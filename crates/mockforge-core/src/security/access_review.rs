@@ -431,8 +431,7 @@ impl AccessReviewEngine {
 
         let now = Utc::now();
         let review_id = self.generate_review_id(ReviewType::UserAccess, now);
-        let due_date =
-            now + chrono::Duration::days(self.config.user_review.approval_timeout_days as i64);
+        let due_date = now + Duration::days(self.config.user_review.approval_timeout_days as i64);
         let next_review = self.config.user_review.frequency.next_review_date(now);
 
         // Analyze users and generate findings
@@ -458,9 +457,7 @@ impl AccessReviewEngine {
             }
 
             // Check for no recent access
-            if user.last_login.is_none()
-                || user.last_login.unwrap() < now - chrono::Duration::days(90)
-            {
+            if user.last_login.is_none() || user.last_login.unwrap() < now - Duration::days(90) {
                 findings.no_recent_access += 1;
             }
 
@@ -641,7 +638,7 @@ impl AccessReviewEngine {
             "old_permissions": old_permissions,
             "new_permissions": new_permissions,
             "reason": reason,
-            "updated_at": chrono::Utc::now(),
+            "updated_at": Utc::now(),
         });
         review
             .metadata

@@ -35,8 +35,7 @@ impl StreamHandler {
         service_name: String,
         method_name: String,
     ) -> impl IntoResponse {
-        let (tx, rx) =
-            tokio::sync::mpsc::channel::<Result<axum::response::sse::Event, axum::BoxError>>(32);
+        let (tx, rx) = mpsc::channel::<Result<axum::response::sse::Event, axum::BoxError>>(32);
 
         // Spawn a task to simulate bidirectional streaming
         tokio::spawn(async move {
@@ -156,7 +155,7 @@ impl StreamHandler {
         method_name: &str,
         initial_request: Value,
     ) -> impl IntoResponse {
-        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        let (tx, rx) = mpsc::channel(32);
 
         // Clone values for the task
         let service_name = service_name.to_string();
@@ -212,7 +211,7 @@ impl StreamHandler {
         service_name: &str,
         method_name: &str,
         initial_request: Value,
-        tx: tokio::sync::mpsc::Sender<Result<axum::response::sse::Event, axum::BoxError>>,
+        tx: mpsc::Sender<Result<axum::response::sse::Event, axum::BoxError>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get the message descriptor for the method
         let registry = proxy.service_registry();
@@ -434,15 +433,15 @@ pub struct ErrorHandler;
 
 impl ErrorHandler {
     /// Convert a bridge error to an HTTP status code
-    pub fn error_to_status_code(error: &str) -> axum::http::StatusCode {
+    pub fn error_to_status_code(error: &str) -> http::StatusCode {
         if error.contains("not found") || error.contains("Unknown") {
-            axum::http::StatusCode::NOT_FOUND
+            http::StatusCode::NOT_FOUND
         } else if error.contains("unauthorized") || error.contains("forbidden") {
-            axum::http::StatusCode::FORBIDDEN
+            http::StatusCode::FORBIDDEN
         } else if error.contains("invalid") || error.contains("malformed") {
-            axum::http::StatusCode::BAD_REQUEST
+            http::StatusCode::BAD_REQUEST
         } else {
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            http::StatusCode::INTERNAL_SERVER_ERROR
         }
     }
 
@@ -489,7 +488,7 @@ impl RequestProcessor {
 
     /// Extract metadata from HTTP headers
     pub fn extract_metadata_from_headers(
-        headers: &axum::http::HeaderMap,
+        headers: &http::HeaderMap,
     ) -> std::collections::HashMap<String, String> {
         let mut metadata = std::collections::HashMap::new();
 

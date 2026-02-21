@@ -2,7 +2,7 @@
 
 use chrono::Utc;
 use mockforge_core::intelligent_behavior::openapi_generator::{
-    ConfidenceScore, HttpExchange, OpenApiGenerationConfig, OpenApiSpecGenerator,
+    HttpExchange, OpenApiGenerationConfig, OpenApiSpecGenerator,
 };
 
 fn create_test_exchange(

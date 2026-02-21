@@ -440,7 +440,7 @@ mod tests {
     async fn test_plugin_dependencies() {
         // Test plugin dependency handling
 
-        let mut dependencies = std::collections::HashMap::new();
+        let mut dependencies = HashMap::new();
         dependencies.insert(PluginId::new("base-plugin"), PluginVersion::new(1, 0, 0));
         dependencies.insert(PluginId::new("optional-plugin"), PluginVersion::new(2, 1, 0));
 

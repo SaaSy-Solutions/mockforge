@@ -187,7 +187,7 @@ pub async fn handle_contract_diff_apply_patch(
     info!("Applying correction patch to contract");
 
     // Load contract specification
-    let spec = mockforge_core::openapi::OpenApiSpec::from_file(&spec_path).await?;
+    let spec = OpenApiSpec::from_file(&spec_path).await?;
     let mut spec_json = spec
         .raw_document
         .ok_or_else(|| Error::generic("Spec does not have raw document"))?;

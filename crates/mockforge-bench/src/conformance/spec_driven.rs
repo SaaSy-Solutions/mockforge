@@ -624,8 +624,7 @@ impl SpecDrivenConformanceGenerator {
             script.push_str(&format!("  group('{}', function () {{\n", category));
 
             // Track which check names we've already emitted to avoid duplicates
-            let mut emitted_checks: std::collections::HashSet<&str> =
-                std::collections::HashSet::new();
+            let mut emitted_checks: HashSet<&str> = HashSet::new();
 
             for (op, feature) in ops {
                 if !emitted_checks.insert(feature.check_name()) {

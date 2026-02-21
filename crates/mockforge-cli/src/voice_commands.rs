@@ -324,7 +324,7 @@ async fn handle_interactive(
 
     loop {
         print!("🎤 > ");
-        std::io::Write::flush(&mut std::io::stdout())?;
+        Write::flush(&mut io::stdout())?;
 
         // Use speech-to-text manager for input
         let command = match stt_manager.transcribe() {

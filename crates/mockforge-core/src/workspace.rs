@@ -1454,11 +1454,8 @@ mod tests {
 
         let folder_path = vec![];
         let effective_headers = workspace.get_effective_headers(&folder_path);
-        let mut request = MockRequest::new(
-            crate::routing::HttpMethod::GET,
-            "/test".to_string(),
-            "Test Request".to_string(),
-        );
+        let mut request =
+            MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
 
         // Request headers should override inherited ones
         request
@@ -1612,7 +1609,7 @@ mod tests {
     fn test_sync_config_default() {
         // Use the SyncConfig from workspace.rs (not from sync module)
         // This is the one used in WorkspaceConfig
-        let config = super::SyncConfig::default();
+        let config = SyncConfig::default();
         assert!(!config.enabled);
         // Just verify it can be created
         let _ = config;

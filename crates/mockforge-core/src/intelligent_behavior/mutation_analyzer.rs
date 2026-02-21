@@ -168,7 +168,7 @@ impl MutationAnalyzer {
         &self,
         current: &Value,
         previous: Option<&Value>,
-        context: &StatefulAiContext,
+        _context: &StatefulAiContext,
     ) -> Result<MutationAnalysis> {
         let mut changed_fields = Vec::new();
         let mut added_fields = Vec::new();
@@ -177,7 +177,7 @@ impl MutationAnalyzer {
         // If no previous request, this is likely a create operation
         if previous.is_none() {
             if let Value::Object(obj) = current {
-                for (key, value) in obj {
+                for (key, _value) in obj {
                     added_fields.push(key.clone());
                 }
             }
@@ -347,7 +347,7 @@ impl MutationAnalyzer {
     pub fn infer_response_type(
         &self,
         mutation: &MutationAnalysis,
-        context: &StatefulAiContext,
+        _context: &StatefulAiContext,
     ) -> ResponseType {
         // If there are validation errors, return validation error
         if !mutation.validation_issues.is_empty() {

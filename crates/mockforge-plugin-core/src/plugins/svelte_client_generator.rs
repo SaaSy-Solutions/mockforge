@@ -46,7 +46,7 @@ impl SvelteClientGenerator {
                 if let Some(prop_obj) = prop_value.as_object_mut() {
                     prop_obj.insert(
                         "required".to_string(),
-                        serde_json::Value::Bool(required_fields.contains(prop_name)),
+                        Value::Bool(required_fields.contains(prop_name)),
                     );
                 }
             }

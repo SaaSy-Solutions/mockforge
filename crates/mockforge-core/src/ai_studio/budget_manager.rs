@@ -4,7 +4,7 @@
 //! and enforce budget limits. It uses in-memory tracking for local usage,
 //! and can integrate with cloud usage tracking when available.
 
-use crate::ai_studio::org_controls::{OrgControls, OrgControlsAccessor};
+use crate::ai_studio::org_controls::OrgControls;
 use crate::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -245,7 +245,7 @@ impl BudgetManager {
         // Record in org controls (if available) for audit log
         if let (Some(org_id), Some(ref org_controls)) = (org_id, &self.org_controls) {
             if let Some(feature) = feature {
-                let feature_name = match feature {
+                let _feature_name = match feature {
                     AiFeature::MockAi => "mock_generation",
                     AiFeature::ContractDiff => "contract_diff",
                     AiFeature::PersonaGeneration => "persona_generation",

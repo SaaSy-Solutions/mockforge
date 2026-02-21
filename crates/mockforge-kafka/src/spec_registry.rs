@@ -14,18 +14,14 @@ use mockforge_core::{Protocol, Result};
 pub struct KafkaSpecRegistry {
     fixtures: Vec<Arc<crate::fixtures::KafkaFixture>>,
     template_engine: mockforge_core::templating::TemplateEngine,
-    topics: std::sync::Arc<
-        tokio::sync::RwLock<std::collections::HashMap<String, crate::topics::Topic>>,
-    >,
+    topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
 }
 
 impl KafkaSpecRegistry {
     /// Create a new Kafka spec registry
     pub async fn new(
         config: mockforge_core::config::KafkaConfig,
-        topics: std::sync::Arc<
-            tokio::sync::RwLock<std::collections::HashMap<String, crate::topics::Topic>>,
-        >,
+        topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
     ) -> Result<Self> {
         let fixtures = if let Some(fixtures_dir) = &config.fixtures_dir {
             crate::fixtures::KafkaFixture::load_from_dir(fixtures_dir)?
@@ -129,7 +125,7 @@ impl SpecRegistry for KafkaSpecRegistry {
                 operation_type: "PRODUCE".to_string(),
                 input_schema: Some("KafkaMessage".to_string()),
                 output_schema: Some("ProduceResponse".to_string()),
-                metadata: std::collections::HashMap::new(),
+                metadata: HashMap::new(),
             })
             .collect()
     }
@@ -144,7 +140,7 @@ impl SpecRegistry for KafkaSpecRegistry {
                 operation_type: "PRODUCE".to_string(),
                 input_schema: Some("KafkaMessage".to_string()),
                 output_schema: Some("ProduceResponse".to_string()),
-                metadata: std::collections::HashMap::new(),
+                metadata: HashMap::new(),
             })
     }
 

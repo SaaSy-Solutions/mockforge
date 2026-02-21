@@ -12,7 +12,7 @@ use lettre::{
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Notify step executor
 pub struct NotifyStep {

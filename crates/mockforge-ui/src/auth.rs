@@ -169,7 +169,7 @@ pub struct UserStore {
 }
 
 #[derive(Debug, Clone)]
-struct User {
+pub(crate) struct User {
     id: String,
     username: String,
     password_hash: String, // Bcrypt hashed password
@@ -340,7 +340,11 @@ impl UserStore {
         store
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str) -> Result<User, String> {
+    pub(crate) async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<User, String> {
         // Check if account is locked
         if self.account_lockout.is_locked(username).await {
             if let Some(remaining) = self.account_lockout.remaining_lockout_time(username).await {
@@ -381,7 +385,7 @@ impl UserStore {
     }
 
     /// Create a new user with password policy validation
-    pub async fn create_user(
+    pub(crate) async fn create_user(
         &self,
         username: String,
         password: String,
@@ -419,7 +423,7 @@ impl UserStore {
         Ok(user)
     }
 
-    pub async fn get_user_by_id(&self, user_id: &str) -> Option<User> {
+    pub(crate) async fn get_user_by_id(&self, user_id: &str) -> Option<User> {
         let users = self.users.read().await;
         users.values().find(|u| u.id == user_id).cloned()
     }
@@ -442,7 +446,7 @@ pub fn get_global_user_store() -> Option<Arc<UserStore>> {
 }
 
 /// Generate JWT token
-pub fn generate_token(
+pub(crate) fn generate_token(
     user: &User,
     expires_in_seconds: i64,
 ) -> Result<String, jsonwebtoken::errors::Error> {
@@ -463,7 +467,7 @@ pub fn generate_token(
 }
 
 /// Generate refresh token
-pub fn generate_refresh_token(user: &User) -> Result<String, jsonwebtoken::errors::Error> {
+pub(crate) fn generate_refresh_token(user: &User) -> Result<String, jsonwebtoken::errors::Error> {
     // Refresh tokens expire in 7 days
     generate_token(user, 7 * 24 * 60 * 60)
 }

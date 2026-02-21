@@ -241,7 +241,7 @@ impl ResponseGenerator {
         scenario: Option<&str>,
         selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
         selector: Option<&crate::openapi::response_selection::ResponseSelector>,
-        persona: Option<&Persona>,
+        _persona: Option<&Persona>,
     ) -> Result<Value> {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
@@ -710,10 +710,10 @@ impl ResponseGenerator {
     /// Expand items array in example if pagination metadata suggests more items
     /// Checks for common response structures: { data: { items: [...], total, limit } } or { items: [...], total, limit }
     fn expand_example_items_if_needed(
-        spec: &OpenApiSpec,
+        _spec: &OpenApiSpec,
         mut example: Value,
-        persona: Option<&Persona>,
-        schema_ref: Option<&ReferenceOr<Schema>>,
+        _persona: Option<&Persona>,
+        _schema_ref: Option<&ReferenceOr<Schema>>,
     ) -> Value {
         // Try to find items array and pagination metadata in the example
         // Support both nested (data.items) and flat (items) structures
@@ -1352,7 +1352,7 @@ impl ResponseGenerator {
 
             // Vary status fields (common enum values)
             if let Some(status_val) = obj.get_mut("status") {
-                if let Some(status_str) = status_val.as_str() {
+                if status_val.as_str().is_some() {
                     let statuses = [
                         "healthy",
                         "sick",
@@ -1414,7 +1414,7 @@ impl ResponseGenerator {
 
             // Vary description fields if they exist
             if let Some(desc_val) = obj.get_mut("description") {
-                if let Some(desc_str) = desc_val.as_str() {
+                if desc_val.as_str().is_some() {
                     let descriptions = [
                         "Production apiary",
                         "Research apiary",
@@ -1484,7 +1484,7 @@ impl ResponseGenerator {
         obj_type: &openapiv3::ObjectType,
     ) -> Option<u64> {
         // Look for "items" array to determine what we're generating
-        if let Some(items_schema_ref) = obj_type.properties.get("items") {
+        if let Some(_items_schema_ref) = obj_type.properties.get("items") {
             // Try to determine child entity name from items schema
             // This is a heuristic: check schema names in the spec
             if let Some(components) = &spec.spec.components {
@@ -1545,7 +1545,7 @@ impl ResponseGenerator {
         child_entity_name: &str,
     ) -> Option<u64> {
         // Look for parent entity schema
-        let parent_schema_name = parent_entity_name.to_string();
+        let _parent_schema_name = parent_entity_name.to_string();
         let count_field_name = format!("{}_count", child_entity_name);
 
         // Try to find the schema
@@ -2715,12 +2715,12 @@ pub struct OpenApiOperation {
     /// The path this operation belongs to
     pub path: String,
     /// The OpenAPI operation
-    pub operation: openapiv3::Operation,
+    pub operation: Operation,
 }
 
 impl OpenApiOperation {
     /// Create a new OpenApiOperation
-    pub fn new(method: String, path: String, operation: openapiv3::Operation) -> Self {
+    pub fn new(method: String, path: String, operation: Operation) -> Self {
         Self {
             method,
             path,

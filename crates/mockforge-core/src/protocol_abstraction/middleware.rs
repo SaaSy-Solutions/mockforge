@@ -277,7 +277,7 @@ impl ProtocolMiddleware for MetricsMiddleware {
         // Store start time for metrics calculation
         request.metadata.insert(
             "x-mockforge-metrics-start".to_string(),
-            std::time::Instant::now().elapsed().as_millis().to_string(),
+            Instant::now().elapsed().as_millis().to_string(),
         );
 
         tracing::debug!(

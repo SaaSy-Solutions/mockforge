@@ -499,10 +499,7 @@ impl RealityProfilePackInstaller {
     }
 
     /// Configure a persona from a reality profile pack
-    async fn configure_persona(
-        &self,
-        studio_persona: &crate::domain_pack::StudioPersona,
-    ) -> Result<()> {
+    async fn configure_persona(&self, studio_persona: &StudioPersona) -> Result<()> {
         use mockforge_data::PersonaProfile;
 
         // Parse domain
@@ -539,7 +536,7 @@ impl RealityProfilePackInstaller {
     /// Apply a chaos rule from a reality profile pack
     async fn apply_chaos_rule(
         &self,
-        chaos_rule: &crate::domain_pack::StudioChaosRule,
+        chaos_rule: &StudioChaosRule,
         _workspace_id: Option<&str>,
     ) -> Result<()> {
         use serde_json::Value;

@@ -19,18 +19,18 @@ use serde_json::Value;
 pub async fn enrich_response(
     request: &Request,
     mut response: Value,
-    workspace_id: &str,
-    endpoint_type: Option<&str>,
+    _workspace_id: &str,
+    _endpoint_type: Option<&str>,
 ) -> Value {
     // Extract UnifiedState from request extensions
     let unified_state = request.extensions().get::<UnifiedState>();
 
-    if let Some(state) = unified_state {
+    if let Some(_state) = unified_state {
         // Enrich with persona graph if available
         #[cfg(feature = "persona-graph")]
-        if let Some(ref persona) = state.active_persona {
+        if let Some(ref persona) = _state.active_persona {
             // Determine endpoint type from path if not provided
-            let endpoint_type = endpoint_type.unwrap_or_else(|| {
+            let endpoint_type = _endpoint_type.unwrap_or_else(|| {
                 let path = request.uri().path();
                 if path.contains("/users/") || path.contains("/user/") {
                     "user"
@@ -62,7 +62,7 @@ pub async fn enrich_response(
             let entity_id = extract_entity_id_from_path(request.uri().path());
 
             // Enrich response with persona graph data if graph is available
-            if let Some(graph) = state.persona_graph() {
+            if let Some(graph) = _state.persona_graph() {
                 enrich_with_persona_graph(
                     graph,
                     &persona.id,

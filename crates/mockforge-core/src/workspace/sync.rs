@@ -357,7 +357,7 @@ impl WorkspaceSyncManager {
         repo_url: &str,
         branch: &str,
         auth_token: Option<&str>,
-        repo_path: &std::path::Path,
+        repo_path: &Path,
     ) -> Result<SyncResult, String> {
         // Clone or ensure repository exists
         self.ensure_git_repo(repo_url, branch, auth_token, repo_path).await?;
@@ -367,7 +367,7 @@ impl WorkspaceSyncManager {
         let workspace_yaml = serde_yaml::to_string(workspace)
             .map_err(|e| format!("Failed to serialize workspace: {}", e))?;
 
-        tokio::fs::write(&workspace_file, &workspace_yaml)
+        fs::write(&workspace_file, &workspace_yaml)
             .await
             .map_err(|e| format!("Failed to write workspace file: {}", e))?;
 
@@ -389,7 +389,7 @@ impl WorkspaceSyncManager {
         repo_url: &str,
         branch: &str,
         auth_token: Option<&str>,
-        repo_path: &std::path::Path,
+        repo_path: &Path,
     ) -> Result<SyncResult, String> {
         // Clone or pull repository
         self.ensure_git_repo(repo_url, branch, auth_token, repo_path).await?;
@@ -406,7 +406,7 @@ impl WorkspaceSyncManager {
             });
         }
 
-        let workspace_yaml = tokio::fs::read_to_string(&workspace_file)
+        let workspace_yaml = fs::read_to_string(&workspace_file)
             .await
             .map_err(|e| format!("Failed to read workspace file: {}", e))?;
 
@@ -443,7 +443,7 @@ impl WorkspaceSyncManager {
         repo_url: &str,
         branch: &str,
         auth_token: Option<&str>,
-        repo_path: &std::path::Path,
+        repo_path: &Path,
     ) -> Result<SyncResult, String> {
         // First sync from Git to local
         let pull_result = self
@@ -465,7 +465,7 @@ impl WorkspaceSyncManager {
         repo_url: &str,
         branch: &str,
         auth_token: Option<&str>,
-        repo_path: &std::path::Path,
+        repo_path: &Path,
     ) -> Result<(), String> {
         use std::process::Command;
 
@@ -515,8 +515,8 @@ impl WorkspaceSyncManager {
     /// Add, commit, and push changes to Git repository
     async fn git_add_commit_push(
         &self,
-        repo_path: &std::path::Path,
-        workspace_file: &std::path::Path,
+        repo_path: &Path,
+        workspace_file: &Path,
         _auth_token: Option<&str>,
     ) -> Result<(), String> {
         use std::process::Command;
@@ -1590,7 +1590,7 @@ mod tests {
         let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
         let remote_workspace = Workspace::new("Remote Workspace".to_string());
         let content = serde_yaml::to_string(&remote_workspace).unwrap();
-        tokio::fs::write(&file_path, content).await.unwrap();
+        fs::write(&file_path, content).await.unwrap();
 
         // Should sync successfully (lines 812-881)
         let result = manager.sync_workspace(&mut workspace).await;
@@ -1676,15 +1676,15 @@ mod tests {
 
         // Create remote workspace with newer timestamp
         // First set local timestamp
-        workspace.updated_at = chrono::Utc::now();
+        workspace.updated_at = Utc::now();
         std::thread::sleep(std::time::Duration::from_millis(10));
         // Then create remote with newer timestamp
         let mut remote_workspace = Workspace::new("Remote Workspace".to_string());
-        remote_workspace.updated_at = chrono::Utc::now(); // Remote is newer
+        remote_workspace.updated_at = Utc::now(); // Remote is newer
 
         let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
         let content = serde_yaml::to_string(&remote_workspace).unwrap();
-        tokio::fs::write(&file_path, content).await.unwrap();
+        fs::write(&file_path, content).await.unwrap();
 
         // Should detect conflicts (lines 897-908)
         let result = manager.sync_workspace(&mut workspace).await;
@@ -1715,13 +1715,13 @@ mod tests {
         let mut workspace = Workspace::new("Test Workspace".to_string());
         // Create remote workspace with older timestamp first
         let mut remote_workspace = Workspace::new("Remote Workspace".to_string());
-        remote_workspace.updated_at = chrono::Utc::now();
+        remote_workspace.updated_at = Utc::now();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        workspace.updated_at = chrono::Utc::now(); // Local is newer
+        workspace.updated_at = Utc::now(); // Local is newer
 
         let file_path = temp_dir.path().join(format!("{}.yaml", workspace.id));
         let content = serde_yaml::to_string(&remote_workspace).unwrap();
-        tokio::fs::write(&file_path, content).await.unwrap();
+        fs::write(&file_path, content).await.unwrap();
 
         // Should detect conflicts (lines 832-862)
         let result = manager.sync_workspace(&mut workspace).await;

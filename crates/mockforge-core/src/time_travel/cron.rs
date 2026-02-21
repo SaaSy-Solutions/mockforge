@@ -318,7 +318,7 @@ impl CronScheduler {
         let now = self.clock.now();
 
         // Get job and action
-        let (job, action) = {
+        let (_job, action) = {
             let jobs = self.jobs.read().await;
             let actions = self.actions.read().await;
 

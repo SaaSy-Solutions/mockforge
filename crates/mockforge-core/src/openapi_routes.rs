@@ -73,7 +73,7 @@ pub struct ValidationOptions {
     /// Whether to validate outgoing responses against schemas
     pub validate_responses: bool,
     /// Per-operation validation mode overrides (operation ID -> mode)
-    pub overrides: std::collections::HashMap<String, ValidationMode>,
+    pub overrides: HashMap<String, ValidationMode>,
     /// Skip validation for request paths starting with any of these prefixes
     pub admin_skip_prefixes: Vec<String>,
     /// Expand templating tokens in responses/examples after generation
@@ -88,7 +88,7 @@ impl Default for ValidationOptions {
             request_mode: ValidationMode::Enforce,
             aggregate_errors: true,
             validate_responses: false,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: Vec::new(),
             response_template_expand: false,
             validation_status: None,
@@ -138,7 +138,7 @@ impl OpenApiRouteRegistry {
             validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                 .unwrap_or(false),
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: Vec::new(),
             response_template_expand: std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -256,9 +256,7 @@ impl OpenApiRouteRegistry {
             let custom_loader_clone = custom_loader.clone();
 
             // Handler: check custom fixtures, then validate path/query/header/cookie/body, then return mock
-            let handler = move |AxumPath(path_params): AxumPath<
-                std::collections::HashMap<String, String>,
-            >,
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
@@ -339,16 +337,14 @@ impl OpenApiRouteRegistry {
                             };
 
                             // Parse response body as JSON
-                            let json_value: serde_json::Value =
-                                serde_json::from_str(&response_body)
-                                    .unwrap_or_else(|_| serde_json::json!({}));
+                            let json_value: Value = serde_json::from_str(&response_body)
+                                .unwrap_or_else(|_| serde_json::json!({}));
 
                             // Build response with status and JSON body
                             let status = axum::http::StatusCode::from_u16(custom_fixture.status)
                                 .unwrap_or(axum::http::StatusCode::OK);
 
-                            let mut response =
-                                (status, axum::response::Json(json_value)).into_response();
+                            let mut response = (status, Json(json_value)).into_response();
 
                             // Add custom headers to response
                             let response_headers = response.headers_mut();
@@ -387,7 +383,7 @@ impl OpenApiRouteRegistry {
                     route_clone.mock_response_with_status_and_scenario(scenario.as_deref());
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
-                let mut path_map = serde_json::Map::new();
+                let mut path_map = Map::new();
                 for (k, v) in path_params {
                     path_map.insert(k, Value::String(v));
                 }
@@ -441,8 +437,8 @@ impl OpenApiRouteRegistry {
                     .unwrap_or(false);
 
                 // Extract multipart data if applicable
-                let mut multipart_fields = std::collections::HashMap::new();
-                let mut multipart_files = std::collections::HashMap::new();
+                let mut multipart_fields = HashMap::new();
+                let mut _multipart_files = HashMap::new();
                 let mut body_json: Option<Value> = None;
 
                 if is_multipart {
@@ -450,9 +446,9 @@ impl OpenApiRouteRegistry {
                     match extract_multipart_from_bytes(&body, &headers).await {
                         Ok((fields, files)) => {
                             multipart_fields = fields;
-                            multipart_files = files;
+                            _multipart_files = files;
                             // Also create a JSON representation for validation
-                            let mut body_obj = serde_json::Map::new();
+                            let mut body_obj = Map::new();
                             for (k, v) in &multipart_fields {
                                 body_obj.insert(k.clone(), v.clone());
                             }
@@ -494,7 +490,7 @@ impl OpenApiRouteRegistry {
                         // For 422 responses, use enhanced schema validation with detailed errors
                         // Note: We need to extract parameters from the request context
                         // For now, using empty maps as placeholders
-                        let empty_params = serde_json::Map::new();
+                        let empty_params = Map::new();
                         generate_enhanced_422_response(
                             &validator,
                             &path_template,
@@ -508,8 +504,8 @@ impl OpenApiRouteRegistry {
                     } else {
                         // For other status codes, use generic error format
                         let msg = format!("{}", e);
-                        let detail_val = serde_json::from_str::<serde_json::Value>(&msg)
-                            .unwrap_or(serde_json::json!(msg));
+                        let detail_val =
+                            serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
                         json!({
                             "error": "request validation failed",
                             "detail": detail_val,
@@ -565,9 +561,7 @@ impl OpenApiRouteRegistry {
                         .next()
                     {
                         // Basic response validation - check if response is valid JSON
-                        if serde_json::from_value::<serde_json::Value>(final_response.clone())
-                            .is_err()
-                        {
+                        if serde_json::from_value::<Value>(final_response.clone()).is_err() {
                             tracing::warn!(
                                 "Response validation failed: invalid JSON for status {}",
                                 status_code
@@ -713,9 +707,7 @@ impl OpenApiRouteRegistry {
             }
 
             // Handler: check custom fixtures, inject latency, validate path/query/header/cookie/body, then return mock
-            let handler = move |AxumPath(path_params): AxumPath<
-                std::collections::HashMap<String, String>,
-            >,
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
@@ -829,16 +821,15 @@ impl OpenApiRouteRegistry {
                             };
 
                             // Parse response body as JSON
-                            let json_value: serde_json::Value =
-                                serde_json::from_str(&response_body)
-                                    .unwrap_or_else(|_| serde_json::json!({}));
+                            let json_value: Value = serde_json::from_str(&response_body)
+                                .unwrap_or_else(|_| serde_json::json!({}));
 
                             // Build response with status and JSON body
                             let status = axum::http::StatusCode::from_u16(custom_fixture.status)
                                 .unwrap_or(axum::http::StatusCode::OK);
 
                             // Return as tuple (StatusCode, Json) to match handler signature
-                            return (status, axum::Json(json_value));
+                            return (status, Json(json_value));
                         } else {
                             tracing::warn!(
                                 "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
@@ -867,7 +858,7 @@ impl OpenApiRouteRegistry {
                         return (
                             axum::http::StatusCode::from_u16(status_code)
                                 .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
-                            axum::Json(serde_json::json!({
+                            Json(serde_json::json!({
                                 "error": error_message,
                                 "injected_failure": true
                             })),
@@ -944,8 +935,8 @@ impl OpenApiRouteRegistry {
                     .unwrap_or(false);
 
                 // Extract multipart data if applicable
-                let mut multipart_fields = std::collections::HashMap::new();
-                let mut multipart_files = std::collections::HashMap::new();
+                let mut multipart_fields = HashMap::new();
+                let mut _multipart_files = HashMap::new();
                 let mut body_json: Option<Value> = None;
 
                 if is_multipart {
@@ -953,9 +944,9 @@ impl OpenApiRouteRegistry {
                     match extract_multipart_from_bytes(&body, &headers).await {
                         Ok((fields, files)) => {
                             multipart_fields = fields;
-                            multipart_files = files;
+                            _multipart_files = files;
                             // Also create a JSON representation for validation
-                            let mut body_obj = serde_json::Map::new();
+                            let mut body_obj = Map::new();
                             for (k, v) in &multipart_fields {
                                 body_obj.insert(k.clone(), v.clone());
                             }
@@ -986,8 +977,8 @@ impl OpenApiRouteRegistry {
                     body_json.as_ref(),
                 ) {
                     let msg = format!("{}", e);
-                    let detail_val = serde_json::from_str::<serde_json::Value>(&msg)
-                        .unwrap_or(serde_json::json!(msg));
+                    let detail_val =
+                        serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
                     let payload = serde_json::json!({
                         "error": "request validation failed",
                         "detail": detail_val,
@@ -1133,10 +1124,10 @@ impl OpenApiRouteRegistry {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(self.options.aggregate_errors);
         // Per-route runtime overrides via JSON env var
-        let env_overrides: Option<serde_json::Map<String, serde_json::Value>> =
+        let env_overrides: Option<Map<String, Value>> =
             std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
                 .ok()
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
                 .and_then(|v| v.as_object().cloned());
         // Response validation is handled in HTTP layer now
         let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
@@ -1164,7 +1155,7 @@ impl OpenApiRouteRegistry {
                 return Ok(());
             }
             let mut errors: Vec<String> = Vec::new();
-            let mut details: Vec<serde_json::Value> = Vec::new();
+            let mut details: Vec<Value> = Vec::new();
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
                 if let Some(value) = body {
@@ -1363,11 +1354,7 @@ impl OpenApiRouteRegistry {
     }
 
     /// Extract path parameters from a request path by matching against known routes
-    pub fn extract_path_parameters(
-        &self,
-        path: &str,
-        method: &str,
-    ) -> std::collections::HashMap<String, String> {
+    pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {
         for route in &self.routes {
             if route.method != method {
                 continue;
@@ -1377,7 +1364,7 @@ impl OpenApiRouteRegistry {
                 return params;
             }
         }
-        std::collections::HashMap::new()
+        HashMap::new()
     }
 
     /// Match a request path against a route pattern and extract parameters
@@ -1385,8 +1372,8 @@ impl OpenApiRouteRegistry {
         &self,
         request_path: &str,
         route_pattern: &str,
-    ) -> Option<std::collections::HashMap<String, String>> {
-        let mut params = std::collections::HashMap::new();
+    ) -> Option<HashMap<String, String>> {
+        let mut params = HashMap::new();
 
         // Split both paths into segments
         let request_segments: Vec<&str> = request_path.trim_start_matches('/').split('/').collect();
@@ -1421,7 +1408,7 @@ impl OpenApiRouteRegistry {
     /// Build router with AI generator support
     pub fn build_router_with_ai(
         &self,
-        ai_generator: Option<std::sync::Arc<dyn AiGenerator + Send + Sync>>,
+        ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
     ) -> Router {
         use axum::routing::{delete, get, patch, post, put};
 
@@ -1475,7 +1462,7 @@ impl OpenApiRouteRegistry {
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                 }
             };
@@ -1515,7 +1502,7 @@ impl OpenApiRouteRegistry {
     /// Axum router with MockAI-powered response generation
     pub fn build_router_with_mockai(
         &self,
-        mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+        mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
     ) -> Router {
         use crate::intelligent_behavior::Request as MockAIRequest;
 
@@ -1644,9 +1631,8 @@ impl OpenApiRouteRegistry {
                                 };
 
                                 // Parse response body as JSON
-                                let json_value: serde_json::Value =
-                                    serde_json::from_str(&response_body)
-                                        .unwrap_or_else(|_| serde_json::json!({}));
+                                let json_value: Value = serde_json::from_str(&response_body)
+                                    .unwrap_or_else(|_| serde_json::json!({}));
 
                                 // Build response with status and JSON body
                                 let status =
@@ -1654,7 +1640,7 @@ impl OpenApiRouteRegistry {
                                         .unwrap_or(axum::http::StatusCode::OK);
 
                                 // Return as tuple (StatusCode, Json) to match handler signature
-                                return (status, axum::Json(json_value));
+                                return (status, Json(json_value));
                             } else {
                                 tracing::warn!(
                                     "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
@@ -1739,7 +1725,7 @@ impl OpenApiRouteRegistry {
                                                 mockai_response.status_code,
                                             )
                                             .unwrap_or(axum::http::StatusCode::OK),
-                                            axum::response::Json(mockai_response.body),
+                                            Json(mockai_response.body),
                                         );
                                     }
                                 }
@@ -1767,7 +1753,7 @@ impl OpenApiRouteRegistry {
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                 }
             };
@@ -1803,10 +1789,7 @@ impl OpenApiRouteRegistry {
 async fn extract_multipart_from_bytes(
     body: &axum::body::Bytes,
     headers: &HeaderMap,
-) -> Result<(
-    std::collections::HashMap<String, Value>,
-    std::collections::HashMap<String, String>,
-)> {
+) -> Result<(HashMap<String, Value>, HashMap<String, String>)> {
     // Get boundary from Content-Type header
     let boundary = headers
         .get(axum::http::header::CONTENT_TYPE)
@@ -1823,8 +1806,8 @@ async fn extract_multipart_from_bytes(
         })
         .ok_or_else(|| Error::generic("Missing boundary in Content-Type header"))?;
 
-    let mut fields = std::collections::HashMap::new();
-    let mut files = std::collections::HashMap::new();
+    let mut fields = HashMap::new();
+    let mut files = HashMap::new();
 
     // Parse multipart data using bytes directly (not string conversion)
     // Multipart format: --boundary\r\n...\r\n--boundary\r\n...\r\n--boundary--\r\n
@@ -1950,11 +1933,11 @@ async fn extract_multipart_from_bytes(
     Ok((fields, files))
 }
 
-static LAST_ERRORS: Lazy<Mutex<VecDeque<serde_json::Value>>> =
+static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
 
 /// Record last validation error for Admin UI inspection
-pub fn record_validation_error(v: &serde_json::Value) {
+pub fn record_validation_error(v: &Value) {
     if let Ok(mut q) = LAST_ERRORS.lock() {
         if q.len() >= 20 {
             q.pop_front();
@@ -1965,12 +1948,12 @@ pub fn record_validation_error(v: &serde_json::Value) {
 }
 
 /// Get most recent validation error
-pub fn get_last_validation_error() -> Option<serde_json::Value> {
+pub fn get_last_validation_error() -> Option<Value> {
     LAST_ERRORS.lock().ok()?.back().cloned()
 }
 
 /// Get recent validation errors (most recent last)
-pub fn get_validation_errors() -> Vec<serde_json::Value> {
+pub fn get_validation_errors() -> Vec<Value> {
     LAST_ERRORS.lock().map(|q| q.iter().cloned().collect()).unwrap_or_default()
 }
 
@@ -2144,10 +2127,10 @@ fn generate_enhanced_422_response(
     path_template: &str,
     method: &str,
     body: Option<&Value>,
-    path_params: &serde_json::Map<String, Value>,
-    query_params: &serde_json::Map<String, Value>,
-    header_params: &serde_json::Map<String, Value>,
-    cookie_params: &serde_json::Map<String, Value>,
+    path_params: &Map<String, Value>,
+    query_params: &Map<String, Value>,
+    header_params: &Map<String, Value>,
+    cookie_params: &Map<String, Value>,
 ) -> Value {
     let mut field_errors = Vec::new();
 
@@ -2161,7 +2144,7 @@ fn generate_enhanced_422_response(
                 {
                     if let Some(_schema_ref) = &content.schema {
                         // Basic JSON validation - schema validation deferred
-                        if serde_json::from_value::<serde_json::Value>(value.clone()).is_err() {
+                        if serde_json::from_value::<Value>(value.clone()).is_err() {
                             field_errors.push(json!({
                                 "path": "body",
                                 "message": "invalid JSON"
@@ -2248,7 +2231,7 @@ fn validate_parameter(
     prefix: &str,
     aggregate: bool,
     errors: &mut Vec<String>,
-    details: &mut Vec<serde_json::Value>,
+    details: &mut Vec<Value>,
 ) {
     match params_map.get(&parameter_data.name) {
         Some(v) => {
@@ -2293,7 +2276,7 @@ fn validate_parameter_with_deep_object(
     style: Option<&str>,
     aggregate: bool,
     errors: &mut Vec<String>,
-    details: &mut Vec<serde_json::Value>,
+    details: &mut Vec<Value>,
 ) {
     match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
         Some(v) => {
@@ -2340,7 +2323,7 @@ fn validate_parameter_detailed(
         Some(value) => {
             if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
                 // Collect detailed validation errors for this parameter
-                let details: Vec<serde_json::Value> = Vec::new();
+                let details: Vec<Value> = Vec::new();
                 let param_path = format!("{}.{}", location, parameter_data.name);
 
                 // Apply coercion before validation
@@ -2395,7 +2378,7 @@ fn validate_parameter_detailed_with_deep(
         Some(value) => {
             if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
                 // Collect detailed validation errors for this parameter
-                let details: Vec<serde_json::Value> = Vec::new();
+                let details: Vec<Value> = Vec::new();
                 let param_path = format!("{}.{}", location, parameter_data.name);
 
                 // Apply coercion before validation
@@ -2614,9 +2597,9 @@ mod tests {
         });
 
         let registry = create_registry_from_json(spec_json).unwrap();
-        let mut path_params = serde_json::Map::new();
+        let mut path_params = Map::new();
         path_params.insert("id".to_string(), json!("abc"));
-        let mut query_params = serde_json::Map::new();
+        let mut query_params = Map::new();
         query_params.insert("q".to_string(), json!(123));
 
         // valid body
@@ -2638,7 +2621,7 @@ mod tests {
             .is_err());
 
         // missing required path param
-        let empty_path_params = serde_json::Map::new();
+        let empty_path_params = Map::new();
         assert!(registry
             .validate_request_with(
                 "/users/{id}",
@@ -2695,9 +2678,9 @@ mod tests {
         });
 
         let registry = create_registry_from_json(spec_json).unwrap();
-        let mut path_params = serde_json::Map::new();
+        let mut path_params = Map::new();
         path_params.insert("id".to_string(), json!("abc"));
-        let mut query_params = serde_json::Map::new();
+        let mut query_params = Map::new();
         query_params.insert("q".to_string(), json!(7));
 
         let body = json!({"email":"user@example.com","website":"https://example.com"});
@@ -2732,13 +2715,13 @@ mod tests {
 
         let registry = create_registry_from_json(spec_json).unwrap();
 
-        let path_params = serde_json::Map::new();
-        let mut query_params = serde_json::Map::new();
+        let path_params = Map::new();
+        let mut query_params = Map::new();
         // comma-separated string for array should coerce
         query_params.insert("ids".to_string(), json!("1,2,3"));
-        let mut header_params = serde_json::Map::new();
+        let mut header_params = Map::new();
         header_params.insert("X-Flag".to_string(), json!("true"));
-        let mut cookie_params = serde_json::Map::new();
+        let mut cookie_params = Map::new();
         cookie_params.insert("session".to_string(), json!("abc123"));
 
         assert!(registry
@@ -2754,7 +2737,7 @@ mod tests {
             .is_ok());
 
         // Missing required cookie
-        let empty_cookie = serde_json::Map::new();
+        let empty_cookie = Map::new();
         assert!(registry
             .validate_request_with_all(
                 "/items",
@@ -2768,7 +2751,7 @@ mod tests {
             .is_err());
 
         // Bad boolean header value (cannot coerce)
-        let mut bad_header = serde_json::Map::new();
+        let mut bad_header = Map::new();
         bad_header.insert("X-Flag".to_string(), json!("notabool"));
         assert!(registry
             .validate_request_with_all(
@@ -2848,49 +2831,25 @@ mod tests {
         // valid: satisfies base via allOf, exactly one of a/b, and at least one of flag/extra
         let ok = json!({"base": "x", "a": 1, "flag": true});
         assert!(registry
-            .validate_request_with(
-                "/composite",
-                "POST",
-                &serde_json::Map::new(),
-                &serde_json::Map::new(),
-                Some(&ok)
-            )
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&ok))
             .is_ok());
 
         // invalid oneOf: both a and b present
         let bad_oneof = json!({"base": "x", "a": 1, "b": 2, "flag": false});
         assert!(registry
-            .validate_request_with(
-                "/composite",
-                "POST",
-                &serde_json::Map::new(),
-                &serde_json::Map::new(),
-                Some(&bad_oneof)
-            )
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_oneof))
             .is_err());
 
         // invalid anyOf: none of flag/extra present
         let bad_anyof = json!({"base": "x", "a": 1});
         assert!(registry
-            .validate_request_with(
-                "/composite",
-                "POST",
-                &serde_json::Map::new(),
-                &serde_json::Map::new(),
-                Some(&bad_anyof)
-            )
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_anyof))
             .is_err());
 
         // invalid allOf: missing base
         let bad_allof = json!({"a": 1, "flag": true});
         assert!(registry
-            .validate_request_with(
-                "/composite",
-                "POST",
-                &serde_json::Map::new(),
-                &serde_json::Map::new(),
-                Some(&bad_allof)
-            )
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_allof))
             .is_err());
     }
 
@@ -2907,7 +2866,7 @@ mod tests {
         });
 
         let spec = OpenApiSpec::from_json(spec_json).unwrap();
-        let mut overrides = std::collections::HashMap::new();
+        let mut overrides = HashMap::new();
         overrides.insert("POST /things".to_string(), ValidationMode::Warn);
         let registry = OpenApiRouteRegistry::new_with_options(
             spec,
@@ -2941,7 +2900,7 @@ mod tests {
                 request_mode: ValidationMode::Enforce,
                 aggregate_errors: true,
                 validate_responses: false,
-                overrides: std::collections::HashMap::new(),
+                overrides: HashMap::new(),
                 admin_skip_prefixes: vec!["/admin".into()],
                 response_template_expand: false,
                 validation_status: None,
@@ -3205,7 +3164,7 @@ mod tests {
             request_mode: ValidationMode::Disabled,
             aggregate_errors: false,
             validate_responses: true,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: vec!["/admin".to_string()],
             response_template_expand: true,
             validation_status: Some(422),
@@ -3240,12 +3199,12 @@ mod tests {
 
     #[test]
     fn test_validation_options_custom() {
-        let mut options = ValidationOptions {
+        let options = ValidationOptions {
             request_mode: ValidationMode::Warn,
             aggregate_errors: false,
             validate_responses: true,
             overrides: {
-                let mut map = std::collections::HashMap::new();
+                let mut map = HashMap::new();
                 map.insert("getUsers".to_string(), ValidationMode::Disabled);
                 map
             },
@@ -3290,7 +3249,7 @@ mod tests {
             request_mode: ValidationMode::Warn,
             aggregate_errors: true,
             validate_responses: false,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: vec![],
             response_template_expand: false,
             validation_status: None,
@@ -3309,7 +3268,7 @@ mod tests {
 
     #[test]
     fn test_validation_options_with_all_fields() {
-        let mut overrides = std::collections::HashMap::new();
+        let mut overrides = HashMap::new();
         overrides.insert("op1".to_string(), ValidationMode::Disabled);
         overrides.insert("op2".to_string(), ValidationMode::Warn);
 
@@ -3384,7 +3343,7 @@ mod tests {
 
     #[test]
     fn test_validation_options_with_overrides() {
-        let mut overrides = std::collections::HashMap::new();
+        let mut overrides = HashMap::new();
         overrides.insert("operation1".to_string(), ValidationMode::Disabled);
         overrides.insert("operation2".to_string(), ValidationMode::Warn);
 
@@ -3409,7 +3368,7 @@ mod tests {
             request_mode: ValidationMode::Enforce,
             aggregate_errors: true,
             validate_responses: false,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: vec![
                 "/admin".to_string(),
                 "/internal".to_string(),
@@ -3431,7 +3390,7 @@ mod tests {
             request_mode: ValidationMode::Enforce,
             aggregate_errors: true,
             validate_responses: false,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: vec![],
             response_template_expand: false,
             validation_status: Some(400),
@@ -3441,7 +3400,7 @@ mod tests {
             request_mode: ValidationMode::Enforce,
             aggregate_errors: true,
             validate_responses: false,
-            overrides: std::collections::HashMap::new(),
+            overrides: HashMap::new(),
             admin_skip_prefixes: vec![],
             response_template_expand: false,
             validation_status: Some(422),

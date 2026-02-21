@@ -504,12 +504,12 @@ impl ParallelExecutor {
     /// Execute a single target test (internal method that doesn't require BenchCommand)
     #[allow(clippy::too_many_arguments)]
     async fn execute_single_target_internal(
-        duration: &str,
+        _duration: &str,
         vus: u32,
-        scenario_str: &str,
-        operations: &Option<String>,
+        _scenario_str: &str,
+        _operations: &Option<String>,
         auth: &Option<String>,
-        headers: &Option<String>,
+        _headers: &Option<String>,
         threshold_percentile: &str,
         threshold_ms: u64,
         max_error_rate: f64,

@@ -3,7 +3,7 @@
 //! These tests cover error paths, edge cases, and boundary conditions
 //! for request chaining functionality.
 
-use mockforge_core::request_chaining::{ChainContext, ChainLink, ChainResponse, RequestBody};
+use mockforge_core::request_chaining::{ChainContext, ChainResponse, RequestBody};
 use serde_json::json;
 
 /// Test ChainContext creation and basic operations

@@ -195,8 +195,8 @@ impl MockReflectionProxy {
                 }
 
                 // For message types, check nested compatibility if full names differ
-                if let prost_reflect::Kind::Message(expected_msg) = expected_field.kind() {
-                    if let prost_reflect::Kind::Message(provided_msg) = provided_field.kind() {
+                if let Kind::Message(expected_msg) = expected_field.kind() {
+                    if let Kind::Message(provided_msg) = provided_field.kind() {
                         if expected_msg.full_name() != provided_msg.full_name() {
                             // Recursively check nested messages
                             Self::check_message_compatibility(
@@ -256,33 +256,23 @@ impl MockReflectionProxy {
     }
 
     /// Check if a Value matches a Kind
-    pub fn value_matches_kind(value: &Value, kind: prost_reflect::Kind) -> bool {
+    pub fn value_matches_kind(value: &Value, kind: Kind) -> bool {
         match *value {
-            prost_reflect::Value::Bool(_) => kind == prost_reflect::Kind::Bool,
-            prost_reflect::Value::I32(_) => matches!(
-                kind,
-                prost_reflect::Kind::Int32
-                    | prost_reflect::Kind::Sint32
-                    | prost_reflect::Kind::Sfixed32
-            ),
-            prost_reflect::Value::I64(_) => matches!(
-                kind,
-                prost_reflect::Kind::Int64
-                    | prost_reflect::Kind::Sint64
-                    | prost_reflect::Kind::Sfixed64
-            ),
-            prost_reflect::Value::U32(_) => {
-                matches!(kind, prost_reflect::Kind::Uint32 | prost_reflect::Kind::Fixed32)
+            Value::Bool(_) => kind == Kind::Bool,
+            Value::I32(_) => matches!(kind, Kind::Int32 | Kind::Sint32 | Kind::Sfixed32),
+            Value::I64(_) => matches!(kind, Kind::Int64 | Kind::Sint64 | Kind::Sfixed64),
+            Value::U32(_) => {
+                matches!(kind, Kind::Uint32 | Kind::Fixed32)
             }
-            prost_reflect::Value::U64(_) => {
-                matches!(kind, prost_reflect::Kind::Uint64 | prost_reflect::Kind::Fixed64)
+            Value::U64(_) => {
+                matches!(kind, Kind::Uint64 | Kind::Fixed64)
             }
-            prost_reflect::Value::F32(_) => kind == prost_reflect::Kind::Float,
-            prost_reflect::Value::F64(_) => kind == prost_reflect::Kind::Double,
-            prost_reflect::Value::String(_) => kind == prost_reflect::Kind::String,
-            prost_reflect::Value::Bytes(_) => kind == prost_reflect::Kind::Bytes,
-            prost_reflect::Value::Message(_) => matches!(kind, prost_reflect::Kind::Message(_)),
-            prost_reflect::Value::List(_) => matches!(kind, prost_reflect::Kind::Message(_)), // Lists are for repeated messages
+            Value::F32(_) => kind == Kind::Float,
+            Value::F64(_) => kind == Kind::Double,
+            Value::String(_) => kind == Kind::String,
+            Value::Bytes(_) => kind == Kind::Bytes,
+            Value::Message(_) => matches!(kind, Kind::Message(_)),
+            Value::List(_) => matches!(kind, Kind::Message(_)), // Lists are for repeated messages
             _ => false,
         }
     }

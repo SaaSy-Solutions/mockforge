@@ -506,7 +506,7 @@ impl WebSocketContract {
             .collect();
 
         // Check for removed fields (breaking change)
-        for (field_name, old_field) in &old_fields_map {
+        for (field_name, _old_field) in &old_fields_map {
             if !new_fields_map.contains_key(field_name) {
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -934,7 +934,7 @@ impl ProtocolContract for WebSocketContract {
         // Try to find by message type only (if operation_id doesn't include topic)
         if !operation_id.contains(':') {
             // Search for operation with this message type
-            for (op_id, operation) in &self.operations_cache {
+            for (_op_id, operation) in &self.operations_cache {
                 if let OperationType::WebSocketMessage { message_type, .. } =
                     &operation.operation_type
                 {
@@ -985,7 +985,7 @@ impl ProtocolContract for WebSocketContract {
         self.validate_message_against_schema(message_type_id, &message)
     }
 
-    fn get_schema(&self, operation_id: &str) -> Option<serde_json::Value> {
+    fn get_schema(&self, operation_id: &str) -> Option<Value> {
         // Extract message type from operation_id
         let message_type_id = if let Some((_, message_type)) = operation_id.split_once(':') {
             message_type
@@ -996,8 +996,8 @@ impl ProtocolContract for WebSocketContract {
         self.message_types.get(message_type_id).map(|mt| mt.schema.clone())
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, ContractError> {
-        let message_types: Vec<serde_json::Value> = self
+    fn to_json(&self) -> Result<Value, ContractError> {
+        let message_types: Vec<Value> = self
             .message_types
             .values()
             .map(|mt| {

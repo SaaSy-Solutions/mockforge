@@ -504,8 +504,6 @@ async fn handle_clients_disconnect(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_mqtt_publish_command_handler() {
         // Test that MqttCommands::Publish variant can be handled

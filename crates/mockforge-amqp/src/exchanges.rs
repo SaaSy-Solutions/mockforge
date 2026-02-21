@@ -182,7 +182,7 @@ impl ExchangeManager {
     }
 
     /// Add a binding to an exchange
-    pub fn add_binding(&mut self, exchange_name: &str, binding: crate::bindings::Binding) -> bool {
+    pub fn add_binding(&mut self, exchange_name: &str, binding: Binding) -> bool {
         if let Some(exchange) = self.exchanges.get_mut(exchange_name) {
             exchange.bindings.push(binding);
             true

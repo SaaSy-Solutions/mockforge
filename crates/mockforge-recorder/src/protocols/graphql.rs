@@ -14,7 +14,7 @@ pub async fn record_graphql_request(
     query: &str,
     variables: Option<&str>,
     headers: &HashMap<String, String>,
-    context: &crate::models::RequestContext,
+    context: &RequestContext,
 ) -> Result<String, crate::RecorderError> {
     let request_id = Uuid::new_v4().to_string();
 

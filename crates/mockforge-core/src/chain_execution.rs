@@ -93,7 +93,7 @@ impl ChainExecutionEngine {
     pub async fn execute_chain(
         &self,
         chain_id: &str,
-        variables: Option<serde_json::Value>,
+        variables: Option<Value>,
     ) -> Result<ChainExecutionResult> {
         let chain = self
             .registry
@@ -125,7 +125,7 @@ impl ChainExecutionEngine {
     pub async fn execute_chain_definition(
         &self,
         chain_def: &ChainDefinition,
-        variables: Option<serde_json::Value>,
+        variables: Option<Value>,
     ) -> Result<ChainExecutionResult> {
         // First validate the chain
         self.registry.validate_chain(chain_def).await?;
@@ -142,7 +142,7 @@ impl ChainExecutionEngine {
         }
 
         // Merge custom variables from request
-        if let Some(serde_json::Value::Object(map)) = variables {
+        if let Some(Value::Object(map)) = variables {
             for (key, value) in map {
                 execution_context.templating.chain_context.set_variable(key, value);
             }
@@ -329,9 +329,7 @@ impl ChainExecutionEngine {
                                 headers.insert(
                                     "content-type",
                                     ct.parse().unwrap_or_else(|_| {
-                                        reqwest::header::HeaderValue::from_static(
-                                            "application/octet-stream",
-                                        )
+                                        HeaderValue::from_static("application/octet-stream")
                                     }),
                                 );
                                 request_builder = request_builder.headers(headers);
@@ -567,12 +565,12 @@ impl ChainExecutionEngine {
 
     /// Expand template string with chain context
     fn expand_template(&self, template: &str, context: &ChainTemplatingContext) -> String {
-        let templating_context = crate::templating::TemplatingContext {
+        let templating_context = TemplatingContext {
             chain_context: Some(context.clone()),
             env_context: None,
             virtual_clock: None,
         };
-        crate::templating::expand_str_with_context(template, &templating_context)
+        expand_str_with_context(template, &templating_context)
     }
 
     /// Expand template variables in JSON value

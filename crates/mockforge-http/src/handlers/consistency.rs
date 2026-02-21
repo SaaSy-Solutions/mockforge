@@ -556,7 +556,7 @@ pub async fn update_persona_lifecycles(
             .lifecycle
             .as_ref()
             .map(|l| l.current_state)
-            .unwrap_or(mockforge_data::LifecycleState::Active);
+            .unwrap_or(LifecycleState::Active);
 
         // Update lifecycle state based on elapsed time
         persona.update_lifecycle_state(current_time);
@@ -565,7 +565,7 @@ pub async fn update_persona_lifecycles(
             .lifecycle
             .as_ref()
             .map(|l| l.current_state)
-            .unwrap_or(mockforge_data::LifecycleState::Active);
+            .unwrap_or(LifecycleState::Active);
 
         if old_state != new_state {
             updated = true;
@@ -598,7 +598,7 @@ pub async fn update_persona_lifecycles(
 ///
 /// GET /api/v1/consistency/lifecycle-presets
 pub async fn list_lifecycle_presets() -> Json<Value> {
-    let presets: Vec<serde_json::Value> = LifecyclePreset::all()
+    let presets: Vec<Value> = LifecyclePreset::all()
         .iter()
         .map(|preset| {
             serde_json::json!({

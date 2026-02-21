@@ -401,7 +401,7 @@ pub async fn generate_gitops_pr(
                 "success": false,
                 "message": "No PR generated (no file changes or incidents)",
             }))),
-            Err(e) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(_e) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     } else {
         // Filter by workspace and/or status
@@ -477,7 +477,7 @@ pub async fn generate_gitops_pr(
                 "success": false,
                 "message": "No PR generated (no file changes or incidents)",
             }))),
-            Err(e) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+            Err(_e) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 }
@@ -529,8 +529,8 @@ pub async fn get_drift_metrics(
         .count();
     let threshold_exceeded = total_incidents - breaking_changes;
 
-    let by_severity: std::collections::HashMap<String, usize> =
-        incidents.iter().fold(std::collections::HashMap::new(), |mut acc, inc| {
+    let by_severity: HashMap<String, usize> =
+        incidents.iter().fold(HashMap::new(), |mut acc, inc| {
             let key = format!("{:?}", inc.severity).to_lowercase();
             *acc.entry(key).or_insert(0) += 1;
             acc

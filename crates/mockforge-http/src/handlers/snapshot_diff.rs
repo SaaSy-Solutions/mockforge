@@ -224,7 +224,7 @@ async fn get_snapshot(
 
 /// List all snapshots
 async fn list_snapshots(
-    Query(params): Query<HashMap<String, String>>,
+    Query(_params): Query<HashMap<String, String>>,
     State(_state): State<ManagementState>,
 ) -> Result<Json<Vec<MockSnapshot>>, StatusCode> {
     // In production, retrieve from database with filters

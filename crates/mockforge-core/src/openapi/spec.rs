@@ -243,17 +243,14 @@ impl OpenApiSpec {
     }
 
     /// Get all schemas defined in the spec
-    pub fn schemas(
-        &self,
-    ) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::Schema>>> {
+    pub fn schemas(&self) -> Option<&indexmap::IndexMap<String, ReferenceOr<Schema>>> {
         self.spec.components.as_ref().map(|c| &c.schemas)
     }
 
     /// Get all security schemes defined in the spec
     pub fn security_schemes(
         &self,
-    ) -> Option<&indexmap::IndexMap<String, openapiv3::ReferenceOr<openapiv3::SecurityScheme>>>
-    {
+    ) -> Option<&indexmap::IndexMap<String, ReferenceOr<openapiv3::SecurityScheme>>> {
         self.spec.components.as_ref().map(|c| &c.security_schemes)
     }
 
@@ -407,8 +404,8 @@ impl OpenApiSpec {
         };
 
         let scheme = match scheme {
-            openapiv3::ReferenceOr::Item(s) => s,
-            openapiv3::ReferenceOr::Reference { .. } => {
+            ReferenceOr::Item(s) => s,
+            ReferenceOr::Reference { .. } => {
                 return Err(Error::generic("Referenced security schemes not supported"))
             }
         };

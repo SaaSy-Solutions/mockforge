@@ -22,7 +22,7 @@ pub(crate) struct RequestContextSnapshot {
     /// Workspace ID
     workspace_id: String,
     /// Snapshot of unified state at request time
-    state_snapshot: serde_json::Value,
+    state_snapshot: Value,
     /// Timestamp when request was made
     timestamp: i64,
 }
@@ -33,7 +33,7 @@ pub struct XRayState {
     /// Consistency engine
     pub engine: Arc<ConsistencyEngine>,
     /// Request context storage (request_id -> snapshot)
-    pub request_contexts: Arc<RwLock<HashMap<String, RequestContextSnapshot>>>,
+    pub(crate) request_contexts: Arc<RwLock<HashMap<String, RequestContextSnapshot>>>,
 }
 
 /// Query parameters for X-Ray operations

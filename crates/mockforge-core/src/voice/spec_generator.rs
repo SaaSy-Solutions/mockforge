@@ -531,8 +531,7 @@ impl Default for VoiceSpecGenerator {
 mod tests {
     use super::*;
     use crate::voice::command_parser::{
-        EndpointRequirement, FieldRequirement, ModelRequirement, ParsedCommand,
-        RequestBodyRequirement, ResponseRequirement,
+        EndpointRequirement, FieldRequirement, ModelRequirement, ParsedCommand, ResponseRequirement,
     };
 
     #[test]

@@ -4,7 +4,7 @@
 //! for latency simulation and failure injection.
 
 use mockforge_core::failure_injection::{FailureConfig, FailureInjector, TagFailureConfig};
-use mockforge_core::latency::{LatencyDistribution, LatencyProfile};
+use mockforge_core::latency::LatencyProfile;
 use std::collections::HashMap;
 
 /// Test latency profile with zero base latency

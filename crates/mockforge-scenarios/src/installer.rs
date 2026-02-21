@@ -49,7 +49,7 @@ impl ScenarioInstaller {
             .unwrap_or_else(|| PathBuf::from(".cache"))
             .join("mockforge")
             .join("scenarios");
-        std::fs::create_dir_all(&cache_dir).map_err(|e| {
+        fs::create_dir_all(&cache_dir).map_err(|e| {
             ScenarioError::Storage(format!("Failed to create cache directory: {}", e))
         })?;
 
@@ -76,7 +76,7 @@ impl ScenarioInstaller {
 
         // Create cache directory within the custom base path
         let cache_dir = base_path.join("cache");
-        std::fs::create_dir_all(&cache_dir).map_err(|e| {
+        fs::create_dir_all(&cache_dir).map_err(|e| {
             ScenarioError::Storage(format!("Failed to create cache directory: {}", e))
         })?;
 
@@ -228,7 +228,7 @@ impl ScenarioInstaller {
 
         // Create parent directory
         if let Some(parent) = install_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
+            fs::create_dir_all(parent).map_err(|e| {
                 ScenarioError::Storage(format!("Failed to create install directory: {}", e))
             })?;
         }
@@ -441,7 +441,7 @@ impl ScenarioInstaller {
             ScenarioError::Storage(format!("Failed to create temp directory: {}", e))
         })?;
         let temp_file = temp_dir.path().join(file_name);
-        let mut file = std::fs::File::create(&temp_file)
+        let mut file = fs::File::create(&temp_file)
             .map_err(|e| ScenarioError::Storage(format!("Failed to create temp file: {}", e)))?;
 
         // Download chunks and write to file
@@ -631,7 +631,7 @@ impl ScenarioInstaller {
         };
 
         let temp_file = temp_dir.path().join(&file_name);
-        std::fs::write(&temp_file, &package_data).map_err(|e| {
+        fs::write(&temp_file, &package_data).map_err(|e| {
             ScenarioError::Storage(format!("Failed to write downloaded package: {}", e))
         })?;
 
@@ -659,7 +659,7 @@ impl ScenarioInstaller {
             copy_dir::copy_dir(source, dest)
                 .map_err(|e| ScenarioError::Storage(format!("Failed to copy package: {}", e)))?;
         } else {
-            std::fs::copy(source, dest)
+            fs::copy(source, dest)
                 .map_err(|e| ScenarioError::Storage(format!("Failed to copy package: {}", e)))?;
         }
 
@@ -681,7 +681,7 @@ impl ScenarioInstaller {
 
         // Remove scenario directory
         if scenario.path.exists() {
-            std::fs::remove_dir_all(&scenario.path).map_err(|e| {
+            fs::remove_dir_all(&scenario.path).map_err(|e| {
                 ScenarioError::Storage(format!("Failed to remove scenario directory: {}", e))
             })?;
         }
@@ -837,7 +837,7 @@ impl ScenarioInstaller {
         let config_source = scenario.path.join("config.yaml");
         if config_source.exists() {
             let config_dest = current_dir.join("config.yaml");
-            std::fs::copy(&config_source, &config_dest).map_err(|e| {
+            fs::copy(&config_source, &config_dest).map_err(|e| {
                 ScenarioError::Storage(format!("Failed to copy config.yaml: {}", e))
             })?;
             info!("Copied config.yaml to workspace");
@@ -857,7 +857,7 @@ impl ScenarioInstaller {
             };
 
             let scenario_spec_content =
-                std::fs::read_to_string(scenario_spec_path).map_err(ScenarioError::Io)?;
+                fs::read_to_string(scenario_spec_path).map_err(ScenarioError::Io)?;
 
             // Try to parse as JSON first, then YAML
             let scenario_spec: Value = if scenario_spec_path
@@ -885,7 +885,7 @@ impl ScenarioInstaller {
             {
                 // Align schemas
                 let existing_spec_content =
-                    std::fs::read_to_string(existing_path).map_err(ScenarioError::Io)?;
+                    fs::read_to_string(existing_path).map_err(ScenarioError::Io)?;
 
                 let existing_spec: Value = if existing_path
                     .extension()
@@ -906,7 +906,7 @@ impl ScenarioInstaller {
                         // Write merged spec
                         let merged_json = serde_json::to_string_pretty(&merged_spec)
                             .map_err(ScenarioError::Serde)?;
-                        std::fs::write(&openapi_dest, merged_json).map_err(|e| {
+                        fs::write(&openapi_dest, merged_json).map_err(|e| {
                             ScenarioError::Storage(format!(
                                 "Failed to write merged openapi.json: {}",
                                 e
@@ -929,7 +929,7 @@ impl ScenarioInstaller {
                         warn!("Conflict: {:?} at {}", conflict.conflict_type, conflict.path);
                     }
                     // Fall back to copying scenario spec
-                    std::fs::copy(scenario_spec_path, &openapi_dest).map_err(|e| {
+                    fs::copy(scenario_spec_path, &openapi_dest).map_err(|e| {
                         ScenarioError::Storage(format!("Failed to copy openapi.json: {}", e))
                     })?;
                     info!("Copied openapi.json to workspace (alignment had conflicts)");
@@ -941,7 +941,7 @@ impl ScenarioInstaller {
                 } else {
                     &openapi_yaml_dest
                 };
-                std::fs::copy(scenario_spec_path, dest_path).map_err(|e| {
+                fs::copy(scenario_spec_path, dest_path).map_err(|e| {
                     ScenarioError::Storage(format!("Failed to copy openapi spec: {}", e))
                 })?;
                 info!("Copied openapi spec to workspace");
@@ -956,7 +956,7 @@ impl ScenarioInstaller {
                 // Merge fixtures
                 info!("Merging fixtures into existing fixtures directory");
             } else {
-                std::fs::create_dir_all(&fixtures_dest).map_err(|e| {
+                fs::create_dir_all(&fixtures_dest).map_err(|e| {
                     ScenarioError::Storage(format!("Failed to create fixtures directory: {}", e))
                 })?;
             }
@@ -970,7 +970,7 @@ impl ScenarioInstaller {
         if examples_source.exists() {
             let examples_dest = current_dir.join("examples");
             if !examples_dest.exists() {
-                std::fs::create_dir_all(&examples_dest).map_err(|e| {
+                fs::create_dir_all(&examples_dest).map_err(|e| {
                     ScenarioError::Storage(format!("Failed to create examples directory: {}", e))
                 })?;
             }
@@ -989,7 +989,7 @@ impl ScenarioInstaller {
         }
 
         // Apply MockAI config if defined in scenario
-        if let Some(ref mockai_config) = scenario.manifest.mockai_config {
+        if let Some(ref _mockai_config) = scenario.manifest.mockai_config {
             info!("Scenario contains MockAI configuration");
             info!("Note: MockAI config needs to be merged with existing config.yaml");
             info!("MockAI config will be available in the scenario package");

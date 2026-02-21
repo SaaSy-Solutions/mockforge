@@ -88,22 +88,22 @@ impl ArtifactFreezer {
             // Add detailed metadata if provided
             if let Some(ref metadata) = request.metadata {
                 if let Some(ref provider) = metadata.llm_provider {
-                    metadata_json["llm_provider"] = serde_json::Value::String(provider.clone());
+                    metadata_json["llm_provider"] = Value::String(provider.clone());
                 }
                 if let Some(ref model) = metadata.llm_model {
-                    metadata_json["llm_model"] = serde_json::Value::String(model.clone());
+                    metadata_json["llm_model"] = Value::String(model.clone());
                 }
                 if let Some(ref version) = metadata.llm_version {
-                    metadata_json["llm_version"] = serde_json::Value::String(version.clone());
+                    metadata_json["llm_version"] = Value::String(version.clone());
                 }
                 if let Some(ref prompt_hash) = metadata.prompt_hash {
-                    metadata_json["prompt_hash"] = serde_json::Value::String(prompt_hash.clone());
+                    metadata_json["prompt_hash"] = Value::String(prompt_hash.clone());
                 }
                 if let Some(ref output_hash) = output_hash {
-                    metadata_json["output_hash"] = serde_json::Value::String(output_hash.clone());
+                    metadata_json["output_hash"] = Value::String(output_hash.clone());
                 }
                 if let Some(ref prompt) = metadata.original_prompt {
-                    metadata_json["original_prompt"] = serde_json::Value::String(prompt.clone());
+                    metadata_json["original_prompt"] = Value::String(prompt.clone());
                 }
             }
 
@@ -188,7 +188,7 @@ impl ArtifactFreezer {
         identifier: Option<&str>,
     ) -> Result<Option<FrozenArtifact>> {
         // Build search pattern
-        let search_pattern = if let Some(id) = identifier {
+        let _search_pattern = if let Some(id) = identifier {
             format!("{}_*_{}", artifact_type, id)
         } else {
             format!("{}_*", artifact_type)
@@ -290,7 +290,7 @@ pub struct FreezeRequest {
     pub artifact_type: String,
 
     /// Artifact content
-    pub content: serde_json::Value,
+    pub content: Value,
 
     /// Output format (yaml or json)
     pub format: String,
@@ -338,7 +338,7 @@ pub struct FrozenArtifact {
     pub artifact_type: String,
 
     /// Frozen content
-    pub content: serde_json::Value,
+    pub content: Value,
 
     /// Output format
     pub format: String,

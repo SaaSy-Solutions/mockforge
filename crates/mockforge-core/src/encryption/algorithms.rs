@@ -455,7 +455,7 @@ pub mod utils {
         };
 
         let mut nonce = vec![0u8; nonce_len];
-        let mut rng = rand::thread_rng();
+        let mut rng = thread_rng();
         rng.fill(&mut nonce[..]);
 
         Ok(nonce)

@@ -782,7 +782,7 @@ impl BenchCommand {
             .as_ref()
             .map(|cats| SecurityTestConfig::parse_categories(cats).unwrap_or_default())
             .unwrap_or_else(|| {
-                let mut default = std::collections::HashSet::new();
+                let mut default = HashSet::new();
                 default.insert(SecurityCategory::SqlInjection);
                 default.insert(SecurityCategory::Xss);
                 default

@@ -8,7 +8,6 @@ use crate::openapi::spec::OpenApiSpec;
 use crate::{Error, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tokio::fs;
 use tracing::{debug, info, warn};
 
 /// Conflict resolution strategy for merging specs
@@ -485,7 +484,8 @@ pub fn merge_specs(
     let all_file_paths: Vec<PathBuf> = specs.iter().map(|(p, _)| p.clone()).collect();
 
     // Start with the first spec as the base
-    let mut base_spec = specs[0].1.clone();
+    let base_spec = specs[0].1.clone();
+    #[allow(unused_mut)]
     let mut base_doc = base_spec
         .raw_document
         .as_ref()
@@ -501,7 +501,7 @@ pub fn merge_specs(
         };
 
     // Merge each subsequent spec
-    for (file_path, spec) in specs_to_merge {
+    for (_file_path, spec) in specs_to_merge {
         let spec_doc = spec.raw_document.as_ref().cloned().unwrap_or_else(|| serde_json::json!({}));
 
         // Merge paths

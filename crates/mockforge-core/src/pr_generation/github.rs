@@ -358,7 +358,7 @@ impl GitHubPRClient {
     async fn create_pull_request(
         &self,
         request: &PRRequest,
-        head_sha: &str,
+        _head_sha: &str,
     ) -> crate::Result<PRResult> {
         let url = format!("https://api.github.com/repos/{}/{}/pulls", self.owner, self.repo);
 

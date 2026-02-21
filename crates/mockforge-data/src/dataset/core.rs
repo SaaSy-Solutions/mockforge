@@ -6,7 +6,7 @@
 use crate::{DataConfig, OutputFormat};
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Dataset validation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -378,9 +378,9 @@ impl Dataset {
             field_type: Option<String>,
             non_null_count: usize,
             null_count: usize,
-            unique_values: std::collections::HashSet<serde_json::Value>,
+            unique_values: HashSet<serde_json::Value>,
             numeric_values: Vec<f64>,
-            frequency: std::collections::HashMap<serde_json::Value, usize>,
+            frequency: HashMap<serde_json::Value, usize>,
         }
 
         let mut temp_field_stats: HashMap<String, TempFieldStats> = HashMap::new();

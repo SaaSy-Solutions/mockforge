@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_status_code_conversion_success() {
-        let status = reqwest::StatusCode::OK.as_u16();
+        let status = StatusCode::OK.as_u16();
         let converted = StatusCode::from_u16(status);
         assert!(converted.is_ok());
         assert_eq!(converted.unwrap(), StatusCode::OK);

@@ -16,7 +16,7 @@ use mockforge_core::{
     openapi::OpenApiSpec,
     Error, Result,
 };
-use sqlx::{postgres::PgPoolOptions, PgPool, Row};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::path::PathBuf;
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -47,7 +47,7 @@ async fn connect_database() -> Option<PgPool> {
 async fn query_drift_incidents(
     pool: &PgPool,
     workspace_id: Option<&str>,
-    service_id: Option<&str>,
+    _service_id: Option<&str>,
     endpoint: Option<&str>,
     method: Option<&str>,
     window_days: u32,
@@ -65,17 +65,17 @@ async fn query_drift_incidents(
 
     let mut bind_index = 2;
 
-    if let Some(ws_id) = workspace_id {
+    if let Some(_ws_id) = workspace_id {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
         bind_index += 1;
     }
 
-    if let Some(ep) = endpoint {
+    if let Some(_ep) = endpoint {
         query.push_str(&format!(" AND endpoint = ${}", bind_index));
         bind_index += 1;
     }
 
-    if let Some(m) = method {
+    if let Some(_m) = method {
         query.push_str(&format!(" AND method = ${}", bind_index));
         bind_index += 1;
     }
@@ -441,10 +441,7 @@ pub async fn handle_threat_assess(
     }
 
     // Exit with error code if critical threats found
-    if matches!(
-        assessment.threat_level,
-        mockforge_core::contract_drift::threat_modeling::ThreatLevel::Critical
-    ) {
+    if matches!(assessment.threat_level, ThreatLevel::Critical) {
         error!("Critical threats detected!");
         std::process::exit(1);
     }
@@ -884,8 +881,6 @@ pub async fn handle_governance_status(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_handle_forecast_generate_creates_output() {
         // Test that handler functions are accessible

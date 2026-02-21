@@ -147,7 +147,7 @@ impl EnvironmentManager {
             &active_env.variables
         } else {
             // No active environment, so return empty variables (will fail on any variable reference)
-            &std::collections::HashMap::new()
+            &HashMap::new()
         };
 
         let mut chars = template.chars().peekable();

@@ -11,9 +11,11 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[cfg(feature = "database")]
+use chrono::{DateTime, Utc};
 
 /// State for contract health handlers
 #[derive(Clone)]

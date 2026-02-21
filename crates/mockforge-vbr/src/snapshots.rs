@@ -43,10 +43,10 @@ pub struct TimeTravelSnapshotState {
     pub scale_factor: f64,
     /// Cron jobs (serialized)
     #[serde(default)]
-    pub cron_jobs: Vec<serde_json::Value>,
+    pub cron_jobs: Vec<Value>,
     /// Mutation rules (serialized)
     #[serde(default)]
-    pub mutation_rules: Vec<serde_json::Value>,
+    pub mutation_rules: Vec<Value>,
 }
 
 /// Snapshot manager
@@ -89,7 +89,7 @@ impl SnapshotManager {
         &self,
         name: &str,
         description: Option<String>,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<SnapshotMetadata> {
         self.create_snapshot_with_time_travel(name, description, database, registry, false, None)
@@ -109,7 +109,7 @@ impl SnapshotManager {
         &self,
         name: &str,
         description: Option<String>,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
         include_time_travel: bool,
         time_travel_state: Option<TimeTravelSnapshotState>,
@@ -170,7 +170,7 @@ impl SnapshotManager {
     async fn create_snapshot_data(
         &self,
         name: &str,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<Option<u64>> {
         let snapshot_dir = self.snapshot_path(name);
@@ -196,7 +196,7 @@ impl SnapshotManager {
     async fn export_sqlite_to_json(
         &self,
         snapshot_dir: &Path,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
         let data_dir = snapshot_dir.join("data");
@@ -227,7 +227,7 @@ impl SnapshotManager {
     async fn export_memory_to_json(
         &self,
         snapshot_dir: &Path,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
         self.export_sqlite_to_json(snapshot_dir, database, registry).await
@@ -242,7 +242,7 @@ impl SnapshotManager {
     pub async fn restore_snapshot(
         &self,
         name: &str,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
         self.restore_snapshot_with_time_travel(
@@ -266,7 +266,7 @@ impl SnapshotManager {
     pub async fn restore_snapshot_with_time_travel<F>(
         &self,
         name: &str,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
         restore_time_travel: bool,
         time_travel_restore_callback: Option<F>,
@@ -309,7 +309,7 @@ impl SnapshotManager {
     async fn import_json_to_database(
         &self,
         snapshot_dir: &Path,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
         let data_dir = snapshot_dir.join("data");
@@ -374,7 +374,7 @@ impl SnapshotManager {
     /// Reset database to empty state
     async fn reset_database(
         &self,
-        database: &dyn crate::database::VirtualDatabase,
+        database: &dyn VirtualDatabase,
         registry: &EntityRegistry,
     ) -> Result<()> {
         // Delete all data from all tables
@@ -460,7 +460,7 @@ impl SnapshotManager {
 
 /// Reset database to empty state (public API)
 pub async fn reset_database(
-    database: &dyn crate::database::VirtualDatabase,
+    database: &dyn VirtualDatabase,
     registry: &EntityRegistry,
 ) -> Result<()> {
     // This is a simplified reset - in production, you might want to

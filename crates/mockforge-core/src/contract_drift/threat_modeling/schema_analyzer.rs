@@ -29,7 +29,7 @@ impl SchemaAnalyzer {
         let mut findings = Vec::new();
 
         for (path, path_item) in &spec.spec.paths.paths {
-            if let openapiv3::ReferenceOr::Item(path_item) = path_item {
+            if let ReferenceOr::Item(path_item) = path_item {
                 // Iterate over all HTTP methods
                 let methods = vec![
                     ("GET", path_item.get.as_ref()),
@@ -63,7 +63,7 @@ impl SchemaAnalyzer {
 
                     // Analyze responses
                     for (status_code, response) in &operation.responses.responses {
-                        if let openapiv3::ReferenceOr::Item(resp) = response {
+                        if let ReferenceOr::Item(resp) = response {
                             for media_type in resp.content.values() {
                                 if let Some(schema) = &media_type.schema {
                                     findings.extend(self.analyze_schema_design(

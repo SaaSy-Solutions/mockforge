@@ -457,7 +457,7 @@ mod tests {
     fn test_contract_registry() {
         // This test would require a mock implementation of ProtocolContract
         // For now, just test the registry structure
-        let mut registry = ProtocolContractRegistry::new();
+        let registry = ProtocolContractRegistry::new();
         assert_eq!(registry.list().len(), 0);
     }
 }

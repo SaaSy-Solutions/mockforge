@@ -437,9 +437,9 @@ impl BehavioralScenarioReplayEngine {
 impl mockforge_core::priority_handler::BehavioralScenarioReplay for BehavioralScenarioReplayEngine {
     async fn try_replay(
         &self,
-        method: &axum::http::Method,
-        uri: &axum::http::Uri,
-        headers: &axum::http::HeaderMap,
+        method: &Method,
+        uri: &Uri,
+        headers: &HeaderMap,
         body: Option<&[u8]>,
         session_id: Option<&str>,
     ) -> mockforge_core::Result<Option<mockforge_core::priority_handler::BehavioralReplayResponse>>

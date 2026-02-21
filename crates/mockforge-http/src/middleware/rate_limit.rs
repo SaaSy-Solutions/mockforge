@@ -141,7 +141,7 @@ impl GlobalRateLimiter {
 /// 2. Adds rate limit headers to successful responses (for deceptive deploy)
 /// 3. Returns 429 with Retry-After header when rate limited
 pub async fn rate_limit_middleware(
-    State(state): axum::extract::State<crate::HttpServerState>,
+    State(state): State<crate::HttpServerState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request<Body>,
     next: Next,

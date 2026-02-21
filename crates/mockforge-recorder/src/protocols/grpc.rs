@@ -13,7 +13,7 @@ pub async fn record_grpc_request(
     method: &str,
     metadata: &HashMap<String, String>,
     message: Option<&[u8]>,
-    context: &crate::models::RequestContext,
+    context: &RequestContext,
 ) -> Result<String, crate::RecorderError> {
     let request_id = Uuid::new_v4().to_string();
     let full_method = format!("{}/{}", service, method);

@@ -325,7 +325,7 @@ impl CollabClient {
             Ok(SyncMessage::StateResponse {
                 workspace_id,
                 version,
-                state,
+                state: _,
             }) => {
                 tracing::debug!(
                     "Received state response for workspace {} (version {})",

@@ -281,8 +281,8 @@ impl DeceptiveCanaryRouter {
     }
 
     /// Update statistics (thread-safe)
-    pub fn record_request(&self, routed: bool, opted_out: bool, matched: bool) {
-        if let Some(stats) = &self.config.stats {
+    pub fn record_request(&self, _routed: bool, _opted_out: bool, _matched: bool) {
+        if let Some(_stats) = &self.config.stats {
             // Note: This is a simplified implementation
             // In production, you'd want to use atomic counters or a proper stats collector
             // For now, stats are stored in config which is not thread-safe for updates

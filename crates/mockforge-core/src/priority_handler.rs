@@ -220,14 +220,13 @@ impl PriorityHttpHandler {
     ) -> Result<PriorityResponse> {
         // Normalize the URI path before creating fingerprint to match fixture normalization
         // This ensures fixtures are matched correctly
-        let normalized_path = crate::CustomFixtureLoader::normalize_path(uri.path());
+        let normalized_path = CustomFixtureLoader::normalize_path(uri.path());
         let normalized_uri_str = if let Some(query) = uri.query() {
             format!("{}?{}", normalized_path, query)
         } else {
             normalized_path
         };
-        let normalized_uri =
-            normalized_uri_str.parse::<axum::http::Uri>().unwrap_or_else(|_| uri.clone());
+        let normalized_uri = normalized_uri_str.parse::<Uri>().unwrap_or_else(|_| uri.clone());
 
         let fingerprint = RequestFingerprint::new(method.clone(), &normalized_uri, headers, body);
 
@@ -531,7 +530,7 @@ impl PriorityHttpHandler {
                                 });
                             }
                         }
-                        (Ok(proxy_response), Ok(None)) => {
+                        (Ok(_proxy_response), Ok(None)) => {
                             // Only proxy succeeded - use it (fallback behavior)
                             tracing::debug!(
                                 path = %uri.path(),
@@ -539,7 +538,7 @@ impl PriorityHttpHandler {
                             );
                             // Fall through to normal proxy handling
                         }
-                        (Ok(proxy_response), Err(_)) => {
+                        (Ok(_proxy_response), Err(_)) => {
                             // Only proxy succeeded - use it (fallback behavior)
                             tracing::debug!(
                                 path = %uri.path(),
@@ -760,7 +759,7 @@ impl PriorityHttpHandler {
     async fn apply_behavioral_economics(
         &self,
         response: PriorityResponse,
-        method: &Method,
+        _method: &Method,
         uri: &Uri,
         latency_ms: Option<u64>,
     ) -> Result<PriorityResponse> {
@@ -1048,9 +1047,9 @@ mod tests {
         let handler = PriorityHttpHandler::new(record_replay, None, None, None)
             .with_custom_fixture_loader(custom_loader);
 
-        let method = Method::GET;
-        let uri = Uri::from_static("/api/test");
-        let headers = HeaderMap::new();
+        let _method = Method::GET;
+        let _uri = Uri::from_static("/api/test");
+        let _headers = HeaderMap::new();
 
         // Custom fixture should be checked first, but won't match without proper fingerprint
         // This tests the custom fixture loader path
@@ -1143,8 +1142,8 @@ mod tests {
     async fn test_new_vs_new_with_openapi() {
         let temp_dir = TempDir::new().unwrap();
         let fixtures_dir = temp_dir.path().to_path_buf();
-        let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
-        let mock_generator = Box::new(SimpleMockGenerator::new(200, "{}".to_string()));
+        let _record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
+        let _mock_generator = Box::new(SimpleMockGenerator::new(200, "{}".to_string()));
 
         // Test new()
         let record_replay1 = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
@@ -1502,7 +1501,7 @@ paths:
                 &self,
                 _method: &Method,
                 _uri: &Uri,
-                headers: &HeaderMap,
+                _headers: &HeaderMap,
                 _body: Option<&[u8]>,
                 session_id: Option<&str>,
             ) -> Result<Option<BehavioralReplayResponse>> {

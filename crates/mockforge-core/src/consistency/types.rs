@@ -8,7 +8,7 @@ use crate::reality::RealityLevel;
 use chrono::{DateTime, Utc};
 // ChaosScenario is defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
 // When used, it should be deserialized from JSON
-type ChaosScenario = serde_json::Value;
+type ChaosScenario = Value;
 #[cfg(feature = "data")]
 pub use mockforge_data::PersonaGraph;
 #[cfg(feature = "data")]

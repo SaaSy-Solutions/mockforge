@@ -131,7 +131,7 @@ impl<'de> Deserialize<'de> for ExtractField {
                             match_mode = Some(map.next_value()?);
                         }
                         _ => {
-                            let _: serde::de::IgnoredAny = map.next_value()?;
+                            let _: de::IgnoredAny = map.next_value()?;
                         }
                     }
                 }

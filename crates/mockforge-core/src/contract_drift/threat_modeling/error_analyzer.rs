@@ -32,7 +32,7 @@ impl ErrorAnalyzer {
         let mut findings = Vec::new();
 
         for (path, path_item) in &spec.spec.paths.paths {
-            if let openapiv3::ReferenceOr::Item(path_item) = path_item {
+            if let ReferenceOr::Item(path_item) = path_item {
                 // Iterate over all HTTP methods
                 let methods = vec![
                     ("GET", path_item.get.as_ref()),
@@ -67,7 +67,7 @@ impl ErrorAnalyzer {
 
                         // Focus on error status codes
                         if status_num >= 400 {
-                            if let openapiv3::ReferenceOr::Item(resp) = response {
+                            if let ReferenceOr::Item(resp) = response {
                                 for (_content_type, media_type) in &resp.content {
                                     if let Some(schema) = &media_type.schema {
                                         findings.extend(
@@ -79,8 +79,7 @@ impl ErrorAnalyzer {
 
                                     // Check examples
                                     for example in media_type.examples.values() {
-                                        if let openapiv3::ReferenceOr::Item(example_item) = example
-                                        {
+                                        if let ReferenceOr::Item(example_item) = example {
                                             if let Some(example_value) = &example_item.value {
                                                 findings.extend(self.analyze_error_example(
                                                     example_value,

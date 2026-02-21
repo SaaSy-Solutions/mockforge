@@ -128,11 +128,11 @@ impl RequestBody {
     }
 
     /// Convert the request body to bytes for HTTP transmission
-    pub async fn to_bytes(&self) -> crate::Result<Vec<u8>> {
+    pub async fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
             RequestBody::Json(value) => Ok(serde_json::to_vec(value)?),
             RequestBody::BinaryFile { path, .. } => tokio::fs::read(path).await.map_err(|e| {
-                crate::Error::generic(format!("Failed to read binary file '{}': {}", path, e))
+                Error::generic(format!("Failed to read binary file '{}': {}", path, e))
             }),
         }
     }

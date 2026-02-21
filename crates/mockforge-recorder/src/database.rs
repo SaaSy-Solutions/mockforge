@@ -925,8 +925,7 @@ impl RecorderDatabase {
         .await?;
 
         // Group by trace_id
-        let mut grouped: std::collections::HashMap<String, Vec<RecordedRequest>> =
-            std::collections::HashMap::new();
+        let mut grouped: HashMap<String, Vec<RecordedRequest>> = HashMap::new();
         for request in requests {
             if let Some(trace_id) = &request.trace_id {
                 grouped.entry(trace_id.clone()).or_default().push(request);
@@ -992,8 +991,7 @@ impl RecorderDatabase {
         tags: &[String],
     ) -> Result<()> {
         let tags_json = serde_json::to_string(tags)?;
-        let metadata_json =
-            serde_json::to_string(&std::collections::HashMap::<String, serde_json::Value>::new())?;
+        let metadata_json = serde_json::to_string(&HashMap::<String, serde_json::Value>::new())?;
 
         sqlx::query(
             r#"

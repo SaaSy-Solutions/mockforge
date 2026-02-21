@@ -79,7 +79,7 @@ impl MergeService {
             self.version_control.get_history(target_workspace_id, Some(1000)).await?;
 
         // Build commit ID sets for fast lookup
-        let source_commit_ids: std::collections::HashSet<Uuid> =
+        let _source_commit_ids: std::collections::HashSet<Uuid> =
             source_commits.iter().map(|c| c.id).collect();
         let target_commit_ids: std::collections::HashSet<Uuid> =
             target_commits.iter().map(|c| c.id).collect();
@@ -121,7 +121,7 @@ impl MergeService {
         &self,
         source_workspace_id: Uuid,
         target_workspace_id: Uuid,
-        user_id: Uuid,
+        _user_id: Uuid,
     ) -> Result<(Value, Vec<MergeConflict>)> {
         // Get latest commits for both workspaces
         let source_commit =

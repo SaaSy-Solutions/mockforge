@@ -765,7 +765,7 @@ impl Default for RagEngine {
 
         // Create a default RAG engine with in-memory storage
         // This is primarily for testing and compatibility purposes
-        let config = crate::rag::config::RagConfig::default();
+        let config = RagConfig::default();
         let storage = Arc::new(InMemoryStorage::default());
 
         // We can unwrap here since default config should be valid

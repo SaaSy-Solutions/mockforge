@@ -53,7 +53,7 @@ pub struct PromotionRequest {
     pub comments: Option<String>,
     /// Additional metadata for the promotion (e.g., config changes diff)
     #[serde(default)]
-    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Scenario promotion request (backward compatibility)
@@ -89,7 +89,7 @@ impl From<ScenarioPromotionRequest> for PromotionRequest {
             requires_approval: req.requires_approval,
             approval_required_reason: req.approval_required_reason,
             comments: req.comments,
-            metadata: std::collections::HashMap::new(),
+            metadata: HashMap::new(),
         }
     }
 }
@@ -493,8 +493,6 @@ mod tests {
 
     #[test]
     fn test_requires_approval_with_pillar_tags() {
-        use crate::pillars::Pillar;
-
         let rules = ApprovalRules::default();
 
         // Test with [Cloud][Contracts][Reality] combination (high-impact pattern)

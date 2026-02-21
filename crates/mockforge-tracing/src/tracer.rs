@@ -86,7 +86,7 @@ impl TracingConfig {
 /// Initialize the OpenTelemetry tracer
 pub fn init_tracer(
     config: TracingConfig,
-) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
+) -> Result<global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     match config.exporter_type {
         ExporterType::Jaeger => init_jaeger_tracer(config),
         ExporterType::Otlp => init_otlp_tracer(config),
@@ -96,7 +96,7 @@ pub fn init_tracer(
 /// Initialize Jaeger tracer
 fn init_jaeger_tracer(
     config: TracingConfig,
-) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
+) -> Result<global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     let endpoint = config.jaeger_endpoint.ok_or("Jaeger endpoint not configured")?;
 
     // Install the tracer provider (this sets it as global)
@@ -107,14 +107,14 @@ fn init_jaeger_tracer(
         .install_simple()?;
 
     // Get the tracer from the global provider
-    let tracer = opentelemetry::global::tracer("mockforge");
+    let tracer = global::tracer("mockforge");
     Ok(tracer)
 }
 
 /// Initialize OTLP tracer
 fn init_otlp_tracer(
     config: TracingConfig,
-) -> Result<opentelemetry::global::BoxedTracer, Box<dyn Error + Send + Sync>> {
+) -> Result<global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     let endpoint = config.otlp_endpoint.ok_or("OTLP endpoint not configured")?;
 
     // Build resource attributes
@@ -143,10 +143,10 @@ fn init_otlp_tracer(
         .build();
 
     // Set the tracer provider as global
-    opentelemetry::global::set_tracer_provider(tracer_provider.clone());
+    global::set_tracer_provider(tracer_provider.clone());
 
     // Get the tracer from the global provider
-    let tracer = opentelemetry::global::tracer("mockforge");
+    let tracer = global::tracer("mockforge");
 
     Ok(tracer)
 }

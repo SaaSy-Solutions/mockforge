@@ -99,7 +99,7 @@ impl Recorder {
         query_params: Option<&str>,
         headers: &std::collections::HashMap<String, String>,
         body: Option<&[u8]>,
-        context: &crate::models::RequestContext,
+        context: &RequestContext,
     ) -> Result<String> {
         let request_id = Uuid::new_v4().to_string();
 

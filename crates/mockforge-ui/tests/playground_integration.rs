@@ -1,6 +1,5 @@
 //! Integration tests for playground API endpoints
 
-use axum::http::StatusCode;
 use mockforge_ui::handlers::playground::*;
 use mockforge_ui::handlers::AdminState;
 use serde_json::json;

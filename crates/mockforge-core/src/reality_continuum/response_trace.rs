@@ -65,7 +65,7 @@ pub struct ResponseGenerationTrace {
 
     /// Additional metadata about the generation process
     #[serde(default)]
-    pub metadata: HashMap<String, serde_json::Value>,
+    pub metadata: HashMap<String, Value>,
 }
 
 impl Default for ResponseGenerationTrace {
@@ -135,7 +135,7 @@ pub struct TemplateExpansion {
     pub template: String,
 
     /// Expanded value
-    pub value: serde_json::Value,
+    pub value: Value,
 
     /// Source of the value (e.g., "persona", "faker", "context")
     pub source: String,
@@ -205,7 +205,7 @@ impl ResponseGenerationTrace {
     }
 
     /// Add metadata
-    pub fn add_metadata(&mut self, key: String, value: serde_json::Value) {
+    pub fn add_metadata(&mut self, key: String, value: Value) {
         self.metadata.insert(key, value);
     }
 

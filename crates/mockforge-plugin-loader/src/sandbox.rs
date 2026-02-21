@@ -65,8 +65,7 @@ impl PluginSandbox {
         sandboxes.insert(plugin_id.clone(), sandbox);
 
         // Create core plugin instance
-        let mut core_instance =
-            mockforge_plugin_core::PluginInstance::new(plugin_id.clone(), context.manifest.clone());
+        let mut core_instance = PluginInstance::new(plugin_id.clone(), context.manifest.clone());
         core_instance.set_state(PluginState::Ready);
 
         Ok(core_instance)

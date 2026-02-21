@@ -198,7 +198,7 @@ impl OpenApiSpecGenerator {
         let mut normalized: HashMap<String, Vec<&HttpExchange>> = HashMap::new();
 
         // Group paths by their base pattern
-        let path_segments: Vec<Vec<String>> = path_groups
+        let _path_segments: Vec<Vec<String>> = path_groups
             .keys()
             .map(|path| path.split('/').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect())
             .collect();
@@ -209,8 +209,6 @@ impl OpenApiSpecGenerator {
 
             // Try to find similar paths
             let mut normalized_path = original_path.clone();
-            let mut found_match = false;
-
             for other_path in path_groups.keys() {
                 if other_path == original_path {
                     continue;
@@ -242,7 +240,6 @@ impl OpenApiSpecGenerator {
 
                     if is_parameter {
                         normalized_path = format!("/{}", normalized_segments.join("/"));
-                        found_match = true;
                         break;
                     }
                 }
@@ -436,7 +433,7 @@ impl OpenApiSpecGenerator {
         &self,
         normalized_paths: &HashMap<String, Vec<&HttpExchange>>,
         schemas: &HashMap<String, Value>,
-        exchanges: &[HttpExchange],
+        _exchanges: &[HttpExchange],
     ) -> Result<OpenApiSpec> {
         // Create a basic OpenAPI 3.0 spec structure
         let mut spec = OpenAPI {
@@ -540,93 +537,81 @@ impl OpenApiSpecGenerator {
                             let schema = match json_value {
                                 Value::Object(_) => Schema {
                                     schema_data: SchemaData::default(),
-                                    schema_kind: SchemaKind::Type(openapiv3::Type::Object(
-                                        openapiv3::ObjectType {
-                                            properties: indexmap::IndexMap::new(),
-                                            required: vec![],
-                                            additional_properties: None,
-                                            ..Default::default()
-                                        },
-                                    )),
+                                    schema_kind: SchemaKind::Type(Type::Object(ObjectType {
+                                        properties: indexmap::IndexMap::new(),
+                                        required: vec![],
+                                        additional_properties: None,
+                                        ..Default::default()
+                                    })),
                                 },
                                 Value::Array(_) => Schema {
                                     schema_data: SchemaData::default(),
-                                    schema_kind: SchemaKind::Type(openapiv3::Type::Array(
-                                        openapiv3::ArrayType {
-                                            items: None,
-                                            min_items: None,
-                                            max_items: None,
-                                            unique_items: false,
-                                        },
-                                    )),
+                                    schema_kind: SchemaKind::Type(Type::Array(ArrayType {
+                                        items: None,
+                                        min_items: None,
+                                        max_items: None,
+                                        unique_items: false,
+                                    })),
                                 },
                                 Value::String(_) => Schema {
                                     schema_data: SchemaData::default(),
-                                    schema_kind: SchemaKind::Type(openapiv3::Type::String(
-                                        openapiv3::StringType {
-                                            enumeration: vec![],
-                                            min_length: None,
-                                            max_length: None,
-                                            pattern: None,
-                                            format: openapiv3::VariantOrUnknownOrEmpty::Empty,
-                                        },
-                                    )),
+                                    schema_kind: SchemaKind::Type(Type::String(StringType {
+                                        enumeration: vec![],
+                                        min_length: None,
+                                        max_length: None,
+                                        pattern: None,
+                                        format: VariantOrUnknownOrEmpty::Empty,
+                                    })),
                                 },
                                 Value::Number(n) => {
                                     if n.is_f64() {
                                         Schema {
                                             schema_data: SchemaData::default(),
-                                            schema_kind: SchemaKind::Type(openapiv3::Type::Number(
-                                                openapiv3::NumberType {
+                                            schema_kind: SchemaKind::Type(Type::Number(
+                                                NumberType {
                                                     minimum: None,
                                                     maximum: None,
                                                     exclusive_minimum: false,
                                                     exclusive_maximum: false,
                                                     multiple_of: None,
                                                     enumeration: vec![],
-                                                    format:
-                                                        openapiv3::VariantOrUnknownOrEmpty::Empty,
+                                                    format: VariantOrUnknownOrEmpty::Empty,
                                                 },
                                             )),
                                         }
                                     } else {
                                         Schema {
                                             schema_data: SchemaData::default(),
-                                            schema_kind: SchemaKind::Type(
-                                                openapiv3::Type::Integer(openapiv3::IntegerType {
+                                            schema_kind: SchemaKind::Type(Type::Integer(
+                                                IntegerType {
                                                     minimum: None,
                                                     maximum: None,
                                                     exclusive_minimum: false,
                                                     exclusive_maximum: false,
                                                     multiple_of: None,
                                                     enumeration: vec![],
-                                                    format:
-                                                        openapiv3::VariantOrUnknownOrEmpty::Item(
-                                                            openapiv3::IntegerFormat::Int64,
-                                                        ),
-                                                }),
-                                            ),
+                                                    format: VariantOrUnknownOrEmpty::Item(
+                                                        IntegerFormat::Int64,
+                                                    ),
+                                                },
+                                            )),
                                         }
                                     }
                                 }
                                 Value::Bool(_) => Schema {
                                     schema_data: SchemaData::default(),
-                                    schema_kind: SchemaKind::Type(openapiv3::Type::Boolean(
-                                        openapiv3::BooleanType {
-                                            enumeration: vec![],
-                                        },
-                                    )),
+                                    schema_kind: SchemaKind::Type(Type::Boolean(BooleanType {
+                                        enumeration: vec![],
+                                    })),
                                 },
                                 Value::Null => Schema {
                                     schema_data: SchemaData::default(),
-                                    schema_kind: SchemaKind::Type(openapiv3::Type::Object(
-                                        openapiv3::ObjectType {
-                                            properties: indexmap::IndexMap::new(),
-                                            required: vec![],
-                                            additional_properties: None,
-                                            ..Default::default()
-                                        },
-                                    )),
+                                    schema_kind: SchemaKind::Type(Type::Object(ObjectType {
+                                        properties: indexmap::IndexMap::new(),
+                                        required: vec![],
+                                        additional_properties: None,
+                                        ..Default::default()
+                                    })),
                                 },
                             };
 

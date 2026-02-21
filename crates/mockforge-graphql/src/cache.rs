@@ -252,20 +252,20 @@ fn json_to_graphql_value(value: &serde_json::Value) -> async_graphql::Value {
             async_graphql::Value::List(arr.iter().map(json_to_graphql_value).collect())
         }
         serde_json::Value::Object(obj) => {
-            let map: async_graphql::indexmap::IndexMap<async_graphql::Name, async_graphql::Value> =
-                obj.iter()
-                    .filter_map(|(k, v)| {
-                        // GraphQL names must match [_A-Za-z][_0-9A-Za-z]*
-                        let is_valid =
-                            k.chars().next().is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
-                                && k.chars().all(|c| c == '_' || c.is_ascii_alphanumeric());
-                        if is_valid {
-                            Some((async_graphql::Name::new(k), json_to_graphql_value(v)))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
+            let map: indexmap::IndexMap<async_graphql::Name, async_graphql::Value> = obj
+                .iter()
+                .filter_map(|(k, v)| {
+                    // GraphQL names must match [_A-Za-z][_0-9A-Za-z]*
+                    let is_valid =
+                        k.chars().next().is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+                            && k.chars().all(|c| c == '_' || c.is_ascii_alphanumeric());
+                    if is_valid {
+                        Some((async_graphql::Name::new(k), json_to_graphql_value(v)))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             async_graphql::Value::Object(map)
         }
     }

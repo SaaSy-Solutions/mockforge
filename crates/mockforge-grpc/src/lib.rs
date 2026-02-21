@@ -217,7 +217,7 @@ pub mod registry;
 /// The generated code in this module is excluded from missing documentation checks
 /// as it is automatically generated from `.proto` files and documentation should
 /// be added to the source `.proto` files instead.
-#[allow(missing_docs)]
+#[allow(missing_docs, unused_qualifications)]
 pub mod generated {
     // Include all generated proto files
     tonic::include_proto!("mockforge.greeter");

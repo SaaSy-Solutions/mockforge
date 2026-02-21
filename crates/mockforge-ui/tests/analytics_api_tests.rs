@@ -9,7 +9,7 @@ mod tests {
         http::{Request, StatusCode},
         Router,
     };
-    use mockforge_analytics::{AnalyticsConfig, AnalyticsDatabase};
+    use mockforge_analytics::AnalyticsDatabase;
     use mockforge_ui::handlers::analytics_v2::*;
     use std::path::PathBuf;
     use tower::ServiceExt; // for `oneshot`

@@ -181,12 +181,8 @@ fn test_generate_index_file() {
         },
     ];
 
-    let result = BarrelGenerator::generate_barrel_files(
-        output_dir,
-        &files,
-        mockforge_core::BarrelType::Index,
-    )
-    .unwrap();
+    let result =
+        BarrelGenerator::generate_barrel_files(output_dir, &files, BarrelType::Index).unwrap();
     assert_eq!(result.len(), 1);
     assert!(result[0].0.ends_with("index.ts"));
     assert!(result[0].1.contains("export * from './types'"));
@@ -199,12 +195,8 @@ fn test_generate_index_file_empty() {
     let output_dir = Path::new("/tmp/test");
     let files: Vec<GeneratedFile> = vec![];
 
-    let result = BarrelGenerator::generate_barrel_files(
-        output_dir,
-        &files,
-        mockforge_core::BarrelType::Index,
-    )
-    .unwrap();
+    let result =
+        BarrelGenerator::generate_barrel_files(output_dir, &files, BarrelType::Index).unwrap();
     assert_eq!(result.len(), 1);
     assert!(result[0].1.contains("No exportable files found"));
 }

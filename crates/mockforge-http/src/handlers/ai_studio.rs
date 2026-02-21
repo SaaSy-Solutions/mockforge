@@ -119,7 +119,7 @@ pub struct ApiCritiqueResponse {
 pub async fn api_critique_handler(
     State(state): State<AiStudioState>,
     Json(request): Json<ApiCritiqueRequest>,
-) -> std::result::Result<Json<ApiCritiqueResponse>, StatusCode> {
+) -> Result<Json<ApiCritiqueResponse>, StatusCode> {
     info!("API critique request received for schema type: {}", request.schema_type);
 
     // Build critique request
@@ -245,7 +245,7 @@ pub struct FreezeArtifactsResponse {
 pub async fn generate_system_handler(
     State(state): State<AiStudioState>,
     Json(request): Json<SystemGenerationHttpRequest>,
-) -> std::result::Result<Json<SystemGenerationResponse>, StatusCode> {
+) -> Result<Json<SystemGenerationResponse>, StatusCode> {
     info!("System generation request received");
 
     let generation_request = SystemGenerationRequest {
@@ -292,7 +292,7 @@ pub async fn apply_system_handler(
     State(state): State<AiStudioState>,
     Path(system_id): Path<String>,
     Json(request): Json<ApplySystemRequest>,
-) -> std::result::Result<Json<ApplySystemResponse>, StatusCode> {
+) -> Result<Json<ApplySystemResponse>, StatusCode> {
     info!("Apply system request received for system: {}", system_id);
 
     // Load the system from storage
@@ -351,7 +351,7 @@ pub async fn freeze_artifacts_handler(
     State(state): State<AiStudioState>,
     Path(system_id): Path<String>,
     Json(request): Json<FreezeArtifactsRequest>,
-) -> std::result::Result<Json<FreezeArtifactsResponse>, StatusCode> {
+) -> Result<Json<FreezeArtifactsResponse>, StatusCode> {
     info!(
         "Freeze artifacts request received for system: {}, artifacts: {:?}",
         system_id, request.artifact_ids
@@ -455,10 +455,12 @@ pub struct SimulateBehaviorHttpRequest {
 /// POST /api/v1/ai-studio/simulate-behavior/create-agent
 #[axum::debug_handler]
 pub async fn create_agent_handler(
-    State(state): State<AiStudioState>,
-    Json(request): Json<CreateAgentHttpRequest>,
-) -> std::result::Result<Json<CreateAgentResponse>, StatusCode> {
+    State(_state): State<AiStudioState>,
+    Json(_request): Json<CreateAgentHttpRequest>,
+) -> Result<Json<CreateAgentResponse>, StatusCode> {
     info!("Create agent request received");
+    let state = _state;
+    let request = _request;
 
     let create_request = CreateAgentRequest {
         persona_id: request.persona_id,
@@ -486,13 +488,15 @@ pub async fn create_agent_handler(
 /// POST /api/v1/ai-studio/simulate-behavior
 #[axum::debug_handler]
 pub async fn simulate_behavior_handler(
-    State(state): State<AiStudioState>,
-    Json(request): Json<SimulateBehaviorHttpRequest>,
-) -> std::result::Result<
+    State(_state): State<AiStudioState>,
+    Json(_request): Json<SimulateBehaviorHttpRequest>,
+) -> Result<
     Json<mockforge_core::ai_studio::behavioral_simulator::SimulateBehaviorResponse>,
     StatusCode,
 > {
     info!("Simulate behavior request received");
+    let state = _state;
+    let request = _request;
 
     let simulate_request = SimulateBehaviorRequest {
         agent_id: request.agent_id,
@@ -523,7 +527,7 @@ pub async fn simulate_behavior_handler(
 
 /// Build AI Studio router
 pub fn ai_studio_router(state: AiStudioState) -> Router {
-    let mut router = Router::new()
+    let router = Router::new()
         .route("/api-critique", post(api_critique_handler))
         .route("/generate-system", post(generate_system_handler))
         .route("/system/{system_id}/apply", post(apply_system_handler))

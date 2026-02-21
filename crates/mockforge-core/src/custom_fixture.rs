@@ -52,7 +52,7 @@ pub struct CustomFixture {
     pub status: u16,
     /// Response body (can be any JSON value)
     #[serde(default)]
-    pub response: serde_json::Value,
+    pub response: Value,
     /// Optional response headers
     #[serde(default)]
     pub headers: HashMap<String, String>,
@@ -696,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_path_normalization() {
-        let loader = CustomFixtureLoader::new(PathBuf::from("/tmp"), true);
+        let _loader = CustomFixtureLoader::new(PathBuf::from("/tmp"), true);
 
         // Test trailing slash removal
         assert_eq!(CustomFixtureLoader::normalize_path("/api/v1/test/"), "/api/v1/test");

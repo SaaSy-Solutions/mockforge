@@ -452,12 +452,12 @@ fn generate_basic_mock_response(route: &RouteInfo) -> String {
 /// - Respects required/optional properties
 /// - Uses schema examples and defaults when available
 /// - Generates appropriate mock data based on field types and formats
-fn generate_from_schema(schema: &openapiv3::Schema) -> String {
+fn generate_from_schema(schema: &Schema) -> String {
     generate_from_schema_internal(schema, 0)
 }
 
 /// Internal recursive helper for schema generation with depth tracking
-fn generate_from_schema_internal(schema: &openapiv3::Schema, depth: usize) -> String {
+fn generate_from_schema_internal(schema: &Schema, depth: usize) -> String {
     // Prevent infinite recursion with nested schemas
     if depth > 5 {
         return r#"serde_json::json!(null)"#.to_string();
@@ -507,10 +507,8 @@ fn generate_object_from_schema(obj_type: &openapiv3::ObjectType, depth: usize) -
 
         // Generate property value based on schema
         let prop_value = match prop_schema_ref {
-            openapiv3::ReferenceOr::Item(prop_schema) => {
-                generate_from_schema_internal(prop_schema, depth + 1)
-            }
-            openapiv3::ReferenceOr::Reference { reference } => {
+            ReferenceOr::Item(prop_schema) => generate_from_schema_internal(prop_schema, depth + 1),
+            ReferenceOr::Reference { reference } => {
                 // For references, generate a placeholder based on the reference name
                 if let Some(ref_name) = reference.strip_prefix("#/components/schemas/") {
                     format!(r#"serde_json::json!({{"$ref": "{}"}})"#, ref_name)
@@ -543,10 +541,8 @@ fn generate_array_from_schema(array_type: &openapiv3::ArrayType, depth: usize) -
     // Generate 1-2 items for arrays
     let item_value = match &array_type.items {
         Some(item_schema_ref) => match item_schema_ref {
-            openapiv3::ReferenceOr::Item(item_schema) => {
-                generate_from_schema_internal(item_schema, depth + 1)
-            }
-            openapiv3::ReferenceOr::Reference { reference } => {
+            ReferenceOr::Item(item_schema) => generate_from_schema_internal(item_schema, depth + 1),
+            ReferenceOr::Reference { reference } => {
                 if let Some(ref_name) = reference.strip_prefix("#/components/schemas/") {
                     format!(r#"serde_json::json!({{"$ref": "{}"}})"#, ref_name)
                 } else {

@@ -186,8 +186,6 @@ mod validation_tests {
 
     #[test]
     fn test_enhanced_schema_validation_integration() {
-        use mockforge_core::validation;
-
         // Test the new enhanced schema validation functionality
         let expected_schema = json!({
             "type": "object",
@@ -206,7 +204,7 @@ mod validation_tests {
             "age": 25
         });
 
-        let result = validation::validate_json_schema(&valid_request, &expected_schema);
+        let result = validate_json_schema(&valid_request, &expected_schema);
         assert!(result.valid, "Valid request should not produce errors: {:?}", result.errors);
 
         // Invalid request with multiple issues
@@ -215,7 +213,7 @@ mod validation_tests {
             "age": 120        // Too old, missing required email
         });
 
-        let result = validation::validate_json_schema(&invalid_request, &expected_schema);
+        let result = validate_json_schema(&invalid_request, &expected_schema);
         assert!(!result.valid, "Invalid request should produce errors");
         assert!(!result.errors.is_empty(), "Should have validation errors");
 
@@ -523,8 +521,7 @@ mod validation_tests {
             "unexpected_root_field": "not allowed"  // Additional property at root
         });
 
-        use mockforge_core::validation;
-        let result = validation::validate_json_schema(&invalid_request, &expected_schema);
+        let result = validate_json_schema(&invalid_request, &expected_schema);
 
         // Verify we get comprehensive error information
         assert!(!result.valid, "Invalid request should fail validation");

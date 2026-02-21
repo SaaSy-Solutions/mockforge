@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::sync::Arc;
 
 use crate::spec_registry::FtpSpecRegistry;
@@ -120,7 +120,7 @@ pub async fn execute_ftp_command(
 async fn execute_vfs_command(command: VfsCommands, vfs: Arc<VirtualFileSystem>) -> Result<()> {
     match command.command {
         VfsSubcommands::List => {
-            let files = vfs.list_files(&std::path::PathBuf::from("/"));
+            let files = vfs.list_files(&PathBuf::from("/"));
             if files.is_empty() {
                 println!("No virtual files found.");
             } else {
@@ -140,12 +140,12 @@ async fn execute_vfs_command(command: VfsCommands, vfs: Arc<VirtualFileSystem>) 
             Ok(())
         }
         VfsSubcommands::Tree => {
-            let files = vfs.list_files(&std::path::PathBuf::from("/"));
+            let files = vfs.list_files(&PathBuf::from("/"));
             if files.is_empty() {
                 println!("No virtual files found.");
             } else {
                 println!("/");
-                print_tree(&files, &std::path::PathBuf::from("/"), "");
+                print_tree(&files, &PathBuf::from("/"), "");
             }
             Ok(())
         }
@@ -216,10 +216,10 @@ fn print_tree(files: &[crate::vfs::VirtualFile], current_path: &std::path::Path,
             if components.len() == 1 {
                 // File in current directory
                 current_files.push(file.clone());
-            } else if let std::path::Component::Normal(name) = components[0] {
+            } else if let Component::Normal(name) = components[0] {
                 let dir_name = name.to_string_lossy().to_string();
                 let sub_path = current_path.join(&dir_name);
-                let remaining_path = components[1..].iter().collect::<std::path::PathBuf>();
+                let remaining_path = components[1..].iter().collect::<PathBuf>();
                 let full_sub_path = sub_path.join(remaining_path);
 
                 dirs.entry(dir_name).or_default().push(crate::vfs::VirtualFile {

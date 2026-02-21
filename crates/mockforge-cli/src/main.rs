@@ -4393,7 +4393,7 @@ pub async fn handle_serve(
         let manager_for_cleanup = Arc::new(RwLock::new(manager));
         let cleanup_manager = manager_for_cleanup.clone();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300)); // Every 5 minutes
+            let mut interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
             loop {
                 interval.tick().await;
                 if let Err(e) = cleanup_manager.write().await.cleanup_expired_sessions().await {
@@ -4463,7 +4463,7 @@ pub async fn handle_serve(
     };
 
     // Initialize risk assessment engine if enabled
-    let risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
+    let _risk_assessment_engine = if config.security.monitoring.risk_assessment.enabled {
         use mockforge_core::security::risk_assessment::RiskAssessmentEngine;
         use std::sync::Arc;
 
@@ -4616,7 +4616,7 @@ pub async fn handle_serve(
         // Start cron scheduler background task
         let cron_scheduler = manager.cron_scheduler();
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+            let mut interval = tokio::time::interval(Duration::from_secs(1));
             loop {
                 interval.tick().await;
                 if let Err(e) = cron_scheduler.check_and_execute().await {
@@ -4653,7 +4653,7 @@ pub async fn handle_serve(
         // Spawn task to upgrade MockAI with OpenAPI spec if available (non-blocking)
         tokio::spawn(async move {
             if let Some(ref spec_path) = spec_path {
-                match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+                match OpenApiSpec::from_file(spec_path).await {
                     Ok(openapi_spec) => {
                         match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await
                         {
@@ -5054,7 +5054,7 @@ pub async fn handle_serve(
     println!("💡 Press Ctrl+C to stop");
 
     // Create metrics registry (use global registry)
-    let metrics_registry = std::sync::Arc::new(MetricsRegistry::new());
+    let metrics_registry = Arc::new(MetricsRegistry::new());
 
     // Start system metrics collector if Prometheus is enabled
     if config.observability.prometheus.enabled {
@@ -5294,7 +5294,7 @@ pub async fn handle_serve(
     let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
-    let tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
+    let _tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
         use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
 
         use tokio::time::{sleep, Duration};
@@ -5680,7 +5680,7 @@ pub async fn handle_serve(
     };
 
     // Give servers a moment to start, then mark service as ready
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     health_manager.set_ready().await;
     tracing::info!("Service marked as ready - all servers initialized");
 
@@ -5798,7 +5798,7 @@ pub async fn handle_serve(
     shutdown_token.cancel();
 
     // Give tasks a moment to shut down gracefully
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Return error if any server failed
     if let Some(error) = result {
@@ -6620,7 +6620,7 @@ async fn output_result(
 /// Generate mock data from OpenAPI specification
 async fn generate_mock_data_from_openapi(
     spec_path: &PathBuf,
-    rows: usize,
+    _rows: usize,
     realistic: bool,
     include_optional: bool,
     validate: bool,
@@ -7367,7 +7367,7 @@ async fn handle_generate(
 async fn load_and_validate_config(
     path: &PathBuf,
     verbose: bool,
-    progress_mgr: &mut crate::progress::ProgressManager,
+    progress_mgr: &mut progress::ProgressManager,
 ) -> mockforge_core::GenerateConfig {
     use crate::progress::{utils, LogLevel};
     use mockforge_core::load_generate_config_with_fallback;
@@ -7385,7 +7385,7 @@ async fn load_and_validate_config(
 
 /// Execute the actual generation process with progress tracking
 async fn execute_generation(
-    progress_mgr: &mut crate::progress::ProgressManager,
+    progress_mgr: &mut progress::ProgressManager,
     config_path: Option<PathBuf>,
     spec_path: Option<PathBuf>,
     output_path: Option<PathBuf>,
@@ -7402,7 +7402,7 @@ async fn execute_generation(
     progress_mgr.log(LogLevel::Info, "🔧 Generating mocks from configuration...");
 
     // Step 1: Discover or load config file
-    let (config_file, mut config) = if let Some(path) = &config_path {
+    let (_config_file, mut config) = if let Some(path) = &config_path {
         let config = load_and_validate_config(path, verbose, progress_mgr).await;
         (Some(path.clone()), config)
     } else {
@@ -8154,10 +8154,10 @@ async fn handle_config_validate(
 
     // First, try to parse with ServerConfig for full schema validation
     let config_result = if is_yaml {
-        serde_yaml::from_str::<mockforge_core::ServerConfig>(&config_content)
+        serde_yaml::from_str::<ServerConfig>(&config_content)
             .map_err(|e| format_yaml_error(&config_content, e))
     } else {
-        serde_json::from_str::<mockforge_core::ServerConfig>(&config_content)
+        serde_json::from_str::<ServerConfig>(&config_content)
             .map_err(|e| format_json_error(&config_content, e))
     };
 

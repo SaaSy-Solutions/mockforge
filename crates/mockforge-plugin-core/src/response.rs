@@ -79,7 +79,7 @@ pub trait ResponsePlugin: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponsePluginConfig {
     /// Plugin-specific configuration
-    pub config: HashMap<String, serde_json::Value>,
+    pub config: HashMap<String, Value>,
     /// Enable/disable the plugin
     pub enabled: bool,
     /// Plugin priority (lower numbers = higher priority)
@@ -91,7 +91,7 @@ pub struct ResponsePluginConfig {
     /// HTTP methods this plugin handles
     pub methods: Vec<String>,
     /// Custom settings
-    pub settings: HashMap<String, serde_json::Value>,
+    pub settings: HashMap<String, Value>,
 }
 
 impl Default for ResponsePluginConfig {
@@ -480,7 +480,7 @@ pub trait ResponseModifierPlugin: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseModifierConfig {
     /// Plugin-specific configuration
-    pub config: HashMap<String, serde_json::Value>,
+    pub config: HashMap<String, Value>,
     /// Enable/disable the plugin
     pub enabled: bool,
     /// Plugin priority (lower numbers = higher priority, executed first)
@@ -494,7 +494,7 @@ pub struct ResponseModifierConfig {
     /// Status codes this plugin modifies (empty = all)
     pub status_codes: Vec<u16>,
     /// Custom settings
-    pub settings: HashMap<String, serde_json::Value>,
+    pub settings: HashMap<String, Value>,
 }
 
 impl Default for ResponseModifierConfig {

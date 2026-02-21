@@ -1,7 +1,7 @@
 //! Tunnel commands for exposing local servers via public URLs
 
 use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(clap::Subcommand)]
 pub enum TunnelSubcommand {

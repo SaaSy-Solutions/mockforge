@@ -162,7 +162,7 @@ impl RelationshipInference {
     /// Analyze a schema for relationship indicators
     fn analyze_schema_for_relationships(
         &mut self,
-        spec: &OpenApiSpec,
+        _spec: &OpenApiSpec,
         schema_name: &str,
         schema: &Schema,
     ) -> Result<()> {

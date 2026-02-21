@@ -458,7 +458,7 @@ pub struct Cache<K, V> {
 
 impl<K, V> Cache<K, V>
 where
-    K: std::cmp::Eq + std::hash::Hash + Clone,
+    K: Eq + std::hash::Hash + Clone,
     V: Clone,
 {
     /// Create a new cache

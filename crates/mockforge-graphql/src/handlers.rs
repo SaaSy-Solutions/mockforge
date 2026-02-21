@@ -265,7 +265,7 @@ impl HandlerRegistry {
                 .and_then(|m| m.as_str())
                 .unwrap_or("Upstream GraphQL error");
 
-            let server_error = async_graphql::ServerError::new(error_msg.to_string(), None);
+            let server_error = ServerError::new(error_msg.to_string(), None);
             Ok(Response::from_errors(vec![server_error]))
         } else {
             // Return successful response

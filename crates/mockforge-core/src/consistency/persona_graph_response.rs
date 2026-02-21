@@ -4,12 +4,7 @@
 //! ensuring that related entities are coherently linked across endpoints.
 
 use crate::consistency::{ConsistencyEngine, EntityState};
-#[cfg(feature = "persona-graph")]
-use mockforge_data::PersonaGraph;
 use serde_json::Value;
-use tracing::debug;
-#[cfg(not(feature = "persona-graph"))]
-type PersonaGraph = ();
 
 /// Enrich a user response with related entities from the persona graph
 ///
@@ -28,7 +23,7 @@ pub async fn enrich_user_response(
     let state = match engine.get_state(workspace_id).await {
         Some(s) => s,
         None => {
-            debug!("No unified state found for workspace: {}", workspace_id);
+            tracing::debug!("No unified state found for workspace: {}", workspace_id);
             return;
         }
     };
@@ -36,7 +31,7 @@ pub async fn enrich_user_response(
     let graph = match state.persona_graph() {
         Some(g) => g,
         None => {
-            debug!("No persona graph found for workspace: {}", workspace_id);
+            tracing::debug!("No persona graph found for workspace: {}", workspace_id);
             return;
         }
     };
@@ -98,7 +93,7 @@ pub async fn get_user_orders_via_graph(
     let state = match engine.get_state(workspace_id).await {
         Some(s) => s,
         None => {
-            debug!("No unified state found for workspace: {}", workspace_id);
+            tracing::debug!("No unified state found for workspace: {}", workspace_id);
             return Vec::new();
         }
     };
@@ -106,7 +101,7 @@ pub async fn get_user_orders_via_graph(
     let graph = match state.persona_graph() {
         Some(g) => g,
         None => {
-            debug!("No persona graph found for workspace: {}", workspace_id);
+            tracing::debug!("No persona graph found for workspace: {}", workspace_id);
             return Vec::new();
         }
     };
@@ -155,7 +150,7 @@ pub async fn enrich_order_response(
     let state = match engine.get_state(workspace_id).await {
         Some(s) => s,
         None => {
-            debug!("No unified state found for workspace: {}", workspace_id);
+            tracing::debug!("No unified state found for workspace: {}", workspace_id);
             return;
         }
     };
@@ -163,7 +158,7 @@ pub async fn enrich_order_response(
     let graph = match state.persona_graph() {
         Some(g) => g,
         None => {
-            debug!("No persona graph found for workspace: {}", workspace_id);
+            tracing::debug!("No persona graph found for workspace: {}", workspace_id);
             return;
         }
     };

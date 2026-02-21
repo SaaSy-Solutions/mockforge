@@ -203,7 +203,7 @@ pub async fn set_clock_skew(
     // If duration is specified, schedule reset
     if let Some(duration) = request.duration_seconds {
         let state_clone = state.clone();
-        let skew_value = request.skew_seconds;
+        let _skew_value = request.skew_seconds;
         tokio::spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_secs(duration)).await;
             state_clone.manager.clock_skew.set_skew(0).await;

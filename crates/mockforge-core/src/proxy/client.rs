@@ -48,7 +48,7 @@ pub struct ProxyResponse {
     /// HTTP status code
     pub status_code: u16,
     /// Response headers
-    pub headers: std::collections::HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     /// Response body
     pub body: Option<Vec<u8>>,
 }

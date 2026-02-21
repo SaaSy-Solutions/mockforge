@@ -1579,7 +1579,7 @@ pub struct HttpConfig {
     /// Validation error HTTP status (e.g., 400 or 422)
     pub validation_status: Option<u16>,
     /// Per-route overrides: key "METHOD path" => mode (off/warn/enforce)
-    pub validation_overrides: std::collections::HashMap<String, String>,
+    pub validation_overrides: HashMap<String, String>,
     /// When embedding Admin UI under HTTP, skip validation for the mounted prefix
     pub skip_admin_validation: bool,
     /// Authentication configuration
@@ -1618,7 +1618,7 @@ impl Default for HttpConfig {
             validate_responses: false,
             response_template_expand: false,
             validation_status: None,
-            validation_overrides: std::collections::HashMap::new(),
+            validation_overrides: HashMap::new(),
             skip_admin_validation: true,
             auth: None,
             tls: None,
@@ -2095,7 +2095,7 @@ impl Default for AdminConfig {
         // This makes Admin UI accessible from outside the container by default
         let default_host = if std::env::var("DOCKER_CONTAINER").is_ok()
             || std::env::var("container").is_ok()
-            || std::path::Path::new("/.dockerenv").exists()
+            || Path::new("/.dockerenv").exists()
         {
             "0.0.0.0".to_string()
         } else {
@@ -3095,7 +3095,7 @@ pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
     // Check current directory
     for name in &config_names {
         let path = current_dir.join(name);
-        if tokio::fs::metadata(&path).await.is_ok() {
+        if fs::metadata(&path).await.is_ok() {
             return Ok(path);
         }
     }
@@ -3106,7 +3106,7 @@ pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
         if let Some(parent) = dir.parent() {
             for name in &config_names {
                 let path = parent.join(name);
-                if tokio::fs::metadata(&path).await.is_ok() {
+                if fs::metadata(&path).await.is_ok() {
                     return Ok(path);
                 }
             }
@@ -3151,7 +3151,7 @@ mod tests {
 
     #[test]
     fn test_apply_profile() {
-        let mut base = ServerConfig::default();
+        let base = ServerConfig::default();
         assert_eq!(base.http.port, 3000);
 
         let mut profile = ProfileConfig::default();

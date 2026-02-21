@@ -94,7 +94,7 @@ pub trait TemplatePlugin: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplatePluginConfig {
     /// Plugin-specific configuration
-    pub config: HashMap<String, serde_json::Value>,
+    pub config: HashMap<String, Value>,
     /// Enable/disable the plugin
     pub enabled: bool,
     /// Function prefix (to avoid conflicts)
@@ -102,7 +102,7 @@ pub struct TemplatePluginConfig {
     /// Data source refresh interval in seconds
     pub data_refresh_interval_secs: Option<u64>,
     /// Custom settings
-    pub settings: HashMap<String, serde_json::Value>,
+    pub settings: HashMap<String, Value>,
 }
 
 impl Default for TemplatePluginConfig {

@@ -135,7 +135,7 @@ impl FileGenerator {
     fn generate_pdf(&self, context: &GenerationContext) -> anyhow::Result<Vec<u8>> {
         // For mock purposes, generate a simple PDF with minimal structure
         // This is a minimal PDF that displays text
-        let title = format!("Mock {} Document", context.route_id);
+        let _title = format!("Mock {} Document", context.route_id);
         let content = format!(
             "MockForge Generated Document\n\
             Route: {}\n\

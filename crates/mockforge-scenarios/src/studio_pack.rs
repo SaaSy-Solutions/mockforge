@@ -286,7 +286,7 @@ impl StudioPackInstaller {
         // If persona registry is available, register the persona
         if let Some(ref registry) = self.persona_registry {
             // Get or create the persona (this ensures it exists in the registry)
-            let persona = registry.get_or_create_persona(studio_persona.id.clone(), domain);
+            let _persona = registry.get_or_create_persona(studio_persona.id.clone(), domain);
 
             // Update the persona with all details from the studio pack
             let traits: std::collections::HashMap<String, String> =

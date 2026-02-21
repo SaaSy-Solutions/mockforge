@@ -24,7 +24,7 @@ impl BehaviorAggregator {
 impl StateAggregator for BehaviorAggregator {
     async fn aggregate(&self) -> anyhow::Result<(Vec<StateNode>, Vec<StateEdge>)> {
         let mut nodes = Vec::new();
-        let mut edges = Vec::new();
+        let edges = Vec::new();
 
         // Note: This is a placeholder implementation that provides basic behavior system visibility.
         // Full implementation would require access to:

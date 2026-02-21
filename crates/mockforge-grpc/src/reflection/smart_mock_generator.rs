@@ -564,7 +564,7 @@ impl SmartMockGenerator {
 
     /// Generate a mock message with all fields populated
     fn generate_mock_message(&mut self, descriptor: &MessageDescriptor, depth: usize) -> Value {
-        let mut message = prost_reflect::DynamicMessage::new(descriptor.clone());
+        let mut message = DynamicMessage::new(descriptor.clone());
 
         if depth >= self.config.max_depth {
             return Value::Message(message);

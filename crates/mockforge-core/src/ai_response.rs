@@ -246,12 +246,12 @@ pub fn expand_prompt_template(template: &str, context: &RequestContext) -> Strin
 }
 
 /// Helper to convert a JSON value to a string representation
-fn value_to_string(val: &serde_json::Value) -> String {
+fn value_to_string(val: &Value) -> String {
     match val {
-        serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::Bool(b) => b.to_string(),
-        serde_json::Value::Null => "null".to_string(),
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "null".to_string(),
         _ => serde_json::to_string(val).unwrap_or_default(),
     }
 }

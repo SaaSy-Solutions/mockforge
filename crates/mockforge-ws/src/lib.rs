@@ -264,7 +264,7 @@ async fn ws_handler_no_state(ws: WebSocketUpgrade) -> impl IntoResponse {
 
 async fn ws_handler_with_state(
     ws: WebSocketUpgrade,
-    axum::extract::State(_latency): axum::extract::State<LatencyInjector>,
+    State(_latency): State<LatencyInjector>,
 ) -> impl IntoResponse {
     ws.on_upgrade(handle_socket)
 }

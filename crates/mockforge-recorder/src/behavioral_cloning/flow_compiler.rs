@@ -81,7 +81,7 @@ impl FlowCompiler {
             if let Some(extracted_vars) =
                 Self::extract_state_variables(&scenario_step.response, &step_id)
             {
-                for (var_name, (json_path, var_value)) in extracted_vars {
+                for (var_name, (json_path, _var_value)) in extracted_vars {
                     // Add extraction to step
                     scenario_step = scenario_step.add_extract(var_name.clone(), json_path.clone());
 
@@ -119,7 +119,7 @@ impl FlowCompiler {
     /// Looks for common patterns like id, user_id, cart_id, order_id, etc.
     fn extract_state_variables(
         response: &RecordedResponse,
-        step_id: &str,
+        _step_id: &str,
     ) -> Option<HashMap<String, (String, Value)>> {
         // Try to parse response body as JSON
         let body_str = response.body.as_ref()?;

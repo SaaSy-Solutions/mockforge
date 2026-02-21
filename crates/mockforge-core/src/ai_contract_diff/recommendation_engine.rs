@@ -63,7 +63,7 @@ impl RecommendationEngine {
         }
 
         // Generate recommendations for each group
-        for (group_key, group_mismatches) in grouped {
+        for (_group_key, group_mismatches) in grouped {
             if group_mismatches.len() > self.config.max_recommendations {
                 // Limit to max_recommendations
                 let limited = group_mismatches

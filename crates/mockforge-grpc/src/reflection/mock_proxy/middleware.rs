@@ -17,7 +17,7 @@ impl MockReflectionProxy {
     /// Apply request preprocessing middleware
     pub async fn preprocess_request<T>(&self, request: &mut Request<T>) -> Result<(), Status>
     where
-        T: prost_reflect::ReflectMessage,
+        T: ReflectMessage,
     {
         // Extract metadata
         let mut metadata_log = Vec::new();
@@ -62,9 +62,9 @@ impl MockReflectionProxy {
     /// Apply request logging middleware
     pub async fn log_request<T>(&self, request: &Request<T>, service_name: &str, method_name: &str)
     where
-        T: prost_reflect::ReflectMessage,
+        T: ReflectMessage,
     {
-        let start_time = std::time::Instant::now();
+        let start_time = Instant::now();
 
         // Log request metadata
         let mut metadata_log = Vec::new();
@@ -167,7 +167,7 @@ impl MockReflectionProxy {
     /// Apply response postprocessing with body transformations for DynamicMessage responses
     pub async fn postprocess_dynamic_response(
         &self,
-        response: &mut tonic::Response<prost_reflect::DynamicMessage>,
+        response: &mut tonic::Response<DynamicMessage>,
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Status> {
@@ -228,11 +228,11 @@ impl MockReflectionProxy {
     /// Transform a DynamicMessage using JSON overrides
     async fn transform_dynamic_message(
         &self,
-        message: &prost_reflect::DynamicMessage,
+        message: &DynamicMessage,
         service_name: &str,
         method_name: &str,
         overrides: &mockforge_core::overrides::Overrides,
-    ) -> Result<prost_reflect::DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<DynamicMessage, Box<dyn std::error::Error + Send + Sync>> {
         use crate::dynamic::http_bridge::converters::ProtobufJsonConverter;
 
         // Get descriptor pool from service registry
@@ -264,9 +264,7 @@ impl MockReflectionProxy {
     pub async fn postprocess_streaming_dynamic_response(
         &self,
         response: &mut tonic::Response<
-            tokio_stream::wrappers::ReceiverStream<
-                Result<prost_reflect::DynamicMessage, tonic::Status>,
-            >,
+            tokio_stream::wrappers::ReceiverStream<Result<DynamicMessage, Status>>,
         >,
         service_name: &str,
         method_name: &str,
@@ -302,7 +300,7 @@ impl MockReflectionProxy {
     /// Validate a DynamicMessage response
     async fn validate_dynamic_message(
         &self,
-        message: &prost_reflect::DynamicMessage,
+        message: &DynamicMessage,
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

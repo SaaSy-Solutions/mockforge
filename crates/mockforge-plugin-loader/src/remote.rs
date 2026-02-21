@@ -66,7 +66,7 @@ impl RemotePluginLoader {
     /// Create a new remote plugin loader
     pub fn new(config: RemotePluginConfig) -> LoaderResult<Self> {
         // Create cache directory if it doesn't exist
-        std::fs::create_dir_all(&config.cache_dir).map_err(|e| {
+        fs::create_dir_all(&config.cache_dir).map_err(|e| {
             PluginLoaderError::fs(format!(
                 "Failed to create cache directory {}: {}",
                 config.cache_dir.display(),
@@ -215,7 +215,7 @@ impl RemotePluginLoader {
             PluginLoaderError::fs(format!("Failed to create temp directory: {}", e))
         })?;
         let temp_file = temp_dir.path().join(file_name);
-        let mut file = std::fs::File::create(&temp_file)
+        let mut file = fs::File::create(&temp_file)
             .map_err(|e| PluginLoaderError::fs(format!("Failed to create temp file: {}", e)))?;
 
         // Download chunks and write to file

@@ -191,7 +191,6 @@ mod tests {
     #[test]
     fn test_average_count_over_window() {
         let mut tracker = FieldCountTracker::new();
-        let now = Utc::now();
 
         // Record counts at different times
         tracker.record_count(None, "/api/users", "GET", 10);

@@ -170,7 +170,7 @@ impl ValidationGenerator {
     async fn format_error_message(
         &self,
         issue: &ValidationIssue,
-        context: &RequestContext,
+        _context: &RequestContext,
     ) -> Result<String> {
         // First, try to find similar examples
         if let Some(similar_example) = self.find_similar_example(issue, &self.error_examples) {
@@ -179,7 +179,7 @@ impl ValidationGenerator {
         }
 
         // If LLM is available, generate message
-        if let Some(ref llm_client) = self.llm_client {
+        if let Some(ref _llm_client) = self.llm_client {
             return self.generate_message_with_llm(issue).await;
         }
 
@@ -249,7 +249,7 @@ impl ValidationGenerator {
         context: &RequestContext,
     ) -> Result<Value> {
         // Use LLM to generate custom format if available
-        if let Some(ref llm_client) = self.llm_client {
+        if let Some(ref _llm_client) = self.llm_client {
             return self.generate_custom_format_with_llm(issue, message, context).await;
         }
 

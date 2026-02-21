@@ -323,7 +323,7 @@ impl MqttContract {
             .collect();
 
         // Check for removed fields (breaking change)
-        for (field_name, old_field) in &old_fields_map {
+        for (field_name, _old_field) in &old_fields_map {
             if !new_fields_map.contains_key(field_name) {
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -786,12 +786,12 @@ impl ProtocolContract for MqttContract {
         self.validate_message_against_schema(operation_id, &message)
     }
 
-    fn get_schema(&self, operation_id: &str) -> Option<serde_json::Value> {
+    fn get_schema(&self, operation_id: &str) -> Option<Value> {
         self.topics.get(operation_id).map(|t| t.schema.clone())
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, ContractError> {
-        let topics: Vec<serde_json::Value> = self
+    fn to_json(&self) -> Result<Value, ContractError> {
+        let topics: Vec<Value> = self
             .topics
             .values()
             .map(|topic| {
@@ -1256,7 +1256,7 @@ impl ProtocolContract for KafkaContract {
         self.validate_message_against_schema(operation_id, key.as_ref(), &value)
     }
 
-    fn get_schema(&self, operation_id: &str) -> Option<serde_json::Value> {
+    fn get_schema(&self, operation_id: &str) -> Option<Value> {
         self.topics.get(operation_id).map(|topic| {
             serde_json::json!({
                 "key": topic.key_schema.as_ref().map(|s| s.schema.clone()),
@@ -1265,14 +1265,14 @@ impl ProtocolContract for KafkaContract {
         })
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, ContractError> {
-        let topics: Vec<serde_json::Value> = self
+    fn to_json(&self) -> Result<Value, ContractError> {
+        let topics: Vec<Value> = self
             .topics
             .values()
             .map(|topic| {
                 serde_json::json!({
                     "topic": topic.topic,
-                    "key_schema": topic.key_schema.as_ref().map(|s| {
+                    "key_schema": topic.key_schema.as_ref().map(|_s| {
                         serde_json::json!({
                             "format": topic.key_schema.as_ref().unwrap().format,
                             "schema": topic.key_schema.as_ref().unwrap().schema,

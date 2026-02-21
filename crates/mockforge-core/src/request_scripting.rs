@@ -651,7 +651,7 @@ fn add_global_functions_static<'js>(
     let json_obj = Object::new(ctx.clone())?;
 
     let json_parse_func = Function::new(ctx.clone(), |json_str: String| -> String {
-        match serde_json::from_str::<serde_json::Value>(&json_str) {
+        match serde_json::from_str::<Value>(&json_str) {
             Ok(value) => serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string()),
             Err(_) => "null".to_string(),
         }
@@ -665,7 +665,7 @@ fn add_global_functions_static<'js>(
     json_obj.set("stringify", json_stringify_func)?;
 
     let json_validate_func = Function::new(ctx.clone(), |json_str: String| -> bool {
-        serde_json::from_str::<serde_json::Value>(&json_str).is_ok()
+        serde_json::from_str::<Value>(&json_str).is_ok()
     })?;
     json_obj.set("validate", json_validate_func)?;
 
@@ -723,7 +723,6 @@ fn add_global_functions_static<'js>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use serde_json::json;
 
     fn create_empty_script_context() -> ScriptContext {
@@ -1374,7 +1373,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_concurrent_script_execution() {
-        let engine = std::sync::Arc::new(ScriptEngine::new());
+        let engine = Arc::new(ScriptEngine::new());
         let ctx = create_empty_script_context();
 
         // Run multiple scripts concurrently

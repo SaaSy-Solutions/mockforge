@@ -574,7 +574,7 @@ impl RuleGenerator {
         }
 
         // Use LLM to generate additional rules if available
-        if let Some(ref llm_client) = self.llm_client {
+        if let Some(ref _llm_client) = self.llm_client {
             let additional_rules = self.generate_rules_with_llm(examples).await?;
             rules.extend(additional_rules);
         }
@@ -779,7 +779,7 @@ impl RuleGenerator {
         prompt.push_str("Maintain consistency across requests and follow REST conventions.");
 
         // Use LLM to enhance prompt if available
-        if let Some(ref llm_client) = self.llm_client {
+        if let Some(ref _llm_client) = self.llm_client {
             let enhanced = self.enhance_prompt_with_llm(&prompt, examples).await?;
             return Ok(enhanced);
         }
@@ -813,7 +813,7 @@ impl RuleGenerator {
             schema: None,
         };
 
-        let response = llm_client.generate(&request).await?;
+        let _response = llm_client.generate(&request).await?;
 
         // Parse rules from LLM response (simplified - in production, use structured output)
         // For now, return empty vector as LLM rule parsing is complex

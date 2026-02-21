@@ -143,7 +143,7 @@ pub async fn auth_middleware(
                 })
                 .with_metadata("failure_reason".to_string(), serde_json::json!(reason));
             emit_security_event(event).await;
-            let mut res = Response::new(axum::body::Body::from(
+            let mut res = Response::new(Body::from(
                 serde_json::json!({
                     "error": "Authentication failed",
                     "message": reason
@@ -156,7 +156,7 @@ pub async fn auth_middleware(
         }
         AuthResult::NetworkError(reason) => {
             error!("Authentication network error: {}", reason);
-            let mut res = Response::new(axum::body::Body::from(
+            let mut res = Response::new(Body::from(
                 serde_json::json!({
                     "error": "Authentication service unavailable",
                     "message": "Unable to verify token due to network issues"
@@ -168,7 +168,7 @@ pub async fn auth_middleware(
         }
         AuthResult::ServerError(reason) => {
             error!("Authentication server error: {}", reason);
-            let mut res = Response::new(axum::body::Body::from(
+            let mut res = Response::new(Body::from(
                 serde_json::json!({
                     "error": "Authentication service error",
                     "message": "Unable to verify token due to server issues"
@@ -199,7 +199,7 @@ pub async fn auth_middleware(
                     reason: Some("Token expired".to_string()),
                 });
             emit_security_event(event).await;
-            let mut res = Response::new(axum::body::Body::from(
+            let mut res = Response::new(Body::from(
                 serde_json::json!({
                     "error": "Token expired",
                     "message": "The provided token has expired"
@@ -237,7 +237,7 @@ pub async fn auth_middleware(
                 })
                 .with_metadata("token_invalid".to_string(), serde_json::json!(true));
             emit_security_event(event).await;
-            let mut res = Response::new(axum::body::Body::from(
+            let mut res = Response::new(Body::from(
                 serde_json::json!({
                     "error": "Invalid token",
                     "message": reason
@@ -272,7 +272,7 @@ pub async fn auth_middleware(
                     });
                 emit_security_event(event).await;
 
-                let mut res = Response::new(axum::body::Body::from(
+                let mut res = Response::new(Body::from(
                     serde_json::json!({
                         "error": "Authentication required"
                     })

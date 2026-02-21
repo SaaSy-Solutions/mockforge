@@ -2,11 +2,9 @@
 //!
 //! These tests verify that generated code can compile and run as expected.
 
-use mockforge_core::codegen::{generate_mock_server_code, CodegenConfig, MockDataStrategy};
+use mockforge_core::codegen::{generate_mock_server_code, CodegenConfig};
 use mockforge_core::openapi::spec::OpenApiSpec;
 use serde_json::json;
-use std::path::PathBuf;
-use tempfile::TempDir;
 
 #[tokio::test]
 async fn test_generated_server_compiles() {

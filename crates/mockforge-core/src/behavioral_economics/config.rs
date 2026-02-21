@@ -64,7 +64,7 @@ mod tests {
     use super::*;
     use crate::behavioral_economics::actions::BehaviorAction;
     use crate::behavioral_economics::conditions::BehaviorCondition;
-    use crate::behavioral_economics::rules::{BehaviorRule, RuleType};
+    use crate::behavioral_economics::rules::BehaviorRule;
 
     #[test]
     fn test_config_creation() {

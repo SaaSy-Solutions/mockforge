@@ -63,7 +63,7 @@ pub struct HandlerContext {
     /// Entity registry
     pub registry: crate::entities::EntityRegistry,
     /// Session data manager (optional, for session-scoped data)
-    pub session_manager: Option<std::sync::Arc<crate::session::SessionDataManager>>,
+    pub session_manager: Option<Arc<crate::session::SessionDataManager>>,
     /// Snapshots directory (optional, for snapshot operations)
     pub snapshots_dir: Option<std::path::PathBuf>,
 }

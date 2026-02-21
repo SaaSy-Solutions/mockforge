@@ -195,7 +195,7 @@ pub fn sse_router_with_config(config: SSEConfig) -> Router {
 async fn sse_handler(
     State(manager): State<SSEStreamManager>,
     Query(params): Query<SSEQueryParams>,
-) -> Sse<impl Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>> {
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let stream = manager.create_stream(params);
 
     Sse::new(stream).keep_alive(

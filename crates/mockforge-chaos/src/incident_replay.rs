@@ -108,7 +108,7 @@ impl IncidentReplayGenerator {
     /// An orchestrated scenario that replays the incident
     pub fn generate_scenario(&self, timeline: &IncidentTimeline) -> OrchestratedScenario {
         let mut steps = Vec::new();
-        let incident_duration = (timeline.end_time - timeline.start_time).num_seconds() as u64;
+        let _incident_duration = (timeline.end_time - timeline.start_time).num_seconds() as u64;
 
         // Group events by time windows to create scenario steps
         let time_windows = self.group_events_by_time_window(timeline);
@@ -312,7 +312,7 @@ impl IncidentReplayGenerator {
     fn calculate_window_duration(
         &self,
         events: &[&IncidentEvent],
-        timeline: &IncidentTimeline,
+        _timeline: &IncidentTimeline,
     ) -> u64 {
         // Find the maximum duration specified in events
         let mut max_duration = 30; // Default 30 seconds

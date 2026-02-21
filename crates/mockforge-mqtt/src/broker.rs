@@ -504,7 +504,7 @@ impl MqttBroker {
         use mockforge_core::templating;
 
         // Create templating context with environment variables
-        let mut env_vars = std::collections::HashMap::new();
+        let mut env_vars = HashMap::new();
         env_vars.insert("topic".to_string(), topic.to_string());
 
         // Try to parse received payload as JSON and add it to context

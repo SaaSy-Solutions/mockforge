@@ -65,7 +65,7 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
     if let Some(failure_injector) = &shared.failure_injector {
         let tags = op.as_ref().map(|o| o.tags.as_slice()).unwrap_or(&[]);
         if let Some((status_code, error_message)) = failure_injector.process_request(tags) {
-            let mut res = Response::new(axum::body::Body::from(error_message));
+            let mut res = Response::new(Body::from(error_message));
             *res.status_mut() =
                 StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             return res;
@@ -79,7 +79,7 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
             .maybe_fault(&op.id, &op.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>())
             .await
         {
-            let mut res = Response::new(axum::body::Body::from(msg));
+            let mut res = Response::new(Body::from(msg));
             *res.status_mut() =
                 StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             return res;
@@ -98,9 +98,8 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
             match traffic_shaper.process_transfer(request_size, tags).await {
                 Ok(Some(_timeout)) => {
                     // Request was "lost" due to burst loss - return timeout error
-                    let mut res = Response::new(axum::body::Body::from(
-                        "Request timeout due to traffic shaping",
-                    ));
+                    let mut res =
+                        Response::new(Body::from("Request timeout due to traffic shaping"));
                     *res.status_mut() = StatusCode::REQUEST_TIMEOUT;
                     return res;
                 }
@@ -109,10 +108,8 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
                 }
                 Err(e) => {
                     // Traffic shaping error - return internal server error
-                    let mut res = Response::new(axum::body::Body::from(format!(
-                        "Traffic shaping error: {}",
-                        e
-                    )));
+                    let mut res =
+                        Response::new(Body::from(format!("Traffic shaping error: {}", e)));
                     *res.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     return res;
                 }
@@ -137,9 +134,8 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
             match traffic_shaper.process_transfer(response_size, tags).await {
                 Ok(Some(_timeout)) => {
                     // Response was "lost" due to burst loss - return timeout error
-                    let mut res = Response::new(axum::body::Body::from(
-                        "Response timeout due to traffic shaping",
-                    ));
+                    let mut res =
+                        Response::new(Body::from("Response timeout due to traffic shaping"));
                     *res.status_mut() = StatusCode::GATEWAY_TIMEOUT;
                     return res;
                 }
@@ -148,10 +144,8 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
                 }
                 Err(e) => {
                     // Traffic shaping error - return internal server error
-                    let mut res = Response::new(axum::body::Body::from(format!(
-                        "Traffic shaping error: {}",
-                        e
-                    )));
+                    let mut res =
+                        Response::new(Body::from(format!("Traffic shaping error: {}", e)));
                     *res.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                     return res;
                 }

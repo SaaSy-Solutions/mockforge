@@ -195,7 +195,7 @@ mod tests {
     #[tokio::test]
     async fn test_record_interaction() {
         let config = IntelligentBehaviorConfig::default();
-        let mut context = StatefulAiContext::new("test_session", config);
+        let context = StatefulAiContext::new("test_session", config);
 
         context
             .record_interaction(
@@ -235,7 +235,7 @@ mod tests {
     #[tokio::test]
     async fn test_context_summary() {
         let config = IntelligentBehaviorConfig::default();
-        let mut context = StatefulAiContext::new("test_session", config);
+        let context = StatefulAiContext::new("test_session", config);
 
         context.set_value("user_id", serde_json::json!("user_1")).await;
 

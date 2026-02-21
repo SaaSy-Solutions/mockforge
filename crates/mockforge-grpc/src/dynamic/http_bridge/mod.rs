@@ -216,22 +216,18 @@ impl HttpBridge {
     }
 
     /// Health check handler
-    async fn health_check(
-        State(_bridge): State<Arc<HttpBridge>>,
-    ) -> axum::response::Json<serde_json::Value> {
-        axum::response::Json(serde_json::json!({"status": "ok", "bridge": "healthy"}))
+    async fn health_check(State(_bridge): State<Arc<HttpBridge>>) -> Json<Value> {
+        Json(serde_json::json!({"status": "ok", "bridge": "healthy"}))
     }
 
     /// Get statistics handler
-    async fn get_stats(
-        State(bridge): State<Arc<HttpBridge>>,
-    ) -> axum::response::Json<serde_json::Value> {
+    async fn get_stats(State(bridge): State<Arc<HttpBridge>>) -> Json<Value> {
         // Handle poisoned mutex gracefully - if mutex is poisoned, use default stats
         let stats = bridge.stats.lock().unwrap_or_else(|poisoned| {
             warn!("Statistics mutex is poisoned, using default values");
             poisoned.into_inner()
         });
-        axum::response::Json(serde_json::json!({
+        Json(serde_json::json!({
             "requests_served": stats.requests_served,
             "requests_successful": stats.requests_successful,
             "requests_failed": stats.requests_failed,
@@ -240,16 +236,12 @@ impl HttpBridge {
     }
 
     /// List services handler
-    async fn list_services(
-        State(bridge): State<Arc<HttpBridge>>,
-    ) -> axum::response::Json<serde_json::Value> {
+    async fn list_services(State(bridge): State<Arc<HttpBridge>>) -> Json<Value> {
         Self::list_services_static(&bridge).await
     }
 
     /// Get OpenAPI spec handler
-    async fn get_openapi_spec(
-        State(bridge): State<Arc<HttpBridge>>,
-    ) -> axum::response::Json<serde_json::Value> {
+    async fn get_openapi_spec(State(bridge): State<Arc<HttpBridge>>) -> Json<Value> {
         Self::get_openapi_spec_static(&bridge).await
     }
 
@@ -270,7 +262,7 @@ impl HttpBridge {
                     error: Some("Missing 'service' parameter in path".to_string()),
                     metadata: HashMap::new(),
                 };
-                return (axum::http::StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+                return (http::StatusCode::BAD_REQUEST, Json(error_response)).into_response();
             }
         };
 
@@ -283,7 +275,7 @@ impl HttpBridge {
                     error: Some("Missing 'method' parameter in path".to_string()),
                     metadata: HashMap::new(),
                 };
-                return (axum::http::StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+                return (http::StatusCode::BAD_REQUEST, Json(error_response)).into_response();
             }
         };
 
@@ -299,7 +291,7 @@ impl HttpBridge {
                 error: Some(format!("Service '{}' not found", service_name)),
                 metadata: HashMap::new(),
             };
-            return (axum::http::StatusCode::NOT_FOUND, Json(error_response)).into_response();
+            return (http::StatusCode::NOT_FOUND, Json(error_response)).into_response();
         };
 
         let method_info = match method_info {
@@ -314,7 +306,7 @@ impl HttpBridge {
                     )),
                     metadata: HashMap::new(),
                 };
-                return (axum::http::StatusCode::NOT_FOUND, Json(error_response)).into_response();
+                return (http::StatusCode::NOT_FOUND, Json(error_response)).into_response();
             }
         };
 
@@ -348,7 +340,7 @@ impl HttpBridge {
                         warn!("Failed to update success stats (mutex poisoned)");
                     }
                 }
-                (axum::http::StatusCode::OK, Json(response)).into_response()
+                (http::StatusCode::OK, Json(response)).into_response()
             }
             Err(err) => {
                 // Update failed stats - handle poisoned mutex gracefully
@@ -366,8 +358,7 @@ impl HttpBridge {
                     error: Some(err.to_string()),
                     metadata: HashMap::new(),
                 };
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
-                    .into_response()
+                (http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)).into_response()
             }
         }
     }
@@ -425,7 +416,7 @@ impl HttpBridge {
                                     warn!("Failed to update success stats (mutex poisoned)");
                                 }
                             }
-                            (axum::http::StatusCode::OK, Json(response)).into_response()
+                            (http::StatusCode::OK, Json(response)).into_response()
                         }
                         Err(err) => {
                             // Update failed stats - handle poisoned mutex gracefully
@@ -446,7 +437,7 @@ impl HttpBridge {
                                 error: Some(err.to_string()),
                                 metadata: HashMap::new(),
                             };
-                            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+                            (http::StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
                                 .into_response()
                         }
                     }
@@ -459,13 +450,13 @@ impl HttpBridge {
     ///
     /// TODO: Integrate into HTTP bridge admin endpoints when stats API is implemented
     #[allow(dead_code)] // TODO: Remove when bridge stats endpoint is complete
-    async fn get_stats_static(bridge: &Arc<HttpBridge>) -> axum::response::Json<serde_json::Value> {
+    async fn get_stats_static(bridge: &Arc<HttpBridge>) -> Json<Value> {
         // Handle poisoned mutex gracefully - if mutex is poisoned, use default stats
         let stats = bridge.stats.lock().unwrap_or_else(|poisoned| {
             warn!("Statistics mutex is poisoned, using default values");
             poisoned.into_inner()
         });
-        axum::response::Json(serde_json::json!({
+        Json(serde_json::json!({
             "requests_served": stats.requests_served,
             "requests_successful": stats.requests_successful,
             "requests_failed": stats.requests_failed,
@@ -474,19 +465,15 @@ impl HttpBridge {
     }
 
     /// List available services (static method for handler)
-    async fn list_services_static(
-        bridge: &Arc<HttpBridge>,
-    ) -> axum::response::Json<serde_json::Value> {
+    async fn list_services_static(bridge: &Arc<HttpBridge>) -> Json<Value> {
         let services = bridge.proxy.service_names();
-        axum::response::Json(serde_json::json!({
+        Json(serde_json::json!({
             "services": services
         }))
     }
 
     /// Get OpenAPI spec (static method for handler)
-    async fn get_openapi_spec_static(
-        bridge: &Arc<HttpBridge>,
-    ) -> axum::response::Json<serde_json::Value> {
+    async fn get_openapi_spec_static(bridge: &Arc<HttpBridge>) -> Json<Value> {
         use crate::dynamic::proto_parser::ProtoService;
         use std::collections::HashMap;
 
@@ -501,7 +488,7 @@ impl HttpBridge {
 
         // Generate OpenAPI spec using the route generator
         let spec = bridge.route_generator.generate_openapi_spec(&services);
-        axum::response::Json(spec)
+        Json(spec)
     }
 
     /// Handle a bridge request by calling the appropriate gRPC method

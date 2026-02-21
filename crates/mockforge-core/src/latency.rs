@@ -399,7 +399,7 @@ mod tests {
 
         // Update profile using async method
         let new_profile = LatencyProfile::new(200, 50);
-        LatencyInjector::update_profile_async(&injector, new_profile).await;
+        LatencyInjector::update_profile_async(&injector, new_profile).await.unwrap();
 
         // Verify it still works
         assert!(injector.read().await.is_enabled());

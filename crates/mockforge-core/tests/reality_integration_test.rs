@@ -5,9 +5,7 @@
 //! These tests verify that the RealityEngine correctly coordinates
 //! chaos, latency, and MockAI subsystems based on the selected reality level.
 
-use mockforge_core::reality::{
-    PresetMetadata, RealityConfig, RealityEngine, RealityLevel, RealityPreset,
-};
+use mockforge_core::reality::{PresetMetadata, RealityConfig, RealityEngine, RealityLevel};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -49,7 +47,7 @@ async fn test_reality_level_changes() {
 
     // Test Level 1: Static Stubs
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::StaticStubs).await;
         drop(engine_guard);
 
@@ -64,7 +62,7 @@ async fn test_reality_level_changes() {
 
     // Test Level 5: Production Chaos
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::ProductionChaos).await;
         drop(engine_guard);
 
@@ -89,7 +87,7 @@ async fn test_reality_config_progression() {
         let level = RealityLevel::from_value(level_value).unwrap();
 
         {
-            let mut engine_guard = engine.write().await;
+            let engine_guard = engine.write().await;
             engine_guard.set_level(level).await;
             drop(engine_guard);
 
@@ -125,7 +123,7 @@ async fn test_reality_preset_creation() {
     let engine = Arc::new(RwLock::new(RealityEngine::new()));
 
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::HighRealism).await;
         drop(engine_guard);
     }
@@ -149,7 +147,7 @@ async fn test_reality_preset_application() {
 
     // Create a preset at Level 5
     let preset = {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::ProductionChaos).await;
         drop(engine_guard);
         let engine_guard = engine.read().await;
@@ -158,7 +156,7 @@ async fn test_reality_preset_application() {
 
     // Reset to Level 1
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::StaticStubs).await;
         drop(engine_guard);
 
@@ -168,7 +166,7 @@ async fn test_reality_preset_application() {
 
     // Apply preset
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.apply_preset(preset.clone()).await;
         drop(engine_guard);
 
@@ -245,7 +243,7 @@ async fn test_reality_engine_concurrent_access() {
             let engine = engine.clone();
             tokio::spawn(async move {
                 let level = RealityLevel::from_value(level_value).unwrap();
-                let mut engine_guard = engine.write().await;
+                let engine_guard = engine.write().await;
                 engine_guard.set_level(level).await;
             })
         })
@@ -260,7 +258,7 @@ async fn test_reality_config_chaos_settings() {
 
     // Level 1 should have no chaos
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::StaticStubs).await;
         drop(engine_guard);
 
@@ -272,7 +270,7 @@ async fn test_reality_config_chaos_settings() {
 
     // Level 5 should have high chaos
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::ProductionChaos).await;
         drop(engine_guard);
 
@@ -289,7 +287,7 @@ async fn test_reality_config_latency_settings() {
 
     // Level 1 should have no latency
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::StaticStubs).await;
         drop(engine_guard);
 
@@ -301,7 +299,7 @@ async fn test_reality_config_latency_settings() {
 
     // Level 5 should have high latency
     {
-        let mut engine_guard = engine.write().await;
+        let engine_guard = engine.write().await;
         engine_guard.set_level(RealityLevel::ProductionChaos).await;
         drop(engine_guard);
 

@@ -267,7 +267,7 @@ impl SystemGenerator {
         system_id: &str,
         version: &str,
         artifacts: &HashMap<String, SystemArtifact>,
-        deterministic_config: Option<&DeterministicModeConfig>,
+        _deterministic_config: Option<&DeterministicModeConfig>,
     ) -> Result<Vec<String>> {
         let mut frozen_ids = Vec::new();
 

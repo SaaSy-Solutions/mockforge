@@ -192,7 +192,7 @@ async fn handle_mod_init(
 async fn create_mod_structure(
     base_dir: &PathBuf,
     template: &str,
-    project_name: &str,
+    _project_name: &str,
 ) -> Result<()> {
     let dirs = match template {
         "solo" => vec!["contracts", "mocks", "scenarios", "personas"],
@@ -437,7 +437,7 @@ mockforge mod review --contract contracts/api.yaml --mock http://localhost:3000 
 }
 
 /// Print project structure
-fn print_project_structure(base_dir: &PathBuf, template: &str) {
+fn print_project_structure(_base_dir: &PathBuf, template: &str) {
     let structure = match template {
         "solo" => {
             r#"
@@ -488,7 +488,7 @@ my-project/
 }
 
 /// Validate contract against implementation
-async fn handle_mod_validate(contract: PathBuf, target: String, strict: bool) -> Result<()> {
+async fn handle_mod_validate(contract: PathBuf, target: String, _strict: bool) -> Result<()> {
     println!("🔍 Validating contract against implementation...");
     println!("   Contract: {}", contract.display());
     println!("   Target: {}", target);

@@ -152,7 +152,7 @@ async fn fetch_endpoints_from_ui_builder(
 /// SSE endpoint for real-time graph updates
 pub async fn graph_sse(
     State(state): State<AdminState>,
-) -> Sse<impl Stream<Item = std::result::Result<Event, Infallible>>> {
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     tracing::info!("SSE endpoint /graph/sse accessed - starting real-time graph updates");
 
     // Clone state for use in the stream

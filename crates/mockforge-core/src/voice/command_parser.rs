@@ -969,7 +969,7 @@ mod tests {
     #[test]
     fn test_voice_command_parser_new() {
         let config = IntelligentBehaviorConfig::default();
-        let parser = VoiceCommandParser::new(config);
+        let _parser = VoiceCommandParser::new(config);
         // Just verify it doesn't panic and creates the parser
         // The llm_client is private, so we can't directly test it
     }

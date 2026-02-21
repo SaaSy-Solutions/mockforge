@@ -68,14 +68,14 @@ async fn health_check() -> Result<Response<String>, StatusCode> {
 /// Main proxy handler that intercepts and forwards requests
 async fn proxy_handler(
     axum::extract::State(state): axum::extract::State<Arc<ProxyServer>>,
-    request: axum::http::Request<axum::body::Body>,
+    request: http::Request<axum::body::Body>,
 ) -> Result<Response<String>, StatusCode> {
     // Extract client address from request extensions (set by ConnectInfo middleware)
     let client_addr = request
         .extensions()
         .get::<SocketAddr>()
         .copied()
-        .unwrap_or_else(|| std::net::SocketAddr::from(([0, 0, 0, 0], 0)));
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 0)));
 
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -122,7 +122,7 @@ async fn proxy_handler(
         };
 
     // Create a new URI with the full upstream URL for the proxy handler
-    let modified_uri = full_upstream_url.parse::<axum::http::Uri>().unwrap_or_else(|_| uri.clone());
+    let _modified_uri = full_upstream_url.parse::<http::Uri>().unwrap_or_else(|_| uri.clone());
 
     // Log the request if enabled
     if state.log_requests {
@@ -211,11 +211,11 @@ async fn proxy_handler(
             }
 
             // Convert response headers
-            let mut response_headers = axum::http::HeaderMap::new();
+            let mut response_headers = http::HeaderMap::new();
             for (name, value) in response.headers() {
                 if let (Ok(header_name), Ok(header_value)) = (
-                    axum::http::HeaderName::try_from(name.as_str()),
-                    axum::http::HeaderValue::try_from(value.as_bytes()),
+                    http::HeaderName::try_from(name.as_str()),
+                    http::HeaderValue::try_from(value.as_bytes()),
                 ) {
                     response_headers.insert(header_name, header_value);
                 }
@@ -284,7 +284,7 @@ async fn logging_middleware(
         .extensions()
         .get::<SocketAddr>()
         .copied()
-        .unwrap_or_else(|| std::net::SocketAddr::from(([0, 0, 0, 0], 0)));
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 0)));
 
     debug!(
         method = %method,

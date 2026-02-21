@@ -99,7 +99,7 @@ pub struct RequestMetrics {
     /// Error count by endpoint
     pub errors_by_endpoint: HashMap<String, u64>,
     /// Last request timestamp by endpoint
-    pub last_request_by_endpoint: HashMap<String, chrono::DateTime<chrono::Utc>>,
+    pub last_request_by_endpoint: HashMap<String, chrono::DateTime<Utc>>,
 }
 
 /// System metrics
@@ -117,7 +117,7 @@ pub struct SystemMetrics {
 #[derive(Debug, Clone)]
 pub struct TimeSeriesPoint {
     /// Timestamp
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: chrono::DateTime<Utc>,
     /// Value
     pub value: f64,
 }
@@ -141,7 +141,7 @@ pub struct RestartStatus {
     /// Whether a restart is currently in progress
     pub in_progress: bool,
     /// Timestamp when restart was initiated
-    pub initiated_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub initiated_at: Option<chrono::DateTime<Utc>>,
     /// Restart reason/message
     pub reason: Option<String>,
     /// Whether restart was successful
@@ -160,7 +160,7 @@ pub struct FixtureInfo {
     /// Request path
     pub path: String,
     /// When the fixture was saved
-    pub saved_at: chrono::DateTime<chrono::Utc>,
+    pub saved_at: chrono::DateTime<Utc>,
     /// File size in bytes
     pub file_size: u64,
     /// File path relative to fixtures directory
@@ -185,7 +185,7 @@ pub struct SmokeTestResult {
     /// Test description
     pub description: String,
     /// When the test was last run
-    pub last_run: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_run: Option<chrono::DateTime<Utc>>,
     /// Test status (passed, failed, running, pending)
     pub status: String,
     /// Response time in milliseconds
@@ -232,7 +232,7 @@ pub struct ImportHistoryEntry {
     /// Import format (postman, insomnia, curl)
     pub format: String,
     /// Timestamp of the import
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: chrono::DateTime<Utc>,
     /// Number of routes imported
     pub routes_count: usize,
     /// Number of variables imported
@@ -267,7 +267,7 @@ pub struct AdminState {
     /// Admin server port
     pub admin_port: u16,
     /// Start time
-    pub start_time: chrono::DateTime<chrono::Utc>,
+    pub start_time: chrono::DateTime<Utc>,
     /// Request metrics (protected by RwLock)
     pub metrics: Arc<RwLock<RequestMetrics>>,
     /// System metrics (protected by RwLock)
@@ -294,15 +294,13 @@ pub struct AdminState {
     pub continuum_engine: Arc<RwLock<mockforge_core::RealityContinuumEngine>>,
     /// Chaos API state for hot-reload support (optional)
     /// Contains config that can be updated at runtime
-    pub chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
     /// Latency injector for HTTP middleware (optional)
     /// Allows updating latency profile at runtime
-    pub latency_injector:
-        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>>,
+    pub latency_injector: Option<Arc<RwLock<mockforge_core::latency::LatencyInjector>>>,
     /// MockAI instance (optional)
     /// Allows updating MockAI configuration at runtime
-    pub mockai:
-        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    pub mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 impl AdminState {
@@ -376,17 +374,13 @@ impl AdminState {
         graphql_server_addr: Option<std::net::SocketAddr>,
         api_enabled: bool,
         admin_port: u16,
-        chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
-        latency_injector: Option<
-            std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
-        >,
-        mockai: Option<
-            std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
-        >,
+        chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
+        latency_injector: Option<Arc<RwLock<mockforge_core::latency::LatencyInjector>>>,
+        mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
         continuum_config: Option<mockforge_core::ContinuumConfig>,
-        virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
+        virtual_clock: Option<Arc<mockforge_core::VirtualClock>>,
     ) -> Self {
-        let start_time = chrono::Utc::now();
+        let start_time = Utc::now();
 
         Self {
             http_server_addr,
@@ -508,7 +502,7 @@ impl AdminState {
         }
 
         // Update last request timestamp for this endpoint
-        metrics.last_request_by_endpoint.insert(endpoint, chrono::Utc::now());
+        metrics.last_request_by_endpoint.insert(endpoint, Utc::now());
 
         // Capture total_requests before releasing the lock
         let total_requests = metrics.total_requests;
@@ -561,7 +555,7 @@ impl AdminState {
 
     /// Update time series data with new metrics
     async fn update_time_series_data(&self, memory_mb: f64, cpu_percent: f64) {
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         let mut time_series = self.time_series.write().await;
 
         // Add memory usage data point
@@ -634,7 +628,7 @@ impl AdminState {
         }
 
         status.in_progress = true;
-        status.initiated_at = Some(chrono::Utc::now());
+        status.initiated_at = Some(Utc::now());
         status.reason = Some(reason);
         status.success = None;
 
@@ -678,7 +672,7 @@ impl AdminState {
 
     /// Update time series data when a request is recorded
     async fn update_time_series_on_request(&self, response_time_ms: u64, total_requests: u64) {
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         let mut time_series = self.time_series.write().await;
 
         // Add request count data point
@@ -1169,7 +1163,7 @@ pub async fn logs_sse(
             );
 
             // Filter for recent logs within TTL
-            let now = chrono::Utc::now();
+            let now = Utc::now();
             let ttl_cutoff = now - chrono::Duration::minutes(RECENT_LOGS_TTL_MINUTES);
 
             // Find new logs that haven't been seen before
@@ -1350,7 +1344,7 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
     };
 
     // Build time-series latency data (last 100 data points)
-    let latency_over_time: Vec<(chrono::DateTime<chrono::Utc>, u64)> =
+    let latency_over_time: Vec<(chrono::DateTime<Utc>, u64)> =
         if let Some(global_logger) = mockforge_core::get_global_logger() {
             let all_logs = global_logger.get_recent_logs(Some(100)).await;
             all_logs.iter().map(|log| (log.timestamp, log.response_time_ms)).collect()
@@ -1381,7 +1375,7 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Me
 /// Update latency profile
 pub async fn update_latency(
     State(state): State<AdminState>,
-    headers: axum::http::HeaderMap,
+    headers: http::HeaderMap,
     Json(update): Json<ConfigUpdate>,
 ) -> Json<ApiResponse<String>> {
     use crate::audit::{create_audit_log, get_global_audit_store, AdminActionType};
@@ -1395,7 +1389,7 @@ pub async fn update_latency(
     let base_ms = update.data.get("base_ms").and_then(|v| v.as_u64()).unwrap_or(50);
     let jitter_ms = update.data.get("jitter_ms").and_then(|v| v.as_u64()).unwrap_or(20);
 
-    let tag_overrides: std::collections::HashMap<String, u64> = update
+    let tag_overrides: HashMap<String, u64> = update
         .data
         .get("tag_overrides")
         .and_then(|v| v.as_object())
@@ -1748,7 +1742,7 @@ pub async fn get_restart_status(
 
 /// Get audit logs
 pub async fn get_audit_logs(
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Json<ApiResponse<Vec<crate::audit::AdminAuditLog>>> {
     use crate::audit::{get_global_audit_store, AdminActionType};
 
@@ -1944,7 +1938,7 @@ fn calculate_endpoint_latency(metrics: &RequestMetrics, endpoint: &str) -> Optio
 fn get_endpoint_last_request(
     metrics: &RequestMetrics,
     endpoint: &str,
-) -> Option<chrono::DateTime<chrono::Utc>> {
+) -> Option<chrono::DateTime<Utc>> {
     metrics.last_request_by_endpoint.get(endpoint).copied()
 }
 
@@ -2452,13 +2446,11 @@ async fn cleanup_empty_directories(file_path: &std::path::Path) {
 }
 
 /// Download a fixture file
-pub async fn download_fixture(
-    axum::extract::Path(fixture_id): axum::extract::Path<String>,
-) -> impl IntoResponse {
+pub async fn download_fixture(Path(fixture_id): Path<String>) -> impl IntoResponse {
     // Find and read the fixture file
     match download_fixture_by_id(&fixture_id).await {
         Ok((content, file_name)) => (
-            http::StatusCode::OK,
+            StatusCode::OK,
             [
                 (http::header::CONTENT_TYPE, "application/json".to_string()),
                 (
@@ -2473,7 +2465,7 @@ pub async fn download_fixture(
             tracing::error!("Failed to download fixture {}: {}", fixture_id, e);
             let error_response = format!(r#"{{"error": "Failed to download fixture: {}"}}"#, e);
             (
-                http::StatusCode::NOT_FOUND,
+                StatusCode::NOT_FOUND,
                 [(http::header::CONTENT_TYPE, "application/json".to_string())],
                 error_response,
             )
@@ -2518,7 +2510,7 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
 
 /// Rename a fixture
 pub async fn rename_fixture(
-    axum::extract::Path(fixture_id): axum::extract::Path<String>,
+    Path(fixture_id): Path<String>,
     Json(payload): Json<FixtureRenameRequest>,
 ) -> Json<ApiResponse<String>> {
     match rename_fixture_by_id(&fixture_id, &payload.new_name).await {
@@ -2595,7 +2587,7 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
 
 /// Move a fixture to a new path
 pub async fn move_fixture(
-    axum::extract::Path(fixture_id): axum::extract::Path<String>,
+    Path(fixture_id): Path<String>,
     Json(payload): Json<FixtureMoveRequest>,
 ) -> Json<ApiResponse<String>> {
     match move_fixture_by_id(&fixture_id, &payload.new_path).await {
@@ -3095,7 +3087,7 @@ async fn execute_smoke_tests(state: &AdminState) -> Result<()> {
 
         let duration = start_time.elapsed();
         test_result.duration_seconds = Some(duration.as_secs_f64());
-        test_result.last_run = Some(chrono::Utc::now());
+        test_result.last_run = Some(Utc::now());
 
         executed_results.push(test_result.clone());
         state.update_smoke_test_result(test_result).await;
@@ -3132,7 +3124,7 @@ async fn execute_single_smoke_test(
 ) -> Result<(u16, u64)> {
     let url = format!("{}{}", context.base_url, test.path);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(context.timeout_seconds))
+        .timeout(Duration::from_secs(context.timeout_seconds))
         .build()
         .map_err(|e| Error::generic(format!("Failed to create HTTP client: {}", e)))?;
 
@@ -3505,7 +3497,7 @@ pub async fn import_postman(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "postman".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -3568,7 +3560,7 @@ pub async fn import_postman(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "postman".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: workspace_result.request_count,
                 variables_count: import_result.variables.len(),
                 warnings_count: workspace_result.warnings.len(),
@@ -3591,7 +3583,7 @@ pub async fn import_postman(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "postman".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -3628,7 +3620,7 @@ pub async fn import_insomnia(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "insomnia".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -3680,7 +3672,7 @@ pub async fn import_insomnia(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "insomnia".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: workspace_result.request_count,
                 variables_count,
                 warnings_count: workspace_result.warnings.len(),
@@ -3703,7 +3695,7 @@ pub async fn import_insomnia(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "insomnia".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -3746,7 +3738,7 @@ pub async fn import_curl(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "curl".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -3787,7 +3779,7 @@ pub async fn import_curl(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "curl".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: workspace_result.request_count,
                 variables_count: 0, // Curl doesn't have variables
                 warnings_count: workspace_result.warnings.len(),
@@ -3810,7 +3802,7 @@ pub async fn import_curl(
             let entry = ImportHistoryEntry {
                 id: Uuid::new_v4().to_string(),
                 format: "curl".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: Utc::now(),
                 routes_count: 0,
                 variables_count: 0,
                 warnings_count: 0,
@@ -4345,7 +4337,7 @@ pub async fn export_reality_preset(
 /// Get current blend ratio for a path
 pub async fn get_continuum_ratio(
     State(state): State<AdminState>,
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     let path = params.get("path").cloned().unwrap_or_else(|| "/".to_string());
     let engine = state.continuum_engine.read().await;
@@ -4420,11 +4412,11 @@ pub async fn set_continuum_schedule(
 ) -> Json<ApiResponse<serde_json::Value>> {
     let start_time = chrono::DateTime::parse_from_rfc3339(&request.start_time)
         .map_err(|e| format!("Invalid start_time: {}", e))
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .map(|dt| dt.with_timezone(&Utc));
 
     let end_time = chrono::DateTime::parse_from_rfc3339(&request.end_time)
         .map_err(|e| format!("Invalid end_time: {}", e))
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .map(|dt| dt.with_timezone(&Utc));
 
     match (start_time, end_time) {
         (Ok(start), Ok(end)) => {
@@ -4525,7 +4517,7 @@ pub async fn clear_continuum_overrides(
 
 pub async fn get_workspace(
     State(_state): State<AdminState>,
-    axum::extract::Path(workspace_id): axum::extract::Path<String>,
+    Path(workspace_id): Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "workspace": {
@@ -4542,21 +4534,21 @@ pub async fn get_workspace(
 
 pub async fn delete_workspace(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace deleted".to_string()))
 }
 
 pub async fn set_active_workspace(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Workspace activated".to_string()))
 }
 
 pub async fn create_folder(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Folder created".to_string()))
@@ -4564,7 +4556,7 @@ pub async fn create_folder(
 
 pub async fn create_request(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Request created".to_string()))
@@ -4572,7 +4564,7 @@ pub async fn create_request(
 
 pub async fn execute_workspace_request(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _request_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _request_id)): Path<(String, String)>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
@@ -4583,14 +4575,14 @@ pub async fn execute_workspace_request(
 
 pub async fn get_request_history(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _request_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _request_id)): Path<(String, String)>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn get_folder(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, folder_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, folder_id)): Path<(String, String)>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "folder": {
@@ -4606,7 +4598,7 @@ pub async fn get_folder(
 
 pub async fn import_to_workspace(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Import to workspace completed".to_string()))
@@ -4622,7 +4614,7 @@ pub async fn export_workspaces(
 // Environment management functions
 pub async fn get_environments(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     // Return a default global environment
     let environments = vec![serde_json::json!({
@@ -4643,7 +4635,7 @@ pub async fn get_environments(
 
 pub async fn create_environment(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment created".to_string()))
@@ -4651,7 +4643,7 @@ pub async fn create_environment(
 
 pub async fn update_environment(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _environment_id)): Path<(String, String)>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment updated".to_string()))
@@ -4659,21 +4651,21 @@ pub async fn update_environment(
 
 pub async fn delete_environment(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _environment_id)): Path<(String, String)>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment deleted".to_string()))
 }
 
 pub async fn set_active_environment(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _environment_id)): Path<(String, String)>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment activated".to_string()))
 }
 
 pub async fn update_environments_order(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment order updated".to_string()))
@@ -4681,7 +4673,7 @@ pub async fn update_environments_order(
 
 pub async fn get_environment_variables(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _environment_id)): Path<(String, String)>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "variables": []
@@ -4690,7 +4682,7 @@ pub async fn get_environment_variables(
 
 pub async fn set_environment_variable(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id)): axum::extract::Path<(String, String)>,
+    Path((_workspace_id, _environment_id)): Path<(String, String)>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment variable set".to_string()))
@@ -4698,11 +4690,7 @@ pub async fn set_environment_variable(
 
 pub async fn remove_environment_variable(
     State(_state): State<AdminState>,
-    axum::extract::Path((_workspace_id, _environment_id, _variable_name)): axum::extract::Path<(
-        String,
-        String,
-        String,
-    )>,
+    Path((_workspace_id, _environment_id, _variable_name)): Path<(String, String, String)>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Environment variable removed".to_string()))
 }
@@ -4710,7 +4698,7 @@ pub async fn remove_environment_variable(
 // Autocomplete functions
 pub async fn get_autocomplete_suggestions(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
@@ -4723,7 +4711,7 @@ pub async fn get_autocomplete_suggestions(
 // Sync management functions
 pub async fn get_sync_status(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<serde_json::Value>> {
     Json(ApiResponse::success(serde_json::json!({
         "status": "disabled"
@@ -4732,7 +4720,7 @@ pub async fn get_sync_status(
 
 pub async fn configure_sync(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync configured".to_string()))
@@ -4740,28 +4728,28 @@ pub async fn configure_sync(
 
 pub async fn disable_sync(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync disabled".to_string()))
 }
 
 pub async fn trigger_sync(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync triggered".to_string()))
 }
 
 pub async fn get_sync_changes(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
 ) -> Json<ApiResponse<Vec<serde_json::Value>>> {
     Json(ApiResponse::success(vec![]))
 }
 
 pub async fn confirm_sync_changes(
     State(_state): State<AdminState>,
-    axum::extract::Path(_workspace_id): axum::extract::Path<String>,
+    Path(_workspace_id): Path<String>,
     Json(_request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<String>> {
     Json(ApiResponse::success("Sync changes confirmed".to_string()))
@@ -4813,7 +4801,7 @@ mod tests {
     #[test]
     fn test_time_series_point() {
         let point = TimeSeriesPoint {
-            timestamp: chrono::Utc::now(),
+            timestamp: Utc::now(),
             value: 42.5,
         };
 
@@ -4824,7 +4812,7 @@ mod tests {
     fn test_restart_status() {
         let status = RestartStatus {
             in_progress: true,
-            initiated_at: Some(chrono::Utc::now()),
+            initiated_at: Some(Utc::now()),
             reason: Some("Manual restart".to_string()),
             success: None,
         };
@@ -4838,31 +4826,31 @@ mod tests {
         use std::collections::HashMap;
 
         let state = ConfigurationState {
-            latency_profile: crate::models::LatencyProfile {
+            latency_profile: LatencyProfile {
                 name: "default".to_string(),
                 base_ms: 100,
                 jitter_ms: 10,
                 tag_overrides: HashMap::new(),
             },
-            fault_config: crate::models::FaultConfig {
+            fault_config: FaultConfig {
                 enabled: false,
                 failure_rate: 0.0,
                 status_codes: vec![],
                 active_failures: 0,
             },
-            proxy_config: crate::models::ProxyConfig {
+            proxy_config: ProxyConfig {
                 enabled: false,
                 upstream_url: None,
                 timeout_seconds: 30,
                 requests_proxied: 0,
             },
-            validation_settings: crate::models::ValidationSettings {
+            validation_settings: ValidationSettings {
                 mode: "off".to_string(),
                 aggregate_errors: false,
                 validate_responses: false,
                 overrides: HashMap::new(),
             },
-            traffic_shaping: crate::models::TrafficShapingConfig {
+            traffic_shaping: TrafficShapingConfig {
                 enabled: false,
                 bandwidth: crate::models::BandwidthConfig {
                     enabled: false,

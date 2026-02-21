@@ -323,7 +323,7 @@ async fn handle_export(
     db: RecorderDatabase,
     scenario_id: String,
     output: PathBuf,
-    format: String,
+    _format: String,
 ) -> anyhow::Result<()> {
     let storage = ScenarioStorage::new(db);
     storage.export_scenario_to_file(&scenario_id, &output).await?;
@@ -335,7 +335,7 @@ async fn handle_export(
 async fn handle_import(
     db: RecorderDatabase,
     input: PathBuf,
-    format: Option<String>,
+    _format: Option<String>,
 ) -> anyhow::Result<()> {
     let storage = ScenarioStorage::new(db.clone());
     let scenario = storage.import_scenario_from_file(&input).await?;

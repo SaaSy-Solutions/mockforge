@@ -528,7 +528,7 @@ impl OpenApiRouteRegistry {
                     let mut axum_response = (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                         .into_response();
 
@@ -618,7 +618,7 @@ impl OpenApiRouteRegistry {
                             // Return a failure response
                             return (
                                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                                axum::response::Json(serde_json::json!({
+                                Json(serde_json::json!({
                                     "error": "Injected failure",
                                     "code": 500
                                 })),
@@ -631,7 +631,7 @@ impl OpenApiRouteRegistry {
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                 }
             };
@@ -710,7 +710,7 @@ impl OpenApiRouteRegistry {
     /// Axum router with AI-powered response generation
     pub fn build_router_with_ai(
         &self,
-        ai_generator: Option<std::sync::Arc<dyn AiGenerator + Send + Sync>>,
+        ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
     ) -> axum::Router {
         use axum::routing::{delete, get, patch, post, put};
 
@@ -764,7 +764,7 @@ impl OpenApiRouteRegistry {
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                 }
             };
@@ -804,7 +804,7 @@ impl OpenApiRouteRegistry {
     /// Axum router with MockAI-powered response generation
     pub fn build_router_with_mockai(
         &self,
-        mockai: Option<std::sync::Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+        mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
     ) -> axum::Router {
         use crate::intelligent_behavior::Request as MockAIRequest;
 
@@ -867,7 +867,7 @@ impl OpenApiRouteRegistry {
                                 return (
                                     axum::http::StatusCode::from_u16(mockai_response.status_code)
                                         .unwrap_or(axum::http::StatusCode::OK),
-                                    axum::response::Json(mockai_response.body),
+                                    Json(mockai_response.body),
                                 );
                             }
                             Err(e) => {
@@ -887,7 +887,7 @@ impl OpenApiRouteRegistry {
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),
-                        axum::response::Json(response),
+                        Json(response),
                     )
                 }
             };

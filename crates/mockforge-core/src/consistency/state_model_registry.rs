@@ -140,7 +140,7 @@ impl StateModelRegistry {
         };
 
         // Get the source workspace's unified state
-        let source_state = match self.consistency_engine.get_state(workspace_id).await {
+        let _source_state = match self.consistency_engine.get_state(workspace_id).await {
             Some(state) => state,
             None => {
                 warn!("Source workspace {} not found", workspace_id);
@@ -149,12 +149,12 @@ impl StateModelRegistry {
         };
 
         // Get all other workspaces using the same state model
-        let target_workspaces = self.get_workspaces_for_model(&state_model).await;
+        let _target_workspaces = self.get_workspaces_for_model(&state_model).await;
 
         // Sync persona graph to all target workspaces
         #[cfg(feature = "persona-graph")]
-        if let Some(source_graph) = source_state.persona_graph() {
-            for target_workspace_id in target_workspaces {
+        if let Some(_source_graph) = _source_state.persona_graph() {
+            for target_workspace_id in _target_workspaces {
                 if target_workspace_id == workspace_id {
                     continue; // Skip the source workspace
                 }
@@ -164,7 +164,7 @@ impl StateModelRegistry {
                     self.consistency_engine.get_or_create_state(&target_workspace_id).await;
 
                 // Clone the persona graph
-                let target_graph = target_state.get_or_create_persona_graph();
+                let _target_graph = target_state.get_or_create_persona_graph();
                 // Note: PersonaGraph doesn't have a clone method, so we'd need to
                 // manually copy nodes and edges, or add a clone method to PersonaGraph
                 // For now, we'll just log that sync is needed

@@ -21,9 +21,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::broker::MqttConfig;
 use crate::metrics::MqttMetrics;
-use crate::protocol::{
-    ConnackCode, Packet, PacketDecoder, PacketEncoder, ProtocolError, PublishPacket, QoS,
-};
+use crate::protocol::{ConnackCode, Packet, PacketDecoder, PacketEncoder, QoS};
 use crate::session::{
     build_connack, build_puback, build_pubcomp, build_pubrec, build_pubrel, build_suback,
     build_unsuback, SessionManager,
@@ -412,7 +410,7 @@ async fn handle_tls_connection(
     let mut buf_len = 0usize;
 
     // Client state
-    let mut client_id: Option<String> = None;
+    let mut _client_id: Option<String> = None;
     let mut packet_rx: Option<mpsc::Receiver<Packet>> = None;
 
     // Read first packet - must be CONNECT
@@ -492,7 +490,7 @@ async fn handle_tls_connection(
         }
     };
 
-    client_id = Some(cid.clone());
+    _client_id = Some(cid.clone());
 
     info!("TLS client {} connected (session_present={})", cid, session_present);
 
@@ -783,7 +781,7 @@ where
 
 /// Handle a single client connection
 async fn handle_connection(
-    socket: tokio::net::TcpStream,
+    socket: TcpStream,
     addr: std::net::SocketAddr,
     session_manager: Arc<SessionManager>,
     metrics: Arc<MqttMetrics>,
@@ -797,7 +795,7 @@ async fn handle_connection(
     let mut buf_len = 0usize;
 
     // Client state
-    let mut client_id: Option<String> = None;
+    let mut _client_id: Option<String> = None;
     let mut packet_rx: Option<mpsc::Receiver<Packet>> = None;
 
     // Read first packet - must be CONNECT
@@ -878,7 +876,7 @@ async fn handle_connection(
         }
     };
 
-    client_id = Some(cid.clone());
+    _client_id = Some(cid.clone());
 
     info!("Client {} connected (session_present={})", cid, session_present);
 

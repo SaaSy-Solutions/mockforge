@@ -39,7 +39,7 @@ impl Forecaster {
     pub fn generate_forecast(
         &self,
         incidents: &[DriftIncident],
-        workspace_id: Option<String>,
+        _workspace_id: Option<String>,
         service_id: Option<String>,
         service_name: Option<String>,
         endpoint: String,

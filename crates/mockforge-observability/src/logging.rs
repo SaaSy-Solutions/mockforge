@@ -190,7 +190,7 @@ pub fn init_logging_with_otel<L, S>(
     _otel_layer: L,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
 where
-    L: tracing_subscriber::Layer<S> + Send + Sync + 'static,
+    L: Layer<S> + Send + Sync + 'static,
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
     // Note: This function is provided for advanced users who want to integrate OpenTelemetry.

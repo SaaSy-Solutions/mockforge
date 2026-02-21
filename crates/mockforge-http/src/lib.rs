@@ -330,9 +330,9 @@ pub struct HttpServerState {
     /// List of registered routes from OpenAPI spec
     pub routes: Vec<RouteInfo>,
     /// Optional global rate limiter for request throttling
-    pub rate_limiter: Option<std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>>,
+    pub rate_limiter: Option<Arc<middleware::rate_limit::GlobalRateLimiter>>,
     /// Production headers to add to all responses (for deceptive deploy)
-    pub production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>>,
+    pub production_headers: Option<Arc<HashMap<String, String>>>,
 }
 
 impl Default for HttpServerState {
@@ -363,17 +363,14 @@ impl HttpServerState {
     /// Add a rate limiter to the HTTP server state
     pub fn with_rate_limiter(
         mut self,
-        rate_limiter: std::sync::Arc<crate::middleware::rate_limit::GlobalRateLimiter>,
+        rate_limiter: Arc<middleware::rate_limit::GlobalRateLimiter>,
     ) -> Self {
         self.rate_limiter = Some(rate_limiter);
         self
     }
 
     /// Add production headers to the HTTP server state
-    pub fn with_production_headers(
-        mut self,
-        headers: std::sync::Arc<std::collections::HashMap<String, String>>,
-    ) -> Self {
+    pub fn with_production_headers(mut self, headers: Arc<HashMap<String, String>>) -> Self {
         self.production_headers = Some(headers);
         self
     }
@@ -553,13 +550,9 @@ pub async fn build_router_with_multi_tenant(
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
-    ai_generator: Option<
-        std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
-    >,
-    smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
-    mockai: Option<
-        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
-    >,
+    ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
+    smtp_registry: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
 ) -> Router {
     use std::time::Instant;
@@ -571,7 +564,7 @@ pub async fn build_router_with_multi_tenant(
 
     // Initialize rate limiter with default configuration
     // Can be customized via environment variables or config
-    let mut rate_limit_config = crate::middleware::RateLimitConfig {
+    let mut rate_limit_config = middleware::RateLimitConfig {
         requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -586,8 +579,7 @@ pub async fn build_router_with_multi_tenant(
 
     // Apply deceptive deploy configuration if enabled
     let mut final_cors_config = cors_config;
-    let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
-        None;
+    let mut production_headers: Option<std::sync::Arc<HashMap<String, String>>> = None;
     // Auth config from deceptive deploy OAuth (if configured)
     let mut deceptive_deploy_auth_config: Option<mockforge_core::config::AuthConfig> = None;
 
@@ -609,7 +601,7 @@ pub async fn build_router_with_multi_tenant(
 
             // Override rate limit config if provided
             if let Some(prod_rate_limit) = &deploy_config.rate_limit {
-                rate_limit_config = crate::middleware::RateLimitConfig {
+                rate_limit_config = middleware::RateLimitConfig {
                     requests_per_minute: prod_rate_limit.requests_per_minute,
                     burst: prod_rate_limit.burst,
                     per_ip: prod_rate_limit.per_ip,
@@ -623,8 +615,7 @@ pub async fn build_router_with_multi_tenant(
 
             // Set production headers
             if !deploy_config.headers.is_empty() {
-                let headers_map: std::collections::HashMap<String, String> =
-                    deploy_config.headers.clone();
+                let headers_map: HashMap<String, String> = deploy_config.headers.clone();
                 production_headers = Some(std::sync::Arc::new(headers_map));
                 info!("Configured {} production headers", deploy_config.headers.len());
             }
@@ -642,7 +633,7 @@ pub async fn build_router_with_multi_tenant(
     }
 
     let rate_limiter =
-        std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
+        std::sync::Arc::new(middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
     let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
 
@@ -784,11 +775,11 @@ pub async fn build_router_with_multi_tenant(
             {
                 // HealthStatus should always serialize, but handle errors gracefully
                 match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
-                    Ok(value) => axum::Json(value),
+                    Ok(value) => Json(value),
                     Err(e) => {
                         // Log error but return a simple healthy response
                         tracing::error!("Failed to serialize health status: {}", e);
-                        axum::Json(serde_json::json!({
+                        Json(serde_json::json!({
                             "status": "healthy",
                             "service": "mockforge-http",
                             "uptime_seconds": 0
@@ -821,7 +812,7 @@ pub async fn build_router_with_multi_tenant(
         .unwrap_or_else(|_| "crates/mockforge-http/static/coverage.html".to_string());
 
     // Check if the file exists before serving it
-    if std::path::Path::new(&coverage_html_path).exists() {
+    if Path::new(&coverage_html_path).exists() {
         app = app.nest_service(
             "/__mockforge/coverage.html",
             tower_http::services::ServeFile::new(&coverage_html_path),
@@ -997,21 +988,19 @@ pub async fn build_router_with_multi_tenant(
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
 
     // Add security middleware for security event tracking (after logging, before contract diff)
-    app = app.layer(axum::middleware::from_fn(crate::middleware::security_middleware));
+    app = app.layer(axum::middleware::from_fn(middleware::security_middleware));
 
     // Add contract diff middleware for automatic request capture
     // This captures requests for contract diff analysis (after logging)
     app = app.layer(axum::middleware::from_fn(contract_diff_middleware::capture_for_contract_diff));
 
     // Add rate limiting middleware (before logging to rate limit early)
-    app = app.layer(from_fn_with_state(state.clone(), crate::middleware::rate_limit_middleware));
+    app = app.layer(from_fn_with_state(state.clone(), middleware::rate_limit_middleware));
 
     // Add production headers middleware if configured
     if state.production_headers.is_some() {
-        app = app.layer(from_fn_with_state(
-            state.clone(),
-            crate::middleware::production_headers_middleware,
-        ));
+        app =
+            app.layer(from_fn_with_state(state.clone(), middleware::production_headers_middleware));
     }
 
     // Add authentication middleware if OAuth is configured via deceptive deploy
@@ -1043,7 +1032,7 @@ pub async fn build_router_with_multi_tenant(
         };
 
         // Apply auth middleware
-        app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
+        app = app.layer(from_fn_with_state(auth_state, auth_middleware));
         info!("Applied OAuth authentication middleware from deceptive deploy configuration");
     }
 
@@ -1190,7 +1179,7 @@ pub async fn build_router_with_auth(
 
     // Set up authentication state
     let spec = if let Some(spec_path) = &spec_path {
-        match mockforge_core::openapi::OpenApiSpec::from_file(&spec_path).await {
+        match OpenApiSpec::from_file(&spec_path).await {
             Ok(spec) => Some(Arc::new(spec)),
             Err(e) => {
                 warn!("Failed to load OpenAPI spec for auth: {}", e);
@@ -1255,11 +1244,11 @@ pub async fn build_router_with_auth(
             {
                 // HealthStatus should always serialize, but handle errors gracefully
                 match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
-                    Ok(value) => axum::Json(value),
+                    Ok(value) => Json(value),
                     Err(e) => {
                         // Log error but return a simple healthy response
                         tracing::error!("Failed to serialize health status: {}", e);
-                        axum::Json(serde_json::json!({
+                        Json(serde_json::json!({
                             "status": "healthy",
                             "service": "mockforge-http",
                             "uptime_seconds": 0
@@ -1274,7 +1263,7 @@ pub async fn build_router_with_auth(
     // Add file serving endpoints for generated mock files
     .merge(file_server::file_serving_router())
     // Add authentication middleware (before logging)
-    .layer(axum::middleware::from_fn_with_state(auth_state.clone(), auth_middleware))
+    .layer(from_fn_with_state(auth_state.clone(), auth_middleware))
     // Add request logging middleware
     .layer(axum::middleware::from_fn(request_logging::log_http_requests));
 
@@ -1381,7 +1370,7 @@ pub async fn start_with_auth_and_injectors(
     options: Option<ValidationOptions>,
     auth_config: Option<mockforge_core::config::AuthConfig>,
     _latency_profile: Option<LatencyProfile>,
-    _failure_injector: Option<mockforge_core::FailureInjector>,
+    _failure_injector: Option<FailureInjector>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // For now, ignore latency and failure injectors and just use auth
     let app = build_router_with_auth(spec_path, options, auth_config).await;
@@ -1437,8 +1426,8 @@ pub async fn build_router_with_chains(
 /// Uses the RouteChaosInjectorTrait from mockforge-core to avoid circular dependency
 async fn apply_route_chaos(
     injector: Option<&dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
-    method: &axum::http::Method,
-    uri: &axum::http::Uri,
+    method: &http::Method,
+    uri: &http::Uri,
 ) -> Option<axum::response::Response> {
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
@@ -1447,7 +1436,7 @@ async fn apply_route_chaos(
         // Check for fault injection first
         if let Some(fault_response) = injector.get_fault_response(method, uri) {
             // Return fault response
-            let mut response = axum::Json(serde_json::json!({
+            let mut response = Json(serde_json::json!({
                 "error": fault_response.error_message,
                 "fault_type": fault_response.fault_type,
             }))
@@ -1475,17 +1464,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
     multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
     route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
-    _ai_generator: Option<
-        std::sync::Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>,
-    >,
-    smtp_registry: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
-    mqtt_broker: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    _ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
+    smtp_registry: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    mqtt_broker: Option<Arc<dyn std::any::Any + Send + Sync>>,
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
-    health_manager: Option<std::sync::Arc<health::HealthManager>>,
-    _mockai: Option<
-        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
-    >,
+    health_manager: Option<Arc<HealthManager>>,
+    _mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
     proxy_config: Option<mockforge_core::proxy::config::ProxyConfig>,
 ) -> Router {
@@ -1649,7 +1634,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             app = app.route(
                 &path,
                 #[allow(clippy::non_send_fields_in_send_ty)]
-                axum::routing::any(move |req: axum::http::Request<axum::body::Body>| {
+                axum::routing::any(move |req: http::Request<axum::body::Body>| {
                     let body = body.clone();
                     let headers = headers.clone();
                     let expand = template_expand;
@@ -1663,7 +1648,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         if req.method().as_str() != expected.as_str() {
                             // Return 405 Method Not Allowed for wrong method
                             return axum::response::Response::builder()
-                                .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
+                                .status(StatusCode::METHOD_NOT_ALLOWED)
                                 .header("Allow", &expected)
                                 .body(axum::body::Body::empty())
                                 .unwrap()
@@ -1754,7 +1739,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                             };
                         }
 
-                        let mut response = axum::Json(body_value).into_response();
+                        let mut response = Json(body_value).into_response();
 
                         // Set status code
                         *response.status_mut() =
@@ -1762,11 +1747,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
                         // Add custom headers
                         for (key, value) in headers {
-                            if let Ok(header_name) =
-                                axum::http::HeaderName::from_bytes(key.as_bytes())
-                            {
-                                if let Ok(header_value) = axum::http::HeaderValue::from_str(&value)
-                                {
+                            if let Ok(header_name) = http::HeaderName::from_bytes(key.as_bytes()) {
+                                if let Ok(header_value) = http::HeaderValue::from_str(&value) {
                                     response.headers_mut().insert(header_name, header_value);
                                 }
                             }
@@ -1797,11 +1779,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 {
                     // HealthStatus should always serialize, but handle errors gracefully
                     match serde_json::to_value(HealthStatus::healthy(0, "mockforge-http")) {
-                        Ok(value) => axum::Json(value),
+                        Ok(value) => Json(value),
                         Err(e) => {
                             // Log error but return a simple healthy response
                             tracing::error!("Failed to serialize health status: {}", e);
-                            axum::Json(serde_json::json!({
+                            Json(serde_json::json!({
                                 "status": "healthy",
                                 "service": "mockforge-http",
                                 "uptime_seconds": 0
@@ -2074,7 +2056,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Get OpenAPI spec if available
         // Note: Load from spec_path if available, or leave as None for manual configuration.
         let spec = if let Some(ref spec_path) = spec_path {
-            match mockforge_core::openapi::OpenApiSpec::from_file(spec_path).await {
+            match OpenApiSpec::from_file(spec_path).await {
                 Ok(s) => Some(Arc::new(s)),
                 Err(e) => {
                     debug!("Failed to load OpenAPI spec for drift tracking: {}", e);
@@ -2097,7 +2079,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         };
 
         // Add response body buffering middleware (before drift tracking)
-        app = app.layer(axum::middleware::from_fn(crate::middleware::buffer_response_middleware));
+        app = app.layer(axum::middleware::from_fn(middleware::buffer_response_middleware));
 
         // Add drift tracking middleware (after response buffering)
         // Use a wrapper that inserts state into extensions before calling the middleware
@@ -2107,18 +2089,12 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 let state = drift_tracking_state_clone.clone();
                 async move {
                     // Insert state into extensions if not already present
-                    if req
-                        .extensions()
-                        .get::<crate::middleware::drift_tracking::DriftTrackingState>()
-                        .is_none()
-                    {
+                    if req.extensions().get::<DriftTrackingState>().is_none() {
                         req.extensions_mut().insert(state);
                     }
                     // Call the middleware function
-                    crate::middleware::drift_tracking::drift_tracking_middleware_with_extensions(
-                        req, next,
-                    )
-                    .await
+                    middleware::drift_tracking::drift_tracking_middleware_with_extensions(req, next)
+                        .await
                 }
             },
         ));
@@ -2433,9 +2409,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::xray::XRayState;
         let xray_state = Arc::new(XRayState {
             engine: consistency_engine.clone(),
-            request_contexts: std::sync::Arc::new(tokio::sync::RwLock::new(
-                std::collections::HashMap::new(),
-            )),
+            request_contexts: std::sync::Arc::new(RwLock::new(HashMap::new())),
         });
 
         // Create consistency middleware state
@@ -2456,7 +2430,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         req.extensions_mut().insert(state);
                     }
                     // Call the middleware function
-                    crate::consistency::middleware::consistency_middleware(req, next).await
+                    consistency::middleware::consistency_middleware(req, next).await
                 }
             },
         ));
@@ -2649,11 +2623,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Apply deceptive deploy configuration if enabled
     let mut final_cors_config = cors_config;
-    let mut production_headers: Option<std::sync::Arc<std::collections::HashMap<String, String>>> =
-        None;
+    let mut production_headers: Option<std::sync::Arc<HashMap<String, String>>> = None;
     // Auth config from deceptive deploy OAuth (if configured)
     let mut deceptive_deploy_auth_config: Option<mockforge_core::config::AuthConfig> = None;
-    let mut rate_limit_config = crate::middleware::RateLimitConfig {
+    let mut rate_limit_config = middleware::RateLimitConfig {
         requests_per_minute: std::env::var("MOCKFORGE_RATE_LIMIT_RPM")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -2684,7 +2657,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
             // Override rate limit config if provided
             if let Some(prod_rate_limit) = &deploy_config.rate_limit {
-                rate_limit_config = crate::middleware::RateLimitConfig {
+                rate_limit_config = middleware::RateLimitConfig {
                     requests_per_minute: prod_rate_limit.requests_per_minute,
                     burst: prod_rate_limit.burst,
                     per_ip: prod_rate_limit.per_ip,
@@ -2698,8 +2671,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
             // Set production headers
             if !deploy_config.headers.is_empty() {
-                let headers_map: std::collections::HashMap<String, String> =
-                    deploy_config.headers.clone();
+                let headers_map: HashMap<String, String> = deploy_config.headers.clone();
                 production_headers = Some(std::sync::Arc::new(headers_map));
                 info!("Configured {} production headers", deploy_config.headers.len());
             }
@@ -2718,7 +2690,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Initialize rate limiter and state
     let rate_limiter =
-        std::sync::Arc::new(crate::middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
+        std::sync::Arc::new(middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
     let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
 
@@ -2728,14 +2700,12 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Add rate limiting middleware
-    app = app.layer(from_fn_with_state(state.clone(), crate::middleware::rate_limit_middleware));
+    app = app.layer(from_fn_with_state(state.clone(), middleware::rate_limit_middleware));
 
     // Add production headers middleware if configured
     if state.production_headers.is_some() {
-        app = app.layer(from_fn_with_state(
-            state.clone(),
-            crate::middleware::production_headers_middleware,
-        ));
+        app =
+            app.layer(from_fn_with_state(state.clone(), middleware::production_headers_middleware));
     }
 
     // Add authentication middleware if OAuth is configured via deceptive deploy
@@ -2767,7 +2737,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         };
 
         // Apply auth middleware
-        app = app.layer(axum::middleware::from_fn_with_state(auth_state, auth_middleware));
+        app = app.layer(from_fn_with_state(auth_state, auth_middleware));
         info!("Applied OAuth authentication middleware from deceptive deploy configuration");
     }
 

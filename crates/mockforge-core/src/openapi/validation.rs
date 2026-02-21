@@ -75,9 +75,9 @@ impl RequestValidator {
     pub fn validate_request(
         spec: &crate::openapi::OpenApiSpec,
         operation: &Operation,
-        path_params: &std::collections::HashMap<String, String>,
-        query_params: &std::collections::HashMap<String, String>,
-        headers: &std::collections::HashMap<String, String>,
+        path_params: &HashMap<String, String>,
+        query_params: &HashMap<String, String>,
+        headers: &HashMap<String, String>,
         body: Option<&Value>,
     ) -> Result<RequestValidationResult> {
         let mut errors = Vec::new();
@@ -123,7 +123,7 @@ impl RequestValidator {
         // Validate request body
         if let Some(request_body_ref) = &operation.request_body {
             match request_body_ref {
-                openapiv3::ReferenceOr::Reference { reference } => {
+                ReferenceOr::Reference { reference } => {
                     if let Some(request_body) = spec.get_request_body(reference) {
                         if let Some(body_errors) =
                             validate_request_body(body, &request_body.content, spec)
@@ -132,7 +132,7 @@ impl RequestValidator {
                         }
                     }
                 }
-                openapiv3::ReferenceOr::Item(request_body) => {
+                ReferenceOr::Item(request_body) => {
                     if let Some(body_errors) =
                         validate_request_body(body, &request_body.content, spec)
                     {
@@ -159,7 +159,7 @@ impl ResponseValidator {
         spec: &crate::openapi::OpenApiSpec,
         operation: &Operation,
         status_code: u16,
-        headers: &std::collections::HashMap<String, String>,
+        headers: &HashMap<String, String>,
         body: Option<&Value>,
     ) -> Result<ResponseValidationResult> {
         let mut errors = Vec::new();

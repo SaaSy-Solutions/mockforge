@@ -7,12 +7,15 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use chrono::{DateTime, Utc};
 use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
 use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use mockforge_core::openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[cfg(feature = "database")]
+use chrono::{DateTime, Utc};
+#[cfg(feature = "database")]
 use uuid::Uuid;
 
 use crate::database::Database;

@@ -110,7 +110,7 @@ pub fn align_openapi_specs(
     let mut merged = existing_spec.clone();
 
     // Extract paths from both specs
-    let existing_paths: Map<String, Value> = existing_spec
+    let _existing_paths: Map<String, Value> = existing_spec
         .get("paths")
         .and_then(|p| p.as_object())
         .cloned()
@@ -220,7 +220,7 @@ pub fn align_openapi_specs(
     }
 
     // Merge components/schemas
-    let existing_components: Map<String, Value> = existing_spec
+    let _existing_components: Map<String, Value> = existing_spec
         .get("components")
         .and_then(|c| c.get("schemas"))
         .and_then(|s| s.as_object())

@@ -108,7 +108,7 @@ pub fn create_route_handler(
     let handler = move || async move {
         let (status, response) = route_clone.mock_response_with_status();
         (
-            axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK),
+            StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
             axum::response::Json(response),
         )
     };

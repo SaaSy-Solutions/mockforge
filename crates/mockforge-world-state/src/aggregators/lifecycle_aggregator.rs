@@ -28,7 +28,7 @@ impl LifecycleAggregator {
 impl StateAggregator for LifecycleAggregator {
     async fn aggregate(&self) -> anyhow::Result<(Vec<StateNode>, Vec<StateEdge>)> {
         let mut nodes = Vec::new();
-        let mut edges = Vec::new();
+        let edges = Vec::new();
 
         if let Some(ref lifecycles) = self.lifecycles {
             let lifecycles = lifecycles.read().unwrap();

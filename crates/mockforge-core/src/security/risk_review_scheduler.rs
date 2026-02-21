@@ -3,13 +3,11 @@
 //! This module provides a scheduler that automatically reviews risks
 //! based on their review frequency and schedules.
 
-use crate::security::risk_assessment::{Risk, RiskAssessmentEngine, RiskReviewFrequency};
-use crate::Error;
-use chrono::{DateTime, Utc};
+use crate::security::risk_assessment::RiskAssessmentEngine;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration as TokioDuration};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Risk review scheduler
 ///
@@ -88,7 +86,7 @@ impl RiskReviewScheduler {
                 // Review each risk
                 for risk in risks_due {
                     let risk_id = risk.risk_id.clone();
-                    let mut engine_guard = engine.write().await;
+                    let engine_guard = engine.write().await;
 
                     match engine_guard.review_risk(&risk_id, system_user_id).await {
                         Ok(()) => {

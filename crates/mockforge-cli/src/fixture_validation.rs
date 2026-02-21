@@ -3,8 +3,8 @@
 //! Standalone tool for validating HTTP fixtures in a directory.
 //! Can validate individual files or entire directories.
 
-use anyhow::{Context, Result};
-use mockforge_core::{CustomFixture, CustomFixtureLoader};
+use anyhow::{bail, Context, Result};
+use mockforge_core::CustomFixture;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -170,9 +170,7 @@ fn normalize_path(path: &str) -> String {
     normalized
 }
 
-fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
-    use anyhow::bail;
-
+fn validate_fixture(fixture: &CustomFixture, _file_path: &Path) -> Result<()> {
     // Check required fields
     if fixture.method.is_empty() {
         bail!("method is required and cannot be empty");
@@ -200,8 +198,6 @@ fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
 }
 
 fn convert_nested_to_flat(nested: NestedFixture) -> Result<CustomFixture> {
-    use anyhow::bail;
-
     let request = nested
         .request
         .ok_or_else(|| anyhow::anyhow!("Nested fixture missing 'request' object"))?;

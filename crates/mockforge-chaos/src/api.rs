@@ -97,18 +97,17 @@ impl Default for ProfileManager {
 pub struct ChaosApiState {
     pub config: Arc<RwLock<ChaosConfig>>,
     pub scenario_engine: Arc<ScenarioEngine>,
-    pub orchestrator: Arc<tokio::sync::RwLock<ScenarioOrchestrator>>,
+    pub orchestrator: Arc<RwLock<ScenarioOrchestrator>>,
     pub analytics: Arc<ChaosAnalytics>,
     pub recommendation_engine: Arc<RecommendationEngine>,
     pub remediation_engine: Arc<RemediationEngine>,
-    pub ab_testing_engine: Arc<tokio::sync::RwLock<ABTestingEngine>>,
+    pub ab_testing_engine: Arc<RwLock<ABTestingEngine>>,
     pub recorder: Arc<ScenarioRecorder>,
-    pub replay_engine: Arc<tokio::sync::RwLock<ScenarioReplayEngine>>,
-    pub scheduler: Arc<tokio::sync::RwLock<ScenarioScheduler>>,
+    pub replay_engine: Arc<RwLock<ScenarioReplayEngine>>,
+    pub scheduler: Arc<RwLock<ScenarioScheduler>>,
     pub latency_tracker: Arc<LatencyMetricsTracker>,
     pub profile_manager: Arc<ProfileManager>,
-    pub mockai:
-        Option<std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    pub mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 }
 
 /// Create the chaos management API router
@@ -121,21 +120,18 @@ pub struct ChaosApiState {
 /// Tuple of (Router, Config, LatencyTracker, ChaosApiState) - The router, config, latency tracker, and API state for hot-reload support
 pub fn create_chaos_api_router(
     config: ChaosConfig,
-    mockai: Option<
-        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
-    >,
+    mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
 ) -> (Router, Arc<RwLock<ChaosConfig>>, Arc<LatencyMetricsTracker>, Arc<ChaosApiState>) {
     let config_arc = Arc::new(RwLock::new(config));
     let scenario_engine = Arc::new(ScenarioEngine::new());
-    let orchestrator = Arc::new(tokio::sync::RwLock::new(ScenarioOrchestrator::new()));
+    let orchestrator = Arc::new(RwLock::new(ScenarioOrchestrator::new()));
     let analytics = Arc::new(ChaosAnalytics::new());
     let recommendation_engine = Arc::new(RecommendationEngine::new());
     let remediation_engine = Arc::new(RemediationEngine::new());
-    let ab_testing_engine =
-        Arc::new(tokio::sync::RwLock::new(ABTestingEngine::new(analytics.clone())));
+    let ab_testing_engine = Arc::new(RwLock::new(ABTestingEngine::new(analytics.clone())));
     let recorder = Arc::new(ScenarioRecorder::new());
-    let replay_engine = Arc::new(tokio::sync::RwLock::new(ScenarioReplayEngine::new()));
-    let scheduler = Arc::new(tokio::sync::RwLock::new(ScenarioScheduler::new()));
+    let replay_engine = Arc::new(RwLock::new(ScenarioReplayEngine::new()));
+    let scheduler = Arc::new(RwLock::new(ScenarioScheduler::new()));
     let latency_tracker = Arc::new(LatencyMetricsTracker::new());
     let profile_manager = Arc::new(ProfileManager::new());
 
@@ -1318,9 +1314,7 @@ struct ScheduleSummary {
 // AI-powered recommendation handlers
 
 /// Get all recommendations
-async fn get_recommendations(
-    State(state): State<ChaosApiState>,
-) -> Json<Vec<crate::recommendations::Recommendation>> {
+async fn get_recommendations(State(state): State<ChaosApiState>) -> Json<Vec<Recommendation>> {
     Json(state.recommendation_engine.get_recommendations())
 }
 
@@ -1356,7 +1350,7 @@ async fn analyze_and_recommend(State(state): State<ChaosApiState>) -> Json<Analy
 async fn get_recommendations_by_category(
     State(state): State<ChaosApiState>,
     Path(category): Path<String>,
-) -> Result<Json<Vec<crate::recommendations::Recommendation>>, StatusCode> {
+) -> Result<Json<Vec<Recommendation>>, StatusCode> {
     let category = match category.as_str() {
         "latency" => RecommendationCategory::Latency,
         "fault_injection" => RecommendationCategory::FaultInjection,
@@ -1376,7 +1370,7 @@ async fn get_recommendations_by_category(
 async fn get_recommendations_by_severity(
     State(state): State<ChaosApiState>,
     Path(severity): Path<String>,
-) -> Result<Json<Vec<crate::recommendations::Recommendation>>, StatusCode> {
+) -> Result<Json<Vec<Recommendation>>, StatusCode> {
     let severity = match severity.as_str() {
         "info" => RecommendationSeverity::Info,
         "low" => RecommendationSeverity::Low,
@@ -1401,7 +1395,7 @@ async fn clear_recommendations(State(state): State<ChaosApiState>) -> Json<Statu
 struct AnalyzeResponse {
     total_recommendations: usize,
     high_priority: usize,
-    recommendations: Vec<crate::recommendations::Recommendation>,
+    recommendations: Vec<Recommendation>,
 }
 
 // Auto-remediation endpoints

@@ -12,7 +12,7 @@ pub struct BufferedResponse {
     /// Response status
     pub status: u16,
     /// Response headers
-    pub headers: axum::http::HeaderMap,
+    pub headers: http::HeaderMap,
     /// Response body as bytes
     pub body: axum::body::Bytes,
 }
@@ -48,7 +48,7 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
             tracing::warn!("Failed to buffer response body: {}", e);
             // Return error response if body buffering fails
             return Response::builder()
-                .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .status(http::StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::from("Failed to buffer response"))
                 .expect("static response body should never fail to build");
         }
@@ -80,7 +80,7 @@ pub async fn buffer_response_middleware(req: Request, next: Next) -> Response<Bo
         Err(e) => {
             tracing::error!("Failed to build response: {}", e);
             return Response::builder()
-                .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .status(http::StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::from("Failed to build response"))
                 .expect("static response body should never fail to build");
         }

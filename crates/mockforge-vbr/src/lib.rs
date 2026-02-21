@@ -179,7 +179,7 @@ impl VbrEngine {
 
         // Register entities and create database tables
         for (entity_name, vbr_schema) in &conversion_result.entities {
-            let entity = entities::Entity::new(entity_name.clone(), vbr_schema.clone());
+            let entity = Entity::new(entity_name.clone(), vbr_schema.clone());
             engine.registry_mut().register(entity.clone())?;
 
             // Create database table for this entity
@@ -265,7 +265,7 @@ impl VbrEngine {
         name: &str,
         description: Option<String>,
         snapshots_dir: P,
-    ) -> Result<snapshots::SnapshotMetadata> {
+    ) -> Result<SnapshotMetadata> {
         let manager = snapshots::SnapshotManager::new(snapshots_dir);
         manager
             .create_snapshot(name, description, self.database.as_ref(), &self.registry)
@@ -286,8 +286,8 @@ impl VbrEngine {
         description: Option<String>,
         snapshots_dir: P,
         include_time_travel: bool,
-        time_travel_state: Option<snapshots::TimeTravelSnapshotState>,
-    ) -> Result<snapshots::SnapshotMetadata> {
+        time_travel_state: Option<TimeTravelSnapshotState>,
+    ) -> Result<SnapshotMetadata> {
         let manager = snapshots::SnapshotManager::new(snapshots_dir);
         manager
             .create_snapshot_with_time_travel(
@@ -331,7 +331,7 @@ impl VbrEngine {
     ) -> Result<()>
     where
         P: AsRef<std::path::Path>,
-        F: FnOnce(snapshots::TimeTravelSnapshotState) -> Result<()>,
+        F: FnOnce(TimeTravelSnapshotState) -> Result<()>,
     {
         let manager = snapshots::SnapshotManager::new(snapshots_dir);
         manager
@@ -351,7 +351,7 @@ impl VbrEngine {
     /// * `snapshots_dir` - Directory where snapshots are stored
     pub async fn list_snapshots<P: AsRef<std::path::Path>>(
         snapshots_dir: P,
-    ) -> Result<Vec<snapshots::SnapshotMetadata>> {
+    ) -> Result<Vec<SnapshotMetadata>> {
         let manager = snapshots::SnapshotManager::new(snapshots_dir);
         manager.list_snapshots().await
     }

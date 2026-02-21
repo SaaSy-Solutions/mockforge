@@ -38,7 +38,7 @@ impl Overrides {
         context: &ConditionContext,
     ) {
         for r in &self.rules {
-            if !matcher::matches_target(r, operation_id, tags, path, &self.regex_cache) {
+            if !matches_target(r, operation_id, tags, path, &self.regex_cache) {
                 continue;
             }
 
@@ -64,12 +64,12 @@ impl Overrides {
             match r.mode {
                 OverrideMode::Replace => {
                     for op in &r.patch {
-                        let _ = patcher::apply_patch(body, op);
+                        let _ = apply_patch(body, op);
                     }
                 }
                 OverrideMode::Merge => {
                     for op in &r.patch {
-                        let _ = patcher::apply_merge_patch(body, op);
+                        let _ = apply_merge_patch(body, op);
                     }
                 }
             }

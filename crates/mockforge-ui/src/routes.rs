@@ -188,13 +188,13 @@ pub fn create_admin_router(
         .route("/__mockforge/validation", get(get_validation))
         .route("/__mockforge/validation", post(update_validation))
         // Migration pipeline routes
-        .route("/__mockforge/migration/routes", get(migration::get_migration_routes))
-        .route("/__mockforge/migration/routes/{pattern}/toggle", post(migration::toggle_route_migration))
-        .route("/__mockforge/migration/routes/{pattern}", axum::routing::put(migration::set_route_migration_mode))
-        .route("/__mockforge/migration/groups/{group}/toggle", post(migration::toggle_group_migration))
-        .route("/__mockforge/migration/groups/{group}", axum::routing::put(migration::set_group_migration_mode))
-        .route("/__mockforge/migration/groups", get(migration::get_migration_groups))
-        .route("/__mockforge/migration/status", get(migration::get_migration_status))
+        .route("/__mockforge/migration/routes", get(get_migration_routes))
+        .route("/__mockforge/migration/routes/{pattern}/toggle", post(toggle_route_migration))
+        .route("/__mockforge/migration/routes/{pattern}", axum::routing::put(set_route_migration_mode))
+        .route("/__mockforge/migration/groups/{group}/toggle", post(toggle_group_migration))
+        .route("/__mockforge/migration/groups/{group}", axum::routing::put(set_group_migration_mode))
+        .route("/__mockforge/migration/groups", get(get_migration_groups))
+        .route("/__mockforge/migration/status", get(get_migration_status))
         // Environment variables routes
         .route("/__mockforge/env", get(get_env_vars))
         .route("/__mockforge/env", post(update_env_var))
@@ -250,7 +250,7 @@ pub fn create_admin_router(
         .route("/__mockforge/continuum/advance", post(advance_continuum_ratio))
         .route("/__mockforge/continuum/enabled", axum::routing::put(set_continuum_enabled))
         .route("/__mockforge/continuum/overrides", get(get_continuum_overrides))
-        .route("/__mockforge/continuum/overrides", axum::routing::delete(clear_continuum_overrides))
+        .route("/__mockforge/continuum/overrides", delete(clear_continuum_overrides))
         // Contract diff routes
         .route("/__mockforge/contract-diff/upload", post(contract_diff::upload_request))
         .route("/__mockforge/contract-diff/submit", post(contract_diff::submit_request))
@@ -555,7 +555,7 @@ pub fn create_admin_router(
             .route("/__mockforge/workspaces/{workspace_id}/mock-environments", get(workspaces::list_mock_environments))
             .route("/__mockforge/workspaces/{workspace_id}/mock-environments/{env_name}", get(workspaces::get_mock_environment))
             .route("/__mockforge/workspaces/{workspace_id}/mock-environments/{env_name}", axum::routing::put(workspaces::update_mock_environment))
-            .route("/__mockforge/workspaces/{workspace_id}/mock-environments/active", axum::routing::post(workspaces::set_active_mock_environment))
+            .route("/__mockforge/workspaces/{workspace_id}/mock-environments/active", post(workspaces::set_active_mock_environment))
             .route(
                 "/__mockforge/workspaces/{workspace_id}/activate",
                 post(workspaces::set_active_workspace),

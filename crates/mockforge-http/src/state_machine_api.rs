@@ -449,7 +449,7 @@ pub async fn get_next_states(
 pub async fn get_current_state(
     State(state): State<ManagementState>,
     Path(resource_id): Path<String>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<Value>, StatusCode> {
     let manager = state.state_machine_manager.read().await;
 
     let current_state =

@@ -7,8 +7,7 @@ use mockforge_core::conditions::{evaluate_condition, ConditionContext};
 use mockforge_core::routing::{HttpMethod, Route, RouteRegistry};
 use mockforge_core::templating::expand_str;
 use mockforge_core::validation::validate_json_schema;
-use serde_json::{json, Value};
-use std::collections::HashMap;
+use serde_json::json;
 
 #[cfg(test)]
 mod malformed_input_tests {
@@ -362,7 +361,7 @@ mod concurrent_access_tests {
 
         // Spawn multiple threads adding routes
         for i in 0..10 {
-            let registry_clone = Arc::clone(&registry);
+            let _registry_clone = Arc::clone(&registry);
             let handle = thread::spawn(move || {
                 for j in 0..100 {
                     let mut reg = RouteRegistry::new();

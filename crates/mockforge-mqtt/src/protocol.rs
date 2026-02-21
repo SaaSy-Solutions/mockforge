@@ -4,7 +4,7 @@
 //! and decoding. It supports all control packet types including CONNECT, PUBLISH,
 //! SUBSCRIBE, and their acknowledgments.
 
-use std::io::{self, Cursor, Read, Write as IoWrite};
+use std::io::{self, Cursor, Read};
 use thiserror::Error;
 
 /// MQTT Protocol Error types

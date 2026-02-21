@@ -1401,7 +1401,7 @@ impl SiemEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::security::events::{EventActor, EventOutcome, EventTarget, SecurityEventType};
+    use crate::security::events::{SecurityEvent, SecurityEventType};
 
     #[test]
     fn test_event_filter_include() {
@@ -1411,16 +1411,11 @@ mod tests {
             conditions: None,
         };
 
-        let event =
-            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
+        let event = SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         assert!(filter.should_include(&event));
 
-        let event = crate::security::events::SecurityEvent::new(
-            SecurityEventType::ConfigChanged,
-            None,
-            None,
-        );
+        let event = SecurityEvent::new(SecurityEventType::ConfigChanged, None, None);
 
         assert!(!filter.should_include(&event));
     }
@@ -1433,13 +1428,11 @@ mod tests {
             conditions: None,
         };
 
-        let event =
-            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
+        let event = SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         assert!(!filter.should_include(&event));
 
-        let event =
-            crate::security::events::SecurityEvent::new(SecurityEventType::AuthFailure, None, None);
+        let event = SecurityEvent::new(SecurityEventType::AuthFailure, None, None);
 
         assert!(filter.should_include(&event));
     }
@@ -1454,8 +1447,7 @@ mod tests {
             "mockforge".to_string(),
         );
 
-        let event =
-            crate::security::events::SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
+        let event = SecurityEvent::new(SecurityEventType::AuthSuccess, None, None);
 
         let message = transport.format_syslog_message(&event);
         assert!(message.starts_with("<"));

@@ -3,10 +3,9 @@
 //! These tests cover error paths, edge cases, and integration scenarios
 //! that are critical for reliability but may have lower coverage.
 
-use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::priority_handler::{PriorityHttpHandler, SimpleMockGenerator};
 use mockforge_core::{RecordReplayHandler, RequestFingerprint};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
 

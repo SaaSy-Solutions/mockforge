@@ -64,18 +64,14 @@ pub struct RequestContext {
     /// Request path
     pub path: String,
     /// Request headers
-    pub headers: std::collections::HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     /// Content type from headers
     pub content_type: Option<String>,
 }
 
 impl RequestContext {
     /// Create a new request context
-    pub fn new(
-        method: String,
-        path: String,
-        headers: std::collections::HashMap<String, String>,
-    ) -> Self {
+    pub fn new(method: String, path: String, headers: HashMap<String, String>) -> Self {
         let content_type =
             headers.get("content-type").or_else(|| headers.get("Content-Type")).cloned();
 

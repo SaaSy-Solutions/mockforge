@@ -344,9 +344,6 @@ impl AccessReviewScheduler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::security::access_review::AccessReviewEngine;
-
     #[tokio::test]
     async fn test_scheduler_creation() {
         // This test would require a mock UserDataProvider

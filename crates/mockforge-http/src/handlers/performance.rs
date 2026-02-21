@@ -7,14 +7,14 @@
 //! - Get performance metrics and snapshots
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::State,
     http::StatusCode,
-    response::{IntoResponse, Json},
+    response::Json,
     routing::{delete, get, post},
     Router,
 };
 use mockforge_performance::{
-    bottleneck::{BottleneckConfig, BottleneckType},
+    bottleneck::BottleneckConfig,
     controller::RpsProfile,
     metrics::PerformanceSnapshot,
     simulator::{PerformanceSimulator, SimulatorConfig},
@@ -22,7 +22,7 @@ use mockforge_performance::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::info;
 
 /// State for performance mode handlers
 #[derive(Clone)]

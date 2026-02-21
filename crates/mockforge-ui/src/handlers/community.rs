@@ -143,7 +143,7 @@ async fn load_store() -> CommunityContentStore {
     serde_json::from_slice::<CommunityContentStore>(&bytes).unwrap_or_default()
 }
 
-async fn save_store(store: &CommunityContentStore) -> std::result::Result<(), String> {
+async fn save_store(store: &CommunityContentStore) -> Result<(), String> {
     let path = content_file_path();
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)

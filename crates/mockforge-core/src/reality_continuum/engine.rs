@@ -4,6 +4,7 @@
 //! Supports time-based progression, manual configuration, and per-route/group/global settings.
 
 use super::blender::ResponseBlender;
+#[allow(unused_imports)]
 use super::config::{ContinuumConfig, ContinuumRule, TransitionMode};
 use super::schedule::TimeSchedule;
 use chrono::{DateTime, Utc};

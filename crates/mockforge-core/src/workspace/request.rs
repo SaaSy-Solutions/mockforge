@@ -663,7 +663,7 @@ impl RequestProcessor {
     ) -> Result<MockResponse> {
         // Apply delay if configured
         if response.delay > 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(response.delay)).await;
+            tokio::time::sleep(Duration::from_millis(response.delay)).await;
         }
 
         // Create processed response
@@ -979,8 +979,8 @@ impl RequestProcessor {
             body: cached.body,
             delay: 0, // Cached responses have no additional delay
             active: true,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
             history: Vec::new(),
             intelligent: None,
             drift: None,
@@ -1750,7 +1750,7 @@ mod tests {
         let processor = RequestProcessor::new();
         let mut workspace = Workspace::new("Test Workspace".to_string());
 
-        let mut request =
+        let request =
             MockRequest::new("Test Request".to_string(), HttpMethod::GET, "/api/test".to_string());
         // Don't add any responses - should trigger error
         workspace.add_request(request.clone());

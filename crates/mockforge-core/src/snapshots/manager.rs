@@ -308,7 +308,7 @@ impl SnapshotManager {
         let manifest: SnapshotManifest = serde_json::from_str(&manifest_json)?;
 
         // Validate checksum
-        let (size, checksum) = self.calculate_snapshot_checksum(&snapshot_dir).await?;
+        let (_size, checksum) = self.calculate_snapshot_checksum(&snapshot_dir).await?;
         if checksum != manifest.checksum {
             warn!("Snapshot checksum mismatch: expected {}, got {}", manifest.checksum, checksum);
             // Continue anyway, but log warning

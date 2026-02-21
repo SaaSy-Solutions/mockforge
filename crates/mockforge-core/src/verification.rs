@@ -390,7 +390,6 @@ pub async fn verify_sequence(
 mod tests {
     use super::*;
     use crate::request_logger::{create_http_log_entry, CentralizedRequestLogger};
-    use chrono::Utc;
     use std::collections::HashMap;
 
     fn create_test_entry(method: &str, path: &str) -> RequestLogEntry {

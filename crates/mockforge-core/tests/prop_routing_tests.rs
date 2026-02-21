@@ -82,7 +82,7 @@ mod route_matching_tests {
             prop_assume!(!segments.is_empty());
 
             let mut pattern_parts = segments.clone();
-            let mut path_parts = segments.clone();
+            let path_parts = segments.clone();
 
             // Insert wildcard at random position if specified
             if let Some(idx) = wildcard_index {

@@ -18,7 +18,7 @@ pub struct ConsistencyMiddlewareState {
     /// HTTP adapter
     pub adapter: Arc<HttpAdapter>,
     /// X-Ray state for request context storage (optional)
-    pub xray_state: Option<std::sync::Arc<crate::handlers::xray::XRayState>>,
+    pub xray_state: Option<Arc<crate::handlers::xray::XRayState>>,
 }
 
 /// Consistency middleware

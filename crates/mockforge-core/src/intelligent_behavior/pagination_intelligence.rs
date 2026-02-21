@@ -127,7 +127,7 @@ impl PaginationIntelligence {
         context: &StatefulAiContext,
     ) -> Result<PaginationMetadata> {
         // Extract pagination parameters from request
-        let (page, page_size, offset, cursor) = self.extract_pagination_params(request);
+        let (page, page_size, offset, _cursor) = self.extract_pagination_params(request);
 
         // Infer page size if not provided
         let page_size = page_size.unwrap_or_else(|| self.infer_page_size(request, &self.examples));
@@ -212,7 +212,7 @@ impl PaginationIntelligence {
         request: &PaginationRequest,
     ) -> Result<usize> {
         // If LLM is available, use it to generate realistic total
-        if let Some(ref llm_client) = self.llm_client {
+        if let Some(ref _llm_client) = self.llm_client {
             return self.generate_total_with_llm(context, request).await;
         }
 
@@ -289,14 +289,13 @@ impl PaginationIntelligence {
         // Detect pagination format
         let mut has_offset = false;
         let mut has_cursor = false;
-        let mut has_page = false;
 
         for example in &self.examples {
             for key in example.query_params.keys() {
                 match key.to_lowercase().as_str() {
                     "offset" => has_offset = true,
                     "cursor" => has_cursor = true,
-                    "page" | "p" => has_page = true,
+                    "page" | "p" => {}
                     _ => {}
                 }
             }

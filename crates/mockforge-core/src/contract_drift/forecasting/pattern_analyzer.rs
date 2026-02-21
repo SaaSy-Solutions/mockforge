@@ -5,7 +5,7 @@
 
 use super::types::{ForecastPattern, PatternAnalysis, PatternType};
 use crate::incidents::types::{DriftIncident, IncidentType};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 
 /// Pattern analyzer for detecting change patterns
 pub struct PatternAnalyzer {
@@ -394,6 +394,7 @@ impl PatternAnalyzer {
 mod tests {
     use super::*;
     use crate::incidents::types::{IncidentSeverity, IncidentStatus};
+    use chrono::Duration;
 
     fn create_test_incident(
         id: &str,

@@ -58,7 +58,7 @@ impl TrafficAnalyzer {
         database: &crate::database::RecorderDatabase,
     ) -> HashMap<String, EndpointUsageStats> {
         let mut aggregated: HashMap<String, EndpointUsageStats> = HashMap::new();
-        let cutoff_time = Utc::now() - chrono::Duration::days(self.config.lookback_days as i64);
+        let cutoff_time = Utc::now() - Duration::days(self.config.lookback_days as i64);
 
         // Get recent requests from database
         if let Ok(requests) = database.list_recent(10000).await {

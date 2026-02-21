@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_detect_graphql_from_extension() {
-        let path = std::path::Path::new("schema.graphql");
+        let path = Path::new("schema.graphql");
         let content = "type Query { users: [User] }";
         let format = SpecFormat::detect(content, Some(path)).unwrap();
         assert_eq!(format, SpecFormat::GraphQL);

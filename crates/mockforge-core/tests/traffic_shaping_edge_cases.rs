@@ -4,7 +4,6 @@
 //! for traffic shaping functionality.
 
 use mockforge_core::traffic_shaping::{BandwidthConfig, BurstLossConfig, BurstLossOverride};
-use std::collections::HashMap;
 
 /// Test BandwidthConfig default
 #[test]

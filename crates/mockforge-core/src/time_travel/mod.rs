@@ -628,7 +628,7 @@ pub struct TimeTravelManager {
     /// Response scheduler
     scheduler: Arc<ResponseScheduler>,
     /// Cron scheduler for recurring events
-    cron_scheduler: Arc<cron::CronScheduler>,
+    cron_scheduler: Arc<CronScheduler>,
 }
 
 impl TimeTravelManager {
@@ -651,9 +651,8 @@ impl TimeTravelManager {
         }
 
         let scheduler = Arc::new(ResponseScheduler::new(clock.clone()));
-        let cron_scheduler = Arc::new(
-            cron::CronScheduler::new(clock.clone()).with_response_scheduler(scheduler.clone()),
-        );
+        let cron_scheduler =
+            Arc::new(CronScheduler::new(clock.clone()).with_response_scheduler(scheduler.clone()));
 
         Self {
             clock,
@@ -673,7 +672,7 @@ impl TimeTravelManager {
     }
 
     /// Get the cron scheduler
-    pub fn cron_scheduler(&self) -> Arc<cron::CronScheduler> {
+    pub fn cron_scheduler(&self) -> Arc<CronScheduler> {
         self.cron_scheduler.clone()
     }
 

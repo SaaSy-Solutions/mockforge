@@ -112,7 +112,7 @@ pub struct PlaygroundHistoryEntry {
     /// Response time in milliseconds
     pub response_time_ms: u64,
     /// Timestamp
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: chrono::DateTime<Utc>,
     /// Request headers (for REST)
     pub request_headers: Option<HashMap<String, String>>,
     /// Request body (for REST)
@@ -224,7 +224,7 @@ pub async fn list_playground_endpoints(
 /// Execute a REST request
 pub async fn execute_rest_request(
     State(state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<ExecuteRestRequest>,
+    Json(request): Json<ExecuteRestRequest>,
 ) -> Json<ApiResponse<ExecuteResponse>> {
     let start_time = std::time::Instant::now();
     let request_id = uuid::Uuid::new_v4().to_string();
@@ -368,7 +368,7 @@ pub async fn execute_rest_request(
 /// Execute a GraphQL query
 pub async fn execute_graphql_query(
     State(state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<ExecuteGraphQLRequest>,
+    Json(request): Json<ExecuteGraphQLRequest>,
 ) -> Json<ApiResponse<ExecuteResponse>> {
     let start_time = std::time::Instant::now();
     let request_id = uuid::Uuid::new_v4().to_string();
@@ -782,7 +782,7 @@ pub async fn replay_request(
                         workspace_id: log.metadata.get("workspace_id").cloned(),
                     };
 
-                    execute_graphql_query(State(state), axum::extract::Json(graphql_request)).await
+                    execute_graphql_query(State(state), Json(graphql_request)).await
                 } else {
                     Json(ApiResponse::error("GraphQL query not found in log entry".to_string()))
                 }
@@ -798,7 +798,7 @@ pub async fn replay_request(
                     workspace_id: log.metadata.get("workspace_id").cloned(),
                 };
 
-                execute_rest_request(State(state), axum::extract::Json(rest_request)).await
+                execute_rest_request(State(state), Json(rest_request)).await
             }
         }
         None => Json(ApiResponse::error(format!("Request with ID {} not found", id))),
@@ -808,7 +808,7 @@ pub async fn replay_request(
 /// Generate code snippets
 pub async fn generate_code_snippet(
     State(_state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<CodeSnippetRequest>,
+    Json(request): Json<CodeSnippetRequest>,
 ) -> Json<ApiResponse<CodeSnippetResponse>> {
     let mut snippets = HashMap::new();
 

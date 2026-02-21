@@ -147,7 +147,7 @@ impl RealityTraceMetadata {
     pub fn from_unified_state(
         unified_state: &crate::consistency::types::UnifiedState,
         blend_ratio: f64,
-        path: &str,
+        _path: &str,
     ) -> Self {
         let reality_continuum_type = RealityContinuumType::from_blend_ratio(blend_ratio);
 

@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_get_target_url() {
         let mut router = ProxyRouter::new();
-        let route = crate::routing::Route::new(HttpMethod::GET, "/api/*".to_string());
+        let route = Route::new(HttpMethod::GET, "/api/*".to_string());
         router.add_proxy_route(route).unwrap();
 
         let base_url = "http://backend:9080";

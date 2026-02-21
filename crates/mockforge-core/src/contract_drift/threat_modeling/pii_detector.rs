@@ -113,7 +113,7 @@ impl PiiDetector {
         &self,
         schema_ref: &openapiv3::ReferenceOr<openapiv3::Schema>,
         base_path: &str,
-        context: &str,
+        _context: &str,
     ) -> Vec<ThreatFinding> {
         let mut findings = Vec::new();
 

@@ -268,7 +268,7 @@ impl BackupService {
         &self,
         backup_id: Uuid,
         target_workspace_id: Option<Uuid>,
-        user_id: Uuid,
+        _user_id: Uuid,
     ) -> Result<Uuid> {
         // Get backup record
         let backup = self.get_backup(backup_id).await?;

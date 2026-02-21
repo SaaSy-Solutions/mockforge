@@ -68,7 +68,7 @@ impl MockGenerator {
     pub async fn generate(
         &self,
         description: &str,
-        workspace_id: Option<&str>,
+        _workspace_id: Option<&str>,
         ai_mode: Option<crate::ai_studio::config::AiMode>,
         deterministic_config: Option<&DeterministicModeConfig>,
     ) -> Result<MockGenerationResult> {

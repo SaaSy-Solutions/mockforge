@@ -96,7 +96,7 @@ impl ConsumerGroupManager {
         &mut self,
         group_id: &str,
         assignments: Vec<PartitionAssignment>,
-        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+        topics: &HashMap<String, crate::topics::Topic>,
     ) -> Result<()> {
         if let Some(group) = self.groups.get_mut(group_id) {
             // If assignments are provided, use them (leader assignment)
@@ -121,7 +121,7 @@ impl ConsumerGroupManager {
     /// Assign partitions to group members using round-robin strategy
     fn assign_partitions_round_robin(
         group: &mut ConsumerGroup,
-        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+        topics: &HashMap<String, crate::topics::Topic>,
     ) {
         // Clear existing assignments for rebalance
         for member in group.members.values_mut() {
@@ -178,7 +178,7 @@ impl ConsumerGroupManager {
         group_id: &str,
         topic: &str,
         lag: i64,
-        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+        topics: &HashMap<String, crate::topics::Topic>,
     ) {
         if let Some(group) = self.groups.get_mut(group_id) {
             // Get actual partition count from topics
@@ -216,7 +216,7 @@ impl ConsumerGroupManager {
         group_id: &str,
         topic: &str,
         to: &str,
-        topics: &std::collections::HashMap<String, crate::topics::Topic>,
+        topics: &HashMap<String, crate::topics::Topic>,
     ) {
         if let Some(group) = self.groups.get_mut(group_id) {
             if let Some(topic_data) = topics.get(topic) {

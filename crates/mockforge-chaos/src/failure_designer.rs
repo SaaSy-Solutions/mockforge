@@ -303,7 +303,7 @@ impl FailureDesigner {
                 }
             }
             FailureType::PartialResponse {
-                truncate_percentage,
+                truncate_percentage: _truncate_percentage,
             } => {
                 let fault_config = FaultInjectionConfig {
                     enabled: true,

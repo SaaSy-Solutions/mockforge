@@ -132,7 +132,7 @@ impl ContractDiffHandler {
             }
             ContractDiffIntent::FindBreakingChanges { filters } => {
                 // Find breaking changes
-                if let Some(spec) = spec {
+                if let Some(_spec) = spec {
                     // This is a simplified version - in practice, you'd compare against a previous version
                     Ok(ContractDiffQueryResult {
                         intent: ContractDiffIntent::FindBreakingChanges { filters: filters.clone() },
@@ -160,8 +160,8 @@ impl ContractDiffHandler {
     /// Compare two contract versions
     pub async fn compare_versions(
         &self,
-        spec1: &OpenApiSpec,
-        spec2: &OpenApiSpec,
+        _spec1: &OpenApiSpec,
+        _spec2: &OpenApiSpec,
     ) -> Result<ContractDiffResult> {
         // Use analyze method with a dummy request for now
         // In production, compare_specs would be implemented separately

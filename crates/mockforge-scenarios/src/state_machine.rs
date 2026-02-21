@@ -389,7 +389,7 @@ impl ScenarioStateMachineManager {
 
         // Update history manager
         let mut history_managers = self.history_managers.write().await;
-        let history = history_managers
+        let _history = history_managers
             .entry(instance.resource_type.clone())
             .or_insert_with(HistoryManager::new);
         // Note: We'd push the state machine to history here if we were tracking edits

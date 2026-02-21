@@ -143,7 +143,7 @@ impl ResponseBlender {
 
                 Value::Object(result)
             }
-            (Value::Array(mock_arr), Value::Array(real_arr)) => {
+            (Value::Array(_mock_arr), Value::Array(_real_arr)) => {
                 // For arrays, use global ratio (field-level doesn't apply well to arrays)
                 match self.strategy {
                     MergeStrategy::FieldLevel => self.blend_field_level(mock, real, global_ratio),

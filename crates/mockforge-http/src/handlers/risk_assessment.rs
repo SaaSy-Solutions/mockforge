@@ -126,23 +126,23 @@ pub async fn create_risk(
         })?;
 
     // Set optional fields
-    if let Some(subcategory) = request.subcategory {
+    if let Some(_subcategory) = request.subcategory {
         // Note: Risk struct doesn't have a setter for subcategory in the engine
         // This would need to be added to the engine or handled differently
     }
-    if let Some(threat) = request.threat {
+    if let Some(_threat) = request.threat {
         // Similar note - would need engine support
     }
-    if let Some(vulnerability) = request.vulnerability {
+    if let Some(_vulnerability) = request.vulnerability {
         // Similar note
     }
-    if let Some(asset) = request.asset {
+    if let Some(_asset) = request.asset {
         // Similar note
     }
-    if let Some(controls) = request.existing_controls {
+    if let Some(_controls) = request.existing_controls {
         // Similar note
     }
-    if let Some(requirements) = request.compliance_requirements {
+    if let Some(_requirements) = request.compliance_requirements {
         // Similar note
     }
 

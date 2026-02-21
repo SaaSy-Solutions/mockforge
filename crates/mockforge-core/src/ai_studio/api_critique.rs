@@ -484,7 +484,7 @@ mod tests {
     #[ignore] // Requires LLM service
     async fn test_api_critique_engine_creation() {
         let config = create_test_config();
-        let engine = ApiCritiqueEngine::new(config);
+        let _engine = ApiCritiqueEngine::new(config);
         // Engine should be created successfully
         assert!(true);
     }

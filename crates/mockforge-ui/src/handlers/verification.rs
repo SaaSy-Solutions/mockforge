@@ -59,7 +59,7 @@ pub struct AtLeastRequest {
 /// Verify requests against a pattern and count assertion
 pub async fn verify(
     State(_state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<VerifyRequest>,
+    Json(request): Json<VerifyRequest>,
 ) -> Json<ApiResponse<VerificationResult>> {
     let logger = match get_global_logger() {
         Some(logger) => logger,
@@ -85,7 +85,7 @@ pub async fn verify(
 /// Get count of matching requests
 pub async fn count(
     State(_state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<CountRequest>,
+    Json(request): Json<CountRequest>,
 ) -> Json<ApiResponse<CountResponse>> {
     let logger = match get_global_logger() {
         Some(logger) => logger,
@@ -102,7 +102,7 @@ pub async fn count(
 /// Verify that requests occurred in a specific sequence
 pub async fn verify_sequence_handler(
     State(_state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<SequenceRequest>,
+    Json(request): Json<SequenceRequest>,
 ) -> Json<ApiResponse<VerificationResult>> {
     let logger = match get_global_logger() {
         Some(logger) => logger,
@@ -127,7 +127,7 @@ pub async fn verify_sequence_handler(
 /// Verify that a request was never made
 pub async fn verify_never_handler(
     State(_state): State<AdminState>,
-    axum::extract::Json(pattern): axum::extract::Json<VerificationRequest>,
+    Json(pattern): Json<VerificationRequest>,
 ) -> Json<ApiResponse<VerificationResult>> {
     let logger = match get_global_logger() {
         Some(logger) => logger,
@@ -155,7 +155,7 @@ pub async fn verify_never_handler(
 /// Verify that a request was made at least N times
 pub async fn verify_at_least_handler(
     State(_state): State<AdminState>,
-    axum::extract::Json(request): axum::extract::Json<AtLeastRequest>,
+    Json(request): Json<AtLeastRequest>,
 ) -> Json<ApiResponse<VerificationResult>> {
     let logger = match get_global_logger() {
         Some(logger) => logger,

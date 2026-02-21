@@ -120,7 +120,7 @@ pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<Si
 
 /// Update latency configuration
 pub async fn update_latency(
-    State(state): State<super::AdminState>,
+    State(state): State<AdminState>,
     Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
     // Extract latency configuration from the JSON
@@ -141,7 +141,7 @@ pub async fn update_latency(
 
 /// Update fault injection configuration
 pub async fn update_faults(
-    State(state): State<super::AdminState>,
+    State(state): State<AdminState>,
     Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
     // Extract fault configuration from the JSON
@@ -162,7 +162,7 @@ pub async fn update_faults(
 
 /// Update proxy configuration
 pub async fn update_proxy(
-    State(state): State<super::AdminState>,
+    State(state): State<AdminState>,
     Json(config): Json<Value>,
 ) -> Json<ApiResponse<String>> {
     // Extract proxy configuration from the JSON
@@ -192,7 +192,7 @@ pub async fn clear_logs(State(_state): State<AdminState>) -> Json<ApiResponse<St
 }
 
 /// Restart servers
-pub async fn restart_servers(State(state): State<super::AdminState>) -> Json<ApiResponse<String>> {
+pub async fn restart_servers(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
     // Check if restart is already in progress
     let current_status = state.get_restart_status().await;
     if current_status.in_progress {
@@ -227,14 +227,14 @@ pub async fn restart_servers(State(state): State<super::AdminState>) -> Json<Api
 
 /// Get restart status
 pub async fn get_restart_status(
-    State(state): State<super::AdminState>,
+    State(state): State<AdminState>,
 ) -> Json<ApiResponse<super::RestartStatus>> {
     let status = state.get_restart_status().await;
     Json(ApiResponse::success(status))
 }
 
 /// Get configuration
-pub async fn get_config(State(state): State<super::AdminState>) -> Json<ApiResponse<Value>> {
+pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<Value>> {
     let config = state.get_config().await;
     Json(ApiResponse::success(serde_json::to_value(config).unwrap_or_else(|_| json!({}))))
 }
@@ -243,8 +243,8 @@ pub async fn get_config(State(state): State<super::AdminState>) -> Json<ApiRespo
 mod tests {
     use super::*;
 
-    fn create_test_state() -> super::AdminState {
-        super::AdminState::new(None, None, None, None, false, 8080, None, None, None, None, None)
+    fn create_test_state() -> AdminState {
+        AdminState::new(None, None, None, None, false, 8080, None, None, None, None, None)
     }
 
     // ==================== RequestMetrics Tests ====================
@@ -304,7 +304,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_restart_status() {
         let state = create_test_state();
-        let response = get_restart_status(axum::extract::State(state)).await;
+        let response = get_restart_status(State(state)).await;
 
         assert!(response.0.success);
     }
@@ -312,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_config() {
         let state = create_test_state();
-        let response = get_config(axum::extract::State(state)).await;
+        let response = get_config(State(state)).await;
 
         assert!(response.0.success);
     }
@@ -328,7 +328,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_server_info() {
         let state = create_test_state();
-        let response = get_server_info(axum::extract::State(state)).await;
+        let response = get_server_info(State(state)).await;
 
         assert!(response.0.is_object());
         let obj = response.0.as_object().unwrap();
@@ -342,7 +342,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_server_info_disabled() {
         let state = create_test_state();
-        let response = get_server_info(axum::extract::State(state)).await;
+        let response = get_server_info(State(state)).await;
 
         // With None addresses, should return "disabled"
         let obj = response.0.as_object().unwrap();
@@ -353,7 +353,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_metrics() {
         let state = create_test_state();
-        let response = get_metrics(axum::extract::State(state)).await;
+        let response = get_metrics(State(state)).await;
 
         assert!(response.0.success);
     }
@@ -362,7 +362,7 @@ mod tests {
     async fn test_get_logs_empty() {
         let state = create_test_state();
         let params = HashMap::new();
-        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+        let response = get_logs(State(state), Query(params)).await;
 
         assert!(response.0.success);
     }
@@ -373,7 +373,7 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("limit".to_string(), "10".to_string());
 
-        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+        let response = get_logs(State(state), Query(params)).await;
 
         assert!(response.0.success);
     }
@@ -384,7 +384,7 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("method".to_string(), "GET".to_string());
 
-        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+        let response = get_logs(State(state), Query(params)).await;
 
         assert!(response.0.success);
     }
@@ -395,7 +395,7 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("path".to_string(), "/api".to_string());
 
-        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+        let response = get_logs(State(state), Query(params)).await;
 
         assert!(response.0.success);
     }
@@ -406,7 +406,7 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("status".to_string(), "200".to_string());
 
-        let response = get_logs(axum::extract::State(state), axum::extract::Query(params)).await;
+        let response = get_logs(State(state), Query(params)).await;
 
         assert!(response.0.success);
     }
@@ -414,7 +414,7 @@ mod tests {
     #[tokio::test]
     async fn test_clear_logs() {
         let state = create_test_state();
-        let response = clear_logs(axum::extract::State(state)).await;
+        let response = clear_logs(State(state)).await;
 
         assert!(response.0.success);
         assert!(response.0.data.is_some());
@@ -428,8 +428,7 @@ mod tests {
             "jitter_ms": 20
         });
 
-        let response =
-            update_latency(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_latency(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -446,8 +445,7 @@ mod tests {
             }
         });
 
-        let response =
-            update_latency(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_latency(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -461,8 +459,7 @@ mod tests {
             "status_codes": [500, 503]
         });
 
-        let response =
-            update_faults(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_faults(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -474,8 +471,7 @@ mod tests {
             "enabled": false
         });
 
-        let response =
-            update_faults(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_faults(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -489,7 +485,7 @@ mod tests {
             "timeout_seconds": 60
         });
 
-        let response = update_proxy(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_proxy(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -501,7 +497,7 @@ mod tests {
             "enabled": false
         });
 
-        let response = update_proxy(axum::extract::State(state), axum::extract::Json(config)).await;
+        let response = update_proxy(State(state), Json(config)).await;
 
         assert!(response.0.success);
     }
@@ -509,7 +505,7 @@ mod tests {
     #[tokio::test]
     async fn test_restart_servers() {
         let state = create_test_state();
-        let response = restart_servers(axum::extract::State(state)).await;
+        let response = restart_servers(State(state)).await;
 
         // Should succeed to initiate (even if restart won't actually work without real servers)
         assert!(response.0.success || response.0.error.is_some());

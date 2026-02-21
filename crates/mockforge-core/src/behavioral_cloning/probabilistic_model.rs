@@ -172,7 +172,8 @@ impl ProbabilisticModel {
         }
 
         let mut variations = Vec::new();
-        for (idx, (key, (count, sample, status_code))) in variation_groups.into_iter().enumerate() {
+        for (idx, (_key, (count, sample, status_code))) in variation_groups.into_iter().enumerate()
+        {
             let probability = count as f64 / total_samples;
             let variation_id = format!("var_{}", idx);
 
@@ -324,7 +325,7 @@ impl ProbabilisticModel {
         let new_total = total + 1.0;
 
         // Update frequency for observed status code
-        for (code, prob) in model.status_code_distribution.iter_mut() {
+        for (_code, prob) in model.status_code_distribution.iter_mut() {
             *prob = (*prob * total) / new_total;
         }
 

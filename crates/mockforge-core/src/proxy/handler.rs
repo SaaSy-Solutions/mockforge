@@ -31,13 +31,13 @@ impl ProxyHandler {
 
         // Parse method
         let reqwest_method = match method.to_uppercase().as_str() {
-            "GET" => reqwest::Method::GET,
-            "POST" => reqwest::Method::POST,
-            "PUT" => reqwest::Method::PUT,
-            "DELETE" => reqwest::Method::DELETE,
-            "HEAD" => reqwest::Method::HEAD,
-            "OPTIONS" => reqwest::Method::OPTIONS,
-            "PATCH" => reqwest::Method::PATCH,
+            "GET" => Method::GET,
+            "POST" => Method::POST,
+            "PUT" => Method::PUT,
+            "DELETE" => Method::DELETE,
+            "HEAD" => Method::HEAD,
+            "OPTIONS" => Method::OPTIONS,
+            "PATCH" => Method::PATCH,
             _ => return Err(Error::generic(format!("Unsupported HTTP method: {}", method))),
         };
 
@@ -107,13 +107,13 @@ impl ProxyHandler {
 
         // Convert method to reqwest method
         let reqwest_method = match *method {
-            Method::GET => reqwest::Method::GET,
-            Method::POST => reqwest::Method::POST,
-            Method::PUT => reqwest::Method::PUT,
-            Method::DELETE => reqwest::Method::DELETE,
-            Method::HEAD => reqwest::Method::HEAD,
-            Method::OPTIONS => reqwest::Method::OPTIONS,
-            Method::PATCH => reqwest::Method::PATCH,
+            Method::GET => Method::GET,
+            Method::POST => Method::POST,
+            Method::PUT => Method::PUT,
+            Method::DELETE => Method::DELETE,
+            Method::HEAD => Method::HEAD,
+            Method::OPTIONS => Method::OPTIONS,
+            Method::PATCH => Method::PATCH,
             _ => return Err(Error::generic(format!("Unsupported HTTP method: {}", method))),
         };
 

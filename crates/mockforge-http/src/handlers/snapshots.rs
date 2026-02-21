@@ -63,9 +63,7 @@ fn default_workspace() -> String {
 }
 
 /// Extract VBR state from VBR engine if available
-async fn extract_vbr_state(
-    vbr_engine: &Option<Arc<dyn ProtocolStateExporter>>,
-) -> Option<serde_json::Value> {
+async fn extract_vbr_state(vbr_engine: &Option<Arc<dyn ProtocolStateExporter>>) -> Option<Value> {
     if let Some(engine) = vbr_engine {
         match engine.export_state().await {
             Ok(state) => {
@@ -87,7 +85,7 @@ async fn extract_vbr_state(
 /// Extract Recorder state from Recorder if available
 async fn extract_recorder_state(
     recorder: &Option<Arc<dyn ProtocolStateExporter>>,
-) -> Option<serde_json::Value> {
+) -> Option<Value> {
     if let Some(rec) = recorder {
         match rec.export_state().await {
             Ok(state) => {

@@ -17,7 +17,7 @@ pub struct KafkaFixture {
     pub partition: Option<i32>,      // None = all partitions
     pub key_pattern: Option<String>, // Template
     pub value_template: serde_json::Value,
-    pub headers: std::collections::HashMap<String, String>,
+    pub headers: HashMap<String, String>,
     pub auto_produce: Option<AutoProduceConfig>,
 }
 
@@ -145,7 +145,7 @@ impl KafkaFixture {
     /// Generate a message using the fixture
     pub fn generate_message(
         &self,
-        context: &std::collections::HashMap<String, String>,
+        context: &HashMap<String, String>,
     ) -> mockforge_core::Result<crate::partitions::KafkaMessage> {
         // Render key if pattern provided
         let key = self.key_pattern.as_ref().map(|pattern| self.render_template(pattern, context));
@@ -171,11 +171,7 @@ impl KafkaFixture {
         })
     }
 
-    fn render_template(
-        &self,
-        template: &str,
-        context: &std::collections::HashMap<String, String>,
-    ) -> String {
+    fn render_template(&self, template: &str, context: &HashMap<String, String>) -> String {
         let mut result = template.to_string();
         for (key, value) in context {
             result = result.replace(&format!("{{{{{}}}}}", key), value);

@@ -155,7 +155,7 @@ mod tests {
         assert!(cache.get("test_key").await.is_some());
 
         // Wait for expiration
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Should be expired
         assert!(cache.get("test_key").await.is_none());
@@ -169,7 +169,7 @@ mod tests {
         cache.put("key2".to_string(), json!("value2")).await;
 
         // Wait for expiration
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
 
         let cleaned = cache.cleanup_expired().await;
         assert_eq!(cleaned, 2);

@@ -577,7 +577,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
             println!("   Checksum: {}", checksum);
 
             // Read archive as base64
-            let archive_data = std::fs::read(&archive_path)
+            let archive_data = fs::read(&archive_path)
                 .map_err(|e| anyhow::anyhow!("Failed to read archive: {}", e))?;
             let archive_base64 = general_purpose::STANDARD.encode(&archive_data);
 
@@ -600,8 +600,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                 .map_err(|_| anyhow::anyhow!("MOCKFORGE_REGISTRY_TOKEN environment variable not set. Required for publishing."))?;
 
             // Create registry client and publish
-            let registry_client =
-                mockforge_scenarios::ScenarioRegistry::with_token(registry_url, token);
+            let registry_client = ScenarioRegistry::with_token(registry_url, token);
 
             println!("   Publishing to registry...");
             match registry_client.publish(publish_request).await {
@@ -618,7 +617,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
             }
 
             // Clean up temp archive
-            let _ = std::fs::remove_file(&archive_path);
+            let _ = fs::remove_file(&archive_path);
         }
 
         ScenarioCommands::Update { name, all } => {
@@ -1046,7 +1045,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
                         let yaml_content = serde_yaml::to_string(&manifest)
                             .map_err(|e| anyhow::anyhow!("Failed to serialize manifest: {}", e))?;
 
-                        std::fs::write(&output_path, yaml_content)
+                        fs::write(&output_path, yaml_content)
                             .map_err(|e| anyhow::anyhow!("Failed to write manifest: {}", e))?;
 
                         println!("✅ Studio pack created successfully!");
@@ -1254,7 +1253,7 @@ fn calculate_checksum(data: &[u8]) -> String {
 /// it's implemented in the CLI layer.
 async fn apply_vbr_entities_from_scenario(
     entities: &[mockforge_scenarios::VbrEntityDefinition],
-    scenario_path: &std::path::Path,
+    scenario_path: &Path,
 ) -> anyhow::Result<usize> {
     use mockforge_vbr::schema::VbrSchemaDefinition;
 
@@ -1336,7 +1335,7 @@ async fn apply_vbr_entities_from_scenario(
 /// Merge MockAI configuration from a scenario into existing config.yaml
 async fn merge_mockai_config_from_scenario(
     mockai_config_def: &mockforge_scenarios::MockAIConfigDefinition,
-    scenario_path: &std::path::Path,
+    scenario_path: &Path,
 ) -> anyhow::Result<()> {
     let current_dir = std::env::current_dir()
         .map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?;
@@ -1569,7 +1568,7 @@ pub async fn handle_reality_profile_command(command: RealityProfileCommands) -> 
                 Some(mockforge_scenarios::create_iot_fleet_chaos_pack())
             } else {
                 // Try as a file path
-                let path = std::path::Path::new(&pack_name);
+                let path = Path::new(&pack_name);
                 if path.exists() {
                     Some(mockforge_scenarios::RealityProfilePackManifest::from_file(path)?)
                 } else {
@@ -2036,7 +2035,6 @@ pub async fn handle_drift_learning_command(command: DriftLearningCommands) -> an
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
 
     // Tests for calculate_checksum
     #[test]

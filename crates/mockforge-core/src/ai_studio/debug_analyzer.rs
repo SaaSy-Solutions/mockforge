@@ -337,7 +337,7 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     if let Some(ref persona_id) = uc.persona.active_persona_id {
                         suggestion.linked_artifacts.push(LinkedArtifact {
                             artifact_type: "persona".to_string(),
-                            artifact_id: persona_id.clone(),
+                            artifact_id: persona_id.to_string(),
                             artifact_name: uc.persona.active_persona_name.clone(),
                         });
                     }
@@ -350,7 +350,7 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     if let Some(ref scenario_id) = uc.scenario.active_scenario {
                         suggestion.linked_artifacts.push(LinkedArtifact {
                             artifact_type: "scenario".to_string(),
-                            artifact_id: scenario_id.clone(),
+                            artifact_id: scenario_id.to_string(),
                             artifact_name: None,
                         });
                     }
@@ -363,7 +363,7 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     for contract_path in &uc.contract.active_contracts {
                         suggestion.linked_artifacts.push(LinkedArtifact {
                             artifact_type: "contract".to_string(),
-                            artifact_id: contract_path.clone(),
+                            artifact_id: contract_path.to_string(),
                             artifact_name: None,
                         });
                     }
@@ -396,8 +396,8 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
         &self,
         suggestions: &mut [DebugSuggestion],
         context: &FailureContext,
-        narrative: &crate::failure_analysis::types::FailureNarrative,
-        unified_context: Option<&UnifiedDebugContext>,
+        _narrative: &crate::failure_analysis::types::FailureNarrative,
+        _unified_context: Option<&UnifiedDebugContext>,
     ) -> Result<()> {
         for suggestion in suggestions.iter_mut() {
             // Generate patch based on suggestion type and context

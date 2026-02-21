@@ -695,7 +695,7 @@ impl WorkspacePersistence {
 
         // Apply exclusion filter if provided
         if let Some(exclude) = exclude_pattern {
-            if let Ok(regex) = regex::Regex::new(exclude) {
+            if let Ok(regex) = Regex::new(exclude) {
                 workspaces_to_sync.retain(|id| !regex.is_match(id));
             }
         }
@@ -1935,7 +1935,7 @@ mod tests {
         let mut workspace = Workspace::new("Test Workspace".to_string());
         let request =
             MockRequest::new(HttpMethod::GET, "/test".to_string(), "Test Request".to_string());
-        workspace.add_request(request);
+        workspace.add_request(request).unwrap();
 
         // Save workspace
         persistence.save_workspace(&workspace).await.unwrap();

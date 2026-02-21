@@ -314,7 +314,7 @@ impl KafkaMockBroker {
         // Protocol parsing for actual topic creation parameters is not yet implemented
         let topic_name = "default-topic".to_string();
         let topic_config = crate::topics::TopicConfig::default();
-        let topic = crate::topics::Topic::new(topic_name.clone(), topic_config);
+        let topic = Topic::new(topic_name.clone(), topic_config);
 
         // Store the topic
         let mut topics = self.topics.write().await;
@@ -335,7 +335,7 @@ impl KafkaMockBroker {
     pub async fn test_commit_offsets(
         &self,
         group_id: &str,
-        offsets: std::collections::HashMap<(String, i32), i64>,
+        offsets: HashMap<(String, i32), i64>,
     ) -> Result<()> {
         let mut consumer_groups = self.consumer_groups.write().await;
         consumer_groups
@@ -345,10 +345,7 @@ impl KafkaMockBroker {
     }
 
     /// Test helper: Get committed offsets for a consumer group (only available in tests)
-    pub async fn test_get_committed_offsets(
-        &self,
-        group_id: &str,
-    ) -> std::collections::HashMap<(String, i32), i64> {
+    pub async fn test_get_committed_offsets(&self, group_id: &str) -> HashMap<(String, i32), i64> {
         let consumer_groups = self.consumer_groups.read().await;
         consumer_groups.get_committed_offsets(group_id)
     }

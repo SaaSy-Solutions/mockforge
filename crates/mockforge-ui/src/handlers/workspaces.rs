@@ -991,7 +991,7 @@ pub async fn get_environment_variables(
     State(state): State<WorkspaceState>,
     Path((workspace_id, environment_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
-    let mut registry = state.registry.write().await;
+    let registry = state.registry.write().await;
     let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
         (
             StatusCode::NOT_FOUND,

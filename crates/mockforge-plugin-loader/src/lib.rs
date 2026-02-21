@@ -49,7 +49,7 @@ pub use signature_gen::*;
 pub use validator::*;
 
 /// Plugin loader result type
-pub type LoaderResult<T> = std::result::Result<T, PluginLoaderError>;
+pub type LoaderResult<T> = Result<T, PluginLoaderError>;
 
 /// Plugin loader error types
 #[derive(Debug, thiserror::Error)]

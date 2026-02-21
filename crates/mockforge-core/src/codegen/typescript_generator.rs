@@ -627,7 +627,7 @@ fn generate_basic_mock_response(route: &RouteInfo) -> String {
 }
 
 /// Generate a mock response based on the OpenAPI schema
-fn generate_from_schema(schema: &openapiv3::Schema) -> String {
+fn generate_from_schema(schema: &Schema) -> String {
     // Basic schema-based generation
     match &schema.schema_kind {
         openapiv3::SchemaKind::Type(openapiv3::Type::Object(_props)) => {

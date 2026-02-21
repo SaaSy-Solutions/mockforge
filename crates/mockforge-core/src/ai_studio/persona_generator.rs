@@ -130,7 +130,7 @@ Make the persona realistic and consistent. Traits should align with the descript
         let response = self.llm_client.generate(&llm_request).await?;
 
         // Parse the response into a persona structure
-        let persona_json = if let Some(id) = response.get("id") {
+        let persona_json = if let Some(_id) = response.get("id") {
             // Full persona structure
             response.clone()
         } else {

@@ -155,7 +155,7 @@ pub async fn generate_rust_axum_backend(
 fn generate_cargo_toml(
     spec: &OpenApiSpec,
     config: &BackendGeneratorConfig,
-    port: u16,
+    _port: u16,
 ) -> Result<GeneratedFile> {
     let project_name = sanitize_name(&spec.spec.info.title);
     let version = &spec.spec.info.version;
@@ -238,7 +238,7 @@ tokio-test = "0.4"
 /// Generate main.rs file
 fn generate_main_rs(
     spec: &OpenApiSpec,
-    config: &BackendGeneratorConfig,
+    _config: &BackendGeneratorConfig,
     port: u16,
     routes: &[RouteInfo],
 ) -> Result<(GeneratedFile, Vec<TodoItem>)> {
@@ -725,7 +725,7 @@ fn generate_handler_function(
 /// Generate routes.rs file
 fn generate_routes_file(
     routes: &[RouteInfo],
-    config: &BackendGeneratorConfig,
+    _config: &BackendGeneratorConfig,
 ) -> Result<(GeneratedFile, Vec<TodoItem>)> {
     let todos = Vec::new();
     let mut content =
@@ -970,7 +970,7 @@ MockForge - API Mocking and Testing Platform
 /// Generate TODO.md file with all TODOs and DoD criteria
 fn generate_todo_md(
     spec: &OpenApiSpec,
-    config: &BackendGeneratorConfig,
+    _config: &BackendGeneratorConfig,
     todos: &[TodoItem],
     routes: &[RouteInfo],
 ) -> Result<GeneratedFile> {

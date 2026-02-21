@@ -109,7 +109,7 @@ pub trait DataSourcePlugin: Send + Sync {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataSourcePluginConfig {
     /// Plugin-specific configuration
-    pub config: HashMap<String, serde_json::Value>,
+    pub config: HashMap<String, Value>,
     /// Enable/disable the plugin
     pub enabled: bool,
     /// Data source type (e.g., "postgresql", "mysql", "api", "file")
@@ -127,7 +127,7 @@ pub struct DataSourcePluginConfig {
     /// SSL/TLS configuration
     pub ssl_config: Option<SslConfig>,
     /// Custom settings
-    pub settings: HashMap<String, serde_json::Value>,
+    pub settings: HashMap<String, Value>,
 }
 
 impl Default for DataSourcePluginConfig {
@@ -211,7 +211,7 @@ pub struct SslConfig {
     /// Skip certificate verification (for development)
     pub skip_verify: bool,
     /// Custom SSL settings
-    pub custom: HashMap<String, serde_json::Value>,
+    pub custom: HashMap<String, Value>,
 }
 
 /// Data connection handle

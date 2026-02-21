@@ -92,9 +92,9 @@ impl GrpcContract {
 
     /// Create a gRPC contract from a proto file path
     pub async fn from_proto_file(
-        contract_id: String,
-        version: String,
-        proto_file: &str,
+        _contract_id: String,
+        _version: String,
+        _proto_file: &str,
     ) -> Result<Self, ContractError> {
         // This would require compiling the proto file first
         // For now, we'll return an error indicating this needs to be implemented
@@ -520,9 +520,9 @@ impl GrpcContract {
         let mut mismatches = Vec::new();
 
         // Collect field information
-        let old_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> =
+        let old_fields: HashMap<u32, prost_reflect::FieldDescriptor> =
             old_message.fields().map(|f| (f.number(), f)).collect();
-        let new_fields: std::collections::HashMap<u32, prost_reflect::FieldDescriptor> =
+        let new_fields: HashMap<u32, prost_reflect::FieldDescriptor> =
             new_message.fields().map(|f| (f.number(), f)).collect();
 
         // Check for removed fields (breaking change)
@@ -975,8 +975,6 @@ pub fn diff_grpc_contracts(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_grpc_contract_creation() {
         // This test would require a sample descriptor set

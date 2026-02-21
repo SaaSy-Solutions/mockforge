@@ -294,7 +294,7 @@ pub async fn get_compliance_status(
 /// GET /api/v1/compliance/reports/{period}
 pub async fn get_compliance_report(
     State(state): State<ComplianceDashboardState>,
-    Path(period): Path<String>,
+    Path(_period): Path<String>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let engine = state.engine.read().await;
@@ -324,10 +324,10 @@ pub async fn get_compliance_report(
     let mut recommendations = Vec::new();
     for gap in &all_gaps {
         match gap.severity {
-            mockforge_core::security::compliance_dashboard::GapSeverity::Critical => {
+            GapSeverity::Critical => {
                 recommendations.push(format!("Urgent: {}", gap.description));
             }
-            mockforge_core::security::compliance_dashboard::GapSeverity::High => {
+            GapSeverity::High => {
                 recommendations.push(format!("High priority: {}", gap.description));
             }
             _ => {}

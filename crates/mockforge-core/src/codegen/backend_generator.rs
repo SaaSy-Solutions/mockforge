@@ -108,7 +108,7 @@ fn extract_route_info(
     method: &str,
     path: &str,
     operation: &Operation,
-    path_item: &PathItem,
+    _path_item: &PathItem,
 ) -> Result<RouteInfo> {
     // Extract path parameters from the path string
     let path_params = extract_path_parameters(path);

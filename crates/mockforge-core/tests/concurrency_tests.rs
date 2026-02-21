@@ -10,7 +10,6 @@ use mockforge_core::validation::validate_json_schema;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 #[cfg(test)]
 mod route_registry_concurrency {
@@ -330,7 +329,7 @@ mod template_expansion_concurrency {
         let mut handles = vec![];
 
         // Multiple threads expanding templates concurrently
-        for i in 0..20 {
+        for _i in 0..20 {
             let handle = thread::spawn(move || {
                 for j in 0..50 {
                     let template = format!("Hello {{name}}_{}", j);

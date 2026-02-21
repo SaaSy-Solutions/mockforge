@@ -852,7 +852,7 @@ pub struct BulkConfigUpdateRequest {
 /// Configuration updates are applied to the server configuration if available
 /// in ManagementState. Changes take effect immediately for supported settings.
 async fn bulk_update_config(
-    State(state): State<ManagementState>,
+    State(_state): State<ManagementState>,
     Json(request): Json<BulkConfigUpdateRequest>,
 ) -> impl IntoResponse {
     // Validate the updates structure
@@ -971,7 +971,7 @@ pub enum ExportFormat {
 /// Export mocks in specified format
 async fn export_mocks(
     State(state): State<ManagementState>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<(StatusCode, String), StatusCode> {
     let mocks = state.mocks.read().await;
 
@@ -1097,7 +1097,7 @@ async fn clear_smtp_mailbox(State(state): State<ManagementState>) -> impl IntoRe
 /// Export SMTP mailbox
 #[cfg(feature = "smtp")]
 async fn export_smtp_mailbox(
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let format = params.get("format").unwrap_or(&"json".to_string()).clone();
     (
@@ -1114,7 +1114,7 @@ async fn export_smtp_mailbox(
 #[cfg(feature = "smtp")]
 async fn search_smtp_emails(
     State(state): State<ManagementState>,
-    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if let Some(ref smtp_registry) = state.smtp_registry {
         let filters = EmailSearchFilters {
@@ -3568,10 +3568,10 @@ fn extract_graphql_schema(text: &str) -> String {
 // ========== Chaos Engineering Management ==========
 
 /// Get current chaos engineering configuration
-async fn get_chaos_config(State(state): State<ManagementState>) -> impl IntoResponse {
+async fn get_chaos_config(State(_state): State<ManagementState>) -> impl IntoResponse {
     #[cfg(feature = "chaos")]
     {
-        if let Some(chaos_state) = &state.chaos_api_state {
+        if let Some(chaos_state) = &_state.chaos_api_state {
             let config = chaos_state.config.read().await;
             // Convert ChaosConfig to JSON response format
             Json(serde_json::json!({
@@ -3625,12 +3625,12 @@ pub struct ChaosConfigUpdate {
 
 /// Update chaos engineering configuration
 async fn update_chaos_config(
-    State(state): State<ManagementState>,
-    Json(config_update): Json<ChaosConfigUpdate>,
+    State(_state): State<ManagementState>,
+    Json(_config_update): Json<ChaosConfigUpdate>,
 ) -> impl IntoResponse {
     #[cfg(feature = "chaos")]
     {
-        if let Some(chaos_state) = &state.chaos_api_state {
+        if let Some(chaos_state) = &_state.chaos_api_state {
             use mockforge_chaos::config::{
                 ChaosConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig,
                 TrafficShapingConfig,
@@ -3639,33 +3639,33 @@ async fn update_chaos_config(
             let mut config = chaos_state.config.write().await;
 
             // Update enabled flag if provided
-            if let Some(enabled) = config_update.enabled {
+            if let Some(enabled) = _config_update.enabled {
                 config.enabled = enabled;
             }
 
             // Update latency config if provided
-            if let Some(latency_json) = config_update.latency {
+            if let Some(latency_json) = _config_update.latency {
                 if let Ok(latency) = serde_json::from_value::<LatencyConfig>(latency_json) {
                     config.latency = Some(latency);
                 }
             }
 
             // Update fault injection config if provided
-            if let Some(fault_json) = config_update.fault_injection {
+            if let Some(fault_json) = _config_update.fault_injection {
                 if let Ok(fault) = serde_json::from_value::<FaultInjectionConfig>(fault_json) {
                     config.fault_injection = Some(fault);
                 }
             }
 
             // Update rate limit config if provided
-            if let Some(rate_json) = config_update.rate_limit {
+            if let Some(rate_json) = _config_update.rate_limit {
                 if let Ok(rate) = serde_json::from_value::<RateLimitConfig>(rate_json) {
                     config.rate_limit = Some(rate);
                 }
             }
 
             // Update traffic shaping config if provided
-            if let Some(traffic_json) = config_update.traffic_shaping {
+            if let Some(traffic_json) = _config_update.traffic_shaping {
                 if let Ok(traffic) = serde_json::from_value::<TrafficShapingConfig>(traffic_json) {
                     config.traffic_shaping = Some(traffic);
                 }

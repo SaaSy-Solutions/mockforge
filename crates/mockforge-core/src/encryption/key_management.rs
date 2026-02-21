@@ -520,7 +520,7 @@ impl KeyStore {
         let expired_keys = self
             .metadata
             .values()
-            .filter(|meta| meta.expires_at.is_some_and(|exp| chrono::Utc::now() > exp))
+            .filter(|meta| meta.expires_at.is_some_and(|exp| Utc::now() > exp))
             .count();
 
         let total_usage: u64 = self.metadata.values().map(|meta| meta.usage_count).sum();
@@ -648,7 +648,7 @@ pub mod utils {
     /// Check if a key is expired
     pub fn is_key_expired(metadata: &KeyMetadata) -> bool {
         if let Some(expires_at) = metadata.expires_at {
-            chrono::Utc::now() > expires_at
+            Utc::now() > expires_at
         } else {
             false
         }
@@ -656,7 +656,7 @@ pub mod utils {
 
     /// Get key age in days
     pub fn get_key_age_days(metadata: &KeyMetadata) -> i64 {
-        let now = chrono::Utc::now();
+        let now = Utc::now();
         (now - metadata.created_at).num_days()
     }
 

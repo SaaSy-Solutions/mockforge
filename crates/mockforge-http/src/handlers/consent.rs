@@ -80,7 +80,7 @@ pub async fn get_consent_screen(
 
 /// Submit consent decision
 pub async fn submit_consent(
-    State(state): State<ConsentState>,
+    State(_state): State<ConsentState>,
     Json(request): Json<ConsentDecisionRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if !request.approved {

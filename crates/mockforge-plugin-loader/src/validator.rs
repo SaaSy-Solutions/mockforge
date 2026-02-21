@@ -13,7 +13,7 @@ use std::path::Path;
 // Import types from plugin core
 use mockforge_plugin_core::{
     FilesystemPermissions, NetworkPermissions, PluginCapabilities, PluginId, PluginManifest,
-    ResourceLimits,
+    PluginVersion, ResourceLimits,
 };
 
 // WASM parsing
@@ -72,7 +72,7 @@ impl PluginValidator {
         }
 
         // Validate plugin dependencies
-        let mut visited = std::collections::HashSet::new();
+        let mut visited = HashSet::new();
         visited.insert(manifest.info.id.clone());
         if let Err(e) = self
             .validate_dependencies(&manifest.info.id, &manifest.dependencies, &mut visited)
@@ -192,11 +192,8 @@ impl PluginValidator {
     async fn validate_dependencies(
         &self,
         current_plugin_id: &PluginId,
-        dependencies: &std::collections::HashMap<
-            mockforge_plugin_core::PluginId,
-            mockforge_plugin_core::PluginVersion,
-        >,
-        visited: &mut std::collections::HashSet<PluginId>,
+        dependencies: &std::collections::HashMap<mockforge_plugin_core::PluginId, PluginVersion>,
+        visited: &mut HashSet<PluginId>,
     ) -> LoaderResult<()> {
         for (plugin_id, version) in dependencies {
             // Check for circular dependencies using DFS
@@ -258,7 +255,7 @@ impl PluginValidator {
         &self,
         current_plugin_id: &PluginId,
         dependency_id: &PluginId,
-        visited: &mut std::collections::HashSet<PluginId>,
+        visited: &mut HashSet<PluginId>,
     ) -> bool {
         // Check for direct self-dependency
         if dependency_id == current_plugin_id {

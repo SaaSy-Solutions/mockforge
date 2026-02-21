@@ -59,7 +59,7 @@ pub enum MutationTrigger {
         /// Field to check
         field: String,
         /// Threshold value
-        threshold: serde_json::Value,
+        threshold: Value,
         /// Comparison operator
         operator: ComparisonOperator,
     },
@@ -90,7 +90,7 @@ pub enum MutationOperation {
         /// Field name
         field: String,
         /// Value to set
-        value: serde_json::Value,
+        value: Value,
     },
     /// Increment a numeric field
     Increment {
@@ -284,7 +284,7 @@ impl MutationRuleManager {
             info!("Mutation rule '{}' {}", rule_id, if enabled { "enabled" } else { "disabled" });
             Ok(())
         } else {
-            Err(crate::Error::generic(format!("Mutation rule '{}' not found", rule_id)))
+            Err(Error::generic(format!("Mutation rule '{}' not found", rule_id)))
         }
     }
 
@@ -340,8 +340,8 @@ impl MutationRuleManager {
     /// - Simple template strings with variable substitution
     fn evaluate_transformation_expression(
         expression: &str,
-        record: &HashMap<String, serde_json::Value>,
-    ) -> Result<serde_json::Value> {
+        record: &HashMap<String, Value>,
+    ) -> Result<Value> {
         use regex::Regex;
 
         // Convert record to Value for easier manipulation
@@ -405,19 +405,19 @@ impl MutationRuleManager {
         // Check for string operations
         if substituted_str.contains(".toUpperCase()") {
             let base = substituted_str.replace(".toUpperCase()", "");
-            return Ok(serde_json::Value::String(base.to_uppercase()));
+            return Ok(Value::String(base.to_uppercase()));
         }
         if substituted_str.contains(".toLowerCase()") {
             let base = substituted_str.replace(".toLowerCase()", "");
-            return Ok(serde_json::Value::String(base.to_lowercase()));
+            return Ok(Value::String(base.to_lowercase()));
         }
         if substituted_str.contains(".trim()") {
             let base = substituted_str.replace(".trim()", "");
-            return Ok(serde_json::Value::String(base.trim().to_string()));
+            return Ok(Value::String(base.trim().to_string()));
         }
 
         // If no operations detected, return as string
-        Ok(serde_json::Value::String(substituted_str))
+        Ok(Value::String(substituted_str))
     }
 
     /// Evaluate a simple mathematical expression
@@ -668,14 +668,12 @@ impl MutationRuleManager {
                     // Get current value
                     if let Some(current) = record.get(field) {
                         let new_value = if let Some(num) = current.as_f64() {
-                            serde_json::Value::Number(
+                            Value::Number(
                                 serde_json::Number::from_f64(num + amount)
                                     .unwrap_or_else(|| serde_json::Number::from(0)),
                             )
                         } else if let Some(num) = current.as_i64() {
-                            serde_json::Value::Number(serde_json::Number::from(
-                                num + *amount as i64,
-                            ))
+                            Value::Number(serde_json::Number::from(num + *amount as i64))
                         } else {
                             continue; // Skip non-numeric fields
                         };
@@ -691,14 +689,12 @@ impl MutationRuleManager {
                     // Get current value
                     if let Some(current) = record.get(field) {
                         let new_value = if let Some(num) = current.as_f64() {
-                            serde_json::Value::Number(
+                            Value::Number(
                                 serde_json::Number::from_f64(num - amount)
                                     .unwrap_or_else(|| serde_json::Number::from(0)),
                             )
                         } else if let Some(num) = current.as_i64() {
-                            serde_json::Value::Number(serde_json::Number::from(
-                                num - *amount as i64,
-                            ))
+                            Value::Number(serde_json::Number::from(num - *amount as i64))
                         } else {
                             continue; // Skip non-numeric fields
                         };
@@ -723,10 +719,7 @@ impl MutationRuleManager {
                     let update_query =
                         format!("UPDATE {} SET status = ? WHERE {} = ?", table_name, pk_field);
                     database
-                        .execute(
-                            &update_query,
-                            &[serde_json::Value::String(status.clone()), pk_value.clone()],
-                        )
+                        .execute(&update_query, &[Value::String(status.clone()), pk_value.clone()])
                         .await?;
                 }
             }

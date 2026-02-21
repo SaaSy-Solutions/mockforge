@@ -146,7 +146,7 @@ impl Dataset {
     /// Get dataset as JSON string
     pub fn to_json_string(&self) -> Result<String> {
         serde_json::to_string_pretty(&self.data)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize dataset: {}", e)))
+            .map_err(|e| Error::generic(format!("Failed to serialize dataset: {}", e)))
     }
 
     /// Get dataset as JSON Lines string
@@ -156,7 +156,7 @@ impl Dataset {
             .iter()
             .map(|value| {
                 serde_json::to_string(value)
-                    .map_err(|e| crate::Error::generic(format!("JSON serialization error: {}", e)))
+                    .map_err(|e| Error::generic(format!("JSON serialization error: {}", e)))
             })
             .collect();
 
@@ -202,7 +202,7 @@ impl Dataset {
     /// Get dataset as YAML string
     pub fn to_yaml_string(&self) -> Result<String> {
         serde_yaml::to_string(&self.data)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize dataset: {}", e)))
+            .map_err(|e| Error::generic(format!("Failed to serialize dataset: {}", e)))
     }
 
     /// Save dataset to file
@@ -216,14 +216,14 @@ impl Dataset {
 
         fs::write(path, content)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to write dataset file: {}", e)))
+            .map_err(|e| Error::generic(format!("Failed to write dataset file: {}", e)))
     }
 
     /// Load dataset from file
     pub async fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(path)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to read dataset file: {}", e)))?;
+            .map_err(|e| Error::generic(format!("Failed to read dataset file: {}", e)))?;
 
         // Try to parse as JSON array first
         if let Ok(data) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
@@ -243,7 +243,7 @@ impl Dataset {
             return Ok(Self::new(metadata, data));
         }
 
-        Err(crate::Error::generic("Unsupported file format or invalid content"))
+        Err(Error::generic("Unsupported file format or invalid content"))
     }
 
     /// Get row count
@@ -343,7 +343,7 @@ impl DatasetCollection {
     pub async fn save_to_directory<P: AsRef<Path>>(&self, dir_path: P) -> Result<()> {
         fs::create_dir_all(&dir_path)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to create directory: {}", e)))?;
+            .map_err(|e| Error::generic(format!("Failed to create directory: {}", e)))?;
 
         for (name, dataset) in &self.datasets {
             let file_path = dir_path.as_ref().join(format!("{}.json", name));
@@ -358,12 +358,12 @@ impl DatasetCollection {
         let mut collection = Self::new();
         let mut entries = fs::read_dir(dir_path)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to read directory: {}", e)))?;
+            .map_err(|e| Error::generic(format!("Failed to read directory: {}", e)))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
         {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -464,7 +464,7 @@ pub mod utils {
 
         fs::write(output_path, content)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to export dataset: {}", e)))
+            .map_err(|e| Error::generic(format!("Failed to export dataset: {}", e)))
     }
 
     /// Validate dataset against schema

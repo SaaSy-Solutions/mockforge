@@ -123,7 +123,7 @@ pub async fn get_snapshot(
 /// GET /api/world-state/graph
 pub async fn get_world_state_graph(
     State(state): State<WorldStateState>,
-    Query(params): Query<WorldStateQueryParams>,
+    Query(_params): Query<WorldStateQueryParams>,
 ) -> Result<Json<WorldStateGraphResponse>, StatusCode> {
     let engine = state.engine.read().await;
     let snapshot = engine.get_current_snapshot().await.map_err(|e| {
@@ -192,7 +192,7 @@ pub async fn query_world_state(
     let mut query = WorldStateQuery::new();
 
     if let Some(ref node_types) = request.node_types {
-        let types: HashSet<_> = node_types
+        let _types: HashSet<_> = node_types
             .iter()
             .filter_map(|s| {
                 // Try to parse as NodeType - for now just store as string
@@ -268,7 +268,6 @@ async fn handle_world_state_stream(
     state: WorldStateState,
 ) {
     use axum::extract::ws::Message;
-    use futures_util::SinkExt;
     use tokio::time::{interval, Duration};
 
     // Send initial snapshot

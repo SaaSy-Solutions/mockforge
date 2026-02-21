@@ -363,8 +363,8 @@ pub async fn execute_kafka_command(command: KafkaCommands) -> Result<()> {
 
                 // Seek to beginning or end
                 let offset = match from.as_str() {
-                    "beginning" => rdkafka::Offset::Beginning,
-                    "end" => rdkafka::Offset::End,
+                    "beginning" => Offset::Beginning,
+                    "end" => Offset::End,
                     _ => return Err(anyhow::anyhow!("Invalid 'from' value: {}", from)),
                 };
                 consumer
@@ -815,7 +815,8 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
                     low_watermark
                 };
 
-                tpl.add_partition_offset(&topic, partition.id(), Offset::Offset(target_offset));
+                let _ =
+                    tpl.add_partition_offset(&topic, partition.id(), Offset::Offset(target_offset));
             }
 
             // Create admin client to alter offsets
@@ -831,7 +832,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             println!("Simulated lag of {} messages for group {} on topic {} (set offsets behind high watermark)", lag, group, topic);
             Ok(())
         }
-        KafkaSimulateCommands::Rebalance { group } => {
+        KafkaSimulateCommands::Rebalance { group: _group } => {
             // Note: Consumer group operations are not available in rdkafka 0.38
             // This is a stub implementation
             println!("Note: Rebalance simulation not supported in rdkafka 0.38");
@@ -869,7 +870,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
             };
 
             for partition in topic_metadata.partitions() {
-                tpl.add_partition_offset(&topic, partition.id(), target_offset);
+                let _ = tpl.add_partition_offset(&topic, partition.id(), target_offset);
             }
 
             // Note: alter_consumer_group_offsets is not available in rdkafka 0.38

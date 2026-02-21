@@ -69,7 +69,7 @@ pub struct ResponseTransformConfig {
     /// Enable response transformations
     pub enabled: bool,
     /// Custom headers to add to all responses
-    pub custom_headers: std::collections::HashMap<String, String>,
+    pub custom_headers: HashMap<String, String>,
     /// Response body overrides using the override system
     pub overrides: Option<Overrides>,
     /// Enable response validation

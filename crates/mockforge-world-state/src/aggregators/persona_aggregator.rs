@@ -8,7 +8,6 @@ use crate::model::{NodeType, StateEdge, StateLayer, StateNode};
 use async_trait::async_trait;
 use mockforge_data::persona_graph::PersonaGraph;
 use std::sync::Arc;
-use std::sync::RwLock as StdRwLock;
 
 /// Aggregator for persona state
 pub struct PersonaAggregator {

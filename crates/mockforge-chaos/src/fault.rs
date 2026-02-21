@@ -260,16 +260,14 @@ impl FaultInjector {
     pub async fn generate_error_message(
         &self,
         status_code: u16,
-        mockai: Option<
-            &std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
-        >,
+        mockai: Option<&Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
         request_context: Option<&str>,
     ) -> String {
         // If MockAI is enabled and available, use it to generate context-aware error messages
         if let Some(mockai_arc) = mockai {
-            if let Ok(mockai_guard) = mockai_arc.try_read() {
+            if let Ok(_mockai_guard) = mockai_arc.try_read() {
                 // Generate error message based on status code and context
-                let error_context = format!(
+                let _error_context = format!(
                     "Generate a realistic HTTP {} error message{}",
                     status_code,
                     request_context

@@ -210,7 +210,7 @@ fn generate_commands_for_operation(
 /// Generate parameter combinations for an operation
 fn generate_parameter_combinations(
     spec: &OpenApiSpec,
-    operation: &openapiv3::Operation,
+    operation: &Operation,
     _max_combinations: usize,
 ) -> Result<Vec<HashMap<String, String>>, String> {
     let mut params = HashMap::new();
@@ -331,8 +331,8 @@ fn build_url_with_params(
 
 /// Build headers for the request
 fn build_headers(
-    spec: &crate::openapi::OpenApiSpec,
-    operation: &openapiv3::Operation,
+    spec: &OpenApiSpec,
+    operation: &Operation,
     _params: &HashMap<String, String>,
     options: &CommandGenerationOptions,
 ) -> Result<HashMap<String, String>, String> {
@@ -362,8 +362,8 @@ fn build_headers(
 
 /// Add security scheme headers to the request
 fn add_security_headers(
-    spec: &crate::openapi::OpenApiSpec,
-    operation: &openapiv3::Operation,
+    spec: &OpenApiSpec,
+    operation: &Operation,
     headers: &mut HashMap<String, String>,
 ) -> Result<(), String> {
     // Get security requirements for this operation, or fall back to global security
@@ -452,7 +452,7 @@ fn add_security_headers(
 
 /// Build request body
 fn build_request_body(
-    operation: &openapiv3::Operation,
+    operation: &Operation,
     _params: &HashMap<String, String>,
     options: &CommandGenerationOptions,
 ) -> Result<Option<String>, String> {

@@ -6,7 +6,7 @@
 use crate::aggregators::StateAggregator;
 use crate::model::{NodeType, StateEdge, StateLayer, StateNode};
 use async_trait::async_trait;
-use mockforge_core::reality::{RealityEngine, RealityLevel};
+use mockforge_core::reality::RealityEngine;
 use std::sync::Arc;
 
 /// Aggregator for reality state
@@ -31,12 +31,12 @@ impl RealityAggregator {
 impl StateAggregator for RealityAggregator {
     async fn aggregate(&self) -> anyhow::Result<(Vec<StateNode>, Vec<StateEdge>)> {
         let mut nodes = Vec::new();
-        let mut edges = Vec::new();
+        let edges = Vec::new();
 
         // Create a node for the reality level
         if let Some(ref engine) = self.reality_engine {
             let level = engine.get_level().await;
-            let config = engine.get_config().await;
+            let _config = engine.get_config().await;
 
             let mut reality_node = StateNode::new(
                 "reality:main".to_string(),

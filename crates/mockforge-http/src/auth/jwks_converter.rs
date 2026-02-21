@@ -58,7 +58,7 @@ pub fn ecdsa_pem_to_jwk(_pem: &str, kid: &str, alg: &str) -> Result<JwkPublicKey
 }
 
 /// Convert HMAC secret to JWK format (oct key type)
-pub fn hmac_to_jwk(secret: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, Error> {
+pub fn hmac_to_jwk(_secret: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, Error> {
     // For HMAC, we don't expose the secret in JWKS (security)
     // Instead, return a placeholder or empty key
     // In practice, HMAC keys are symmetric and shouldn't be in JWKS

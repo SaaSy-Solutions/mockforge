@@ -110,7 +110,7 @@ pub async fn test_webhook(
 /// POST /api/v1/webhooks/receive
 pub async fn receive_webhook(
     State(state): State<WebhookTestState>,
-    headers: axum::http::HeaderMap,
+    headers: http::HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract event type from headers or payload

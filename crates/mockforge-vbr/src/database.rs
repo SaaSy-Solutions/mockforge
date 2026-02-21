@@ -7,7 +7,7 @@
 use crate::{Error, Result};
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::{Column, Row};
+use sqlx::Column;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -46,7 +46,7 @@ pub trait VirtualDatabase: Send + Sync {
 /// Create a virtual database instance based on the storage backend configuration
 pub async fn create_database(
     backend: &crate::config::StorageBackend,
-) -> Result<std::sync::Arc<dyn VirtualDatabase + Send + Sync>> {
+) -> Result<Arc<dyn VirtualDatabase + Send + Sync>> {
     use std::sync::Arc;
     match backend {
         crate::config::StorageBackend::Sqlite { path } => {

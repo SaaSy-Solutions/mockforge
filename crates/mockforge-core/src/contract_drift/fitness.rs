@@ -149,14 +149,14 @@ pub trait FitnessEvaluator: Send + Sync {
         &self,
         old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
         new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
-        diff_result: &ContractDiffResult,
+        _diff_result: &ContractDiffResult,
         operation_id: &str,
-        config: &serde_json::Value,
+        _config: &serde_json::Value,
     ) -> crate::Result<FitnessTestResult> {
         // Default implementation: extract schema from protocol contract and use basic evaluation
         // Individual evaluators can override this for protocol-specific logic
-        let new_schema = new_contract.get_schema(operation_id);
-        let old_schema = old_contract.and_then(|c| c.get_schema(operation_id));
+        let _new_schema = new_contract.get_schema(operation_id);
+        let _old_schema = old_contract.and_then(|c| c.get_schema(operation_id));
 
         // For protocol contracts, we'll estimate based on schema complexity
         // This is a fallback - specific evaluators should override this method
@@ -166,7 +166,7 @@ pub trait FitnessEvaluator: Send + Sync {
             passed: true,
             message: "Protocol contract evaluation not implemented for this fitness function type"
                 .to_string(),
-            metrics: std::collections::HashMap::new(),
+            metrics: HashMap::new(),
         })
     }
 }
@@ -827,7 +827,7 @@ impl FitnessFunctionRegistry {
         &self,
         function: &FitnessFunction,
         endpoint: &str,
-        method: &str,
+        _method: &str,
         workspace_id: Option<&str>,
         service_name: Option<&str>,
     ) -> bool {
