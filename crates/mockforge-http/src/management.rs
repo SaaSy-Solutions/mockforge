@@ -2277,22 +2277,70 @@ async fn delete_proxy_rule(
 /// Get recent intercepted requests/responses for inspection
 /// This is a placeholder - in a full implementation, you'd track intercepted traffic
 async fn get_proxy_inspect(
-    State(_state): State<ManagementState>,
+    State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let limit: usize = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let offset: usize = params.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
 
-    // Note: Request/response inspection would require:
-    // 1. Storing intercepted requests/responses in ManagementState or a separate store
-    // 2. Integrating with proxy middleware to capture traffic
-    // 3. Implementing filtering and pagination for large volumes of traffic
-    // For now, return an empty response structure indicating the feature is not yet implemented
+    let proxy_config = match &state.proxy_config {
+        Some(config) => config.read().await,
+        None => {
+            return Ok(Json(serde_json::json!({
+                "error": "Proxy not configured. Proxy config not available."
+            })));
+        }
+    };
+
+    let mut rules = Vec::new();
+    for (idx, rule) in proxy_config.request_replacements.iter().enumerate() {
+        rules.push(serde_json::json!({
+            "id": idx,
+            "kind": "request",
+            "pattern": rule.pattern,
+            "enabled": rule.enabled,
+            "status_codes": rule.status_codes,
+            "transform_count": rule.body_transforms.len(),
+            "transforms": rule.body_transforms.iter().map(|t| serde_json::json!({
+                "path": t.path,
+                "operation": t.operation,
+                "replace": t.replace
+            })).collect::<Vec<_>>()
+        }));
+    }
+    let request_rule_count = rules.len();
+    for (idx, rule) in proxy_config.response_replacements.iter().enumerate() {
+        rules.push(serde_json::json!({
+            "id": request_rule_count + idx,
+            "kind": "response",
+            "pattern": rule.pattern,
+            "enabled": rule.enabled,
+            "status_codes": rule.status_codes,
+            "transform_count": rule.body_transforms.len(),
+            "transforms": rule.body_transforms.iter().map(|t| serde_json::json!({
+                "path": t.path,
+                "operation": t.operation,
+                "replace": t.replace
+            })).collect::<Vec<_>>()
+        }));
+    }
+
+    let total = rules.len();
+    let paged_rules: Vec<_> = rules.into_iter().skip(offset).take(limit).collect();
+
     Ok(Json(serde_json::json!({
-        "requests": [],
-        "responses": [],
+        "enabled": proxy_config.enabled,
+        "target_url": proxy_config.target_url,
+        "prefix": proxy_config.prefix,
+        "timeout_seconds": proxy_config.timeout_seconds,
+        "follow_redirects": proxy_config.follow_redirects,
+        "passthrough_by_default": proxy_config.passthrough_by_default,
+        "rules": paged_rules,
+        "request_rule_count": request_rule_count,
+        "response_rule_count": total.saturating_sub(request_rule_count),
         "limit": limit,
-        "total": 0,
-        "message": "Request/response inspection not yet implemented. This endpoint will return intercepted traffic when proxy inspection is fully integrated."
+        "offset": offset,
+        "total": total
     })))
 }
 
