@@ -4,7 +4,9 @@
 use crate::app::AppState;
 use crate::server::MockServerManager;
 use std::sync::Arc;
-use tauri::{Manager, SystemTray, SystemTrayMenu, SystemTrayMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
+use tauri::Manager;
 use tokio::sync::RwLock;
 
 mod app;
@@ -22,29 +24,52 @@ fn main() {
     // Initialize tracing
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
 
-    // Create system tray menu
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(tauri::CustomMenuItem::new("show", "Show MockForge"))
-        .add_item(tauri::CustomMenuItem::new("hide", "Hide"))
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(tauri::CustomMenuItem::new("start-server", "Start Server"))
-        .add_item(tauri::CustomMenuItem::new("stop-server", "Stop Server"))
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(tauri::CustomMenuItem::new("settings", "Settings"))
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(tauri::CustomMenuItem::new("quit", "Quit"));
-
-    let system_tray = SystemTray::new().with_menu(tray_menu);
-
     // Create app state
     let app_state = Arc::new(RwLock::new(AppState::new()));
 
     tauri::Builder::default()
-        .system_tray(system_tray)
-        .on_system_tray_event(|app, event| {
-            system_tray::handle_system_tray_event(app, event);
-        })
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_global_shortcut::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
+            // Build the tray menu
+            let show_i = MenuItem::with_id(app, "show", "Show MockForge", true, None::<&str>)?;
+            let hide_i = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
+            let sep1 = PredefinedMenuItem::separator(app)?;
+            let start_i =
+                MenuItem::with_id(app, "start-server", "Start Server", true, None::<&str>)?;
+            let stop_i =
+                MenuItem::with_id(app, "stop-server", "Stop Server", true, None::<&str>)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+            let settings_i =
+                MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+            let sep3 = PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show_i, &hide_i, &sep1, &start_i, &stop_i, &sep2, &settings_i, &sep3,
+                    &quit_i,
+                ],
+            )?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .icon_as_template(true)
+                .menu(&menu)
+                .menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    system_tray::handle_menu_event(app, &event);
+                })
+                .on_tray_icon_event(|tray, event| {
+                    system_tray::handle_tray_icon_event(tray, &event);
+                })
+                .build(app)?;
+
             // Initialize app state
             let state = app_state.clone();
             app.manage(state);
@@ -53,28 +78,28 @@ fn main() {
             let server_manager = Arc::new(RwLock::new(MockServerManager::new()));
             app.manage(server_manager);
 
-            // Note: Tauri 1.5 has built-in dialog and fs APIs, no plugins needed
-
             // Set up window event handlers
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
                 // Handle window close - minimize to tray instead
                 let app_handle = app.handle().clone();
-                window.listen("tauri://close-requested", move |_event| {
-                    if let Some(window) = app_handle.get_window("main") {
-                        let _ = window.hide();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
                     }
                 });
             }
 
             // Handle file drop events
-            let app_handle = app.handle().clone();
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
                 window.listen("tauri://file-drop", move |event| {
-                    if let Some(paths) = event.payload() {
-                        if let Ok(paths) = serde_json::from_str::<Vec<String>>(paths) {
+                    if let Some(payload) = event.payload() {
+                        if let Ok(paths) = serde_json::from_str::<Vec<String>>(payload) {
                             if let Some(path) = paths.first() {
-                                // Emit event to frontend to handle file
-                                if let Some(window) = app_handle.get_window("main") {
+                                if let Some(window) = app_handle.get_webview_window("main") {
                                     let _ = window.emit("file-dropped", path);
                                 }
                             }
@@ -83,18 +108,13 @@ fn main() {
                 });
             }
 
-            // Handle file open events (when app is opened with a file)
-            // Note: For Tauri 1.5, we handle file associations via window events
-            // Single instance handling would require a different approach or plugin
-            // For now, file associations will work, but single instance needs manual implementation
-
             // Register keyboard shortcuts
-            if let Err(e) = shortcuts::register_shortcuts(&app.handle()) {
+            if let Err(e) = shortcuts::register_shortcuts(app.handle()) {
                 tracing::warn!("Failed to register keyboard shortcuts: {}", e);
             }
 
             // Show notification on startup
-            show_notification(&app.handle(), "MockForge", "MockForge Desktop is running");
+            show_notification(app.handle(), "MockForge", "MockForge Desktop is running");
 
             // Start watching for system theme changes
             theme::watch_system_theme(app.handle().clone());

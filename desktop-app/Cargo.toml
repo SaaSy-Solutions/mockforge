@@ -10,13 +10,17 @@ description = "MockForge Desktop Application - Native desktop app for API mockin
 publish = false
 
 [build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+tauri-build = { version = "2.5", features = [] }
 
 [dependencies]
 # Tauri dependencies
-tauri = { version = "1.5", features = ["system-tray", "updater", "shell-open", "notification-all", "window-close", "window-hide", "window-maximize", "window-minimize", "window-set-focus", "window-set-fullscreen", "window-set-icon", "window-set-position", "window-set-size", "window-set-title", "window-show", "window-start-dragging", "window-unmaximize", "window-unminimize", "dialog-open", "dialog-save", "fs-create-dir", "fs-exists", "fs-read-dir", "fs-read-file", "fs-remove-dir", "fs-remove-file", "fs-rename-file", "fs-write-file", "http-all", "global-shortcut"] }
-# Note: Tauri 1.5 uses built-in APIs, plugins are for Tauri 2.0+
-# For Tauri 1.5, we use the built-in dialog and fs APIs directly
+tauri = { version = "2.10", features = ["tray-icon"] }
+tauri-plugin-dialog = "2.6"
+tauri-plugin-notification = "2.3"
+tauri-plugin-shell = "2.3"
+tauri-plugin-global-shortcut = "2.3"
+tauri-plugin-updater = "2.10"
+tauri-plugin-opener = "2.5"
 
 # MockForge dependencies
 mockforge-core = { path = "../crates/mockforge-core" }

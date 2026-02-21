@@ -128,7 +128,7 @@ pub fn watch_system_theme(app: AppHandle) {
             };
 
             // Emit event to all windows
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
                 let _ = window.emit("system-theme-changed", theme_str);
             }
         }

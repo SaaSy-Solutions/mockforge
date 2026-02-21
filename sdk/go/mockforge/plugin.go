@@ -41,6 +41,7 @@ package mockforge
 import (
 	"encoding/json"
 	"fmt"
+	"unsafe"
 )
 
 // PluginContext contains information about the current request
@@ -212,6 +213,7 @@ var (
 	currentTemplatePlugin   TemplatePlugin
 	currentResponsePlugin   ResponsePlugin
 	currentDataSourcePlugin DataSourcePlugin
+	wasmAllocations         = make([][]byte, 0, 64)
 )
 
 // ExportAuthPlugin registers an authentication plugin for export to WASM
@@ -316,21 +318,29 @@ func plugin_template_execute(namePtr, nameLen, argsPtr, argsLen, ctxPtr, ctxLen 
 // ============================================================================
 
 // readMemory reads bytes from WASM linear memory
-// This is a placeholder - actual implementation depends on TinyGo's memory model
 func readMemory(ptr, length uint32) []byte {
-	// In real implementation, this would read from WASM linear memory
-	// For now, returning empty slice as placeholder
-	return make([]byte, length)
+	if ptr == 0 || length == 0 {
+		return []byte{}
+	}
+
+	src := unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), int(length))
+	out := make([]byte, len(src))
+	copy(out, src)
+	return out
 }
 
 // writeMemory writes bytes to WASM linear memory
 func writeMemory(data []byte) uint32 {
-	// In real implementation, this would:
-	// 1. Allocate memory in WASM linear memory
-	// 2. Write data to that memory
-	// 3. Return pointer to the data
-	// For now, returning 0 as placeholder
-	return 0
+	if len(data) == 0 {
+		return 0
+	}
+
+	buf := make([]byte, len(data))
+	copy(buf, data)
+
+	// Keep a reference alive so the GC does not reclaim memory before host reads it.
+	wasmAllocations = append(wasmAllocations, buf)
+	return uint32(uintptr(unsafe.Pointer(&buf[0])))
 }
 
 // encodeResult encodes a result as JSON and returns pointer to it

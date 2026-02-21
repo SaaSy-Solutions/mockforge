@@ -48,7 +48,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -152,7 +152,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -200,7 +200,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -244,7 +244,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install security tools
       run: |
         cargo install cargo-audit --locked
@@ -277,7 +277,7 @@ jobs:
         components: llvm-tools-preview
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
 
@@ -309,7 +309,7 @@ jobs:
         toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
 
     - name: Install protoc (protobuf compiler)
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install sccache
       run: |
         SCCACHE_VERSION=0.10.0
@@ -342,9 +342,7 @@ jobs:
     - name: Check MSRV compatibility
       run: |
         # MSRV 1.91 supports edition2024 and all current dependency requirements
-        # No workspace member exclusions needed
-        cargo check --workspace --exclude mockforge-desktop
-  typos:
+        cargo check --workspace  typos:
     name: Spell Check
     runs-on: ubuntu-latest
     steps:
@@ -425,7 +423,7 @@ jobs:
 
     - name: Install protoc (protobuf compiler) on Linux
       if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev
+      run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
     - name: Install protoc (protobuf compiler) on macOS
       if: runner.os == 'macOS'
       run: brew install protobuf

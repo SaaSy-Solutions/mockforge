@@ -35,7 +35,7 @@ if __name__ == "__main__":
 ```
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
@@ -45,7 +45,7 @@ from datetime import datetime
 
 # Try to import FastAPI, but make it optional
 try:
-    from fastapi import FastAPI, HTTPException, Request
+    from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
     import uvicorn
     FASTAPI_AVAILABLE = True
@@ -311,8 +311,6 @@ class RemotePlugin(ABC):
 
                 result = await self.authenticate(ctx, creds)
                 return {"success": True, "result": result.to_dict()}
-            except NotImplementedError:
-                raise HTTPException(status_code=501, detail="Authentication not implemented")
             except Exception as e:
                 logger.error(f"Authentication error: {e}", exc_info=True)
                 return JSONResponse(
@@ -331,8 +329,6 @@ class RemotePlugin(ABC):
 
                 result = await self.execute_template_function(function_name, args, ctx)
                 return {"success": True, "result": result}
-            except NotImplementedError:
-                raise HTTPException(status_code=501, detail="Template functions not implemented")
             except Exception as e:
                 logger.error(f"Template execution error: {e}", exc_info=True)
                 return JSONResponse(
@@ -350,8 +346,6 @@ class RemotePlugin(ABC):
 
                 result = await self.generate_response(ctx, req)
                 return {"success": True, "result": result.to_dict()}
-            except NotImplementedError:
-                raise HTTPException(status_code=501, detail="Response generation not implemented")
             except Exception as e:
                 logger.error(f"Response generation error: {e}", exc_info=True)
                 return JSONResponse(
@@ -369,8 +363,6 @@ class RemotePlugin(ABC):
 
                 result = await self.query_datasource(query, ctx)
                 return {"success": True, "result": result.to_dict()}
-            except NotImplementedError:
-                raise HTTPException(status_code=501, detail="Data source not implemented")
             except Exception as e:
                 logger.error(f"Data source query error: {e}", exc_info=True)
                 return JSONResponse(
@@ -395,7 +387,8 @@ class RemotePlugin(ABC):
         Returns:
             AuthResult with authentication status and user info
         """
-        raise NotImplementedError("authenticate() must be implemented")
+        logger.info("No custom authenticate() provided; returning unauthenticated default")
+        return AuthResult(authenticated=False, user_id="", claims={})
 
     async def execute_template_function(
         self, function_name: str, args: List[Any], ctx: ResolutionContext
@@ -411,7 +404,30 @@ class RemotePlugin(ABC):
         Returns:
             Function result
         """
-        raise NotImplementedError("execute_template_function() must be implemented")
+        fn = function_name.strip().lower()
+
+        if fn == "now":
+            return datetime.utcnow().isoformat() + "Z"
+
+        if fn == "env":
+            key = str(args[0]) if len(args) > 0 else ""
+            default = args[1] if len(args) > 1 else None
+            return ctx.environment.get(key, default)
+
+        if fn == "header":
+            if not ctx.request_context:
+                return None
+            key = str(args[0]).lower() if len(args) > 0 else ""
+            headers = {k.lower(): v for k, v in ctx.request_context.headers.items()}
+            return headers.get(key)
+
+        if fn == "upper":
+            return str(args[0]).upper() if len(args) > 0 else ""
+
+        if fn == "lower":
+            return str(args[0]).lower() if len(args) > 0 else ""
+
+        raise ValueError(f"Unknown template function: {function_name}")
 
     async def generate_response(
         self, ctx: PluginContext, req: ResponseRequest
@@ -426,7 +442,20 @@ class RemotePlugin(ABC):
         Returns:
             Generated response data
         """
-        raise NotImplementedError("generate_response() must be implemented")
+        payload = {
+            "message": "No custom response generator configured",
+            "request": {
+                "method": req.method,
+                "path": req.path
+            },
+            "plugin": self.name
+        }
+        return ResponseData(
+            status_code=404,
+            headers={"content-type": "application/json"},
+            body=json.dumps(payload).encode("utf-8"),
+            content_type="application/json"
+        )
 
     async def query_datasource(
         self, query: DataQuery, ctx: PluginContext
@@ -441,7 +470,11 @@ class RemotePlugin(ABC):
         Returns:
             Query results
         """
-        raise NotImplementedError("query_datasource() must be implemented")
+        logger.info(
+            "No custom query_datasource() provided; returning empty result for query '%s'",
+            query.query
+        )
+        return DataResult(columns=[], rows=[])
 
     def get_capabilities(self) -> PluginCapabilities:
         """

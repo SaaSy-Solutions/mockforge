@@ -1,24 +1,11 @@
-//! Native notification utilities
+//! Native notification utilities using tauri-plugin-notification
 
 use tauri::AppHandle;
+use tauri_plugin_notification::NotificationExt;
 
 /// Show a native notification
 pub fn show_notification(app: &AppHandle, title: &str, body: &str) {
-    #[cfg(not(target_os = "macos"))]
-    {
-        use tauri::api::notification::Notification;
-        let app_id = app.config().tauri.bundle.identifier.clone();
-        Notification::new(&app_id).title(title).body(body).show().ok();
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        // macOS notifications require different handling
-        // For now, we'll use the system tray tooltip
-        if let Some(window) = app.get_window("main") {
-            window.set_title(&format!("{} - {}", title, body)).ok();
-        }
-    }
+    app.notification().builder().title(title).body(body).show().ok();
 }
 
 /// Show server start notification

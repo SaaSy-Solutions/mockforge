@@ -1,112 +1,16 @@
 {
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "MockForge",
+  "version": "0.2.8",
+  "identifier": "dev.mockforge.app",
   "build": {
     "beforeDevCommand": "cd ../crates/mockforge-ui/ui && pnpm dev",
     "beforeBuildCommand": "cd ../crates/mockforge-ui/ui && pnpm build",
-    "devPath": "http://localhost:5173",
-    "distDir": "../crates/mockforge-ui/ui/dist",
-    "withGlobalTauri": false
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../crates/mockforge-ui/ui/dist"
   },
-  "package": {
-    "productName": "MockForge",
-    "version": "0.2.8"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "dialog": {
-        "all": false,
-        "open": true,
-        "save": true
-      },
-      "fs": {
-        "all": false,
-        "readFile": true,
-        "writeFile": true,
-        "readDir": true,
-        "createDir": true,
-        "removeDir": true,
-        "removeFile": true,
-        "renameFile": true,
-        "exists": true,
-        "scope": ["$APPDATA/**", "$DOCUMENT/**", "$DOWNLOAD/**", "$HOME/**", "$RESOURCE/**"]
-      },
-      "http": {
-        "all": true,
-        "request": true
-      },
-      "notification": {
-        "all": true
-      },
-      "window": {
-        "all": false,
-        "close": true,
-        "hide": true,
-        "show": true,
-        "maximize": true,
-        "minimize": true,
-        "unmaximize": true,
-        "unminimize": true,
-        "startDragging": true,
-        "setFocus": true,
-        "setSize": true,
-        "setPosition": true,
-        "setTitle": true,
-        "setFullscreen": true,
-        "setIcon": true
-      }
-    },
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://updates.mockforge.dev/{{target}}/{{current_version}}"
-      ],
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU5QzE2QzE2RjU2RjE2RgpSV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJY"
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "dev.mockforge.app",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "resources": [],
-      "externalBin": [],
-      "copyright": "",
-      "category": "DeveloperTool",
-      "shortDescription": "MockForge Desktop - API Mocking Framework",
-      "longDescription": "MockForge Desktop provides a native desktop application for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.",
-      "deb": {
-        "depends": [],
-        "files": {
-          "/usr/share/applications/mockforge.desktop": "assets/mockforge.desktop"
-        }
-      },
-      "macOS": {
-        "frameworks": [],
-        "minimumSystemVersion": "10.13",
-        "exceptionDomain": "",
-        "signingIdentity": null,
-        "providerShortName": null,
-        "entitlements": null
-      },
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": "",
-        "wix": {
-          "language": "en-US"
-        }
-      }
-    },
+  "app": {
+    "withGlobalTauri": false,
     "security": {
       "csp": null
     },
@@ -126,13 +30,62 @@
         "transparent": false,
         "maximized": false,
         "visible": true,
-        "fileDropEnabled": true
+        "dragDropEnabled": true
       }
     ],
-    "systemTray": {
+    "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": true,
       "menuOnLeftClick": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "",
+    "category": "DeveloperTool",
+    "shortDescription": "MockForge Desktop - API Mocking Framework",
+    "longDescription": "MockForge Desktop provides a native desktop application for creating, managing, and deploying mock servers across different protocols with advanced data generation capabilities.",
+    "linux": {
+      "deb": {
+        "depends": [],
+        "files": {
+          "/usr/share/applications/mockforge.desktop": "assets/mockforge.desktop"
+        }
+      }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": "en-US"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://updates.mockforge.dev/{{target}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU5QzE2QzE2RjU2RjE2RgpSV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJYV1JMRjJY"
     }
   }
 }

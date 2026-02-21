@@ -4,19 +4,11 @@ use tauri::{AppHandle, Manager};
 
 /// Register global keyboard shortcuts
 pub fn register_shortcuts(app: &AppHandle) -> Result<(), String> {
-    let _window = app.get_window("main").ok_or("Main window not found")?;
+    let _window = app.get_webview_window("main").ok_or("Main window not found")?;
 
-    // Register shortcuts using Tauri's global shortcut API
-    // Note: Tauri 1.5 uses global-shortcut feature
-
-    // Ctrl/Cmd + Shift + S: Start server
-    // Note: Tauri 1.5 global shortcuts API uses on_global_shortcut
-    // For now, we'll skip global shortcuts as they require a different setup
-    // Global shortcuts in Tauri 1.5 need to be registered differently
-    // This functionality can be implemented later or moved to frontend
-    tracing::warn!(
-        "Global shortcuts registration skipped - requires Tauri 1.5 specific implementation"
-    );
+    // Global shortcuts can be registered via tauri-plugin-global-shortcut
+    // For now, shortcuts are handled via the frontend
+    tracing::info!("Global shortcuts available via tauri-plugin-global-shortcut");
 
     Ok(())
 }

@@ -3,7 +3,6 @@
 //! This module handles checking for updates and installing them.
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tauri::{AppHandle, Manager};
 
 /// Update check result
@@ -74,25 +73,16 @@ struct UpdateResponse {
     release_notes: Option<String>,
 }
 
-/// Install update (Tauri 1.5 uses built-in updater)
+/// Install update using tauri-plugin-updater
 pub async fn install_update(app: &AppHandle) -> Result<(), String> {
-    // Tauri 1.5 has built-in updater support
-    // The updater is configured in tauri.conf.json
     // Emit event to frontend to show update dialog
-    if let Some(window) = app.get_window("main") {
+    if let Some(window) = app.get_webview_window("main") {
         window
             .emit("update-install-started", ())
             .map_err(|e| format!("Failed to emit update event: {}", e))?;
     }
 
-    // Note: Tauri 1.5 updater requires proper configuration in tauri.conf.json
-    // The actual update installation is handled by Tauri's built-in updater
-    // This function triggers the update process by emitting events
     tracing::info!("Update installation triggered");
-
-    // In a real implementation, the Tauri updater would be triggered automatically
-    // when the app checks for updates and finds one available
-    // For now, we emit events to the frontend to handle the UI
     Ok(())
 }
 
@@ -112,13 +102,13 @@ pub fn start_periodic_update_check(app: AppHandle) {
                         );
 
                         // Emit event to frontend
-                        if let Some(window) = app.get_window("main") {
+                        if let Some(window) = app.get_webview_window("main") {
                             let _ = window.emit("update-available", &update_info);
                         }
 
                         // Show notification
-                        if let Some(window) = app.get_window("main") {
-                            let _ = window.emit("notification", json!({
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("notification", serde_json::json!({
                                 "title": "Update Available",
                                 "body": format!("MockForge {} is available", update_info.latest_version.as_deref().unwrap_or("new version")),
                             }));

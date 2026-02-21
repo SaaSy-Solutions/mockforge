@@ -7,7 +7,8 @@ use mockforge_core::ServerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, State, Window};
+use tauri::{AppHandle, State, WebviewWindow};
+use tauri_plugin_dialog::DialogExt;
 use tokio::sync::RwLock;
 
 /// Server status response
@@ -27,7 +28,7 @@ pub async fn start_server(
     admin_port: Option<u16>,
     server_manager: State<'_, Arc<RwLock<MockServerManager>>>,
     app_state: State<'_, Arc<RwLock<AppState>>>,
-    window: Window,
+    window: WebviewWindow,
     app: AppHandle,
 ) -> Result<ServerStatus, String> {
     // Load configuration
@@ -93,7 +94,7 @@ pub async fn start_server(
 pub async fn stop_server(
     server_manager: State<'_, Arc<RwLock<MockServerManager>>>,
     app_state: State<'_, Arc<RwLock<AppState>>>,
-    window: Window,
+    window: WebviewWindow,
     app: AppHandle,
 ) -> Result<ServerStatus, String> {
     let mut manager = server_manager.write().await;
@@ -136,27 +137,20 @@ pub async fn get_server_status(
     })
 }
 
-/// Open a configuration file
+/// Open a configuration file using tauri-plugin-dialog
 #[tauri::command]
-pub async fn open_config_file(window: Window) -> Result<Option<String>, String> {
-    use std::sync::mpsc;
-    use tauri::api::dialog::FileDialogBuilder;
-
-    let (tx, rx) = mpsc::channel();
-
-    FileDialogBuilder::new()
+pub async fn open_config_file(app: AppHandle) -> Result<Option<String>, String> {
+    let file_path = app
+        .dialog()
+        .file()
         .add_filter("YAML", &["yaml", "yml"])
         .add_filter("JSON", &["json"])
         .add_filter("All", &["*"])
-        .pick_file(move |path_buf| {
-            let _ = tx.send(path_buf);
-        });
-
-    let file_path = rx.recv().map_err(|_| "Dialog cancelled".to_string())?;
+        .blocking_pick_file();
 
     match file_path {
         Some(path) => {
-            let content = tokio::fs::read_to_string(&path)
+            let content = tokio::fs::read_to_string(path.path())
                 .await
                 .map_err(|e| format!("Failed to read file: {}", e))?;
             Ok(Some(content))
@@ -165,30 +159,23 @@ pub async fn open_config_file(window: Window) -> Result<Option<String>, String> 
     }
 }
 
-/// Save a configuration file
+/// Save a configuration file using tauri-plugin-dialog
 #[tauri::command]
-pub async fn save_config_file(content: String, window: Window) -> Result<Option<String>, String> {
-    use std::sync::mpsc;
-    use tauri::api::dialog::FileDialogBuilder;
-
-    let (tx, rx) = mpsc::channel();
-
-    FileDialogBuilder::new()
+pub async fn save_config_file(content: String, app: AppHandle) -> Result<Option<String>, String> {
+    let file_path = app
+        .dialog()
+        .file()
         .add_filter("YAML", &["yaml", "yml"])
         .add_filter("JSON", &["json"])
         .set_file_name("mockforge.yaml")
-        .save_file(move |path_buf| {
-            let _ = tx.send(path_buf);
-        });
-
-    let file_path = rx.recv().map_err(|_| "Dialog cancelled".to_string())?;
+        .blocking_save_file();
 
     match file_path {
         Some(path) => {
-            tokio::fs::write(&path, content)
+            tokio::fs::write(path.path(), content)
                 .await
                 .map_err(|e| format!("Failed to write file: {}", e))?;
-            Ok(Some(path.to_string_lossy().to_string()))
+            Ok(Some(path.path().to_string_lossy().to_string()))
         }
         None => Ok(None),
     }
@@ -206,7 +193,7 @@ pub async fn handle_file_open(
     file_path: String,
     server_manager: State<'_, Arc<RwLock<MockServerManager>>>,
     app_state: State<'_, Arc<RwLock<AppState>>>,
-    window: Window,
+    window: WebviewWindow,
     app: AppHandle,
 ) -> Result<(), String> {
     // Read the config file
