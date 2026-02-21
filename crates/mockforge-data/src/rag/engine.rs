@@ -688,12 +688,49 @@ impl RagEngine {
     /// Generate Anthropic response
     async fn generate_anthropic_response(
         &self,
-        _query: &str,
-        _context: &str,
-        _model: &str,
+        query: &str,
+        context: &str,
+        model: &str,
     ) -> Result<String> {
-        // Placeholder implementation
-        Ok("Anthropic response placeholder".to_string())
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or_else(|| crate::Error::generic("Anthropic API key not configured"))?;
+
+        let response = self
+            .client
+            .post(format!("{}/messages", self.config.api_endpoint))
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "max_tokens": self.config.max_tokens,
+                "temperature": self.config.temperature,
+                "messages": [{
+                    "role": "user",
+                    "content": format!("Context: {}\n\nQuestion: {}", context, query)
+                }]
+            }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(crate::Error::generic(format!(
+                "Anthropic API error: {}",
+                response.status()
+            )));
+        }
+
+        let json: Value = response.json().await?;
+        let text = json["content"]
+            .as_array()
+            .and_then(|content| content.first())
+            .and_then(|entry| entry["text"].as_str())
+            .ok_or_else(|| crate::Error::generic("Invalid Anthropic response format"))?;
+
+        Ok(text.to_string())
     }
 
     /// Generate OpenAI compatible response
@@ -750,12 +787,39 @@ impl RagEngine {
     /// Generate Ollama response
     async fn generate_ollama_response(
         &self,
-        _query: &str,
-        _context: &str,
-        _model: &str,
+        query: &str,
+        context: &str,
+        model: &str,
     ) -> Result<String> {
-        // Placeholder implementation
-        Ok("Ollama response placeholder".to_string())
+        let response = self
+            .client
+            .post(format!("{}/generate", self.config.api_endpoint))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({
+                "model": model,
+                "prompt": format!("Context: {}\n\nQuestion: {}", context, query),
+                "stream": false,
+                "options": {
+                    "temperature": self.config.temperature,
+                    "top_p": self.config.top_p
+                }
+            }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(crate::Error::generic(format!(
+                "Ollama API error: {}",
+                response.status()
+            )));
+        }
+
+        let json: Value = response.json().await?;
+        let content = json["response"]
+            .as_str()
+            .ok_or_else(|| crate::Error::generic("Invalid Ollama response format"))?;
+
+        Ok(content.to_string())
     }
 }
 
