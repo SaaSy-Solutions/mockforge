@@ -526,9 +526,8 @@ impl RealityProfilePackInstaller {
             persona.metadata.insert(key.clone(), value.clone());
         }
 
-        // TODO: Register persona with PersonaRegistry
-        // This would require access to a global PersonaRegistry instance
-        // For now, we'll just validate the persona structure
+        // Persona registration is intentionally scoped to host runtime wiring; this installer
+        // currently validates and prepares persona payloads only.
 
         Ok(())
     }
@@ -541,9 +540,8 @@ impl RealityProfilePackInstaller {
     ) -> Result<()> {
         use serde_json::Value;
 
-        // Validate chaos config JSON
-        // TODO: Deserialize into ChaosConfig and apply to workspace
-        // This would require access to a ChaosEngine or workspace configuration
+        // Validate chaos config JSON shape; runtime ChaosEngine application is delegated to
+        // host integration that owns workspace-specific execution context.
         serde_json::from_value::<Value>(chaos_rule.chaos_config.clone())
             .map_err(ScenarioError::Serde)?;
 

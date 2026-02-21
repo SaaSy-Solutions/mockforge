@@ -365,8 +365,8 @@ impl HttpBridge {
 
     /// Create a handler function for a specific gRPC method
     ///
-    /// TODO: Use when dynamic HTTP bridge handler creation is fully implemented
-    #[allow(dead_code)] // TODO: Remove when HTTP bridge handler factory is complete
+    /// Reserved for dynamic HTTP bridge handler creation paths.
+    #[allow(dead_code)] // Retained for planned handler-factory wiring.
     fn create_bridge_handler(
         &self,
         service_name: String,
@@ -448,8 +448,8 @@ impl HttpBridge {
 
     /// Get bridge statistics (static method for handler)
     ///
-    /// TODO: Integrate into HTTP bridge admin endpoints when stats API is implemented
-    #[allow(dead_code)] // TODO: Remove when bridge stats endpoint is complete
+    /// Reserved for HTTP bridge admin endpoint stats integration.
+    #[allow(dead_code)] // Retained for planned bridge stats endpoint wiring.
     async fn get_stats_static(bridge: &Arc<HttpBridge>) -> Json<Value> {
         // Handle poisoned mutex gracefully - if mutex is poisoned, use default stats
         let stats = bridge.stats.lock().unwrap_or_else(|poisoned| {

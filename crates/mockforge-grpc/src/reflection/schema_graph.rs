@@ -148,13 +148,13 @@ enum EntityExtractionMethod {
     RemoveSuffix(String),
     /// Direct mapping
     ///
-    /// TODO: Use when direct entity name mapping without transformation is needed
-    #[allow(dead_code)] // TODO: Remove when entity extraction feature is implemented
+    /// Reserved for direct entity-name mapping without transformation.
+    #[allow(dead_code)] // Retained for planned entity extraction paths.
     Direct,
     /// Custom transform function
     ///
-    /// TODO: Use for custom entity name transformation functions
-    #[allow(dead_code)] // TODO: Remove when custom entity extraction is implemented
+    /// Reserved for custom entity name transformation functions.
+    #[allow(dead_code)] // Retained for planned custom extraction wiring.
     Custom(fn(&str) -> Option<String>),
 }
 

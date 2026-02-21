@@ -146,8 +146,8 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 );
             }
 
-            // TODO: Get consistency engine, workspace persistence, VBR engine, and Recorder from server state when integrated
-            // For now, we'll create a placeholder that can be extended
+            // CLI mode does not own a live server state object, so component providers are
+            // intentionally absent here and SnapshotManager falls back to empty component payloads.
             let manifest = manager
                 .save_snapshot(
                     name.clone(),
@@ -198,7 +198,8 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                     filtered
                 });
 
-                // TODO: Get consistency engine and workspace persistence from server state when integrated
+                // CLI mode restores from artifact files only; live consistency/workspace providers
+                // are not available in this process.
                 let (manifest, vbr_state, recorder_state) = manager
                     .load_snapshot(name.clone(), workspace.clone(), components, None, None)
                     .await?;

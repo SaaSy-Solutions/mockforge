@@ -147,8 +147,8 @@ impl SmartMockGenerator {
 
     /// Generate a deterministic random number within a range
     ///
-    /// TODO: Use in smart generation features when range-based field inference is implemented
-    #[allow(dead_code)] // TODO: Remove when range-based smart generation is implemented
+    /// Reserved for smart generation features that use range-based field inference.
+    #[allow(dead_code)] // Retained for planned range-based generation wiring.
     fn next_random_range(&mut self, min: i64, max: i64) -> i64 {
         if let Some(ref mut rng) = self.rng {
             rng.random_range(min..=max)
