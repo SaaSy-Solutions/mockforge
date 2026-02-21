@@ -344,6 +344,9 @@ impl ValidationFramework {
         result: &mut ValidationResult,
     ) {
         match &rule.rule_type {
+            ValidationRuleType::ForeignKeyExists => {
+                self.validate_foreign_key_rule(entity, rule, result);
+            }
             ValidationRuleType::FieldFormat => {
                 self.validate_field_format(entity, rule, result);
             }
@@ -353,8 +356,136 @@ impl ValidationFramework {
             ValidationRuleType::Unique => {
                 self.validate_field_uniqueness(entity, rule, result);
             }
-            _ => {
-                debug!("Custom validation rule type {:?} not yet implemented", rule.rule_type);
+            ValidationRuleType::BusinessLogic | ValidationRuleType::Custom => {
+                // Evaluate simple expression-style rules if configured: field/operator/value.
+                // Unknown operators/rules are surfaced as best-practice warnings.
+                self.validate_business_logic_rule(entity, rule, result);
+            }
+        }
+    }
+
+    /// Validate explicit foreign key existence rule.
+    /// Parameters:
+    /// - target_entity: referenced entity type
+    fn validate_foreign_key_rule(
+        &self,
+        entity: &GeneratedEntity,
+        rule: &CustomValidationRule,
+        result: &mut ValidationResult,
+    ) {
+        let Some(target_entity) = rule.parameters.get("target_entity") else {
+            result.warnings.push(ValidationWarning {
+                warning_type: ValidationWarningType::BestPracticeViolation,
+                entity_name: entity.entity_type.clone(),
+                field_name: None,
+                message: format!(
+                    "Rule '{}' is missing required parameter 'target_entity'",
+                    rule.name
+                ),
+            });
+            return;
+        };
+
+        for field_name in &rule.validates_fields {
+            if let Some(fk_value) = entity.field_values.get(field_name) {
+                if !self.foreign_key_exists(target_entity, fk_value) {
+                    result.errors.push(ValidationError {
+                        error_type: ValidationErrorType::ForeignKeyNotFound,
+                        entity_name: entity.entity_type.clone(),
+                        field_name: field_name.clone(),
+                        message: rule.error_message.clone(),
+                        invalid_value: fk_value.clone(),
+                        suggested_fix: Some(format!(
+                            "Create a {} entity with primary key '{}'",
+                            target_entity, fk_value
+                        )),
+                    });
+                }
+            }
+        }
+    }
+
+    /// Validate basic business logic/custom rule expressions.
+    /// Supported parameters:
+    /// - field: field name to validate
+    /// - operator: eq|ne|contains|starts_with|ends_with
+    /// - value: expected value
+    fn validate_business_logic_rule(
+        &self,
+        entity: &GeneratedEntity,
+        rule: &CustomValidationRule,
+        result: &mut ValidationResult,
+    ) {
+        let Some(field) = rule.parameters.get("field") else {
+            result.warnings.push(ValidationWarning {
+                warning_type: ValidationWarningType::BestPracticeViolation,
+                entity_name: entity.entity_type.clone(),
+                field_name: None,
+                message: format!(
+                    "Rule '{}' skipped: missing 'field' parameter for {:?}",
+                    rule.name, rule.rule_type
+                ),
+            });
+            return;
+        };
+        let Some(operator) = rule.parameters.get("operator") else {
+            result.warnings.push(ValidationWarning {
+                warning_type: ValidationWarningType::BestPracticeViolation,
+                entity_name: entity.entity_type.clone(),
+                field_name: Some(field.clone()),
+                message: format!(
+                    "Rule '{}' skipped: missing 'operator' parameter for {:?}",
+                    rule.name, rule.rule_type
+                ),
+            });
+            return;
+        };
+        let Some(expected) = rule.parameters.get("value") else {
+            result.warnings.push(ValidationWarning {
+                warning_type: ValidationWarningType::BestPracticeViolation,
+                entity_name: entity.entity_type.clone(),
+                field_name: Some(field.clone()),
+                message: format!(
+                    "Rule '{}' skipped: missing 'value' parameter for {:?}",
+                    rule.name, rule.rule_type
+                ),
+            });
+            return;
+        };
+
+        if let Some(actual) = entity.field_values.get(field) {
+            let passed = match operator.as_str() {
+                "eq" => actual == expected,
+                "ne" => actual != expected,
+                "contains" => actual.contains(expected),
+                "starts_with" => actual.starts_with(expected),
+                "ends_with" => actual.ends_with(expected),
+                _ => {
+                    result.warnings.push(ValidationWarning {
+                        warning_type: ValidationWarningType::BestPracticeViolation,
+                        entity_name: entity.entity_type.clone(),
+                        field_name: Some(field.clone()),
+                        message: format!(
+                            "Rule '{}' uses unsupported operator '{}'",
+                            rule.name, operator
+                        ),
+                    });
+                    return;
+                }
+            };
+
+            if !passed {
+                result.errors.push(ValidationError {
+                    error_type: ValidationErrorType::BusinessRuleViolation,
+                    entity_name: entity.entity_type.clone(),
+                    field_name: field.clone(),
+                    message: rule.error_message.clone(),
+                    invalid_value: actual.clone(),
+                    suggested_fix: Some(format!(
+                        "Expected '{}' {} '{}'",
+                        field, operator, expected
+                    )),
+                });
             }
         }
     }
