@@ -283,14 +283,11 @@ impl SnapshotManager {
         // Restore data based on storage backend
         let snapshot_dir = self.snapshot_path(name);
         let storage_backend_lower = metadata.storage_backend.to_lowercase();
-        if storage_backend_lower.contains("sqlite") || storage_backend_lower.contains("memory") {
+        if storage_backend_lower.contains("sqlite")
+            || storage_backend_lower.contains("memory")
+            || storage_backend_lower.contains("json")
+        {
             self.import_json_to_database(&snapshot_dir, database, registry).await?;
-        } else if storage_backend_lower.contains("json") {
-            // For JSON backend, would need to copy the JSON file
-            // This requires access to the JSON database implementation
-            return Err(Error::generic(
-                "JSON backend snapshot restore not yet implemented".to_string(),
-            ));
         }
 
         // Restore time travel state if requested and available
