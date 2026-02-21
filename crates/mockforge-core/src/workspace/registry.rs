@@ -24,6 +24,8 @@ pub struct WorkspaceRegistry {
     environments: HashMap<EntityId, Environment>,
     /// Request processor for converting requests to routes
     request_processor: RequestProcessor,
+    /// Registry configuration
+    config: WorkspaceRegistryConfig,
 }
 
 /// Configuration for workspace registry
@@ -73,15 +75,19 @@ impl WorkspaceRegistry {
             route_registry: Arc::new(RwLock::new(RouteRegistry::new())),
             environments: HashMap::new(),
             request_processor: RequestProcessor::new(),
+            config: WorkspaceRegistryConfig::default(),
         }
     }
 
     /// Create a new workspace registry with configuration
     pub fn with_config(config: WorkspaceRegistryConfig) -> Self {
-        let mut registry = Self::new();
+        let mut registry = Self {
+            config: config.clone(),
+            ..Self::new()
+        };
 
         // Create default workspace
-        let default_workspace = Workspace::new(config.default_workspace_name);
+        let default_workspace = Workspace::new(config.default_workspace_name.clone());
         let _ = registry.add_workspace(default_workspace);
 
         registry
@@ -270,7 +276,7 @@ impl WorkspaceRegistry {
 
     /// Get the configuration (placeholder implementation)
     pub fn get_config(&self) -> WorkspaceRegistryConfig {
-        WorkspaceRegistryConfig::default()
+        self.config.clone()
     }
 
     /// Find a request by ID across all workspaces
@@ -477,6 +483,10 @@ mod tests {
         assert!(registry.workspaces.is_empty());
         assert!(registry.active_workspace_id.is_none());
         assert!(registry.environments.is_empty());
+        assert_eq!(
+            registry.get_config().default_workspace_name,
+            "Default Workspace"
+        );
     }
 
     #[test]
@@ -495,6 +505,9 @@ mod tests {
             auto_save_interval_seconds: 60,
         };
         let registry = WorkspaceRegistry::with_config(config);
+        let registry_config = registry.get_config();
+        assert_eq!(registry_config.max_workspaces, Some(10));
+        assert_eq!(registry_config.auto_save_interval_seconds, 60);
         assert_eq!(registry.workspaces.len(), 1);
         // Note: with_config doesn't set active workspace, just creates it
         // So we verify the workspace exists but may not be active
@@ -528,16 +541,19 @@ mod tests {
     #[test]
     fn test_add_workspace_max_limit() {
         // Test add_workspace() with max limit (lines 93-96)
-        let mut registry = WorkspaceRegistry::new();
-        // Set a custom config with max limit
-        // Note: get_config() returns default, so we'll test the limit check path
+        let mut registry = WorkspaceRegistry::with_config(WorkspaceRegistryConfig {
+            max_workspaces: Some(1),
+            default_workspace_name: "Workspace 1".to_string(),
+            auto_save_interval_seconds: 300,
+        });
         let workspace1 = Workspace::new("Workspace 1".to_string());
-        registry.add_workspace(workspace1).unwrap();
+        let result = registry.add_workspace(workspace1);
+        assert!(result.is_err());
 
-        // The default config has no limit, so this should succeed
+        // Max workspace limit should reject additional workspaces
         let workspace2 = Workspace::new("Workspace 2".to_string());
         let result = registry.add_workspace(workspace2);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 
     #[test]
@@ -790,6 +806,8 @@ mod tests {
         let registry = WorkspaceRegistry::new();
         let config = registry.get_config();
         assert_eq!(config.default_workspace_name, "Default Workspace");
+        assert_eq!(config.max_workspaces, None);
+        assert_eq!(config.auto_save_interval_seconds, 300);
     }
 
     #[test]
