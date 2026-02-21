@@ -597,8 +597,8 @@ impl SpecDrivenConformanceGenerator {
         script.push_str("  },\n");
         script.push_str("};\n\n");
 
-        // Base URL
-        script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.target_url));
+        // Base URL (includes base_path if configured)
+        script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
         // Default function
@@ -909,6 +909,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: None,
+            base_path: None,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -944,6 +945,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string()]),
+            base_path: None,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1010,6 +1012,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: None,
+            base_path: None,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let script = gen.generate().unwrap();
@@ -1124,6 +1127,37 @@ mod tests {
         assert!(
             !annotated.features.contains(&ConformanceFeature::ContentNegotiation),
             "Should NOT detect ContentNegotiation for a single content type"
+        );
+    }
+
+    #[test]
+    fn test_spec_driven_with_base_path() {
+        let annotated = AnnotatedOperation {
+            path: "/users".to_string(),
+            method: "GET".to_string(),
+            features: vec![ConformanceFeature::MethodGet],
+            path_params: vec![],
+            query_params: vec![],
+            header_params: vec![],
+            request_body_content_type: None,
+            sample_body: None,
+            response_schema: None,
+        };
+        let config = ConformanceConfig {
+            target_url: "https://192.168.2.86/".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: true,
+            categories: None,
+            base_path: Some("/api".to_string()),
+        };
+        let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
+        let script = gen.generate().unwrap();
+
+        assert!(
+            script.contains("const BASE_URL = 'https://192.168.2.86/api'"),
+            "BASE_URL should include the base_path. Got: {}",
+            script.lines().find(|l| l.contains("BASE_URL")).unwrap_or("not found")
         );
     }
 }

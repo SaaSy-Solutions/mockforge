@@ -7726,7 +7726,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
@@ -7874,7 +7874,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8359,7 +8359,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -8511,7 +8511,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "serde_json",
 ]
@@ -8556,7 +8556,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "axum 0.8.8",
  "http 1.4.0",
@@ -8574,7 +8574,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.31"
+version = "0.3.60"
 dependencies = [
  "anyhow",
  "chrono",

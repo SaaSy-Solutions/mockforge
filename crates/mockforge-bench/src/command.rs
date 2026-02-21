@@ -1823,6 +1823,7 @@ impl BenchCommand {
             basic_auth: self.conformance_basic_auth.clone(),
             skip_tls_verify: self.skip_tls_verify,
             categories,
+            base_path: self.base_path.clone(),
         };
 
         // Branch: spec-driven mode vs reference mode

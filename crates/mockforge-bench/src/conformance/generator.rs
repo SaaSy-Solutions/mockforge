@@ -15,6 +15,8 @@ pub struct ConformanceConfig {
     pub skip_tls_verify: bool,
     /// Optional category filter — None means all categories
     pub categories: Option<Vec<String>>,
+    /// Optional base path prefix for all generated URLs (e.g., "/api")
+    pub base_path: Option<String>,
 }
 
 impl ConformanceConfig {
@@ -23,6 +25,24 @@ impl ConformanceConfig {
         match &self.categories {
             None => true,
             Some(cats) => cats.iter().any(|c| c.eq_ignore_ascii_case(category)),
+        }
+    }
+
+    /// Returns the effective base URL with base_path appended.
+    /// Handles trailing/leading slash normalization to avoid double slashes.
+    pub fn effective_base_url(&self) -> String {
+        match &self.base_path {
+            None => self.target_url.clone(),
+            Some(bp) if bp.is_empty() => self.target_url.clone(),
+            Some(bp) => {
+                let url = self.target_url.trim_end_matches('/');
+                let path = if bp.starts_with('/') {
+                    bp.as_str()
+                } else {
+                    return format!("{}/{}", url, bp);
+                };
+                format!("{}{}", url, path)
+            }
         }
     }
 }
@@ -57,8 +77,8 @@ impl ConformanceGenerator {
         script.push_str("  },\n");
         script.push_str("};\n\n");
 
-        // Base URL
-        script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.target_url));
+        // Base URL (includes base_path if configured)
+        script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
 
         // Helper: JSON headers
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
@@ -593,6 +613,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: None,
+            base_path: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -629,6 +650,7 @@ mod tests {
             basic_auth: Some("admin:secret".to_string()),
             skip_tls_verify: true,
             categories: None,
+            base_path: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -646,6 +668,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: None,
+            base_path: None,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -660,6 +683,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
+            base_path: None,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -676,6 +700,7 @@ mod tests {
             basic_auth: None,
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
+            base_path: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -685,5 +710,62 @@ mod tests {
         assert!(!script.contains("group('Request Bodies'"));
         assert!(!script.contains("group('Schema Types'"));
         assert!(!script.contains("group('Composition'"));
+    }
+
+    #[test]
+    fn test_effective_base_url_no_base_path() {
+        let config = ConformanceConfig {
+            target_url: "https://example.com".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: None,
+        };
+        assert_eq!(config.effective_base_url(), "https://example.com");
+    }
+
+    #[test]
+    fn test_effective_base_url_with_base_path() {
+        let config = ConformanceConfig {
+            target_url: "https://example.com".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: Some("/api".to_string()),
+        };
+        assert_eq!(config.effective_base_url(), "https://example.com/api");
+    }
+
+    #[test]
+    fn test_effective_base_url_trailing_slash_normalization() {
+        let config = ConformanceConfig {
+            target_url: "https://example.com/".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: Some("/api".to_string()),
+        };
+        assert_eq!(config.effective_base_url(), "https://example.com/api");
+    }
+
+    #[test]
+    fn test_generate_script_with_base_path() {
+        let config = ConformanceConfig {
+            target_url: "https://192.168.2.86".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: true,
+            categories: None,
+            base_path: Some("/api".to_string()),
+        };
+        let generator = ConformanceGenerator::new(config);
+        let script = generator.generate().unwrap();
+
+        assert!(script.contains("const BASE_URL = 'https://192.168.2.86/api'"));
+        // Verify URLs include the base path via BASE_URL
+        assert!(script.contains("${BASE_URL}/conformance/"));
     }
 }
