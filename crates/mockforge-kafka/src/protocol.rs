@@ -171,37 +171,44 @@ impl KafkaProtocolHandler {
         response: &KafkaResponse,
         correlation_id: i32,
     ) -> Result<Vec<u8>> {
-        // Basic response serialization - full protocol serialization not yet implemented
+        fn push_kafka_string(buf: &mut Vec<u8>, value: &str) {
+            buf.extend_from_slice(&(value.len() as i16).to_be_bytes());
+            buf.extend_from_slice(value.as_bytes());
+        }
+
         match response {
             KafkaResponse::ApiVersions => {
-                // Minimal ApiVersions response
+                // ApiVersions response with all registered API keys.
+                let mut api_versions = self.api_versions.iter().collect::<Vec<_>>();
+                api_versions.sort_by_key(|(api_key, _)| **api_key);
+
                 let mut data = Vec::new();
-                // Correlation ID
                 data.extend_from_slice(&correlation_id.to_be_bytes());
-                // Error code (0 = success)
                 data.extend_from_slice(&0i16.to_be_bytes());
-                // Empty API keys array for now
-                data.extend_from_slice(&0i32.to_be_bytes());
+                data.extend_from_slice(&(api_versions.len() as i32).to_be_bytes());
+                for (api_key, version) in api_versions {
+                    data.extend_from_slice(&api_key.to_be_bytes());
+                    data.extend_from_slice(&version.min_version.to_be_bytes());
+                    data.extend_from_slice(&version.max_version.to_be_bytes());
+                }
+                data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
                 Ok(data)
             }
             KafkaResponse::CreateTopics => {
-                // Minimal CreateTopics response
                 let mut data = Vec::new();
                 data.extend_from_slice(&correlation_id.to_be_bytes());
-                data.extend_from_slice(&0i16.to_be_bytes()); // Error code
-                data.extend_from_slice(&1i32.to_be_bytes()); // Number of topics
-                                                             // Topic name (length + bytes)
-                let topic_name = b"default-topic";
-                data.extend_from_slice(&(topic_name.len() as i16).to_be_bytes());
-                data.extend_from_slice(topic_name);
-                data.extend_from_slice(&0i16.to_be_bytes()); // Error code for topic
+                data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
+                data.extend_from_slice(&1i32.to_be_bytes()); // topics array length
+                push_kafka_string(&mut data, "default-topic");
+                data.extend_from_slice(&0i16.to_be_bytes()); // error_code
+                data.extend_from_slice(&(-1i16).to_be_bytes()); // nullable error message
                 Ok(data)
             }
             _ => {
-                // Minimal response for other types
+                // Generic "success" response envelope for currently-supported request handlers.
                 let mut data = Vec::new();
                 data.extend_from_slice(&correlation_id.to_be_bytes());
-                data.extend_from_slice(&0i16.to_be_bytes()); // Error code
+                data.extend_from_slice(&0i16.to_be_bytes());
                 Ok(data)
             }
         }
