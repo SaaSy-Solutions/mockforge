@@ -39,7 +39,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -112,7 +112,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -241,7 +241,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -273,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -306,7 +306,7 @@ jobs:
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
@@ -356,7 +356,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Check typos
       uses: crate-ci/typos@master
@@ -367,7 +367,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -421,7 +421,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -524,7 +524,7 @@ jobs:
       contents: write
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Download all artifacts
       uses: actions/download-artifact@v5
