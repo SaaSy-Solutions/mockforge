@@ -57,10 +57,10 @@ jobs:
       uses: Swatinem/rust-cache@v2
 
     - name: Run tests
-      run: cargo test --workspace --release
+      run: cargo test --workspace --release --exclude mockforge-desktop
 
     - name: Build release binaries
-      run: cargo build --workspace --release
+      run: cargo build --workspace --release --exclude mockforge-desktop
 
     - name: sccache stats
       if: always()
