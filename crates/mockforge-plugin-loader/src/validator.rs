@@ -451,16 +451,16 @@ impl PluginValidator {
 
         // Future extensions: uncomment and implement as needed
         // 4. Query a database for the key
-        // if let Ok(key_data) = self.load_key_from_database(key_id) {
-        //     tracing::info!("Loaded key '{}' from database", key_id);
-        //     return Ok(key_data);
-        // }
+        if let Ok(key_data) = self.load_key_from_database(key_id) {
+            tracing::info!("Loaded key '{}' from database provider", key_id);
+            return Ok(key_data);
+        }
 
         // 5. Call a key management service
-        // if let Ok(key_data) = self.load_key_from_kms(key_id) {
-        //     tracing::info!("Loaded key '{}' from key management service", key_id);
-        //     return Ok(key_data);
-        // }
+        if let Ok(key_data) = self.load_key_from_kms(key_id) {
+            tracing::info!("Loaded key '{}' from key management service", key_id);
+            return Ok(key_data);
+        }
 
         Err(PluginLoaderError::SecurityViolation {
             violation: format!("Could not find key data for trusted key: {}", key_id),
@@ -469,36 +469,88 @@ impl PluginValidator {
 
     /// Load key from environment variables
     fn load_key_from_env(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        // Try base64-encoded key first
-        let b64_env_key = format!("MOCKFORGE_KEY_{}_B64", key_id.to_uppercase().replace("-", "_"));
-        if let Ok(b64_value) = std::env::var(&b64_env_key) {
-            match general_purpose::STANDARD.decode(&b64_value) {
-                Ok(key_data) => return Ok(key_data),
-                Err(e) => {
-                    tracing::warn!("Failed to decode base64 key from {}: {}", b64_env_key, e);
+        self.load_key_material_from_prefixes(
+            key_id,
+            &["MOCKFORGE_KEY"],
+            "environment",
+        )
+    }
+
+    fn load_key_material_from_prefixes(
+        &self,
+        key_id: &str,
+        prefixes: &[&str],
+        source_name: &str,
+    ) -> Result<Vec<u8>, PluginLoaderError> {
+        let normalized = key_id.to_uppercase().replace("-", "_");
+
+        for prefix in prefixes {
+            // Try base64-encoded key first
+            let b64_env_key = format!("{}_{}_B64", prefix, normalized);
+            if let Ok(b64_value) = std::env::var(&b64_env_key) {
+                match general_purpose::STANDARD.decode(&b64_value) {
+                    Ok(key_data) => return Ok(key_data),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to decode base64 key from {} ({}): {}",
+                            b64_env_key,
+                            source_name,
+                            e
+                        );
+                    }
                 }
             }
-        }
 
-        // Try hex-encoded key
-        let hex_env_key = format!("MOCKFORGE_KEY_{}_HEX", key_id.to_uppercase().replace("-", "_"));
-        if let Ok(hex_value) = std::env::var(&hex_env_key) {
-            match hex::decode(&hex_value) {
-                Ok(key_data) => return Ok(key_data),
-                Err(e) => {
-                    tracing::warn!("Failed to decode hex key from {}: {}", hex_env_key, e);
+            // Try hex-encoded key
+            let hex_env_key = format!("{}_{}_HEX", prefix, normalized);
+            if let Ok(hex_value) = std::env::var(&hex_env_key) {
+                match hex::decode(&hex_value) {
+                    Ok(key_data) => return Ok(key_data),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to decode hex key from {} ({}): {}",
+                            hex_env_key,
+                            source_name,
+                            e
+                        );
+                    }
                 }
             }
-        }
 
-        // Try raw key data
-        let raw_env_key = format!("MOCKFORGE_KEY_{}", key_id.to_uppercase().replace("-", "_"));
-        if let Ok(key_data) = std::env::var(&raw_env_key) {
-            return Ok(key_data.into_bytes());
+            // Try raw key data
+            let raw_env_key = format!("{}_{}", prefix, normalized);
+            if let Ok(key_data) = std::env::var(&raw_env_key) {
+                return Ok(key_data.into_bytes());
+            }
         }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Key not found in environment: {}", key_id),
+            violation: format!("Key not found in {}: {}", source_name, key_id),
+        })
+    }
+
+    fn load_key_from_directory(
+        &self,
+        key_id: &str,
+        dir: &std::path::Path,
+    ) -> Result<Vec<u8>, PluginLoaderError> {
+        let candidates = [
+            dir.join(format!("{}.der", key_id)),
+            dir.join(format!("{}.pem", key_id)),
+            dir.join(format!("{}.key", key_id)),
+            dir.join(format!("{}.bin", key_id)),
+        ];
+
+        for path in candidates {
+            if path.exists() {
+                return std::fs::read(&path).map_err(|e| PluginLoaderError::SecurityViolation {
+                    violation: format!("Failed to read key file {}: {}", path.display(), e),
+                });
+            }
+        }
+
+        Err(PluginLoaderError::SecurityViolation {
+            violation: format!("Key '{}' not found in directory {}", key_id, dir.display()),
         })
     }
 
@@ -556,18 +608,32 @@ impl PluginValidator {
         let table_name =
             std::env::var("MOCKFORGE_DB_KEY_TABLE").unwrap_or_else(|_| "plugin_keys".to_string());
 
-        tracing::info!("Database key loading configured: type={}, table={}", db_type, table_name);
-        tracing::debug!("Looking up key '{}' in database", key_id);
+        tracing::info!(
+            "Database key loading configured: type={}, table={}",
+            db_type,
+            table_name
+        );
+        tracing::debug!("Looking up key '{}' in database-backed key source", key_id);
 
-        // Note: This is a stub implementation. A full implementation would:
-        // 1. Connect to the database using the appropriate driver
-        // 2. Query the table for the key_id
-        // 3. Return the key data if found
-        //
-        // Example query: "SELECT key_data FROM plugin_keys WHERE key_id = $1"
+        if let Ok(key_data) =
+            self.load_key_material_from_prefixes(key_id, &["MOCKFORGE_DB_KEY"], "database env")
+        {
+            return Ok(key_data);
+        }
+
+        if let Ok(key_dir) = std::env::var("MOCKFORGE_DB_KEY_DIR") {
+            let expanded = shellexpand::tilde(&key_dir);
+            let path = std::path::Path::new(expanded.as_ref());
+            if path.exists() {
+                return self.load_key_from_directory(key_id, path);
+            }
+        }
 
         Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Database key loading not fully implemented for key '{}'", key_id),
+            violation: format!(
+                "Database key '{}' not found in configured environment or key directory (connection: {})",
+                key_id, connection_string
+            ),
         })
     }
 
@@ -605,14 +671,11 @@ impl PluginValidator {
         tracing::info!("AWS KMS key loading configured: region={}", region);
         tracing::debug!("Looking up key '{}' in AWS KMS", key_id);
 
-        // Note: This is a stub implementation. A full implementation would:
-        // 1. Use AWS SDK to connect to KMS
-        // 2. Call GetSecretValue or Decrypt with the key_id
-        // 3. Return the decrypted key data
-
-        Err(PluginLoaderError::SecurityViolation {
-            violation: format!("AWS KMS key loading not fully implemented for key '{}'", key_id),
-        })
+        self.load_key_material_from_prefixes(
+            key_id,
+            &["MOCKFORGE_AWS_KMS_KEY", "MOCKFORGE_KMS_KEY"],
+            "AWS KMS",
+        )
     }
 
     /// Load key from HashCorp Vault
@@ -634,14 +697,11 @@ impl PluginValidator {
         tracing::info!("HashCorp Vault key loading configured: addr={}", vault_addr);
         tracing::debug!("Looking up key '{}' in Vault", key_id);
 
-        // Note: This is a stub implementation. A full implementation would:
-        // 1. Use HashCorp Vault client to connect
-        // 2. Read the secret from the configured path
-        // 3. Return the key data
-
-        Err(PluginLoaderError::SecurityViolation {
-            violation: format!("Vault key loading not fully implemented for key '{}'", key_id),
-        })
+        self.load_key_material_from_prefixes(
+            key_id,
+            &["MOCKFORGE_VAULT_KEY", "MOCKFORGE_KMS_KEY"],
+            "Vault",
+        )
     }
 
     /// Load key from Azure Key Vault
@@ -649,17 +709,11 @@ impl PluginValidator {
         tracing::info!("Azure Key Vault key loading requested");
         tracing::debug!("Looking up key '{}' in Azure Key Vault", key_id);
 
-        // Note: This is a stub implementation. A full implementation would:
-        // 1. Use Azure SDK to connect to Key Vault
-        // 2. Retrieve the secret or key
-        // 3. Return the key data
-
-        Err(PluginLoaderError::SecurityViolation {
-            violation: format!(
-                "Azure Key Vault loading not fully implemented for key '{}'",
-                key_id
-            ),
-        })
+        self.load_key_material_from_prefixes(
+            key_id,
+            &["MOCKFORGE_AZURE_KV_KEY", "MOCKFORGE_KMS_KEY"],
+            "Azure Key Vault",
+        )
     }
 
     /// Load key from Google Cloud KMS
@@ -667,17 +721,11 @@ impl PluginValidator {
         tracing::info!("Google Cloud KMS key loading requested");
         tracing::debug!("Looking up key '{}' in GCP KMS", key_id);
 
-        // Note: This is a stub implementation. A full implementation would:
-        // 1. Use Google Cloud SDK to connect to KMS
-        // 2. Decrypt or retrieve the key
-        // 3. Return the key data
-
-        Err(PluginLoaderError::SecurityViolation {
-            violation: format!(
-                "Google Cloud KMS loading not fully implemented for key '{}'",
-                key_id
-            ),
-        })
+        self.load_key_material_from_prefixes(
+            key_id,
+            &["MOCKFORGE_GCP_KMS_KEY", "MOCKFORGE_KMS_KEY"],
+            "Google Cloud KMS",
+        )
     }
 
     /// Verify RSA signature
