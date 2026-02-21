@@ -126,10 +126,9 @@ async fn test_image_assets_mime_types() {
     let content_type = response.headers().get("content-type").unwrap();
     assert_eq!(content_type, "image/png");
 
-    // Verify we got actual PNG data (currently empty placeholder)
+    // Verify we got PNG data
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    // Note: Currently returns empty body as placeholder
-    assert!(body_bytes.is_empty(), "PNG file should be empty placeholder");
+    assert!(!body_bytes.is_empty(), "PNG file should not be empty");
 
     // Test different icon sizes
     let icon_sizes = vec![
