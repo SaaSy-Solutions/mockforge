@@ -39,84 +39,103 @@ pub struct QueryResult {
 
 /// Execute a query against the database
 pub async fn execute_query(db: &RecorderDatabase, filter: QueryFilter) -> Result<QueryResult> {
-    // Build SQL query based on filters
-    let mut query = String::from(
-        r#"
-        SELECT id, protocol, timestamp, method, path, query_params,
-               headers, body, body_encoding, client_ip, trace_id, span_id,
-               duration_ms, status_code, tags
-        FROM requests WHERE 1=1
-        "#,
-    );
-
-    let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send>> = Vec::new();
-
-    // Add filters
-    if let Some(protocol) = filter.protocol {
-        query.push_str(" AND protocol = ?");
-        params.push(Box::new(protocol.as_str().to_string()));
-    }
-
-    if let Some(method) = &filter.method {
-        query.push_str(" AND method = ?");
-        params.push(Box::new(method.clone()));
-    }
-
-    if let Some(path) = &filter.path {
-        if path.contains('*') {
-            query.push_str(" AND path LIKE ?");
-            params.push(Box::new(path.replace('*', "%")));
-        } else {
-            query.push_str(" AND path = ?");
-            params.push(Box::new(path.clone()));
-        }
-    }
-
-    if let Some(status) = filter.status_code {
-        query.push_str(" AND status_code = ?");
-        params.push(Box::new(status));
-    }
-
-    if let Some(trace_id) = &filter.trace_id {
-        query.push_str(" AND trace_id = ?");
-        params.push(Box::new(trace_id.clone()));
-    }
-
-    if let Some(min_duration) = filter.min_duration_ms {
-        query.push_str(" AND duration_ms >= ?");
-        params.push(Box::new(min_duration));
-    }
-
-    if let Some(max_duration) = filter.max_duration_ms {
-        query.push_str(" AND duration_ms <= ?");
-        params.push(Box::new(max_duration));
-    }
-
-    // Order by timestamp descending
-    query.push_str(" ORDER BY timestamp DESC");
-
-    // Add limit and offset
     let limit = filter.limit.unwrap_or(100);
     let offset = filter.offset.unwrap_or(0);
-    query.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
 
-    // For now, use the list_recent method as a placeholder
-    // Full query implementation would require dynamic query building
-    let requests = db.list_recent(limit).await?;
+    // Fetch a sufficiently large recent window and apply filters in memory.
+    // This avoids the previous placeholder behavior where filters were ignored.
+    let fetch_window = std::cmp::max(limit + offset, 1000);
+    let requests = db.list_recent(fetch_window).await?;
+
+    let mut filtered: Vec<RecordedRequest> = requests
+        .into_iter()
+        .filter(|request| request_matches_filter(request, &filter))
+        .collect();
+
+    let total = filtered.len() as i64;
+    filtered = filtered
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect();
 
     // Fetch responses for each request
     let mut exchanges = Vec::new();
-    for request in requests {
+    for request in filtered {
         let response = db.get_response(&request.id).await?;
         exchanges.push(RecordedExchange { request, response });
     }
 
     Ok(QueryResult {
-        total: exchanges.len() as i64,
+        total,
         offset,
         limit,
         exchanges,
     })
+}
+
+fn request_matches_filter(request: &RecordedRequest, filter: &QueryFilter) -> bool {
+    if let Some(protocol) = &filter.protocol {
+        if &request.protocol != protocol {
+            return false;
+        }
+    }
+
+    if let Some(method) = &filter.method {
+        if request.method.as_deref() != Some(method.as_str()) {
+            return false;
+        }
+    }
+
+    if let Some(path_filter) = &filter.path {
+        let request_path = request.path.as_deref().unwrap_or_default();
+        if path_filter.contains('*') {
+            let pattern = path_filter.replace('*', "");
+            if !request_path.contains(&pattern) {
+                return false;
+            }
+        } else if request_path != path_filter {
+            return false;
+        }
+    }
+
+    if let Some(status_code) = filter.status_code {
+        if request.status_code != Some(status_code) {
+            return false;
+        }
+    }
+
+    if let Some(trace_id) = &filter.trace_id {
+        if request.trace_id.as_deref() != Some(trace_id.as_str()) {
+            return false;
+        }
+    }
+
+    if let Some(min_duration) = filter.min_duration_ms {
+        let duration = request.duration_ms.unwrap_or_default();
+        if duration < min_duration {
+            return false;
+        }
+    }
+
+    if let Some(max_duration) = filter.max_duration_ms {
+        let duration = request.duration_ms.unwrap_or_default();
+        if duration > max_duration {
+            return false;
+        }
+    }
+
+    if let Some(required_tags) = &filter.tags {
+        let request_tags = request.tags.as_ref().map(|tags| tags.as_slice()).unwrap_or(&[]);
+        if required_tags
+            .iter()
+            .any(|required| !request_tags.iter().any(|actual| actual == required))
+        {
+            return false;
+        }
+    }
+
+    true
 }
 
 #[cfg(test)]
@@ -134,5 +153,41 @@ mod tests {
 
         assert_eq!(filter.protocol, Some(Protocol::Http));
         assert_eq!(filter.method, Some("GET".to_string()));
+    }
+
+    #[test]
+    fn test_request_matches_filter() {
+        let request = RecordedRequest {
+            id: "req-1".to_string(),
+            protocol: Protocol::Http,
+            timestamp: chrono::Utc::now(),
+            method: Some("GET".to_string()),
+            path: Some("/api/users/123".to_string()),
+            query_params: None,
+            headers: None,
+            body: None,
+            body_encoding: None,
+            client_ip: None,
+            trace_id: Some("trace-1".to_string()),
+            span_id: None,
+            duration_ms: Some(42),
+            status_code: Some(200),
+            tags: Some(vec!["users".to_string(), "read".to_string()]),
+        };
+
+        let filter = QueryFilter {
+            protocol: Some(Protocol::Http),
+            method: Some("GET".to_string()),
+            path: Some("/api/users/*".to_string()),
+            status_code: Some(200),
+            trace_id: Some("trace-1".to_string()),
+            min_duration_ms: Some(40),
+            max_duration_ms: Some(100),
+            tags: Some(vec!["users".to_string()]),
+            limit: Some(10),
+            offset: Some(0),
+        };
+
+        assert!(request_matches_filter(&request, &filter));
     }
 }
