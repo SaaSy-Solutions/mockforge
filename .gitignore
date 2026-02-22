@@ -152,3 +152,12 @@ crates/mockforge-collab/*.db-shm
 crates/mockforge-collab/*.db-wal
 vscode-extension/out/
 vscode-extension/*.vsix
+
+# Pre-commit cache
+.cache/
+
+# Generated files
+desktop-app/gen/
+
+# Test data (databases, fixtures)
+tests/data/
