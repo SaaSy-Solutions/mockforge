@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-test"
-version = "0.3.31"
+version = "0.3.66"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,9 +14,9 @@ publish = false
 
 [dependencies]
 # Core MockForge dependencies
-mockforge-core = { version = "0.3.31", path = "../mockforge-core" }
-mockforge-http = { version = "0.3.31", path = "../mockforge-http" }
-mockforge-data = { version = "0.3.31", path = "../mockforge-data", optional = true }
+mockforge-core = { version = "0.3.66", path = "../mockforge-core" }
+mockforge-http = { version = "0.3.66", path = "../mockforge-http" }
+mockforge-data = { version = "0.3.66", path = "../mockforge-data", optional = true }
 
 # Async runtime
 tokio = { workspace = true }

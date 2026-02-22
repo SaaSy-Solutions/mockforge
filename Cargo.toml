@@ -1,21 +1,16 @@
 [workspace]
 members = [
     # Core foundation crates
-    "crates/mockforge-core",
     "crates/mockforge-data",
     "crates/mockforge-template-expansion",
 
     # Protocol implementations
     "crates/mockforge-amqp",
     "crates/mockforge-ftp",
-    "crates/mockforge-graphql",
-    "crates/mockforge-grpc",
-    "crates/mockforge-http",
     "crates/mockforge-kafka",
     "crates/mockforge-mqtt",
     "crates/mockforge-smtp",
     "crates/mockforge-tcp",
-    "crates/mockforge-ws",
 
     # Plugin system
     "crates/mockforge-plugin-core",
@@ -37,28 +32,20 @@ members = [
     "crates/mockforge-pipelines",
     "crates/mockforge-recorder",
     "crates/mockforge-route-chaos",
-    "crates/mockforge-scenarios",
     "crates/mockforge-schema",
-    "crates/mockforge-world-state",
 
     # SDK
-    "crates/mockforge-sdk",
 
     # Infrastructure
     "crates/mockforge-tunnel",
-    "crates/mockforge-vbr",
     "crates/mockforge-collab",
 
     # Main user-facing crates
-    "crates/mockforge-cli",
-    "crates/mockforge-bench",
-    "crates/mockforge-test",
     "crates/mockforge-ui",
     "crates/mockforge-tui",
 
     # Server applications
     "crates/mockforge-k8s-operator",
-    "crates/mockforge-runtime-daemon",
     "crates/mockforge-registry-server",
 
     # Examples and integration tests
@@ -72,7 +59,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.65"
+version = "0.3.66"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"

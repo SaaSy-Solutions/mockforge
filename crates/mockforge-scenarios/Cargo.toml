@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-scenarios"
-version = "0.3.31"
+version = "0.3.66"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -74,10 +74,10 @@ mockforge-plugin-registry = { version = "0.3.31", path = "../mockforge-plugin-re
 mockforge-plugin-loader = { version = "0.3.31", path = "../mockforge-plugin-loader" }
 
 # Core types for state machines
-mockforge-core = { version = "0.3.31", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.66", path = "../mockforge-core" }
 
 # Data types for schemas
-mockforge-data = { version = "0.3.31", path = "../mockforge-data" }
+mockforge-data = { version = "0.3.66", path = "../mockforge-data" }
 
 [features]
 default = ["git-support"]
