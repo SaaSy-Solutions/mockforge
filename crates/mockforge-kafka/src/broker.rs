@@ -290,9 +290,9 @@ impl KafkaMockBroker {
 
     async fn handle_produce(&self) -> Result<KafkaResponse> {
         let mut topics = self.topics.write().await;
-        let topic = topics
-            .entry("default-topic".to_string())
-            .or_insert_with(|| Topic::new("default-topic".to_string(), crate::topics::TopicConfig::default()));
+        let topic = topics.entry("default-topic".to_string()).or_insert_with(|| {
+            Topic::new("default-topic".to_string(), crate::topics::TopicConfig::default())
+        });
 
         let partition = topic.assign_partition(None);
         let message = KafkaMessage {

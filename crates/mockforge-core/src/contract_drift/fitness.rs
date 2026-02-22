@@ -174,10 +174,7 @@ pub trait FitnessEvaluator: Send + Sync {
         metrics.insert("new_schema_size".to_string(), new_size);
         metrics.insert("increase_percent".to_string(), increase_percent);
         metrics.insert("max_increase_percent".to_string(), max_increase_percent);
-        metrics.insert(
-            "mismatch_count".to_string(),
-            diff_result.mismatches.len() as f64,
-        );
+        metrics.insert("mismatch_count".to_string(), diff_result.mismatches.len() as f64);
 
         Ok(FitnessTestResult {
             function_id: String::new(),
@@ -1223,9 +1220,7 @@ fn extract_response_schema<'a>(
         .or_else(|| responses.values().next())?;
 
     let content = response.get("content")?.as_object()?;
-    let media_type = content
-        .get("application/json")
-        .or_else(|| content.values().next())?;
+    let media_type = content.get("application/json").or_else(|| content.values().next())?;
     media_type.get("schema")
 }
 
@@ -1313,7 +1308,11 @@ fn schema_depth_resolved(
             .map(|t| t == "object" || t == "array")
             .unwrap_or(false);
 
-    if is_object_like { 1 + max_child } else { max_child }
+    if is_object_like {
+        1 + max_child
+    } else {
+        max_child
+    }
 }
 
 /// Estimate schema size for a protocol contract operation

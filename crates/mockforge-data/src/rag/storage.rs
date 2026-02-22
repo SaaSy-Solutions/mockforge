@@ -594,9 +594,7 @@ impl StorageFactory {
     /// Create file-based storage
     pub fn create_file(path: &str) -> Result<Box<dyn DocumentStorage>> {
         if path.trim().is_empty() {
-            return Err(crate::Error::generic(
-                "File storage path cannot be empty",
-            ));
+            return Err(crate::Error::generic("File storage path cannot be empty"));
         }
 
         std::fs::create_dir_all(path)?;
@@ -606,9 +604,7 @@ impl StorageFactory {
     /// Create database storage
     pub fn create_database(connection_string: &str) -> Result<Box<dyn DocumentStorage>> {
         if connection_string.trim().is_empty() {
-            return Err(crate::Error::generic(
-                "Database connection string cannot be empty",
-            ));
+            return Err(crate::Error::generic("Database connection string cannot be empty"));
         }
 
         Ok(Box::new(InMemoryStorage::new_with_backend_type("database")))
@@ -617,9 +613,7 @@ impl StorageFactory {
     /// Create vector database storage
     pub fn create_vector_db(config: HashMap<String, String>) -> Result<Box<dyn DocumentStorage>> {
         if config.is_empty() {
-            return Err(crate::Error::generic(
-                "Vector database configuration cannot be empty",
-            ));
+            return Err(crate::Error::generic("Vector database configuration cannot be empty"));
         }
 
         Ok(Box::new(InMemoryStorage::new_with_backend_type("vector-db")))
@@ -638,7 +632,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_file_storage_fallback_backend_type() {
-        let dir = std::env::temp_dir().join(format!("mockforge-data-storage-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("mockforge-data-storage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let storage = StorageFactory::create_file(dir.to_str().expect("path")).expect("create");
         let stats = storage.get_stats().await.expect("stats");
@@ -648,8 +643,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_database_storage_fallback_backend_type() {
-        let storage = StorageFactory::create_database("postgres://user:pass@localhost/db")
-            .expect("create");
+        let storage =
+            StorageFactory::create_database("postgres://user:pass@localhost/db").expect("create");
         let stats = storage.get_stats().await.expect("stats");
         assert_eq!(stats.backend_type, "database");
     }

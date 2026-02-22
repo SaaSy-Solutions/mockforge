@@ -460,10 +460,7 @@ async fn execute_serve_command(
         let session_tracking = SessionTracking::default();
         let core_session_manager =
             Arc::new(SessionManager::new(session_tracking, session_timeout_secs));
-        Some(Arc::new(SessionDataManager::new(
-            core_session_manager,
-            session_storage_backend,
-        )))
+        Some(Arc::new(SessionDataManager::new(core_session_manager, session_storage_backend)))
     } else {
         None
     };
@@ -494,45 +491,43 @@ async fn execute_serve_command(
 
 async fn execute_manage_command(command: ManageCommands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
-        ManageCommands::Entities { entities_command } => {
-            match entities_command {
-                EntitiesCommands::List { db_path, storage } => {
-                    let config = create_config_from_storage(&storage, db_path)?;
-                    let engine = VbrEngine::new(config).await?;
-                    let entities = engine.registry().list();
+        ManageCommands::Entities { entities_command } => match entities_command {
+            EntitiesCommands::List { db_path, storage } => {
+                let config = create_config_from_storage(&storage, db_path)?;
+                let engine = VbrEngine::new(config).await?;
+                let entities = engine.registry().list();
 
-                    if entities.is_empty() {
-                        println!("{} No entities registered", "ℹ".bright_blue());
-                    } else {
-                        println!("{} Registered entities:", "📋".bright_cyan());
-                        for entity in entities {
-                            println!("  - {}", entity);
-                        }
+                if entities.is_empty() {
+                    println!("{} No entities registered", "ℹ".bright_blue());
+                } else {
+                    println!("{} Registered entities:", "📋".bright_cyan());
+                    for entity in entities {
+                        println!("  - {}", entity);
                     }
-                    Ok(())
                 }
-                EntitiesCommands::Show {
-                    name,
-                    db_path,
-                    storage,
-                } => {
-                    let config = create_config_from_storage(&storage, db_path)?;
-                    let engine = VbrEngine::new(config).await?;
-                    if let Some(entity) = engine.registry().get(&name) {
-                        let schema = serde_json::to_string_pretty(&entity.schema)?;
-                        println!("{} Entity '{}':", "ℹ".bright_blue(), name.bright_cyan());
-                        println!("{}", schema);
-                        Ok(())
-                    } else {
-                        Err(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            format!("Entity '{}' not found", name),
-                        )
-                        .into())
-                    }
+                Ok(())
+            }
+            EntitiesCommands::Show {
+                name,
+                db_path,
+                storage,
+            } => {
+                let config = create_config_from_storage(&storage, db_path)?;
+                let engine = VbrEngine::new(config).await?;
+                if let Some(entity) = engine.registry().get(&name) {
+                    let schema = serde_json::to_string_pretty(&entity.schema)?;
+                    println!("{} Entity '{}':", "ℹ".bright_blue(), name.bright_cyan());
+                    println!("{}", schema);
+                    Ok(())
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("Entity '{}' not found", name),
+                    )
+                    .into())
                 }
             }
-        }
+        },
         ManageCommands::Data {
             query,
             db_path,

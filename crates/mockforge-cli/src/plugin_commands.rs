@@ -344,16 +344,12 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
                     let source_text = format!("{:?}", metadata.source).to_lowercase();
                     let searchable = format!(
                         "{} {} {} {}",
-                        plugin_id,
-                        metadata.version,
-                        source_kind,
-                        source_text
+                        plugin_id, metadata.version, source_kind, source_text
                     )
                     .to_lowercase();
                     let query_match = searchable.contains(&query_lower);
-                    let category_match = category_lower
-                        .as_ref()
-                        .is_none_or(|cat| source_kind.contains(cat));
+                    let category_match =
+                        category_lower.as_ref().is_none_or(|cat| source_kind.contains(cat));
 
                     query_match && category_match
                 })

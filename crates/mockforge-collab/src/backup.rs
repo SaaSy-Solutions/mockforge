@@ -196,13 +196,8 @@ impl BackupService {
                 self.save_to_local(workspace_id, &serialized, &backup_format).await?
             }
             StorageBackend::S3 => {
-                self.save_to_s3(
-                    workspace_id,
-                    &serialized,
-                    &backup_format,
-                    storage_config.as_ref(),
-                )
-                .await?
+                self.save_to_s3(workspace_id, &serialized, &backup_format, storage_config.as_ref())
+                    .await?
             }
             StorageBackend::Azure => {
                 self.save_to_azure(
@@ -590,17 +585,13 @@ impl BackupService {
         format: &str,
         storage_config: Option<&serde_json::Value>,
     ) -> Result<String> {
-        let config = storage_config
-            .ok_or_else(|| CollabError::Internal("Custom storage configuration required".to_string()))?;
+        let config = storage_config.ok_or_else(|| {
+            CollabError::Internal("Custom storage configuration required".to_string())
+        })?;
 
-        let upload_url = config
-            .get("upload_url")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                CollabError::Internal(
-                    "Custom storage config must include 'upload_url'".to_string(),
-                )
-            })?;
+        let upload_url = config.get("upload_url").and_then(|v| v.as_str()).ok_or_else(|| {
+            CollabError::Internal("Custom storage config must include 'upload_url'".to_string())
+        })?;
 
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("workspace_{workspace_id}_{timestamp}.{format}");
@@ -706,35 +697,24 @@ impl BackupService {
             use aws_sdk_s3::primitives::ByteStream;
             use aws_sdk_s3::Client as S3Client;
 
-            let config = storage_config
-                .ok_or_else(|| CollabError::Internal("S3 storage configuration required".to_string()))?;
+            let config = storage_config.ok_or_else(|| {
+                CollabError::Internal("S3 storage configuration required".to_string())
+            })?;
 
-            let bucket_name = config
-                .get("bucket_name")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    CollabError::Internal(
-                        "S3 bucket_name not found in storage_config".to_string(),
-                    )
+            let bucket_name =
+                config.get("bucket_name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    CollabError::Internal("S3 bucket_name not found in storage_config".to_string())
                 })?;
 
             let prefix = config.get("prefix").and_then(|v| v.as_str()).unwrap_or("backups");
-            let region_str = config
-                .get("region")
-                .and_then(|v| v.as_str())
-                .unwrap_or("us-east-1");
+            let region_str = config.get("region").and_then(|v| v.as_str()).unwrap_or("us-east-1");
 
             let aws_config: SdkConfig = if let (Some(access_key_id), Some(secret_access_key)) = (
                 config.get("access_key_id").and_then(|v| v.as_str()),
                 config.get("secret_access_key").and_then(|v| v.as_str()),
             ) {
-                let credentials = Credentials::new(
-                    access_key_id,
-                    secret_access_key,
-                    None,
-                    None,
-                    "mockforge",
-                );
+                let credentials =
+                    Credentials::new(access_key_id, secret_access_key, None, None, "mockforge");
                 aws_config::ConfigLoader::default()
                     .credentials_provider(credentials)
                     .region(Region::new(region_str.to_string()))
@@ -747,7 +727,8 @@ impl BackupService {
             let client = S3Client::new(&aws_config);
 
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-            let object_key = format!("{}/workspace_{}_{}.{}", prefix, workspace_id, timestamp, format);
+            let object_key =
+                format!("{}/workspace_{}_{}.{}", prefix, workspace_id, timestamp, format);
             let content_type = match format {
                 "yaml" => "application/x-yaml",
                 "json" => "application/json",

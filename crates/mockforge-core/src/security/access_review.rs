@@ -549,7 +549,8 @@ impl AccessReviewEngine {
             }
 
             if token.expires_at.is_some_and(|expires| {
-                expires <= now + Duration::days(self.config.token_review.rotation_threshold_days as i64)
+                expires
+                    <= now + Duration::days(self.config.token_review.rotation_threshold_days as i64)
             }) {
                 findings.expiring_soon += 1;
             }
@@ -594,16 +595,15 @@ impl AccessReviewEngine {
         resources: Vec<ResourceAccessInfo>,
     ) -> Result<AccessReview, crate::Error> {
         if !self.config.enabled || !self.config.resource_review.enabled {
-            return Err(crate::Error::Generic(
-                "Resource access review is not enabled".to_string(),
-            ));
+            return Err(crate::Error::Generic("Resource access review is not enabled".to_string()));
         }
 
         let now = Utc::now();
         let review_id = self.generate_review_id(ReviewType::ResourceAccess, now);
         let due_date = now + Duration::days(30);
         let next_review = self.config.resource_review.frequency.next_review_date(now);
-        let stale_threshold = now - Duration::days(self.config.user_review.inactive_threshold_days as i64);
+        let stale_threshold =
+            now - Duration::days(self.config.user_review.inactive_threshold_days as i64);
 
         let mut findings = ReviewFindings {
             inactive_users: 0,
@@ -1039,10 +1039,7 @@ mod tests {
         let review = engine.start_resource_access_review(resources).await.unwrap();
         assert_eq!(review.review_type, ReviewType::ResourceAccess);
         assert_eq!(review.total_items, 1);
-        assert_eq!(
-            review.findings.custom.get("sensitive_resources_reviewed"),
-            Some(&1)
-        );
+        assert_eq!(review.findings.custom.get("sensitive_resources_reviewed"), Some(&1));
         assert!(review.findings.no_recent_access >= 1);
     }
 }

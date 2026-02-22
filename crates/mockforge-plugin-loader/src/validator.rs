@@ -469,11 +469,7 @@ impl PluginValidator {
 
     /// Load key from environment variables
     fn load_key_from_env(&self, key_id: &str) -> Result<Vec<u8>, PluginLoaderError> {
-        self.load_key_material_from_prefixes(
-            key_id,
-            &["MOCKFORGE_KEY"],
-            "environment",
-        )
+        self.load_key_material_from_prefixes(key_id, &["MOCKFORGE_KEY"], "environment")
     }
 
     fn load_key_material_from_prefixes(
@@ -608,11 +604,7 @@ impl PluginValidator {
         let table_name =
             std::env::var("MOCKFORGE_DB_KEY_TABLE").unwrap_or_else(|_| "plugin_keys".to_string());
 
-        tracing::info!(
-            "Database key loading configured: type={}, table={}",
-            db_type,
-            table_name
-        );
+        tracing::info!("Database key loading configured: type={}, table={}", db_type, table_name);
         tracing::debug!("Looking up key '{}' in database-backed key source", key_id);
 
         if let Ok(key_data) =

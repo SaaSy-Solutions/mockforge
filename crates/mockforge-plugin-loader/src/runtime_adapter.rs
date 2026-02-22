@@ -145,7 +145,9 @@ fn has_tinygo_signature(wasm_bytes: &[u8]) -> bool {
     let has_runtime_exports = exports.contains("resume") && exports.contains("getsp");
     let has_tinygo_custom = custom_sections.iter().any(|s| s.contains("tinygo"));
 
-    has_runtime_exports || has_tinygo_custom || String::from_utf8_lossy(wasm_bytes).contains("tinygo")
+    has_runtime_exports
+        || has_tinygo_custom
+        || String::from_utf8_lossy(wasm_bytes).contains("tinygo")
 }
 
 /// Check if WASM binary has AssemblyScript signature
@@ -153,8 +155,8 @@ fn has_assemblyscript_signature(wasm_bytes: &[u8]) -> bool {
     let (exports, custom_sections) = extract_wasm_signatures(wasm_bytes);
 
     // AssemblyScript modules typically export allocation/pinning helpers.
-    let has_alloc_exports = exports.contains("__new")
-        && (exports.contains("__pin") || exports.contains("__unpin"));
+    let has_alloc_exports =
+        exports.contains("__new") && (exports.contains("__pin") || exports.contains("__unpin"));
     let has_as_custom = custom_sections
         .iter()
         .any(|s| s.contains("assemblyscript") || s.contains("asc"));

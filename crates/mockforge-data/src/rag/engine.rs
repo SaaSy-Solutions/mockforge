@@ -808,10 +808,7 @@ impl RagEngine {
             .await?;
 
         if !response.status().is_success() {
-            return Err(crate::Error::generic(format!(
-                "Ollama API error: {}",
-                response.status()
-            )));
+            return Err(crate::Error::generic(format!("Ollama API error: {}", response.status())));
         }
 
         let json: Value = response.json().await?;

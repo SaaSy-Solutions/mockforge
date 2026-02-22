@@ -1270,10 +1270,7 @@ paths:
             .unwrap();
 
         let mut headers = HashMap::new();
-        headers.insert(
-            "Cookie".to_string(),
-            "sessionId=abc123; theme=dark".to_string(),
-        );
+        headers.insert("Cookie".to_string(), "sessionId=abc123; theme=dark".to_string());
 
         let with_cookie = RequestValidator::validate_request(
             &spec,

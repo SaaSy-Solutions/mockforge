@@ -483,10 +483,7 @@ mod tests {
         assert!(registry.workspaces.is_empty());
         assert!(registry.active_workspace_id.is_none());
         assert!(registry.environments.is_empty());
-        assert_eq!(
-            registry.get_config().default_workspace_name,
-            "Default Workspace"
-        );
+        assert_eq!(registry.get_config().default_workspace_name, "Default Workspace");
     }
 
     #[test]

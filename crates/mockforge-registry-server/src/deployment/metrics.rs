@@ -162,10 +162,7 @@ impl MetricsCollector {
 
         let parsed_metrics = match self.client.get(&metrics_url).send().await {
             Ok(resp) if resp.status().is_success() => {
-                let body = resp
-                    .text()
-                    .await
-                    .context("Failed to read metrics response body")?;
+                let body = resp.text().await.context("Failed to read metrics response body")?;
                 parse_prometheus_metrics(&body)
             }
             Ok(resp) => {
@@ -224,11 +221,7 @@ impl MetricsCollector {
             .bind(parsed_metrics.requests_4xx.unwrap_or(metrics.requests_4xx))
             .bind(parsed_metrics.requests_5xx.unwrap_or(metrics.requests_5xx))
             .bind(parsed_metrics.egress_bytes.unwrap_or(metrics.egress_bytes))
-            .bind(
-                parsed_metrics
-                    .avg_response_time_ms
-                    .unwrap_or(metrics.avg_response_time_ms),
-            )
+            .bind(parsed_metrics.avg_response_time_ms.unwrap_or(metrics.avg_response_time_ms))
             .execute(pool)
             .await?;
         } else {

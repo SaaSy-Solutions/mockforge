@@ -387,7 +387,9 @@ async fn execute_fixtures_command(
         }
         FixturesSubcommands::Reload => {
             if spec_registry.fixtures.is_empty() {
-                println!("No fixtures loaded. Use `mockforge ftp fixtures load --dir <path>` first.");
+                println!(
+                    "No fixtures loaded. Use `mockforge ftp fixtures load --dir <path>` first."
+                );
                 return Ok(());
             }
 

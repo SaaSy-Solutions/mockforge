@@ -447,10 +447,7 @@ pub async fn apply_amplification(
             }
 
             if models.is_empty() {
-                return Err(format!(
-                    "No probability models found for sequence {}",
-                    sequence_id
-                ));
+                return Err(format!("No probability models found for sequence {}", sequence_id));
             }
 
             models

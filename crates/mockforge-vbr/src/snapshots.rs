@@ -822,10 +822,7 @@ mod tests {
 
         // Verify restoration
         let rows = database
-            .query(
-                "SELECT * FROM users WHERE id = ?",
-                &[Value::String("1".to_string())],
-            )
+            .query("SELECT * FROM users WHERE id = ?", &[Value::String("1".to_string())])
             .await
             .unwrap();
         assert_eq!(rows.len(), 1);
@@ -921,17 +918,11 @@ mod tests {
             .unwrap();
 
         database
-            .execute(
-                "INSERT INTO products (id) VALUES (?)",
-                &[Value::String("1".to_string())],
-            )
+            .execute("INSERT INTO products (id) VALUES (?)", &[Value::String("1".to_string())])
             .await
             .unwrap();
         database
-            .execute(
-                "INSERT INTO products (id) VALUES (?)",
-                &[Value::String("2".to_string())],
-            )
+            .execute("INSERT INTO products (id) VALUES (?)", &[Value::String("2".to_string())])
             .await
             .unwrap();
 

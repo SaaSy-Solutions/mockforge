@@ -203,19 +203,14 @@ mod tests {
     async fn test_apply_vbr_entities_validates_seed_data() {
         let temp = TempDir::new().unwrap();
         let root = temp.path().to_path_buf();
-        fs::write(
-            root.join("seed.json"),
-            r#"[{"id":"1","name":"Alice"},{"id":"2","name":"Bob"}]"#,
-        )
-        .unwrap();
+        fs::write(root.join("seed.json"), r#"[{"id":"1","name":"Alice"},{"id":"2","name":"Bob"}]"#)
+            .unwrap();
 
-        let entities = vec![
-            VbrEntityDefinition::new(
-                "User".to_string(),
-                serde_json::json!({"base":{"name":"User","fields":[]}}),
-            )
-            .with_seed_data("seed.json".to_string()),
-        ];
+        let entities = vec![VbrEntityDefinition::new(
+            "User".to_string(),
+            serde_json::json!({"base":{"name":"User","fields":[]}}),
+        )
+        .with_seed_data("seed.json".to_string())];
 
         let mut engine = ();
         let result =

@@ -113,10 +113,7 @@ impl GrpcContract {
 
         let output = std::process::Command::new("protoc")
             .arg("--include_imports")
-            .arg(format!(
-                "--descriptor_set_out={}",
-                descriptor_path.to_string_lossy()
-            ))
+            .arg(format!("--descriptor_set_out={}", descriptor_path.to_string_lossy()))
             .arg(format!("--proto_path={}", parent.to_string_lossy()))
             .arg(proto_path.to_string_lossy().to_string())
             .output()

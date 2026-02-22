@@ -614,10 +614,7 @@ impl HttpBridge {
         }
 
         let mut metadata = HashMap::new();
-        metadata.insert(
-            "x-mockforge-streaming-mode".to_string(),
-            "json-envelope".to_string(),
-        );
+        metadata.insert("x-mockforge-streaming-mode".to_string(), "json-envelope".to_string());
         metadata.insert("x-mockforge-stream-count".to_string(), "3".to_string());
         metadata.insert(
             "x-mockforge-service-count".to_string(),

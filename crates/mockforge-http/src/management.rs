@@ -1,3 +1,5 @@
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
+use axum::response::sse::{Event, Sse};
 /// Management API for MockForge
 ///
 /// Provides REST endpoints for controlling mocks, server configuration,
@@ -9,8 +11,6 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-#[cfg(any(feature = "mqtt", feature = "kafka"))]
-use axum::response::sse::{Event, Sse};
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use futures::stream::{self, Stream};
 use mockforge_core::openapi::OpenApiSpec;
@@ -4183,14 +4183,7 @@ mod tests {
         let headers = std::collections::HashMap::new();
         let query = std::collections::HashMap::new();
 
-        assert!(mock_matches_request(
-            &mock,
-            "POST",
-            "/xml",
-            &headers,
-            &query,
-            Some(body)
-        ));
+        assert!(mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
     }
 
     #[test]
@@ -4221,14 +4214,7 @@ mod tests {
         let headers = std::collections::HashMap::new();
         let query = std::collections::HashMap::new();
 
-        assert!(mock_matches_request(
-            &mock,
-            "POST",
-            "/xml",
-            &headers,
-            &query,
-            Some(body)
-        ));
+        assert!(mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
     }
 
     #[test]
@@ -4259,13 +4245,6 @@ mod tests {
         let headers = std::collections::HashMap::new();
         let query = std::collections::HashMap::new();
 
-        assert!(!mock_matches_request(
-            &mock,
-            "POST",
-            "/xml",
-            &headers,
-            &query,
-            Some(body)
-        ));
+        assert!(!mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
     }
 }

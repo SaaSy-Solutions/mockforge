@@ -41,18 +41,23 @@ fn main() {
             let sep1 = PredefinedMenuItem::separator(app)?;
             let start_i =
                 MenuItem::with_id(app, "start-server", "Start Server", true, None::<&str>)?;
-            let stop_i =
-                MenuItem::with_id(app, "stop-server", "Stop Server", true, None::<&str>)?;
+            let stop_i = MenuItem::with_id(app, "stop-server", "Stop Server", true, None::<&str>)?;
             let sep2 = PredefinedMenuItem::separator(app)?;
-            let settings_i =
-                MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+            let settings_i = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let sep3 = PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
             let menu = Menu::with_items(
                 app,
                 &[
-                    &show_i, &hide_i, &sep1, &start_i, &stop_i, &sep2, &settings_i, &sep3,
+                    &show_i,
+                    &hide_i,
+                    &sep1,
+                    &start_i,
+                    &stop_i,
+                    &sep2,
+                    &settings_i,
+                    &sep3,
                     &quit_i,
                 ],
             )?;

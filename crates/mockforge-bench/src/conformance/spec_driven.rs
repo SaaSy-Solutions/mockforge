@@ -601,6 +601,14 @@ impl SpecDrivenConformanceGenerator {
         script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
+        // Custom auth headers (injected via --conformance-header)
+        if self.config.has_custom_headers() {
+            script.push_str(&format!(
+                "const CUSTOM_HEADERS = {};\n\n",
+                self.config.custom_headers_js_object()
+            ));
+        }
+
         // Default function
         script.push_str("export default function () {\n");
 
@@ -669,11 +677,20 @@ impl SpecDrivenConformanceGenerator {
 
         let full_url = format!("${{BASE_URL}}{}", url_path);
 
+        // Build effective headers: merge spec-derived headers with custom headers.
+        // Custom headers override spec-derived ones with the same name.
+        let effective_headers = self.effective_headers(&op.header_params);
+        let has_headers = !effective_headers.is_empty();
+        let headers_obj = if has_headers {
+            Self::format_headers(&effective_headers)
+        } else {
+            String::new()
+        };
+
         // Determine HTTP method and emit request
         match op.method.as_str() {
             "GET" => {
-                if !op.header_params.is_empty() {
-                    let headers_obj = Self::format_headers(&op.header_params);
+                if has_headers {
                     script.push_str(&format!(
                         "      let res = http.get(`{}`, {{ headers: {} }});\n",
                         full_url, headers_obj
@@ -683,25 +700,53 @@ impl SpecDrivenConformanceGenerator {
                 }
             }
             "POST" => {
-                self.emit_request_with_body(script, "post", &full_url, op);
+                self.emit_request_with_body(script, "post", &full_url, op, &effective_headers);
             }
             "PUT" => {
-                self.emit_request_with_body(script, "put", &full_url, op);
+                self.emit_request_with_body(script, "put", &full_url, op, &effective_headers);
             }
             "PATCH" => {
-                self.emit_request_with_body(script, "patch", &full_url, op);
+                self.emit_request_with_body(script, "patch", &full_url, op, &effective_headers);
             }
             "DELETE" => {
-                script.push_str(&format!("      let res = http.del(`{}`);\n", full_url));
+                if has_headers {
+                    script.push_str(&format!(
+                        "      let res = http.del(`{}`, null, {{ headers: {} }});\n",
+                        full_url, headers_obj
+                    ));
+                } else {
+                    script.push_str(&format!("      let res = http.del(`{}`);\n", full_url));
+                }
             }
             "HEAD" => {
-                script.push_str(&format!("      let res = http.head(`{}`);\n", full_url));
+                if has_headers {
+                    script.push_str(&format!(
+                        "      let res = http.head(`{}`, {{ headers: {} }});\n",
+                        full_url, headers_obj
+                    ));
+                } else {
+                    script.push_str(&format!("      let res = http.head(`{}`);\n", full_url));
+                }
             }
             "OPTIONS" => {
-                script.push_str(&format!("      let res = http.options(`{}`);\n", full_url));
+                if has_headers {
+                    script.push_str(&format!(
+                        "      let res = http.options(`{}`, null, {{ headers: {} }});\n",
+                        full_url, headers_obj
+                    ));
+                } else {
+                    script.push_str(&format!("      let res = http.options(`{}`);\n", full_url));
+                }
             }
             _ => {
-                script.push_str(&format!("      let res = http.get(`{}`);\n", full_url));
+                if has_headers {
+                    script.push_str(&format!(
+                        "      let res = http.get(`{}`, {{ headers: {} }});\n",
+                        full_url, headers_obj
+                    ));
+                } else {
+                    script.push_str(&format!("      let res = http.get(`{}`);\n", full_url));
+                }
             }
         }
 
@@ -753,23 +798,64 @@ impl SpecDrivenConformanceGenerator {
         method: &str,
         url: &str,
         op: &AnnotatedOperation,
+        effective_headers: &[(String, String)],
     ) {
         if let Some(body) = &op.sample_body {
             let escaped_body = body.replace('\'', "\\'");
-            let mut headers = "JSON_HEADERS".to_string();
-            if !op.header_params.is_empty() {
-                headers = format!(
+            let headers = if !effective_headers.is_empty() {
+                format!(
                     "Object.assign({{}}, JSON_HEADERS, {})",
-                    Self::format_headers(&op.header_params)
-                );
-            }
+                    Self::format_headers(effective_headers)
+                )
+            } else {
+                "JSON_HEADERS".to_string()
+            };
             script.push_str(&format!(
                 "      let res = http.{}(`{}`, '{}', {{ headers: {} }});\n",
                 method, url, escaped_body, headers
             ));
+        } else if !effective_headers.is_empty() {
+            script.push_str(&format!(
+                "      let res = http.{}(`{}`, null, {{ headers: {} }});\n",
+                method,
+                url,
+                Self::format_headers(effective_headers)
+            ));
         } else {
             script.push_str(&format!("      let res = http.{}(`{}`, null);\n", method, url));
         }
+    }
+
+    /// Build effective headers by merging spec-derived headers with custom headers.
+    /// Custom headers override spec-derived ones with the same name (case-insensitive).
+    /// Custom headers not in the spec are appended.
+    fn effective_headers(&self, spec_headers: &[(String, String)]) -> Vec<(String, String)> {
+        let custom = &self.config.custom_headers;
+        if custom.is_empty() {
+            return spec_headers.to_vec();
+        }
+
+        let mut result: Vec<(String, String)> = Vec::new();
+
+        // Start with spec headers, replacing values if a custom header matches
+        for (name, value) in spec_headers {
+            if let Some((_, custom_val)) =
+                custom.iter().find(|(cn, _)| cn.eq_ignore_ascii_case(name))
+            {
+                result.push((name.clone(), custom_val.clone()));
+            } else {
+                result.push((name.clone(), value.clone()));
+            }
+        }
+
+        // Append custom headers that aren't already in spec headers
+        for (name, value) in custom {
+            if !spec_headers.iter().any(|(sn, _)| sn.eq_ignore_ascii_case(name)) {
+                result.push((name.clone(), value.clone()));
+            }
+        }
+
+        result
     }
 
     /// Format header params as a JS object literal
@@ -910,6 +996,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
 
         let operations = vec![AnnotatedOperation {
@@ -946,6 +1033,7 @@ mod tests {
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string()]),
             base_path: None,
+            custom_headers: vec![],
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1013,6 +1101,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let script = gen.generate().unwrap();
@@ -1150,6 +1239,7 @@ mod tests {
             skip_tls_verify: true,
             categories: None,
             base_path: Some("/api".to_string()),
+            custom_headers: vec![],
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let script = gen.generate().unwrap();
@@ -1159,5 +1249,89 @@ mod tests {
             "BASE_URL should include the base_path. Got: {}",
             script.lines().find(|l| l.contains("BASE_URL")).unwrap_or("not found")
         );
+    }
+
+    #[test]
+    fn test_spec_driven_with_custom_headers() {
+        let annotated = AnnotatedOperation {
+            path: "/users".to_string(),
+            method: "GET".to_string(),
+            features: vec![ConformanceFeature::MethodGet],
+            path_params: vec![],
+            query_params: vec![],
+            header_params: vec![
+                ("X-Avi-Tenant".to_string(), "test-value".to_string()),
+                ("X-CSRFToken".to_string(), "test-value".to_string()),
+            ],
+            request_body_content_type: None,
+            sample_body: None,
+            response_schema: None,
+        };
+        let config = ConformanceConfig {
+            target_url: "https://192.168.2.86/".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: true,
+            categories: None,
+            base_path: Some("/api".to_string()),
+            custom_headers: vec![
+                ("X-Avi-Tenant".to_string(), "admin".to_string()),
+                ("X-CSRFToken".to_string(), "real-csrf-token".to_string()),
+                ("Cookie".to_string(), "sessionid=abc123".to_string()),
+            ],
+        };
+        let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
+        let script = gen.generate().unwrap();
+
+        // Custom headers should override spec-derived test-value placeholders
+        assert!(
+            script.contains("'X-Avi-Tenant': 'admin'"),
+            "Should use custom value for X-Avi-Tenant, not test-value"
+        );
+        assert!(
+            script.contains("'X-CSRFToken': 'real-csrf-token'"),
+            "Should use custom value for X-CSRFToken, not test-value"
+        );
+        // Custom headers not in spec should be appended
+        assert!(
+            script.contains("'Cookie': 'sessionid=abc123'"),
+            "Should include Cookie header from custom_headers"
+        );
+        // test-value should NOT appear
+        assert!(
+            !script.contains("'test-value'"),
+            "test-value placeholders should be replaced by custom values"
+        );
+    }
+
+    #[test]
+    fn test_effective_headers_merging() {
+        let config = ConformanceConfig {
+            target_url: "http://localhost".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: None,
+            custom_headers: vec![
+                ("X-Auth".to_string(), "real-token".to_string()),
+                ("Cookie".to_string(), "session=abc".to_string()),
+            ],
+        };
+        let gen = SpecDrivenConformanceGenerator::new(config, vec![]);
+
+        // Spec headers with a matching custom header
+        let spec_headers = vec![
+            ("X-Auth".to_string(), "test-value".to_string()),
+            ("X-Other".to_string(), "keep-this".to_string()),
+        ];
+        let effective = gen.effective_headers(&spec_headers);
+
+        // X-Auth should be overridden
+        assert_eq!(effective[0], ("X-Auth".to_string(), "real-token".to_string()));
+        // X-Other should be kept as-is
+        assert_eq!(effective[1], ("X-Other".to_string(), "keep-this".to_string()));
+        // Cookie should be appended
+        assert_eq!(effective[2], ("Cookie".to_string(), "session=abc".to_string()));
     }
 }

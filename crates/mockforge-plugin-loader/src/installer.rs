@@ -194,8 +194,7 @@ impl PluginInstaller {
             }
             PluginSource::Git(git_source) => self.git_loader.clone_from_git(git_source).await?,
             PluginSource::Registry { name, version } => {
-                self.install_from_registry(name, version.as_deref(), &options)
-                    .await?
+                self.install_from_registry(name, version.as_deref(), &options).await?
             }
         };
 
@@ -292,19 +291,17 @@ impl PluginInstaller {
             })?;
 
             let selected = select_registry_version(&entry).ok_or_else(|| {
-                PluginLoaderError::load(format!("No installable versions found for plugin '{}'", name))
+                PluginLoaderError::load(format!(
+                    "No installable versions found for plugin '{}'",
+                    name
+                ))
             })?;
             (selected.download_url.clone(), selected.checksum.clone())
         };
 
-        let checksum_ref = options
-            .expected_checksum
-            .as_deref()
-            .or(checksum.as_deref());
+        let checksum_ref = options.expected_checksum.as_deref().or(checksum.as_deref());
 
-        self.remote_loader
-            .download_with_checksum(&download_url, checksum_ref)
-            .await
+        self.remote_loader.download_with_checksum(&download_url, checksum_ref).await
     }
 
     /// Verify plugin signature using cryptographic verification
@@ -499,11 +496,10 @@ struct RegistryVersionResponseWithVersion {
     yanked: bool,
 }
 
-fn select_registry_version(entry: &RegistryPluginResponse) -> Option<&RegistryVersionResponseWithVersion> {
-    if let Some(preferred) = entry
-        .versions
-        .iter()
-        .find(|v| v.version == entry.version && !v.yanked)
+fn select_registry_version(
+    entry: &RegistryPluginResponse,
+) -> Option<&RegistryVersionResponseWithVersion> {
+    if let Some(preferred) = entry.versions.iter().find(|v| v.version == entry.version && !v.yanked)
     {
         return Some(preferred);
     }

@@ -137,6 +137,9 @@ pub struct BenchCommand {
     pub conformance_categories: Option<String>,
     /// Conformance report format: "json" or "sarif"
     pub conformance_report_format: String,
+    /// Custom headers to inject into every conformance request (for authentication).
+    /// Each entry is "Header-Name: value" format.
+    pub conformance_headers: Vec<String>,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -537,6 +540,7 @@ impl BenchCommand {
                 conformance_report: PathBuf::from("conformance-report.json"),
                 conformance_categories: None,
                 conformance_report_format: "json".to_string(),
+                conformance_headers: vec![],
             },
             targets,
             max_concurrency,
@@ -1849,6 +1853,23 @@ impl BenchCommand {
                 .collect::<Vec<String>>()
         });
 
+        // Parse custom headers from "Key: Value" format
+        let custom_headers: Vec<(String, String)> = self
+            .conformance_headers
+            .iter()
+            .filter_map(|h| {
+                let (name, value) = h.split_once(':')?;
+                Some((name.trim().to_string(), value.trim().to_string()))
+            })
+            .collect();
+
+        if !custom_headers.is_empty() {
+            TerminalReporter::print_progress(&format!(
+                "Using {} custom header(s) for authentication",
+                custom_headers.len()
+            ));
+        }
+
         let config = ConformanceConfig {
             target_url: self.target.clone(),
             api_key: self.conformance_api_key.clone(),
@@ -1856,6 +1877,7 @@ impl BenchCommand {
             skip_tls_verify: self.skip_tls_verify,
             categories,
             base_path: self.base_path.clone(),
+            custom_headers,
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -2154,6 +2176,7 @@ mod tests {
             conformance_report: PathBuf::from("conformance-report.json"),
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
+            conformance_headers: vec![],
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2221,6 +2244,7 @@ mod tests {
             conformance_report: PathBuf::from("conformance-report.json"),
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
+            conformance_headers: vec![],
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2284,6 +2308,7 @@ mod tests {
             conformance_report: PathBuf::from("conformance-report.json"),
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
+            conformance_headers: vec![],
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
@@ -2308,10 +2333,7 @@ mod tests {
         assert_eq!(extracted.get("pool_id"), Some(&serde_json::json!("abc123")));
         assert_eq!(extracted.get("count"), Some(&serde_json::json!(0)));
         assert_eq!(extracted.get("enabled"), Some(&serde_json::json!(false)));
-        assert_eq!(
-            extracted.get("metadata"),
-            Some(&serde_json::json!({"owner": "team-a"}))
-        );
+        assert_eq!(extracted.get("metadata"), Some(&serde_json::json!({"owner": "team-a"})));
     }
 
     #[test]

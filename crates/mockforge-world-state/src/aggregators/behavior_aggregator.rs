@@ -81,11 +81,7 @@ impl StateAggregator for BehaviorAggregator {
     }
 }
 
-fn collect_matching_files<F>(
-    workspace: &Path,
-    roots: &[&str],
-    predicate: F,
-) -> Vec<PathBuf>
+fn collect_matching_files<F>(workspace: &Path, roots: &[&str], predicate: F) -> Vec<PathBuf>
 where
     F: Fn(&Path) -> bool,
 {
@@ -110,14 +106,8 @@ where
 }
 
 fn is_behavior_file(path: &Path) -> bool {
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    let ext = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
+    let name = path.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     let behavior_like = name.contains("behavior")
         || name.contains("rule")
         || name.contains("policy")

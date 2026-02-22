@@ -280,15 +280,13 @@ impl MockReflectionProxy {
                 "Generic upstream forwarding is unavailable for {}/{}, falling back to local mock response",
                 service_name, method_name
             );
-            self.generate_mock_response(service_name, method_name, request)
-                .await
+            self.generate_mock_response(service_name, method_name, request).await
         } else {
             debug!(
                 "No upstream endpoint configured for {}/{}, using local mock fallback",
                 service_name, method_name
             );
-            self.generate_mock_response(service_name, method_name, request)
-                .await
+            self.generate_mock_response(service_name, method_name, request).await
         }
     }
 

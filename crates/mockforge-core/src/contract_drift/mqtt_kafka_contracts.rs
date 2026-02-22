@@ -965,19 +965,17 @@ impl KafkaContract {
                         ContractError::SchemaValidation(format!("Invalid JSON schema: {}", e))
                     })?,
                 ),
-                SchemaFormat::Avro | SchemaFormat::Protobuf => {
-                    Some(
-                        jsonschema::options()
-                            .with_draft(Draft::Draft7)
-                            .build(&serde_json::json!({}))
-                            .map_err(|e| {
-                                ContractError::SchemaValidation(format!(
-                                    "Failed to build fallback key schema for {:?}: {}",
-                                    key_schema_def.format, e
-                                ))
-                            })?,
-                    )
-                }
+                SchemaFormat::Avro | SchemaFormat::Protobuf => Some(
+                    jsonschema::options()
+                        .with_draft(Draft::Draft7)
+                        .build(&serde_json::json!({}))
+                        .map_err(|e| {
+                        ContractError::SchemaValidation(format!(
+                            "Failed to build fallback key schema for {:?}: {}",
+                            key_schema_def.format, e
+                        ))
+                    })?,
+                ),
             }
         } else {
             None

@@ -959,10 +959,7 @@ async fn execute_simulate_command(command: KafkaSimulateCommands) -> Result<()> 
                 .commit(&tpl, CommitMode::Sync)
                 .map_err(|e| anyhow::anyhow!("Failed to commit offsets: {}", e))?;
 
-            println!(
-                "Successfully reset offsets for group {} on topic {} to {}",
-                group, topic, to
-            );
+            println!("Successfully reset offsets for group {} on topic {} to {}", group, topic, to);
             Ok(())
         }
     }

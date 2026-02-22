@@ -290,10 +290,7 @@ fn parse_manifest_content(path: &Path, content: &str) -> Result<serde_json::Valu
         Some("json") => {
             serde_json::from_str(content).map_err(|e| format!("Invalid JSON manifest: {}", e))
         }
-        _ => Err(format!(
-            "Unsupported manifest file extension: {}",
-            path.display()
-        )),
+        _ => Err(format!("Unsupported manifest file extension: {}", path.display())),
     }
 }
 

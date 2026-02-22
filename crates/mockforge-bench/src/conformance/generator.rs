@@ -17,6 +17,10 @@ pub struct ConformanceConfig {
     pub categories: Option<Vec<String>>,
     /// Optional base path prefix for all generated URLs (e.g., "/api")
     pub base_path: Option<String>,
+    /// Custom headers to inject into every conformance request (e.g., auth headers).
+    /// Each entry is (header_name, header_value). When a custom header matches
+    /// a spec-derived header name, the custom value replaces the placeholder.
+    pub custom_headers: Vec<(String, String)>,
 }
 
 impl ConformanceConfig {
@@ -26,6 +30,21 @@ impl ConformanceConfig {
             None => true,
             Some(cats) => cats.iter().any(|c| c.eq_ignore_ascii_case(category)),
         }
+    }
+
+    /// Returns true if custom headers are configured
+    pub fn has_custom_headers(&self) -> bool {
+        !self.custom_headers.is_empty()
+    }
+
+    /// Format custom headers as a JS object literal string
+    pub fn custom_headers_js_object(&self) -> String {
+        let entries: Vec<String> = self
+            .custom_headers
+            .iter()
+            .map(|(k, v)| format!("'{}': '{}'", k, v.replace('\'', "\\'")))
+            .collect();
+        format!("{{ {} }}", entries.join(", "))
     }
 
     /// Returns the effective base URL with base_path appended.
@@ -83,6 +102,14 @@ impl ConformanceGenerator {
         // Helper: JSON headers
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
+        // Custom auth headers (injected via --conformance-header)
+        if self.config.has_custom_headers() {
+            script.push_str(&format!(
+                "const CUSTOM_HEADERS = {};\n\n",
+                self.config.custom_headers_js_object()
+            ));
+        }
+
         // Default function
         script.push_str("export default function () {\n");
 
@@ -135,12 +162,79 @@ impl ConformanceGenerator {
             .map_err(|e| BenchError::Other(format!("Failed to write conformance script: {}", e)))
     }
 
+    /// Returns a JS expression for merging custom headers with provided headers.
+    /// If no custom headers, returns the input as-is.
+    /// If custom headers exist, wraps with Object.assign.
+    fn merge_with_custom_headers(&self, headers_expr: &str) -> String {
+        if self.config.has_custom_headers() {
+            format!("Object.assign({{}}, {}, CUSTOM_HEADERS)", headers_expr)
+        } else {
+            headers_expr.to_string()
+        }
+    }
+
+    /// Emit a GET request with optional custom headers merged in.
+    fn emit_get(&self, script: &mut String, url: &str, extra_headers: Option<&str>) {
+        let has_custom = self.config.has_custom_headers();
+        match (extra_headers, has_custom) {
+            (None, false) => {
+                script.push_str(&format!("      let res = http.get(`{}`);\n", url));
+            }
+            (None, true) => {
+                script.push_str(&format!(
+                    "      let res = http.get(`{}`, {{ headers: CUSTOM_HEADERS }});\n",
+                    url
+                ));
+            }
+            (Some(hdrs), false) => {
+                script.push_str(&format!(
+                    "      let res = http.get(`{}`, {{ headers: {} }});\n",
+                    url, hdrs
+                ));
+            }
+            (Some(hdrs), true) => {
+                script.push_str(&format!(
+                    "      let res = http.get(`{}`, {{ headers: Object.assign({{}}, {}, CUSTOM_HEADERS) }});\n",
+                    url, hdrs
+                ));
+            }
+        }
+    }
+
+    /// Emit a POST/PUT/PATCH request with optional custom headers merged in.
+    fn emit_post_like(
+        &self,
+        script: &mut String,
+        method: &str,
+        url: &str,
+        body: &str,
+        headers_expr: &str,
+    ) {
+        let merged = self.merge_with_custom_headers(headers_expr);
+        script.push_str(&format!(
+            "      let res = http.{}(`{}`, {}, {{ headers: {} }});\n",
+            method, url, body, merged
+        ));
+    }
+
+    /// Emit a DELETE/HEAD/OPTIONS request with optional custom headers.
+    fn emit_no_body(&self, script: &mut String, method: &str, url: &str) {
+        if self.config.has_custom_headers() {
+            script.push_str(&format!(
+                "      let res = http.{}(`{}`, {{ headers: CUSTOM_HEADERS }});\n",
+                method, url
+            ));
+        } else {
+            script.push_str(&format!("      let res = http.{}(`{}`);\n", method, url));
+        }
+    }
+
     fn generate_parameters_group(&self, script: &mut String) {
         script.push_str("  group('Parameters', function () {\n");
 
         // Path param: string
         script.push_str("    {\n");
-        script.push_str("      let res = http.get(`${BASE_URL}/conformance/params/hello`);\n");
+        self.emit_get(script, "${BASE_URL}/conformance/params/hello", None);
         script.push_str(
             "      check(res, { 'param:path:string': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -148,7 +242,7 @@ impl ConformanceGenerator {
 
         // Path param: integer
         script.push_str("    {\n");
-        script.push_str("      let res = http.get(`${BASE_URL}/conformance/params/42`);\n");
+        self.emit_get(script, "${BASE_URL}/conformance/params/42", None);
         script.push_str(
             "      check(res, { 'param:path:integer': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -156,9 +250,7 @@ impl ConformanceGenerator {
 
         // Query param: string
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/params/query?name=test`);\n",
-        );
+        self.emit_get(script, "${BASE_URL}/conformance/params/query?name=test", None);
         script.push_str(
             "      check(res, { 'param:query:string': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -166,9 +258,7 @@ impl ConformanceGenerator {
 
         // Query param: integer
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/params/query?count=10`);\n",
-        );
+        self.emit_get(script, "${BASE_URL}/conformance/params/query?count=10", None);
         script.push_str(
             "      check(res, { 'param:query:integer': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -176,9 +266,7 @@ impl ConformanceGenerator {
 
         // Query param: array
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/params/query?tags=a&tags=b`);\n",
-        );
+        self.emit_get(script, "${BASE_URL}/conformance/params/query?tags=a&tags=b", None);
         script.push_str(
             "      check(res, { 'param:query:array': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -186,8 +274,10 @@ impl ConformanceGenerator {
 
         // Header param
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/params/header`, { headers: { 'X-Custom-Param': 'test-value' } });\n",
+        self.emit_get(
+            script,
+            "${BASE_URL}/conformance/params/header",
+            Some("{ 'X-Custom-Param': 'test-value' }"),
         );
         script.push_str(
             "      check(res, { 'param:header': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -198,7 +288,7 @@ impl ConformanceGenerator {
         script.push_str("    {\n");
         script.push_str("      let jar = http.cookieJar();\n");
         script.push_str("      jar.set(BASE_URL, 'session', 'abc123');\n");
-        script.push_str("      let res = http.get(`${BASE_URL}/conformance/params/cookie`);\n");
+        self.emit_get(script, "${BASE_URL}/conformance/params/cookie", None);
         script.push_str(
             "      check(res, { 'param:cookie': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -212,8 +302,12 @@ impl ConformanceGenerator {
 
         // JSON body
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/body/json`, JSON.stringify({ name: 'test', value: 42 }), { headers: JSON_HEADERS });\n",
+        self.emit_post_like(
+            script,
+            "post",
+            "${BASE_URL}/conformance/body/json",
+            "JSON.stringify({ name: 'test', value: 42 })",
+            "JSON_HEADERS",
         );
         script.push_str(
             "      check(res, { 'body:json': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -222,9 +316,15 @@ impl ConformanceGenerator {
 
         // Form-urlencoded body
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' });\n",
-        );
+        if self.config.has_custom_headers() {
+            script.push_str(
+                "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' }, { headers: CUSTOM_HEADERS });\n",
+            );
+        } else {
+            script.push_str(
+                "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' });\n",
+            );
+        }
         script.push_str(
             "      check(res, { 'body:form-urlencoded': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -235,9 +335,15 @@ impl ConformanceGenerator {
         script.push_str(
             "      let data = { field: http.file('test content', 'test.txt', 'text/plain') };\n",
         );
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data);\n",
-        );
+        if self.config.has_custom_headers() {
+            script.push_str(
+                "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data, { headers: CUSTOM_HEADERS });\n",
+            );
+        } else {
+            script.push_str(
+                "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data);\n",
+            );
+        }
         script.push_str(
             "      check(res, { 'body:multipart': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -260,10 +366,9 @@ impl ConformanceGenerator {
 
         for (type_name, body, check_name) in types {
             script.push_str("    {\n");
-            script.push_str(&format!(
-                "      let res = http.post(`${{BASE_URL}}/conformance/schema/{}`, '{}', {{ headers: JSON_HEADERS }});\n",
-                type_name, body
-            ));
+            let url = format!("${{BASE_URL}}/conformance/schema/{}", type_name);
+            let body_str = format!("'{}'", body);
+            self.emit_post_like(script, "post", &url, &body_str, "JSON_HEADERS");
             script.push_str(&format!(
                 "      check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }});\n",
                 check_name
@@ -285,10 +390,9 @@ impl ConformanceGenerator {
 
         for (kind, body, check_name) in compositions {
             script.push_str("    {\n");
-            script.push_str(&format!(
-                "      let res = http.post(`${{BASE_URL}}/conformance/composition/{}`, '{}', {{ headers: JSON_HEADERS }});\n",
-                kind, body
-            ));
+            let url = format!("${{BASE_URL}}/conformance/composition/{}", kind);
+            let body_str = format!("'{}'", body);
+            self.emit_post_like(script, "post", &url, &body_str, "JSON_HEADERS");
             script.push_str(&format!(
                 "      check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }});\n",
                 check_name
@@ -314,10 +418,9 @@ impl ConformanceGenerator {
 
         for (fmt, body, check_name) in formats {
             script.push_str("    {\n");
-            script.push_str(&format!(
-                "      let res = http.post(`${{BASE_URL}}/conformance/formats/{}`, '{}', {{ headers: JSON_HEADERS }});\n",
-                fmt, body
-            ));
+            let url = format!("${{BASE_URL}}/conformance/formats/{}", fmt);
+            let body_str = format!("'{}'", body);
+            self.emit_post_like(script, "post", &url, &body_str, "JSON_HEADERS");
             script.push_str(&format!(
                 "      check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }});\n",
                 check_name
@@ -331,55 +434,28 @@ impl ConformanceGenerator {
     fn generate_constraints_group(&self, script: &mut String) {
         script.push_str("  group('Constraints', function () {\n");
 
-        // Required field
-        script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/constraints/required`, JSON.stringify({ required_field: 'present' }), { headers: JSON_HEADERS });\n",
-        );
-        script.push_str(
-            "      check(res, { 'constraint:required': (r) => r.status >= 200 && r.status < 500 });\n",
-        );
-        script.push_str("    }\n");
+        let constraints = [
+            (
+                "required",
+                "JSON.stringify({ required_field: 'present' })",
+                "constraint:required",
+            ),
+            ("optional", "JSON.stringify({})", "constraint:optional"),
+            ("minmax", "JSON.stringify({ value: 50 })", "constraint:minmax"),
+            ("pattern", "JSON.stringify({ value: 'ABC-123' })", "constraint:pattern"),
+            ("enum", "JSON.stringify({ status: 'active' })", "constraint:enum"),
+        ];
 
-        // Optional field
-        script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/constraints/optional`, JSON.stringify({}), { headers: JSON_HEADERS });\n",
-        );
-        script.push_str(
-            "      check(res, { 'constraint:optional': (r) => r.status >= 200 && r.status < 500 });\n",
-        );
-        script.push_str("    }\n");
-
-        // Min/max
-        script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/constraints/minmax`, JSON.stringify({ value: 50 }), { headers: JSON_HEADERS });\n",
-        );
-        script.push_str(
-            "      check(res, { 'constraint:minmax': (r) => r.status >= 200 && r.status < 500 });\n",
-        );
-        script.push_str("    }\n");
-
-        // Pattern
-        script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/constraints/pattern`, JSON.stringify({ value: 'ABC-123' }), { headers: JSON_HEADERS });\n",
-        );
-        script.push_str(
-            "      check(res, { 'constraint:pattern': (r) => r.status >= 200 && r.status < 500 });\n",
-        );
-        script.push_str("    }\n");
-
-        // Enum
-        script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/constraints/enum`, JSON.stringify({ status: 'active' }), { headers: JSON_HEADERS });\n",
-        );
-        script.push_str(
-            "      check(res, { 'constraint:enum': (r) => r.status >= 200 && r.status < 500 });\n",
-        );
-        script.push_str("    }\n");
+        for (kind, body, check_name) in constraints {
+            script.push_str("    {\n");
+            let url = format!("${{BASE_URL}}/conformance/constraints/{}", kind);
+            self.emit_post_like(script, "post", &url, body, "JSON_HEADERS");
+            script.push_str(&format!(
+                "      check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }});\n",
+                check_name
+            ));
+            script.push_str("    }\n");
+        }
 
         script.push_str("  });\n\n");
     }
@@ -397,10 +473,8 @@ impl ConformanceGenerator {
 
         for (code, check_name) in codes {
             script.push_str("    {\n");
-            script.push_str(&format!(
-                "      let res = http.get(`${{BASE_URL}}/conformance/responses/{}`);\n",
-                code
-            ));
+            let url = format!("${{BASE_URL}}/conformance/responses/{}", code);
+            self.emit_get(script, &url, None);
             script.push_str(&format!(
                 "      check(res, {{ '{}': (r) => r.status === {} }});\n",
                 check_name, code
@@ -416,7 +490,7 @@ impl ConformanceGenerator {
 
         // GET
         script.push_str("    {\n");
-        script.push_str("      let res = http.get(`${BASE_URL}/conformance/methods`);\n");
+        self.emit_get(script, "${BASE_URL}/conformance/methods", None);
         script.push_str(
             "      check(res, { 'method:GET': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -424,8 +498,12 @@ impl ConformanceGenerator {
 
         // POST
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.post(`${BASE_URL}/conformance/methods`, JSON.stringify({ action: 'create' }), { headers: JSON_HEADERS });\n",
+        self.emit_post_like(
+            script,
+            "post",
+            "${BASE_URL}/conformance/methods",
+            "JSON.stringify({ action: 'create' })",
+            "JSON_HEADERS",
         );
         script.push_str(
             "      check(res, { 'method:POST': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -434,8 +512,12 @@ impl ConformanceGenerator {
 
         // PUT
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.put(`${BASE_URL}/conformance/methods`, JSON.stringify({ action: 'update' }), { headers: JSON_HEADERS });\n",
+        self.emit_post_like(
+            script,
+            "put",
+            "${BASE_URL}/conformance/methods",
+            "JSON.stringify({ action: 'update' })",
+            "JSON_HEADERS",
         );
         script.push_str(
             "      check(res, { 'method:PUT': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -444,8 +526,12 @@ impl ConformanceGenerator {
 
         // PATCH
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.patch(`${BASE_URL}/conformance/methods`, JSON.stringify({ action: 'patch' }), { headers: JSON_HEADERS });\n",
+        self.emit_post_like(
+            script,
+            "patch",
+            "${BASE_URL}/conformance/methods",
+            "JSON.stringify({ action: 'patch' })",
+            "JSON_HEADERS",
         );
         script.push_str(
             "      check(res, { 'method:PATCH': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -454,7 +540,7 @@ impl ConformanceGenerator {
 
         // DELETE
         script.push_str("    {\n");
-        script.push_str("      let res = http.del(`${BASE_URL}/conformance/methods`);\n");
+        self.emit_no_body(script, "del", "${BASE_URL}/conformance/methods");
         script.push_str(
             "      check(res, { 'method:DELETE': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -462,7 +548,7 @@ impl ConformanceGenerator {
 
         // HEAD
         script.push_str("    {\n");
-        script.push_str("      let res = http.head(`${BASE_URL}/conformance/methods`);\n");
+        self.emit_no_body(script, "head", "${BASE_URL}/conformance/methods");
         script.push_str(
             "      check(res, { 'method:HEAD': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -470,7 +556,7 @@ impl ConformanceGenerator {
 
         // OPTIONS
         script.push_str("    {\n");
-        script.push_str("      let res = http.options(`${BASE_URL}/conformance/methods`);\n");
+        self.emit_no_body(script, "options", "${BASE_URL}/conformance/methods");
         script.push_str(
             "      check(res, { 'method:OPTIONS': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -483,8 +569,10 @@ impl ConformanceGenerator {
         script.push_str("  group('Content Types', function () {\n");
 
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/content-types`, { headers: { 'Accept': 'application/json' } });\n",
+        self.emit_get(
+            script,
+            "${BASE_URL}/conformance/content-types",
+            Some("{ 'Accept': 'application/json' }"),
         );
         script.push_str(
             "      check(res, { 'content:negotiation': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -499,8 +587,10 @@ impl ConformanceGenerator {
 
         // Bearer token
         script.push_str("    {\n");
-        script.push_str(
-            "      let res = http.get(`${BASE_URL}/conformance/security/bearer`, { headers: { 'Authorization': 'Bearer test-token-123' } });\n",
+        self.emit_get(
+            script,
+            "${BASE_URL}/conformance/security/bearer",
+            Some("{ 'Authorization': 'Bearer test-token-123' }"),
         );
         script.push_str(
             "      check(res, { 'security:bearer': (r) => r.status >= 200 && r.status < 500 });\n",
@@ -510,10 +600,8 @@ impl ConformanceGenerator {
         // API Key
         let api_key = self.config.api_key.as_deref().unwrap_or("test-api-key-123");
         script.push_str("    {\n");
-        script.push_str(&format!(
-            "      let res = http.get(`${{BASE_URL}}/conformance/security/apikey`, {{ headers: {{ 'X-API-Key': '{}' }} }});\n",
-            api_key
-        ));
+        let api_key_hdrs = format!("{{ 'X-API-Key': '{}' }}", api_key);
+        self.emit_get(script, "${BASE_URL}/conformance/security/apikey", Some(&api_key_hdrs));
         script.push_str(
             "      check(res, { 'security:apikey': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -523,10 +611,8 @@ impl ConformanceGenerator {
         let basic_creds = self.config.basic_auth.as_deref().unwrap_or("user:pass");
         let encoded = base64_encode(basic_creds);
         script.push_str("    {\n");
-        script.push_str(&format!(
-            "      let res = http.get(`${{BASE_URL}}/conformance/security/basic`, {{ headers: {{ 'Authorization': 'Basic {}' }} }});\n",
-            encoded
-        ));
+        let basic_hdrs = format!("{{ 'Authorization': 'Basic {}' }}", encoded);
+        self.emit_get(script, "${BASE_URL}/conformance/security/basic", Some(&basic_hdrs));
         script.push_str(
             "      check(res, { 'security:basic': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -614,6 +700,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -651,6 +738,7 @@ mod tests {
             skip_tls_verify: true,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -669,6 +757,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -684,6 +773,7 @@ mod tests {
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
             base_path: None,
+            custom_headers: vec![],
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -701,6 +791,7 @@ mod tests {
             skip_tls_verify: false,
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
             base_path: None,
+            custom_headers: vec![],
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -721,6 +812,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: None,
+            custom_headers: vec![],
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -734,6 +826,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: Some("/api".to_string()),
+            custom_headers: vec![],
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -747,6 +840,7 @@ mod tests {
             skip_tls_verify: false,
             categories: None,
             base_path: Some("/api".to_string()),
+            custom_headers: vec![],
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -760,6 +854,7 @@ mod tests {
             skip_tls_verify: true,
             categories: None,
             base_path: Some("/api".to_string()),
+            custom_headers: vec![],
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -767,5 +862,55 @@ mod tests {
         assert!(script.contains("const BASE_URL = 'https://192.168.2.86/api'"));
         // Verify URLs include the base path via BASE_URL
         assert!(script.contains("${BASE_URL}/conformance/"));
+    }
+
+    #[test]
+    fn test_generate_with_custom_headers() {
+        let config = ConformanceConfig {
+            target_url: "https://192.168.2.86".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: true,
+            categories: Some(vec!["Parameters".to_string()]),
+            base_path: Some("/api".to_string()),
+            custom_headers: vec![
+                ("X-Avi-Tenant".to_string(), "admin".to_string()),
+                ("X-CSRFToken".to_string(), "real-token".to_string()),
+            ],
+        };
+        let generator = ConformanceGenerator::new(config);
+        let script = generator.generate().unwrap();
+
+        // Should declare CUSTOM_HEADERS constant
+        assert!(
+            script.contains("const CUSTOM_HEADERS = "),
+            "Script should declare CUSTOM_HEADERS"
+        );
+        assert!(script.contains("'X-Avi-Tenant': 'admin'"));
+        assert!(script.contains("'X-CSRFToken': 'real-token'"));
+        // GET requests should merge with CUSTOM_HEADERS
+        assert!(
+            script.contains("CUSTOM_HEADERS"),
+            "Script should reference CUSTOM_HEADERS in requests"
+        );
+    }
+
+    #[test]
+    fn test_custom_headers_js_object() {
+        let config = ConformanceConfig {
+            target_url: "http://localhost".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: None,
+            custom_headers: vec![
+                ("Authorization".to_string(), "Bearer abc123".to_string()),
+                ("X-Custom".to_string(), "value".to_string()),
+            ],
+        };
+        let js = config.custom_headers_js_object();
+        assert!(js.contains("'Authorization': 'Bearer abc123'"));
+        assert!(js.contains("'X-Custom': 'value'"));
     }
 }

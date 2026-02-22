@@ -739,9 +739,8 @@ impl ReflectionProxy {
 
             let service_name = method.parent_service().name().to_string();
             let method_name = method.name().to_string();
-            let mock_response = self
-                .generate_mock_response(&service_name, &method_name, &method)
-                .await?;
+            let mock_response =
+                self.generate_mock_response(&service_name, &method_name, &method).await?;
             let mut response = Response::new(mock_response);
 
             for entry in request_metadata.iter() {
@@ -765,10 +764,9 @@ impl ReflectionProxy {
             response
                 .metadata_mut()
                 .insert("x-mockforge-timestamp", chrono::Utc::now().to_rfc3339().parse().unwrap());
-            response.metadata_mut().insert(
-                "x-mockforge-message-count",
-                message_count.to_string().parse().unwrap(),
-            );
+            response
+                .metadata_mut()
+                .insert("x-mockforge-message-count", message_count.to_string().parse().unwrap());
 
             Ok(response)
         }

@@ -53,11 +53,7 @@ pub async fn execute_query(db: &RecorderDatabase, filter: QueryFilter) -> Result
         .collect();
 
     let total = filtered.len() as i64;
-    filtered = filtered
-        .into_iter()
-        .skip(offset as usize)
-        .take(limit as usize)
-        .collect();
+    filtered = filtered.into_iter().skip(offset as usize).take(limit as usize).collect();
 
     // Fetch responses for each request
     let mut exchanges = Vec::new();

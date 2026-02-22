@@ -179,6 +179,7 @@ async fn test_bench_command_parse_headers() {
         conformance_report: PathBuf::from("conformance-report.json"),
         conformance_categories: None,
         conformance_report_format: "json".to_string(),
+        conformance_headers: vec![],
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -248,6 +249,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         conformance_report: PathBuf::from("conformance-report.json"),
         conformance_categories: None,
         conformance_report_format: "json".to_string(),
+        conformance_headers: vec![],
     };
 
     let result = cmd.parse_headers();

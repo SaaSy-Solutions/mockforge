@@ -835,8 +835,7 @@ impl ProviderFactory {
                 Ok(Box::new(AnthropicProvider::new(api_key, base_url, model)))
             }
             LlmProvider::Ollama => {
-                let base_url =
-                    base_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
+                let base_url = base_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
                 Ok(Box::new(OpenAiCompatibleProvider::new(api_key, base_url, model)))
             }
             LlmProvider::OpenAICompatible => {
