@@ -63,8 +63,8 @@ mockforge-mqtt = { version = "0.3.66", path = "../mockforge-mqtt", optional = tr
 mockforge-chaos = { version = "0.3.66", path = "../mockforge-chaos" }
 mockforge-performance = { version = "0.3.66", path = "../mockforge-performance" }
 mockforge-world-state = { version = "0.3.31", path = "../mockforge-world-state" }
-mockforge-template-expansion = { version = "0.3.31", path = "../mockforge-template-expansion" }
-mockforge-route-chaos = { version = "0.3.31", path = "../mockforge-route-chaos" }
+mockforge-template-expansion = { version = "0.3.66", path = "../mockforge-template-expansion" }
+mockforge-route-chaos = { version = "0.3.66", path = "../mockforge-route-chaos" }
 futures-util = "0.3"
 rustls = "0.23"
 rustls-pemfile = "2.0"
@@ -101,7 +101,7 @@ tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
 mockforge-ws = { version = "0.3.66", path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.3.31", path = "../mockforge-plugin-core" }
+mockforge-plugin-core = { version = "0.3.66", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.22"
 uuid = { version = "1.0", features = ["v4"] }
 once_cell = { workspace = true }

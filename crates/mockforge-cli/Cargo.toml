@@ -42,8 +42,8 @@ mockforge-tcp = { version = "0.3.66", path = "../mockforge-tcp", optional = true
 mockforge-tunnel = { version = "0.3.66", path = "../mockforge-tunnel" }
 mockforge-tui = { version = "0.3.66", path = "../mockforge-tui", optional = true }
 mockforge-vbr = { version = "0.3.66", path = "../mockforge-vbr" }
-mockforge-plugin-core = { version = "0.3.31", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = { version = "0.3.31", path = "../mockforge-plugin-loader" }
+mockforge-plugin-core = { version = "0.3.66", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.66", path = "../mockforge-plugin-loader" }
 mockforge-scenarios = { version = "0.3.66", path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { version = "0.3.66", path = "../mockforge-chaos" }
 mockforge-schema = { version = "0.3.66", path = "../mockforge-schema" }

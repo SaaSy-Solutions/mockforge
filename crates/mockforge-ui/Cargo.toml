@@ -44,8 +44,8 @@ mockforge-http = { version = "0.3.66", path = "../mockforge-http", features = ["
 mockforge-ws = { version = "0.3.66", path = "../mockforge-ws" }
 mockforge-grpc = { version = "0.3.66", path = "../mockforge-grpc" }
 mockforge-vbr = { version = "0.3.66", path = "../mockforge-vbr" }
-mockforge-plugin-core = { version = "0.3.31", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = { version = "0.3.31", path = "../mockforge-plugin-loader" }
+mockforge-plugin-core = { version = "0.3.66", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.66", path = "../mockforge-plugin-loader" }
 mockforge-analytics = { version = "0.3.66", path = "../mockforge-analytics" }
 mockforge-chaos = { version = "0.3.66", path = "../mockforge-chaos" }
 mockforge-collab = { version = "0.3.66", path = "../mockforge-collab" }
