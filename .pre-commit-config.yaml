@@ -48,12 +48,12 @@ repos:
     language: system
   - id: clippy
     name: clippy
-    entry: cargo clippy --all-targets --all-features
+    entry: cargo clippy --all-targets --all-features --workspace --exclude mockforge-desktop
     language: system
     pass_filenames: false
   - id: cargo-check
     name: cargo-check
-    entry: cargo check
+    entry: cargo check --workspace --exclude mockforge-desktop
     language: system
     pass_filenames: false
   - id: typos

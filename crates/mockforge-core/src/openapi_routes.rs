@@ -1716,15 +1716,20 @@ impl OpenApiRouteRegistry {
                                         );
                                         // Fall through to standard OpenAPI response generation
                                     } else {
+                                        // Use the status code from the OpenAPI spec rather than
+                                        // MockAI's hardcoded 200, so that e.g. POST returning 201
+                                        // is honored correctly.
+                                        let spec_status = route.find_first_available_status_code();
                                         tracing::debug!(
-                                            "MockAI generated response with status: {}",
+                                            "MockAI generated response for {} {}, using spec status: {} (MockAI suggested: {})",
+                                            route.method,
+                                            route.path,
+                                            spec_status,
                                             mockai_response.status_code
                                         );
                                         return (
-                                            axum::http::StatusCode::from_u16(
-                                                mockai_response.status_code,
-                                            )
-                                            .unwrap_or(axum::http::StatusCode::OK),
+                                            axum::http::StatusCode::from_u16(spec_status)
+                                                .unwrap_or(axum::http::StatusCode::OK),
                                             Json(mockai_response.body),
                                         );
                                     }

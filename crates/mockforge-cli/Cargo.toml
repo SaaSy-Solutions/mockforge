@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-cli"
-version = "0.3.66"
+version = "0.3.68"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -22,7 +22,7 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = { version = "0.3.66", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.68", path = "../mockforge-core" }
 mockforge-http = { version = "0.3.66", path = "../mockforge-http", optional = true }
 mockforge-ws = { version = "0.3.66", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.66", path = "../mockforge-grpc", optional = true }
@@ -30,7 +30,7 @@ mockforge-graphql = { version = "0.3.66", path = "../mockforge-graphql", optiona
 mockforge-smtp = { version = "0.3.66", path = "../mockforge-smtp", optional = true }
 mockforge-mqtt = { version = "0.3.66", path = "../mockforge-mqtt", optional = true }
 mockforge-data = { version = "0.3.66", path = "../mockforge-data" }
-mockforge-ui = { version = "0.3.66", path = "../mockforge-ui" }
+mockforge-ui = { version = "0.3.68", path = "../mockforge-ui" }
 mockforge-observability = { version = "0.3.66", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.3.66", path = "../mockforge-tracing" }
 mockforge-recorder = { version = "0.3.66", path = "../mockforge-recorder" }
@@ -40,7 +40,7 @@ mockforge-kafka = { version = "0.3.66", path = "../mockforge-kafka", optional = 
 mockforge-amqp = { version = "0.3.66", path = "../mockforge-amqp", optional = true }
 mockforge-tcp = { version = "0.3.66", path = "../mockforge-tcp", optional = true }
 mockforge-tunnel = { version = "0.3.66", path = "../mockforge-tunnel" }
-mockforge-tui = { version = "0.3.66", path = "../mockforge-tui", optional = true }
+mockforge-tui = { version = "0.3.68", path = "../mockforge-tui", optional = true }
 mockforge-vbr = { version = "0.3.66", path = "../mockforge-vbr" }
 mockforge-plugin-core = { version = "0.3.66", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { version = "0.3.66", path = "../mockforge-plugin-loader" }

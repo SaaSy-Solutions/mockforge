@@ -428,7 +428,7 @@ impl OpenApiRoute {
     }
 
     /// Find the first available status code from the OpenAPI operation responses
-    fn find_first_available_status_code(&self) -> u16 {
+    pub fn find_first_available_status_code(&self) -> u16 {
         // Look for the first available status code in the responses
         for (status, _) in &self.operation.responses.responses {
             match status {

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-ui"
-version = "0.3.66"
+version = "0.3.68"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -13,6 +13,7 @@ include = [
     "/src/**/*",
     "/ui/dist/**/*",
     "/ui/public/*.png",
+    "/ui/public/manifest.json",
     "/build.rs",
     "/build_ui.sh",
     "/Cargo.toml",
