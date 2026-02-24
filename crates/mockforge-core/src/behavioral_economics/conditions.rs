@@ -97,6 +97,8 @@ pub struct ConditionEvaluator {
     error_rates: HashMap<String, f64>,
     /// Current pricing data (product_id -> price)
     pricing_data: HashMap<String, f64>,
+    /// Previous pricing data for detecting changes (product_id -> price)
+    previous_pricing_data: HashMap<String, f64>,
     /// Current fraud scores (user_id -> risk_score)
     fraud_scores: HashMap<String, f64>,
     /// Current customer segments (user_id -> segment)
@@ -111,6 +113,7 @@ impl ConditionEvaluator {
             load_rps: 0.0,
             error_rates: HashMap::new(),
             pricing_data: HashMap::new(),
+            previous_pricing_data: HashMap::new(),
             fraud_scores: HashMap::new(),
             customer_segments: HashMap::new(),
         }
@@ -131,8 +134,11 @@ impl ConditionEvaluator {
         self.error_rates.insert(endpoint.to_string(), error_rate);
     }
 
-    /// Update pricing data
+    /// Update pricing data, preserving the previous price for change detection
     pub fn update_pricing(&mut self, product_id: &str, price: f64) {
+        if let Some(old_price) = self.pricing_data.get(product_id) {
+            self.previous_pricing_data.insert(product_id.to_string(), *old_price);
+        }
         self.pricing_data.insert(product_id.to_string(), price);
     }
 
@@ -166,11 +172,23 @@ impl ConditionEvaluator {
 
             BehaviorCondition::PricingChange {
                 product_id,
-                threshold: _,
+                threshold,
             } => {
-                // Check if price change exceeds threshold
-                // This is simplified - in practice, you'd track price history
-                Ok(self.pricing_data.contains_key(product_id))
+                // Check if price change percentage exceeds threshold
+                let current = match self.pricing_data.get(product_id) {
+                    Some(price) => *price,
+                    None => return Ok(false),
+                };
+                let previous = match self.previous_pricing_data.get(product_id) {
+                    Some(price) => *price,
+                    None => return Ok(false), // No history yet
+                };
+                if previous == 0.0 {
+                    // Avoid division by zero; any change from zero is significant
+                    return Ok(current != 0.0);
+                }
+                let pct_change = ((current - previous) / previous).abs() * 100.0;
+                Ok(pct_change > *threshold)
             }
 
             BehaviorCondition::FraudSuspicion {
@@ -213,18 +231,43 @@ impl ConditionEvaluator {
         }
     }
 
-    /// Simple pattern matching (supports * wildcard)
+    /// Glob-style pattern matching (supports multiple `*` wildcards)
+    ///
+    /// Each `*` matches zero or more characters greedily. The pattern is split
+    /// on `*` and the resulting literal parts are matched left-to-right.
     fn matches_pattern(&self, text: &str, pattern: &str) -> bool {
-        if pattern.contains('*') {
-            let parts: Vec<&str> = pattern.split('*').collect();
-            if parts.len() == 2 {
-                text.starts_with(parts[0]) && text.ends_with(parts[1])
-            } else {
-                text == pattern
-            }
-        } else {
-            text == pattern
+        if !pattern.contains('*') {
+            return text == pattern;
         }
+
+        let parts: Vec<&str> = pattern.split('*').collect();
+
+        // First part must be a prefix
+        if !text.starts_with(parts[0]) {
+            return false;
+        }
+
+        // Last part must be a suffix (checked separately to avoid overlap)
+        let last = parts[parts.len() - 1];
+        if !text.ends_with(last) {
+            return false;
+        }
+
+        // Walk through the middle parts in order
+        let mut cursor = parts[0].len();
+        let end = text.len() - last.len();
+
+        for &part in &parts[1..parts.len() - 1] {
+            if part.is_empty() {
+                continue;
+            }
+            match text[cursor..end].find(part) {
+                Some(pos) => cursor += pos + part.len(),
+                None => return false,
+            }
+        }
+
+        cursor <= end
     }
 }
 
@@ -263,6 +306,96 @@ mod tests {
         assert!(evaluator
             .evaluate(&BehaviorCondition::LoadPressure {
                 threshold_rps: 100.0
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn test_single_wildcard_pattern() {
+        let evaluator = ConditionEvaluator::new();
+        assert!(evaluator.matches_pattern("/api/users", "/api/*"));
+        assert!(evaluator.matches_pattern("/api/users/123", "/api/*"));
+        assert!(!evaluator.matches_pattern("/other/path", "/api/*"));
+    }
+
+    #[test]
+    fn test_multi_wildcard_pattern() {
+        let evaluator = ConditionEvaluator::new();
+        assert!(evaluator.matches_pattern("/api/v1/users/123", "/api/*/users/*"));
+        assert!(evaluator.matches_pattern("/api/v2/users/456", "/api/*/users/*"));
+        assert!(!evaluator.matches_pattern("/api/v1/orders/123", "/api/*/users/*"));
+    }
+
+    #[test]
+    fn test_no_wildcard_pattern() {
+        let evaluator = ConditionEvaluator::new();
+        assert!(evaluator.matches_pattern("/api/users", "/api/users"));
+        assert!(!evaluator.matches_pattern("/api/users/123", "/api/users"));
+    }
+
+    #[test]
+    fn test_wildcard_edge_cases() {
+        let evaluator = ConditionEvaluator::new();
+        // Pattern of just a wildcard matches anything
+        assert!(evaluator.matches_pattern("anything", "*"));
+        assert!(evaluator.matches_pattern("", "*"));
+        // Wildcard at start
+        assert!(evaluator.matches_pattern("/foo/bar", "*/bar"));
+        // Wildcard at end
+        assert!(evaluator.matches_pattern("/foo/bar", "/foo/*"));
+        // Adjacent wildcards
+        assert!(evaluator.matches_pattern("/api/users", "/api/**"));
+        // Empty text with non-trivial pattern
+        assert!(!evaluator.matches_pattern("", "/api/*"));
+    }
+
+    #[test]
+    fn test_pricing_change_above_threshold() {
+        let mut evaluator = ConditionEvaluator::new();
+        evaluator.update_pricing("prod-1", 100.0);
+        evaluator.update_pricing("prod-1", 125.0); // 25% change
+        assert!(evaluator
+            .evaluate(&BehaviorCondition::PricingChange {
+                product_id: "prod-1".to_string(),
+                threshold: 10.0, // 10% threshold
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn test_pricing_change_below_threshold() {
+        let mut evaluator = ConditionEvaluator::new();
+        evaluator.update_pricing("prod-1", 100.0);
+        evaluator.update_pricing("prod-1", 103.0); // 3% change
+        assert!(!evaluator
+            .evaluate(&BehaviorCondition::PricingChange {
+                product_id: "prod-1".to_string(),
+                threshold: 10.0,
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn test_pricing_change_no_history() {
+        let mut evaluator = ConditionEvaluator::new();
+        evaluator.update_pricing("prod-1", 100.0); // First price, no previous
+        assert!(!evaluator
+            .evaluate(&BehaviorCondition::PricingChange {
+                product_id: "prod-1".to_string(),
+                threshold: 10.0,
+            })
+            .unwrap());
+    }
+
+    #[test]
+    fn test_pricing_change_zero_price() {
+        let mut evaluator = ConditionEvaluator::new();
+        evaluator.update_pricing("prod-1", 0.0);
+        evaluator.update_pricing("prod-1", 50.0); // Change from zero
+        assert!(evaluator
+            .evaluate(&BehaviorCondition::PricingChange {
+                product_id: "prod-1".to_string(),
+                threshold: 10.0,
             })
             .unwrap());
     }

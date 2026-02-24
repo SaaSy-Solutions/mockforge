@@ -89,10 +89,82 @@ impl CorrectionProposer {
         proposals
     }
 
+    /// Extract the existing schema definition for an endpoint field from the spec
+    fn extract_field_from_spec(
+        spec: &OpenApiSpec,
+        request_path: &str,
+        method: Option<&str>,
+        field_name: &str,
+    ) -> Value {
+        // Navigate: spec.paths[path][method].requestBody.content["application/json"].schema.properties[field]
+        let path_item = spec.spec.paths.paths.get(request_path).and_then(|p| p.as_item());
+
+        let operation = path_item.and_then(|item| {
+            let m = method.unwrap_or("get");
+            match m.to_uppercase().as_str() {
+                "GET" => item.get.as_ref(),
+                "POST" => item.post.as_ref(),
+                "PUT" => item.put.as_ref(),
+                "DELETE" => item.delete.as_ref(),
+                "PATCH" => item.patch.as_ref(),
+                _ => None,
+            }
+        });
+
+        if let Some(op) = operation {
+            // Try request body schema
+            if let Some(ref body) = op.request_body {
+                if let openapiv3::ReferenceOr::Item(ref body_item) = body {
+                    if let Some(media) = body_item.content.get("application/json") {
+                        if let Some(ref schema) = media.schema {
+                            if let Ok(schema_val) = serde_json::to_value(schema) {
+                                if let Some(field_val) =
+                                    schema_val.pointer(&format!("/item/properties/{}", field_name))
+                                {
+                                    return field_val.clone();
+                                }
+                                // Also try without the item wrapper
+                                if let Some(field_val) =
+                                    schema_val.pointer(&format!("/properties/{}", field_name))
+                                {
+                                    return field_val.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Try response schema (200)
+            if let Some(resp) = op.responses.responses.get(&openapiv3::StatusCode::Code(200)) {
+                if let openapiv3::ReferenceOr::Item(ref resp_item) = resp {
+                    if let Some(media) = resp_item.content.get("application/json") {
+                        if let Some(ref schema) = media.schema {
+                            if let Ok(schema_val) = serde_json::to_value(schema) {
+                                if let Some(field_val) =
+                                    schema_val.pointer(&format!("/item/properties/{}", field_name))
+                                {
+                                    return field_val.clone();
+                                }
+                                if let Some(field_val) =
+                                    schema_val.pointer(&format!("/properties/{}", field_name))
+                                {
+                                    return field_val.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        json!(null)
+    }
+
     /// Propose adding a required field to the schema
     fn propose_add_required_field(
         mismatch: &Mismatch,
-        _spec: &OpenApiSpec,
+        spec: &OpenApiSpec,
     ) -> Option<CorrectionProposal> {
         // Extract field path and type from mismatch
         let path_parts: Vec<&str> = mismatch.path.split('/').filter(|s| !s.is_empty()).collect();
@@ -133,8 +205,13 @@ impl CorrectionProposer {
             }),
         };
 
-        // Get before value (current schema state)
-        let before = json!(null); // Would need to extract from actual spec
+        // Extract the current schema state from the spec
+        let before = Self::extract_field_from_spec(
+            spec,
+            &mismatch.path,
+            mismatch.method.as_deref(),
+            field_name,
+        );
 
         // Get after value (proposed schema)
         let after = field_schema.clone();
@@ -239,10 +316,10 @@ impl CorrectionProposer {
     /// Propose adding an optional field (alternative to removal)
     fn propose_add_optional_field(
         mismatch: &Mismatch,
-        _spec: &OpenApiSpec,
+        spec: &OpenApiSpec,
     ) -> Option<CorrectionProposal> {
         // Similar to add_required_field but with required: false
-        Self::propose_add_required_field(mismatch, _spec).map(|mut proposal| {
+        Self::propose_add_required_field(mismatch, spec).map(|mut proposal| {
             proposal.operation = PatchOperation::Add;
             proposal.confidence = mismatch.confidence * 0.7; // Lower confidence for optional
             proposal.description = format!(
@@ -434,6 +511,19 @@ impl CorrectionProposer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_extract_field_from_spec_no_match() {
+        // With an empty spec, extraction should return null
+        let spec = OpenApiSpec {
+            spec: openapiv3::OpenAPI::default(),
+            file_path: None,
+            raw_document: None,
+        };
+        let result =
+            CorrectionProposer::extract_field_from_spec(&spec, "/api/users", Some("POST"), "name");
+        assert_eq!(result, json!(null));
+    }
 
     #[test]
     fn test_escape_json_pointer() {

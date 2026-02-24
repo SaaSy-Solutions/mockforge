@@ -203,6 +203,9 @@ impl DriftGitOpsHandler {
     }
 
     /// Create OpenAPI spec changes from incident
+    ///
+    /// Generates a JSON Patch (RFC 6902) file describing the operations needed
+    /// to bring the OpenAPI spec in line with observed API behaviour.
     async fn create_openapi_changes(
         &self,
         incident: &DriftIncident,
@@ -224,34 +227,84 @@ impl DriftGitOpsHandler {
 
         // Determine OpenAPI spec file path
         let spec_path = if let Some(ref spec_dir) = self.config.openapi_spec_dir {
-            // Try to find spec file based on endpoint
-            // For now, use a default path - in a full implementation, we'd search for the spec
             PathBuf::from(spec_dir).join("openapi.yaml")
         } else {
             PathBuf::from("openapi.yaml")
         };
 
-        // Apply corrections to OpenAPI spec
-        // Note: In a full implementation, we'd:
-        // 1. Load the existing OpenAPI spec
-        // 2. Apply JSON Patch corrections
-        // 3. Serialize the updated spec
-        // For now, we'll create a placeholder that indicates what needs to be updated
-        let updated_spec = serde_json::json!({
-            "note": "OpenAPI spec should be updated based on drift corrections",
-            "endpoint": format!("{} {}", incident.method, incident.endpoint),
-            "corrections": corrections,
-            "incident_id": incident.id,
+        // Convert corrections into RFC 6902 JSON Patch operations
+        let endpoint_pointer = incident.endpoint.replace('/', "~1");
+        let method_lower = incident.method.to_lowercase();
+
+        let patch_ops: Vec<serde_json::Value> = corrections
+            .iter()
+            .filter_map(|correction| {
+                // Each correction may carry its own op/path/value, or we derive them
+                let op =
+                    correction.get("op").and_then(|v| v.as_str()).unwrap_or("replace").to_string();
+
+                let patch_path = if let Some(p) = correction.get("path").and_then(|v| v.as_str()) {
+                    p.to_string()
+                } else if let Some(field) = correction.get("field").and_then(|v| v.as_str()) {
+                    // Build a path into the endpoint's schema
+                    format!(
+                        "/paths/{}/{}/requestBody/content/application~1json/schema/properties/{}",
+                        endpoint_pointer,
+                        method_lower,
+                        field.replace('/', "~1")
+                    )
+                } else {
+                    return None;
+                };
+
+                let mut patch_op = serde_json::json!({
+                    "op": op,
+                    "path": patch_path,
+                });
+
+                // Add value for add/replace operations
+                if op != "remove" {
+                    if let Some(value) = correction.get("value") {
+                        patch_op["value"] = value.clone();
+                    } else if let Some(expected) = correction.get("expected") {
+                        patch_op["value"] = expected.clone();
+                    }
+                }
+
+                // Preserve from for move/copy
+                if let Some(from) = correction.get("from").and_then(|v| v.as_str()) {
+                    patch_op["from"] = serde_json::json!(from);
+                }
+
+                Some(patch_op)
+            })
+            .collect();
+
+        if patch_ops.is_empty() {
+            return Ok(None);
+        }
+
+        // Build the patch document with metadata
+        let patch_document = serde_json::json!({
+            "openapi_patch": {
+                "format": "json-patch+rfc6902",
+                "incident_id": incident.id,
+                "endpoint": format!("{} {}", incident.method, incident.endpoint),
+                "generated_at": chrono::Utc::now().to_rfc3339(),
+            },
+            "operations": patch_ops,
         });
 
-        // Use JSON format for now (YAML would require serde_yaml)
-        let spec_content = serde_json::to_string_pretty(&updated_spec)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize spec: {}", e)))?;
+        let spec_content = serde_json::to_string_pretty(&patch_document)
+            .map_err(|e| crate::Error::generic(format!("Failed to serialize patch: {}", e)))?;
+
+        // The patch file sits alongside the spec so reviewers can inspect it
+        let patch_path = spec_path.with_extension("patch.json");
 
         Ok(Some(vec![PRFileChange {
-            path: spec_path.to_string_lossy().to_string(),
+            path: patch_path.to_string_lossy().to_string(),
             content: spec_content,
-            change_type: PRFileChangeType::Update,
+            change_type: PRFileChangeType::Create,
         }]))
     }
 

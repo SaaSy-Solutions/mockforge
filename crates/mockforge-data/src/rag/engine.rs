@@ -466,14 +466,72 @@ impl RagEngine {
         Ok(results)
     }
 
-    /// Perform keyword search (placeholder)
+    /// Perform keyword search using TF-IDF-like scoring
+    ///
+    /// Scores each candidate chunk based on:
+    /// - Term frequency (how often query terms appear in the chunk)
+    /// - Exact phrase bonus (query appears as a contiguous substring)
     async fn keyword_search(
         &self,
-        _query: &str,
-        _candidates: &[DocumentChunk],
+        query: &str,
+        candidates: &[DocumentChunk],
     ) -> Result<Vec<SearchResult>> {
-        // Placeholder implementation
-        Ok(Vec::new())
+        let query_lower = query.to_lowercase();
+        let query_terms: Vec<&str> = query_lower.split_whitespace().collect();
+
+        if query_terms.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let num_candidates = candidates.len();
+        let mut results = Vec::new();
+
+        for (rank, chunk) in candidates.iter().enumerate() {
+            let content_lower = chunk.content.to_lowercase();
+            let content_words: Vec<&str> = content_lower.split_whitespace().collect();
+
+            if content_words.is_empty() {
+                continue;
+            }
+
+            // Term frequency: fraction of query terms found in the chunk
+            let matching_terms = query_terms
+                .iter()
+                .filter(|term| content_words.iter().any(|w| w.contains(*term)))
+                .count();
+            let tf_score = matching_terms as f32 / query_terms.len() as f32;
+
+            // Inverse document frequency approximation: boost terms that appear
+            // in fewer candidate chunks
+            let mut idf_sum = 0.0f32;
+            for term in &query_terms {
+                let docs_with_term = candidates
+                    .iter()
+                    .filter(|c| c.content.to_lowercase().contains(term))
+                    .count()
+                    .max(1);
+                idf_sum += ((num_candidates as f32) / docs_with_term as f32).ln() + 1.0;
+            }
+            let idf_score = idf_sum / query_terms.len() as f32;
+
+            // Exact phrase bonus
+            let phrase_bonus = if query_terms.len() > 1 && content_lower.contains(&query_lower) {
+                0.3
+            } else {
+                0.0
+            };
+
+            let score = (tf_score * idf_score + phrase_bonus).min(1.0);
+
+            if score > 0.0 {
+                results.push(SearchResult::new(chunk.clone(), score, rank));
+            }
+        }
+
+        // Sort by score descending
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+
+        Ok(results)
     }
 
     /// Build context from search results
@@ -907,9 +965,79 @@ impl Default for StorageStats {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
-    #[test]
-    fn test_module_compiles() {
-        // Basic compilation test
+    fn make_chunk(id: &str, content: &str) -> DocumentChunk {
+        DocumentChunk::new(
+            id.to_string(),
+            content.to_string(),
+            HashMap::new(),
+            Vec::new(),
+            "doc1".to_string(),
+            0,
+            content.split_whitespace().count(),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_keyword_search_basic_term_matching() {
+        let engine = RagEngine::default();
+        let candidates = vec![
+            make_chunk("c1", "rust programming language systems"),
+            make_chunk("c2", "python scripting language web"),
+            make_chunk("c3", "java enterprise applications"),
+        ];
+
+        let results = engine.keyword_search("rust language", &candidates).await.unwrap();
+        assert!(!results.is_empty());
+        // First result should be c1 since it contains both "rust" and "language"
+        assert_eq!(results[0].chunk.id, "c1");
+    }
+
+    #[tokio::test]
+    async fn test_keyword_search_phrase_bonus() {
+        let engine = RagEngine::default();
+        let candidates = vec![
+            make_chunk("c1", "mock api server for testing mock endpoints"),
+            make_chunk("c2", "this is a mock api server that works well"),
+        ];
+
+        let results = engine.keyword_search("mock api server", &candidates).await.unwrap();
+        assert!(!results.is_empty());
+        // Both contain the phrase, but c2 has the exact contiguous phrase
+        // Both should score, and both contain "mock api server" as an exact phrase
+        assert!(results.len() >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_keyword_search_empty_query() {
+        let engine = RagEngine::default();
+        let candidates = vec![make_chunk("c1", "some content here")];
+        let results = engine.keyword_search("", &candidates).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_keyword_search_no_match() {
+        let engine = RagEngine::default();
+        let candidates = vec![make_chunk("c1", "rust programming")];
+        let results = engine.keyword_search("python django", &candidates).await.unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!((sim - 1.0).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(sim.abs() < 1e-6);
     }
 }

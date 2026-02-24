@@ -322,11 +322,56 @@ impl SemanticAnalyzer {
         mismatches
     }
 
-    /// Detect error code changes
-    fn detect_error_code_changes(&self, _before: &Value, _after: &Value) -> Vec<Mismatch> {
-        // This would analyze error response schemas
-        // For now, return empty - would need full OpenAPI spec context
-        Vec::new()
+    /// Detect error code changes (4xx/5xx status codes removed between versions)
+    ///
+    /// Extracts error status codes from the `responses` object in both schema
+    /// snapshots and reports any codes present in `before` but missing in `after`.
+    fn detect_error_code_changes(&self, before: &Value, after: &Value) -> Vec<Mismatch> {
+        let mut mismatches = Vec::new();
+
+        let before_codes = Self::extract_error_status_codes(before);
+        let after_codes = Self::extract_error_status_codes(after);
+
+        let removed: Vec<&String> =
+            before_codes.iter().filter(|c| !after_codes.contains(*c)).collect();
+
+        if !removed.is_empty() {
+            mismatches.push(Mismatch {
+                mismatch_type: MismatchType::SemanticErrorCodeRemoved,
+                path: "responses".to_string(),
+                method: None,
+                expected: Some(format!("{:?}", before_codes)),
+                actual: Some(format!("{:?}", after_codes)),
+                description: format!(
+                    "Error status code(s) removed: {}",
+                    removed.iter().map(|c| c.as_str()).collect::<Vec<_>>().join(", ")
+                ),
+                severity: MismatchSeverity::High,
+                confidence: 1.0,
+                context: HashMap::new(),
+            });
+        }
+
+        mismatches
+    }
+
+    /// Extract error status codes (4xx/5xx) from a schema value's `responses` map
+    fn extract_error_status_codes(schema: &Value) -> Vec<String> {
+        let mut codes = Vec::new();
+        if let Some(responses) = schema.get("responses").and_then(|v| v.as_object()) {
+            for key in responses.keys() {
+                // Match 4xx and 5xx status codes
+                if let Some(first_char) = key.chars().next() {
+                    if (first_char == '4' || first_char == '5') && key.len() == 3 {
+                        if key.chars().all(|c| c.is_ascii_digit()) {
+                            codes.push(key.clone());
+                        }
+                    }
+                }
+            }
+        }
+        codes.sort();
+        codes
     }
 
     /// Analyze with LLM for deeper semantic understanding
