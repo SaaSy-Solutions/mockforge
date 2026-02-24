@@ -41,8 +41,6 @@ members = [
     "crates/mockforge-collab",
 
     # Main user-facing crates
-    "crates/mockforge-core",
-    "crates/mockforge-cli",
     "crates/mockforge-ui",
     "crates/mockforge-tui",
 
