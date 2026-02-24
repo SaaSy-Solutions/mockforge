@@ -2274,8 +2274,7 @@ async fn delete_proxy_rule(
     })))
 }
 
-/// Get recent intercepted requests/responses for inspection
-/// This is a placeholder - in a full implementation, you'd track intercepted traffic
+/// Get proxy rules and transformation configuration for inspection
 async fn get_proxy_inspect(
     State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,

@@ -19,7 +19,10 @@ pub use proxy::*;
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
-    fn test_module_compiles() {}
+    fn test_module_compiles() {
+        // Importing super::* ensures this module's types and imports are valid
+    }
 }
