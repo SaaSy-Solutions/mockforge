@@ -6,10 +6,12 @@ use mockforge_ui::routes::create_admin_router;
 async fn test_spa_routing_configuration() {
     let router = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
 
-    // The router should be configured with the catch-all route
-    // We can't easily test the exact routes without more complex setup,
-    // but we can verify the router is created without panicking
-    assert!(true); // If we get here, the router was created successfully
+    // Verify the router was created successfully and has structure
+    let description = format!("{:?}", router);
+    assert!(
+        !description.is_empty(),
+        "Router should have debug representation"
+    );
 }
 
 fn main() {

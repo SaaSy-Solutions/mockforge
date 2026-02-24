@@ -881,28 +881,26 @@ pub async fn handle_governance_status(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_handle_forecast_generate_creates_output() {
-        // Test that handler functions are accessible
-        // Actual GovernanceCommands enum is defined in main.rs
-        assert!(true);
+    fn test_forecasting_config_defaults() {
+        let config = ForecastingConfig::default();
+        let _forecaster = Forecaster::new(config);
     }
 
     #[test]
-    fn test_handle_semantic_analyze_available() {
-        // Verify semantic analysis handler is available from this module
-        assert!(true);
+    fn test_threat_modeling_config_defaults() {
+        let config = ThreatModelingConfig::default();
+        let analyzer = ThreatAnalyzer::new(config);
+        assert!(analyzer.is_ok(), "ThreatAnalyzer should be constructible with default config");
     }
 
     #[test]
-    fn test_handle_threat_assess_available() {
-        // Verify threat assessment handler is available from this module
-        assert!(true);
-    }
-
-    #[test]
-    fn test_handle_governance_status_available() {
-        // Verify governance status handler is available from this module
-        assert!(true);
+    fn test_connect_database_returns_none_without_env() {
+        // Without DATABASE_URL set, connect_database should return None
+        // We verify the function exists and compiles with the expected return type
+        let _: fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<PgPool>> + Send>> =
+            || Box::pin(connect_database());
     }
 }

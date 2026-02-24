@@ -641,22 +641,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_smtp_mailbox_commands_handler() {
-        // Test that SmtpCommands::Mailbox variant can be handled
-        // Actual enum is defined in main.rs
-        assert!(true);
+    fn test_smtp_mailbox_command_construction() {
+        let cmd = SmtpCommands::Mailbox {
+            mailbox_command: MailboxCommands::List,
+        };
+        assert!(matches!(cmd, SmtpCommands::Mailbox { .. }));
     }
 
     #[test]
-    fn test_smtp_fixtures_commands_handler() {
-        // Test that SmtpCommands::Fixtures variant can be handled
-        assert!(true);
+    fn test_smtp_fixtures_command_construction() {
+        let cmd = SmtpCommands::Fixtures {
+            fixtures_command: FixturesCommands::List,
+        };
+        assert!(matches!(cmd, SmtpCommands::Fixtures { .. }));
     }
 
     #[test]
-    fn test_smtp_send_command_handler() {
-        // Test that SmtpCommands::Send variant can be handled
-        assert!(true);
+    fn test_smtp_send_command_construction() {
+        let cmd = SmtpCommands::Send {
+            to: "user@example.com".to_string(),
+            subject: "Test".to_string(),
+            body: "Hello".to_string(),
+            host: "localhost".to_string(),
+            port: 1025,
+            from: "test@mockforge.cli".to_string(),
+        };
+        assert!(matches!(cmd, SmtpCommands::Send { .. }));
     }
 
     #[test]

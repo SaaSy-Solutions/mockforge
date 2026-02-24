@@ -227,8 +227,8 @@ mod tests {
             _db.pool()
         }
 
-        // If this compiles, the method exists with the correct signature
-        assert!(true);
+        // Verify the function has the expected signature (compile-time check)
+        let _: fn(&Database) -> &PgPool = check_pool_method;
     }
 
     // Mock test to verify query structures
@@ -406,8 +406,10 @@ mod tests {
         fn check_total_downloads_type(_: i64) {}
         fn check_total_users_type(_: i64) {}
 
-        // If this compiles, the types are correct
-        assert!(true);
+        // Verify the functions accept i64 (compile-time type check)
+        let _: fn(i64) = check_total_plugins_type;
+        let _: fn(i64) = check_total_downloads_type;
+        let _: fn(i64) = check_total_users_type;
     }
 
     #[test]

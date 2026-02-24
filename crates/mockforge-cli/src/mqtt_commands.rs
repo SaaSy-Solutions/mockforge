@@ -504,34 +504,72 @@ async fn handle_clients_disconnect(
 
 #[cfg(test)]
 mod tests {
+    use crate::{MqttClientsCommands, MqttCommands, MqttFixturesCommands, MqttTopicsCommands};
+
     #[test]
-    fn test_mqtt_publish_command_handler() {
-        // Test that MqttCommands::Publish variant can be handled
-        // Actual enum is defined in main.rs
-        assert!(true);
+    fn test_mqtt_publish_command_construction() {
+        let cmd = MqttCommands::Publish {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "test/topic".to_string(),
+            payload: r#"{"key":"value"}"#.to_string(),
+            qos: 0,
+            retain: false,
+        };
+        assert!(matches!(cmd, MqttCommands::Publish { .. }));
     }
 
     #[test]
-    fn test_mqtt_subscribe_command_handler() {
-        // Test that MqttCommands::Subscribe variant can be handled
-        assert!(true);
+    fn test_mqtt_subscribe_command_construction() {
+        let cmd = MqttCommands::Subscribe {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "test/#".to_string(),
+            qos: 1,
+        };
+        assert!(matches!(cmd, MqttCommands::Subscribe { .. }));
     }
 
     #[test]
-    fn test_mqtt_topics_command_handler() {
-        // Test that MqttCommands::Topics variant can be handled
-        assert!(true);
+    fn test_mqtt_topics_command_construction() {
+        let cmd = MqttCommands::Topics {
+            topics_command: MqttTopicsCommands::List,
+        };
+        assert!(matches!(cmd, MqttCommands::Topics { .. }));
+
+        let cmd_clear = MqttCommands::Topics {
+            topics_command: MqttTopicsCommands::ClearRetained,
+        };
+        assert!(matches!(cmd_clear, MqttCommands::Topics { .. }));
     }
 
     #[test]
-    fn test_mqtt_fixtures_command_handler() {
-        // Test that MqttCommands::Fixtures variant can be handled
-        assert!(true);
+    fn test_mqtt_fixtures_command_construction() {
+        let cmd = MqttCommands::Fixtures {
+            fixtures_command: MqttFixturesCommands::Load {
+                path: std::path::PathBuf::from("/tmp/fixtures"),
+            },
+        };
+        assert!(matches!(cmd, MqttCommands::Fixtures { .. }));
+
+        let cmd_start = MqttCommands::Fixtures {
+            fixtures_command: MqttFixturesCommands::StartAutoPublish,
+        };
+        assert!(matches!(cmd_start, MqttCommands::Fixtures { .. }));
     }
 
     #[test]
-    fn test_mqtt_clients_command_handler() {
-        // Test that MqttCommands::Clients variant can be handled
-        assert!(true);
+    fn test_mqtt_clients_command_construction() {
+        let cmd = MqttCommands::Clients {
+            clients_command: MqttClientsCommands::List,
+        };
+        assert!(matches!(cmd, MqttCommands::Clients { .. }));
+
+        let cmd_disconnect = MqttCommands::Clients {
+            clients_command: MqttClientsCommands::Disconnect {
+                client_id: "test-client".to_string(),
+            },
+        };
+        assert!(matches!(cmd_disconnect, MqttCommands::Clients { .. }));
     }
 }
