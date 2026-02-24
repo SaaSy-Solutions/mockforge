@@ -130,7 +130,7 @@ impl RequestGenerator {
             Parameter::Query { parameter_data, .. } => ("query", parameter_data),
             Parameter::Path { parameter_data, .. } => ("path", parameter_data),
             Parameter::Header { parameter_data, .. } => ("header", parameter_data),
-            Parameter::Cookie { .. } => return Ok(()), // Skip cookies for now
+            Parameter::Cookie { parameter_data, .. } => ("cookie", parameter_data),
         };
 
         // Check for override first, then fall back to generated value
@@ -155,6 +155,18 @@ impl RequestGenerator {
             }
             "header" => {
                 template.headers.insert(param_data.name.clone(), value);
+            }
+            "cookie" => {
+                // Append cookie to existing Cookie header or create new one
+                let cookie_pair = format!("{}={}", param_data.name, value);
+                template
+                    .headers
+                    .entry("Cookie".to_string())
+                    .and_modify(|existing| {
+                        existing.push_str("; ");
+                        existing.push_str(&cookie_pair);
+                    })
+                    .or_insert(cookie_pair);
             }
             _ => {}
         }

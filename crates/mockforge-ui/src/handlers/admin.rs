@@ -108,12 +108,24 @@ pub async fn get_logs(
 /// Get metrics data
 pub async fn get_metrics(State(state): State<AdminState>) -> Json<ApiResponse<SimpleMetricsData>> {
     let metrics = state.metrics.read().await;
-    let error_rate = 0.0; // Note: total_errors field doesn't exist in this RequestMetrics, setting to 0.0
-                          // Note: Some fields from the original RequestMetrics aren't available, using defaults
+
+    let total_errors: u64 = metrics.errors_by_endpoint.values().sum();
+    let error_rate = if metrics.total_requests > 0 {
+        total_errors as f64 / metrics.total_requests as f64
+    } else {
+        0.0
+    };
+
+    let average_response_time = if metrics.response_times.is_empty() {
+        0.0
+    } else {
+        metrics.response_times.iter().sum::<u64>() as f64 / metrics.response_times.len() as f64
+    };
+
     Json(ApiResponse::success(SimpleMetricsData {
         total_requests: metrics.total_requests,
-        active_requests: metrics.active_connections, // Using active_connections as proxy
-        average_response_time: 0.0, // This field doesn't exist in this RequestMetrics
+        active_requests: metrics.active_connections,
+        average_response_time,
         error_rate,
     }))
 }

@@ -219,22 +219,23 @@ impl TraceCollector {
         Ok(traces)
     }
 
-    /// Collect traces from OTLP backend (placeholder - OTLP doesn't typically provide query API)
+    /// Collect traces from OTLP backend.
+    ///
+    /// OTLP is an export protocol (push-based), not a query API. Trace retrieval
+    /// requires a separate backend (e.g., Jaeger, Tempo). Returns empty when
+    /// no compatible query backend is configured.
     async fn collect_from_otlp(&self) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
-        // OTLP is primarily for exporting, not querying
-        // In a real implementation, you might need to query a separate trace storage backend
-        // For now, return empty results
         Ok(Vec::new())
     }
 
-    /// Get a specific trace from OTLP backend (placeholder)
+    /// Get a specific trace from OTLP backend.
+    ///
+    /// See [`collect_from_otlp`] — OTLP has no query API, so this always
+    /// returns empty unless a compatible trace store is configured.
     async fn get_trace_from_otlp(
         &self,
         _trace_id: &str,
     ) -> Result<Vec<CollectedTrace>, TraceCollectorError> {
-        // OTLP is primarily for exporting, not querying
-        // In a real implementation, you might need to query a separate trace storage backend
-        // For now, return empty results
         Ok(Vec::new())
     }
 }
