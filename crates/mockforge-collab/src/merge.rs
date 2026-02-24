@@ -394,6 +394,13 @@ impl MergeService {
             ));
         }
 
+        // Determine next version from the latest commit in the target workspace
+        let next_version =
+            match self.version_control.get_latest_commit(merge.target_workspace_id).await? {
+                Some(latest) => latest.version + 1,
+                None => 1,
+            };
+
         // Create merge commit
         let merge_commit = self
             .version_control
@@ -402,8 +409,7 @@ impl MergeService {
                 user_id,
                 message,
                 Some(merge.target_commit_id),
-                // Version will be incremented by workspace service
-                0, // Placeholder, will be set properly
+                next_version,
                 resolved_state.clone(),
                 serde_json::json!({
                     "type": "merge",

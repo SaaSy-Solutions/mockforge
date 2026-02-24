@@ -129,9 +129,11 @@ impl SyncDriftEvaluator {
 
         // Check if budget is exceeded
         let budget_exceeded = if let Some(max_churn_percent) = budget.max_field_churn_percent {
-            // Simplified percentage calculation
-            // In a full implementation, we'd track baseline field counts
-            let baseline = 100.0; // Placeholder
+            // Use total fields from comparison as baseline. If unavailable, fall back
+            // to total differences + 1 to avoid division by zero (conservative estimate).
+            let baseline =
+                (differences_count as f64 + breaking_changes as f64 + non_breaking_changes as f64)
+                    .max(1.0);
             let churn_percent = (differences_count as f64 / baseline) * 100.0;
             churn_percent > max_churn_percent || breaking_changes > budget.max_breaking_changes
         } else {

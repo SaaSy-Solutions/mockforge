@@ -92,7 +92,9 @@ impl AccessReviewService {
                 roles: p.roles,
                 permissions: vec![], // Would need to fetch from permissions system
                 last_login: p.last_privileged_action,
-                access_granted: Utc::now() - Duration::days(90), // Placeholder
+                access_granted: p
+                    .last_privileged_action
+                    .unwrap_or_else(|| Utc::now() - Duration::days(90)),
                 days_inactive: p.last_privileged_action.map(|d| (Utc::now() - d).num_days() as u64),
                 is_active: true,
             })

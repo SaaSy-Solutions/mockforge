@@ -90,10 +90,9 @@ pub async fn handle_git_watch(
                     .unwrap_or("openapi");
 
                 // Create schema changed event
-                // Note: workspace_id is not available in CLI context, so we use a placeholder
-                // In a full implementation, this would come from workspace configuration
+                // CLI context has no persistent workspace, so each event gets a unique ID
                 let event = PipelineEvent::schema_changed(
-                    Uuid::new_v4(), // Placeholder - in real implementation, get from workspace config
+                    Uuid::new_v4(),
                     schema_type.to_string(),
                     std::collections::HashMap::new(),
                 );

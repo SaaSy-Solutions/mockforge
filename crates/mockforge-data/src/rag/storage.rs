@@ -547,13 +547,62 @@ impl DocumentStorage for InMemoryStorage {
         Ok(())
     }
 
-    async fn create_backup(&self, _path: &str) -> Result<()> {
-        // Placeholder implementation
+    async fn create_backup(&self, path: &str) -> Result<()> {
+        let chunks = self.chunks.read().await;
+        let vectors = self.vectors.read().await;
+
+        let backup_data = serde_json::json!({
+            "version": 1,
+            "created_at": chrono::Utc::now().to_rfc3339(),
+            "chunks": chunks.values().collect::<Vec<_>>(),
+            "vectors": vectors.iter().collect::<Vec<_>>(),
+        });
+
+        let json_bytes = serde_json::to_vec_pretty(&backup_data)?;
+        std::fs::write(path, json_bytes)?;
+
         Ok(())
     }
 
-    async fn restore_backup(&self, _path: &str) -> Result<()> {
-        // Placeholder implementation
+    async fn restore_backup(&self, path: &str) -> Result<()> {
+        let json_bytes = std::fs::read(path)?;
+        let backup_data: serde_json::Value = serde_json::from_slice(&json_bytes)?;
+
+        // Clear current data
+        self.clear().await?;
+
+        let mut chunks_map = self.chunks.write().await;
+        let mut vectors = self.vectors.write().await;
+        let mut stats = self.stats.write().await;
+
+        // Restore chunks
+        if let Some(chunks_arr) = backup_data.get("chunks").and_then(|v| v.as_array()) {
+            for chunk_val in chunks_arr {
+                if let Ok(chunk) = serde_json::from_value::<DocumentChunk>(chunk_val.clone()) {
+                    chunks_map.insert(chunk.id.clone(), chunk);
+                }
+            }
+        }
+
+        // Restore vectors
+        if let Some(vectors_arr) = backup_data.get("vectors").and_then(|v| v.as_array()) {
+            for vector_val in vectors_arr {
+                if let Ok(vector) = serde_json::from_value::<(String, Vec<f32>)>(vector_val.clone())
+                {
+                    vectors.push(vector);
+                }
+            }
+        }
+
+        // Update stats
+        let doc_ids: std::collections::HashSet<String> =
+            chunks_map.values().map(|c| c.document_id.clone()).collect();
+        stats.total_documents = doc_ids.len();
+        stats.total_chunks = chunks_map.len();
+        stats.index_size_bytes = (stats.total_chunks * 1536 * 4) as u64;
+        stats.used_space_bytes = stats.index_size_bytes;
+        stats.last_updated = chrono::Utc::now();
+
         Ok(())
     }
 

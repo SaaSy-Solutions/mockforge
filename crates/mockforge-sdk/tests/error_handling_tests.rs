@@ -3,12 +3,13 @@
 use mockforge_sdk::{Error, MockServer};
 
 #[tokio::test]
-async fn test_server_not_started_error() {
+async fn test_server_builder_creation() {
     let server = MockServer::new();
 
-    // MockServerBuilder doesn't have a url method, so we can't test this
-    // This test is more about ensuring the builder can be created
-    assert!(true); // Placeholder assertion
+    // Verify builder can be created and configured without starting
+    let builder = server.port(44000).auto_port();
+    // Builder should be usable (not panic) — the actual start is tested elsewhere
+    drop(builder);
 }
 
 #[tokio::test]

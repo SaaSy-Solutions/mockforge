@@ -379,16 +379,19 @@ mod tests {
     }
 
     #[test]
-    fn test_reconciler_new() {
-        // This test doesn't require a real K8s client, we just test creation
-        // In production, you'd use a mock client
-        // For now, we test the structure
-        assert!(true); // Placeholder - actual creation requires K8s client
+    fn test_mock_spec_is_valid() {
+        let spec = create_mock_spec();
+        assert!(!spec.name.is_empty(), "spec name should be non-empty");
+        assert!(!spec.steps.is_empty(), "spec should have at least one step");
+        assert_eq!(spec.name, "test-orchestration");
+        assert!(
+            spec.steps[0].duration_seconds.unwrap_or(0) > 0,
+            "step duration should be positive"
+        );
     }
 
     #[test]
-    fn test_should_run_scheduled_never_run_before() {
-        // Create a minimal orchestration without status
+    fn test_orchestration_without_status_has_no_schedule_time() {
         let orchestration = ChaosOrchestration {
             metadata: kube::core::ObjectMeta {
                 name: Some("test".to_string()),
@@ -398,18 +401,15 @@ mod tests {
             status: None,
         };
 
-        // Note: We can't easily test the reconciler without a K8s client
-        // but we can test the logic by creating a reconciler with a mock client
-        // For now, test the helper logic
-        let schedule = "0 * * * *";
-        // The function should return true when status is None
-        assert!(true); // Placeholder
+        // An orchestration with no status has never been scheduled
+        assert!(orchestration.status.is_none());
+        assert!(orchestration.spec.schedule.is_none());
+        assert_eq!(orchestration.metadata.name.as_deref(), Some("test"));
     }
 
     #[test]
-    fn test_should_run_scheduled_with_elapsed_time() {
+    fn test_orchestration_with_elapsed_scheduled_time() {
         let mut status = ChaosOrchestrationStatus::default();
-        // Set last scheduled time to 2 hours ago
         status.last_scheduled_time = Some(chrono::Utc::now() - chrono::Duration::hours(2));
 
         let orchestration = ChaosOrchestration {
@@ -421,8 +421,10 @@ mod tests {
             status: Some(status),
         };
 
-        // Should run since more than 1 hour has passed
-        assert!(true); // Placeholder
+        // Verify status was set and enough time has elapsed
+        let status = orchestration.status.as_ref().unwrap();
+        let elapsed = chrono::Utc::now() - status.last_scheduled_time.unwrap();
+        assert!(elapsed.num_hours() >= 1, "at least 1 hour should have elapsed");
     }
 
     #[test]

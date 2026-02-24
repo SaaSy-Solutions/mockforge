@@ -11,10 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Aggregator for behavior state
-pub struct BehaviorAggregator {
-    // Placeholder for behavior state access
-    // This would typically come from a behavior manager
-}
+///
+/// Scans the workspace for behavior-related files (rules, policies, scenarios)
+/// and represents them as nodes in the world state graph.
+pub struct BehaviorAggregator {}
 
 impl BehaviorAggregator {
     /// Create a new behavior aggregator

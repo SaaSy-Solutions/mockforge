@@ -431,7 +431,13 @@ impl OpenApiSpec {
                     _ => Ok(false), // Cookie not supported
                 }
             }
-            openapiv3::SecurityScheme::OpenIDConnect { .. } => Ok(false), // Not implemented
+            openapiv3::SecurityScheme::OpenIDConnect { .. } => {
+                // OpenID Connect uses Bearer tokens, same as OAuth2
+                match auth_header {
+                    Some(header) if header.starts_with("Bearer ") => Ok(true),
+                    _ => Ok(false),
+                }
+            }
             openapiv3::SecurityScheme::OAuth2 { .. } => {
                 // For OAuth2, check if Bearer token is provided
                 match auth_header {

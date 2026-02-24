@@ -188,6 +188,13 @@ pub async fn get_analytics(
             .await
             .map_err(|e| ApiError::Database(e))?;
 
+    let trial_orgs: (i64,) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT org_id) FROM subscriptions WHERE status = 'trialing'",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| ApiError::Database(e))?;
+
     // Revenue estimate (Pro: $29, Team: $99)
     let revenue_estimate = plan_distribution
         .iter()
@@ -417,7 +424,7 @@ pub async fn get_analytics(
                 .map(|(plan, count)| PlanCount { plan, count })
                 .collect(),
             active_subscriptions: active_subs.0,
-            trial_orgs: 0, // Not implemented yet
+            trial_orgs: trial_orgs.0,
             revenue_estimate,
         },
         usage: UsageAnalytics {

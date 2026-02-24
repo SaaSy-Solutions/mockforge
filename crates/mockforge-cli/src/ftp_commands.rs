@@ -190,16 +190,108 @@ async fn handle_ftp_serve(
 async fn handle_ftp_fixtures(command: FtpFixturesCommands) -> Result<()> {
     match command {
         FtpFixturesCommands::List => {
+            let cwd = std::env::current_dir()?;
+            let fixture_dirs = ["fixtures/ftp", "fixtures", "ftp-fixtures"];
+            let mut found_any = false;
+
             println!("FTP fixtures:");
-            println!("  (Not yet implemented - fixtures will be loaded from configuration)");
+            for dir_name in &fixture_dirs {
+                let dir = cwd.join(dir_name);
+                if !dir.exists() {
+                    continue;
+                }
+                for entry in std::fs::read_dir(&dir)?.flatten() {
+                    let path = entry.path();
+                    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    if matches!(ext, "yaml" | "yml") {
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            match serde_yaml::from_str::<mockforge_ftp::FtpFixture>(&content) {
+                                Ok(fixture) => {
+                                    println!(
+                                        "  {} - {} ({} files, {} upload rules)",
+                                        fixture.identifier,
+                                        fixture.name,
+                                        fixture.virtual_files.len(),
+                                        fixture.upload_rules.len()
+                                    );
+                                    found_any = true;
+                                }
+                                Err(_) => {
+                                    // Not a valid FTP fixture, skip
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !found_any {
+                println!("  No fixtures found. Place YAML fixture files in fixtures/ftp/");
+            }
         }
         FtpFixturesCommands::Load { directory } => {
             println!("Loading FTP fixtures from: {}", directory.display());
-            println!("  (Not yet implemented - will scan directory for YAML files)");
+            if !directory.exists() {
+                anyhow::bail!("Directory does not exist: {}", directory.display());
+            }
+
+            let mut loaded = 0;
+            let mut errors = 0;
+            for entry in std::fs::read_dir(&directory)?.flatten() {
+                let path = entry.path();
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                if !matches!(ext, "yaml" | "yml") {
+                    continue;
+                }
+                let content = std::fs::read_to_string(&path)?;
+                match serde_yaml::from_str::<mockforge_ftp::FtpFixture>(&content) {
+                    Ok(fixture) => {
+                        println!(
+                            "  Loaded: {} ({} files, {} upload rules)",
+                            fixture.name,
+                            fixture.virtual_files.len(),
+                            fixture.upload_rules.len()
+                        );
+                        loaded += 1;
+                    }
+                    Err(e) => {
+                        println!("  Error in {}: {}", path.display(), e);
+                        errors += 1;
+                    }
+                }
+            }
+            println!("Loaded {} fixture(s), {} error(s)", loaded, errors);
         }
         FtpFixturesCommands::Validate { file } => {
             println!("Validating FTP fixture: {}", file.display());
-            println!("  (Not yet implemented - will validate YAML structure)");
+            if !file.exists() {
+                anyhow::bail!("File does not exist: {}", file.display());
+            }
+            let content = std::fs::read_to_string(&file)?;
+            match serde_yaml::from_str::<mockforge_ftp::FtpFixture>(&content) {
+                Ok(fixture) => {
+                    println!("  Valid fixture: {}", fixture.name);
+                    println!("  Identifier: {}", fixture.identifier);
+                    println!(
+                        "  Description: {}",
+                        fixture.description.as_deref().unwrap_or("(none)")
+                    );
+                    println!("  Virtual files: {}", fixture.virtual_files.len());
+                    for vf in &fixture.virtual_files {
+                        println!("    - {} ({})", vf.path.display(), vf.permissions);
+                    }
+                    println!("  Upload rules: {}", fixture.upload_rules.len());
+                    for rule in &fixture.upload_rules {
+                        println!(
+                            "    - pattern: {} (auto_accept: {})",
+                            rule.path_pattern, rule.auto_accept
+                        );
+                    }
+                }
+                Err(e) => {
+                    println!("  Invalid fixture: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
     }
     Ok(())

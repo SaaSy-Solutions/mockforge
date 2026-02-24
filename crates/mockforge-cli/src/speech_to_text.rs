@@ -652,17 +652,24 @@ impl InteractiveVoiceInput {
     }
 
     /// Start continuous listening (for interactive mode)
+    ///
+    /// Reports available backends and readiness for transcription.
+    /// Actual transcription happens via `prompt()` / `transcribe()` calls.
     pub fn start_listening(&self) -> Result<(), SttError> {
-        // Placeholder for future implementation
-        // This would start a background thread listening for voice input
-        println!("🎤 Listening for voice input...");
-        println!("   (Currently using text input - voice STT coming soon)");
+        let backends = self.stt_manager.list_backends();
+        if backends.len() > 1 || (backends.len() == 1 && backends[0] != "text-input") {
+            println!("Voice input ready (backends: {})", backends.join(", "));
+        } else {
+            println!("Using text input (no audio backend available).");
+        }
         Ok(())
     }
 
     /// Stop listening
+    ///
+    /// No-op — transcription is one-shot per `prompt()` call, so there
+    /// is no persistent session to tear down.
     pub fn stop_listening(&self) -> Result<(), SttError> {
-        // Placeholder for future implementation
         Ok(())
     }
 }

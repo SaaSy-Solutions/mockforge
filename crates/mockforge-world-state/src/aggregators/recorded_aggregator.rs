@@ -11,10 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Aggregator for recorded data state
-pub struct RecordedAggregator {
-    // Placeholder for recorded data access
-    // This would typically come from a record/replay manager
-}
+///
+/// Scans the workspace for recorded data files (fixtures, recordings, captures)
+/// and represents them as nodes in the world state graph.
+pub struct RecordedAggregator {}
 
 impl RecordedAggregator {
     /// Create a new recorded aggregator

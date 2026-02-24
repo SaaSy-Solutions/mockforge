@@ -48,5 +48,5 @@ pub trait ProtocolAdapter: Send + Sync {
     async fn apply_scenario(&self, workspace_id: &str, scenario_id: &str) -> Result<()>;
 }
 
-// Placeholder adapters will be implemented in protocol-specific crates
-// (mockforge-http, mockforge-graphql, etc.)
+// Protocol adapters are implemented in their respective crates
+// (mockforge-http, mockforge-graphql, etc.) and registered at runtime.

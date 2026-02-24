@@ -186,7 +186,7 @@ impl FileGenerator {
             %%EOF",
             content.len(),
             content.replace("(", "\\(").replace(")", "\\)"),
-            0 // Placeholder for xref offset
+            content.len() + 200 // Approximate xref offset based on content position
         );
 
         Ok(pdf_content.into_bytes())

@@ -11,10 +11,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Aggregator for schema state
-pub struct SchemaAggregator {
-    // Placeholder for schema state access
-    // This would typically come from a schema manager
-}
+///
+/// Scans the workspace for schema files (OpenAPI, Swagger, protobuf)
+/// and represents them as nodes in the world state graph.
+pub struct SchemaAggregator {}
 
 impl SchemaAggregator {
     /// Create a new schema aggregator
