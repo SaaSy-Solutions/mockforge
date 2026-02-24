@@ -208,7 +208,8 @@ impl SystemGenerator {
             .clone()
             .unwrap_or_else(|| format!("system-{}", Uuid::new_v4()));
 
-        // For now, always start with v1. In a full implementation, we'd check for existing versions
+        // Version starts at v1 since there is no persistent storage for generated systems.
+        // If versioning is needed, a storage backend would track previous versions by system_id.
         let version = "v1".to_string();
 
         // Build the generation prompt

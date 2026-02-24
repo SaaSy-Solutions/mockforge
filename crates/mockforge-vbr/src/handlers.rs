@@ -558,10 +558,48 @@ pub async fn patch_handler(
     Extension(context): Extension<HandlerContext>,
     Json(body): Json<Value>,
 ) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
-    // PATCH is similar to PUT but only updates provided fields
-    // For now, we'll use the same logic as PUT
-    // In a full implementation, we'd fetch the existing record first and merge
-    update_handler(Path((entity_name.clone(), id.clone())), Extension(context), Json(body)).await
+    let (_entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
+    let primary_key = "id";
+
+    // Fetch existing record
+    let select_query = format!("SELECT * FROM {} WHERE {} = ?", table_name, primary_key);
+    let existing_results = context
+        .database
+        .query(&select_query, &[Value::String(id.clone())])
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Database query failed: {}", e)})),
+            )
+        })?;
+
+    let existing = existing_results.into_iter().next().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": format!("{} with id '{}' not found", entity_name, id)
+            })),
+        )
+    })?;
+
+    // Merge: start with existing record, overlay with provided fields
+    let mut merged = existing.into_iter().collect::<serde_json::Map<String, Value>>();
+    if let Value::Object(patch_fields) = &body {
+        for (field, value) in patch_fields {
+            if field != primary_key {
+                merged.insert(field.clone(), value.clone());
+            }
+        }
+    } else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Request body must be a JSON object"})),
+        ));
+    }
+
+    // Delegate to update_handler with the merged body
+    update_handler(Path((entity_name, id)), Extension(context), Json(Value::Object(merged))).await
 }
 
 /// Delete entity (DELETE /api/{entity}/{id})

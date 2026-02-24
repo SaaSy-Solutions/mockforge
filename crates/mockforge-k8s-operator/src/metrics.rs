@@ -179,15 +179,11 @@ mod tests {
         let registry = Registry::new();
         let result = OperatorMetrics::new(&registry);
 
-        match result {
-            Ok(metrics) => {
-                // Successfully created metrics
-                assert!(true);
-            }
-            Err(e) => {
-                panic!("Should successfully create metrics: {:?}", e);
-            }
-        }
+        let metrics = result.expect("Should successfully create metrics");
+        // Verify metric fields are accessible (counters initialized)
+        let _ = &metrics.reconciliations_total;
+        let _ = &metrics.reconciliation_errors_total;
+        let _ = &metrics.reconciliation_duration_seconds;
     }
 
     #[test]

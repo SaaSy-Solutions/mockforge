@@ -140,14 +140,13 @@ pub async fn create_budget(
     // Generate budget ID
     let budget_id = format!("{}:{}:{}", request.method, request.endpoint, uuid::Uuid::new_v4());
 
-    // Update engine config with new budget
-    let mut config = state.engine.config().clone();
+    // Build the key for this budget (matches the format used by list_budgets/get_budget)
     let key = format!("{} {}", request.method, request.endpoint);
-    config.per_endpoint_budgets.insert(key, budget.clone());
 
-    // Note: In a full implementation, this would persist to database
-    // For now, we just update the engine config
-    // state.engine.update_config(config);
+    // Note: DriftBudgetEngine.config is not behind interior mutability (RwLock),
+    // so budget creation is returned but not persisted in the running engine.
+    // A future refactor should wrap config in RwLock for runtime mutation.
+    let _ = key;
 
     Ok(Json(DriftBudgetResponse {
         id: budget_id,
@@ -162,12 +161,36 @@ pub async fn create_budget(
 ///
 /// GET /api/v1/drift/budgets
 pub async fn list_budgets(
-    State(_state): State<DriftBudgetState>,
+    State(state): State<DriftBudgetState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    // In a full implementation, this would query from database
-    // For now, return empty list
+    let config = state.engine.config();
+    let budgets: Vec<serde_json::Value> = config
+        .per_endpoint_budgets
+        .iter()
+        .map(|(key, budget)| {
+            // Key format is "METHOD /path"
+            let parts: Vec<&str> = key.splitn(2, ' ').collect();
+            let (method, endpoint) = if parts.len() == 2 {
+                (parts[0].to_string(), parts[1].to_string())
+            } else {
+                ("GET".to_string(), key.clone())
+            };
+            serde_json::json!({
+                "id": key,
+                "method": method,
+                "endpoint": endpoint,
+                "budget": {
+                    "max_breaking_changes": budget.max_breaking_changes,
+                    "max_non_breaking_changes": budget.max_non_breaking_changes,
+                    "enabled": budget.enabled,
+                }
+            })
+        })
+        .collect();
+
     Ok(Json(serde_json::json!({
-        "budgets": []
+        "budgets": budgets,
+        "total": budgets.len(),
     })))
 }
 
@@ -175,10 +198,30 @@ pub async fn list_budgets(
 ///
 /// GET /api/v1/drift/budgets/{id}
 pub async fn get_budget(
-    State(_state): State<DriftBudgetState>,
-    Path(_id): Path<String>,
+    State(state): State<DriftBudgetState>,
+    Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    Err(StatusCode::NOT_IMPLEMENTED)
+    let config = state.engine.config();
+    if let Some(budget) = config.per_endpoint_budgets.get(&id) {
+        let parts: Vec<&str> = id.splitn(2, ' ').collect();
+        let (method, endpoint) = if parts.len() == 2 {
+            (parts[0].to_string(), parts[1].to_string())
+        } else {
+            ("GET".to_string(), id.clone())
+        };
+        Ok(Json(serde_json::json!({
+            "id": id,
+            "method": method,
+            "endpoint": endpoint,
+            "budget": {
+                "max_breaking_changes": budget.max_breaking_changes,
+                "max_non_breaking_changes": budget.max_non_breaking_changes,
+                "enabled": budget.enabled,
+            }
+        })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 /// Get budget for a specific endpoint/workspace/service

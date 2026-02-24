@@ -494,13 +494,16 @@ mod tests {
     #[test]
     fn test_failure_designer_new() {
         let designer = FailureDesigner::new();
-        assert!(true); // Designer created successfully
+        // Verify designer can validate a valid rule
+        let rule = create_basic_rule();
+        assert!(designer.validate_rule(&rule).is_ok());
     }
 
     #[test]
     fn test_failure_designer_default() {
         let designer = FailureDesigner::default();
-        assert!(true); // Designer created successfully
+        let rule = create_basic_rule();
+        assert!(designer.validate_rule(&rule).is_ok());
     }
 
     #[test]
@@ -922,10 +925,7 @@ mod tests {
         assert_eq!(json, "header");
 
         let deserialized: ConditionType = serde_json::from_value(json).unwrap();
-        match deserialized {
-            ConditionType::Header => assert!(true),
-            _ => panic!("Wrong condition type"),
-        }
+        assert!(matches!(deserialized, ConditionType::Header));
     }
 
     #[test]
@@ -935,10 +935,7 @@ mod tests {
         assert_eq!(json, "equals");
 
         let deserialized: ConditionOperator = serde_json::from_value(json).unwrap();
-        match deserialized {
-            ConditionOperator::Equals => assert!(true),
-            _ => panic!("Wrong operator"),
-        }
+        assert!(matches!(deserialized, ConditionOperator::Equals));
     }
 
     #[test]

@@ -473,13 +473,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_find_endpoint_in_spec() {
-        // This would require creating a test OpenAPI spec
-        // For now, just test the structure
+    fn test_diff_analyzer_creation() {
         let config = crate::ai_contract_diff::ContractDiffConfig::default();
         let _analyzer = DiffAnalyzer::new(config);
-
-        // Test would go here with actual spec
-        assert!(true);
+        // DiffAnalyzer was successfully created with default config
     }
 }

@@ -561,8 +561,8 @@ mod tests {
     #[test]
     fn test_ai_studio_state_creation() {
         let state = create_test_state();
-        // State should be created successfully
-        assert!(true);
+        assert!(state.workspace_id.is_none());
+        assert!(state.deterministic_config.is_none());
     }
 
     #[test]

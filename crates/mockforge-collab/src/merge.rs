@@ -679,11 +679,8 @@ mod tests {
     #[tokio::test]
     async fn test_merge_service_new() {
         let pool = setup_test_db().await;
-        let service = MergeService::new(pool);
-
-        // Just verify service is created
-        // We can't test much without real commits
-        assert!(true);
+        let _service = MergeService::new(pool);
+        // MergeService was successfully created with test database
     }
 
     #[test]

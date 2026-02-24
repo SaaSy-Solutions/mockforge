@@ -337,10 +337,12 @@ impl DriftGitOpsHandler {
         let fixture_content = serde_json::to_string_pretty(&fixture_data)
             .map_err(|e| crate::Error::generic(format!("Failed to serialize fixture: {}", e)))?;
 
-        // Determine if this is a create or update
-        // Note: We can't check file existence in async context easily, so default to Update
-        // In a full implementation, we'd check the file system or track this in metadata
-        let change_type = PRFileChangeType::Update;
+        // Determine if this is a create or update based on file existence
+        let change_type = if fixture_path.exists() {
+            PRFileChangeType::Update
+        } else {
+            PRFileChangeType::Create
+        };
 
         Ok(Some(vec![PRFileChange {
             path: fixture_path.to_string_lossy().to_string(),

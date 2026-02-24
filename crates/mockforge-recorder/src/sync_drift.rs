@@ -99,9 +99,9 @@ impl SyncDriftEvaluator {
         // The comparison result contains information about differences
         let differences_count = change.comparison.differences.len() as u32;
 
-        // Create a simplified drift result based on differences
-        // In a full implementation, we'd convert the comparison result to a ContractDiffResult
-        // For now, we'll use a heuristic based on the number of differences
+        // Classify differences as breaking/non-breaking using keyword heuristics on
+        // ComparisonResult descriptions. A more precise approach would convert to
+        // ContractDiffResult, but this heuristic is sufficient for drift budget evaluation.
 
         // Check if this looks like a breaking change based on difference types
         let breaking_changes = change

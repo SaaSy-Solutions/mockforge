@@ -80,7 +80,7 @@ pub async fn get_consent_screen(
 
 /// Submit consent decision
 pub async fn submit_consent(
-    State(_state): State<ConsentState>,
+    State(state): State<ConsentState>,
     Json(request): Json<ConsentDecisionRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if !request.approved {
@@ -90,11 +90,30 @@ pub async fn submit_consent(
         })));
     }
 
-    // Store consent decision and redirect back to OAuth2 flow
-    // In a full implementation, this would store consent and redirect to authorization endpoint
+    // Generate authorization code and store it in OAuth2 state
+    let code = uuid::Uuid::new_v4().to_string();
+    let expires_at = chrono::Utc::now().timestamp() + 600; // 10 minute expiry
+
+    let code_info = crate::handlers::oauth2_server::AuthorizationCodeInfo {
+        client_id: request.client_id.clone(),
+        redirect_uri: String::new(), // Will be filled when used at token endpoint
+        scopes: request.scopes.clone(),
+        user_id: "consent-user".to_string(),
+        state: request.state.clone(),
+        expires_at,
+        tenant_context: None,
+    };
+
+    // Store the authorization code
+    {
+        let mut auth_codes = state.oauth2_state.auth_codes.write().await;
+        auth_codes.insert(code.clone(), code_info);
+    }
+
     Ok(Json(serde_json::json!({
         "approved": true,
         "scopes": request.scopes,
+        "code": code,
         "message": "Consent approved"
     })))
 }

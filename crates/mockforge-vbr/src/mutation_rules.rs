@@ -1050,18 +1050,18 @@ mod tests {
         assert_eq!(rules[0].id, "test-1");
     }
 
-    #[test]
-    fn test_mutation_rule_manager_new() {
-        let _manager = MutationRuleManager::new();
-        // Manager should be created without error
-        assert!(true);
+    #[tokio::test]
+    async fn test_mutation_rule_manager_new() {
+        let manager = MutationRuleManager::new();
+        let rules = manager.list_rules().await;
+        assert!(rules.is_empty());
     }
 
-    #[test]
-    fn test_mutation_rule_manager_default() {
-        let _manager = MutationRuleManager::default();
-        // Default should work like new
-        assert!(true);
+    #[tokio::test]
+    async fn test_mutation_rule_manager_default() {
+        let manager = MutationRuleManager::default();
+        let rules = manager.list_rules().await;
+        assert!(rules.is_empty());
     }
 
     #[tokio::test]

@@ -759,8 +759,17 @@ impl ConnectionHandler {
     }
 
     async fn handle_tx_commit(&mut self, channel: u16) -> io::Result<()> {
-        // In a full implementation, this would commit the transaction
         tracing::debug!("Transaction commit on channel {}", channel);
+
+        if let Some(ch) = self.channels.get_mut(&channel) {
+            if !ch.transaction_mode {
+                tracing::warn!("Tx.Commit on non-transactional channel {}", channel);
+            }
+            // Commit: confirm all pending messages and clear unconfirmed set
+            let committed_count = ch.unconfirmed_messages.len();
+            ch.unconfirmed_messages.clear();
+            tracing::debug!("Committed {} messages on channel {}", committed_count, channel);
+        }
 
         // Send Tx.Commit-Ok
         let mut payload = Vec::new();
@@ -776,8 +785,18 @@ impl ConnectionHandler {
     }
 
     async fn handle_tx_rollback(&mut self, channel: u16) -> io::Result<()> {
-        // In a full implementation, this would rollback the transaction
         tracing::debug!("Transaction rollback on channel {}", channel);
+
+        if let Some(ch) = self.channels.get_mut(&channel) {
+            if !ch.transaction_mode {
+                tracing::warn!("Tx.Rollback on non-transactional channel {}", channel);
+            }
+            // Rollback: discard all pending messages and reset delivery tag
+            let rolled_back_count = ch.unconfirmed_messages.len();
+            ch.unconfirmed_messages.clear();
+            ch.next_delivery_tag = 1;
+            tracing::debug!("Rolled back {} messages on channel {}", rolled_back_count, channel);
+        }
 
         // Send Tx.Rollback-Ok
         let mut payload = Vec::new();

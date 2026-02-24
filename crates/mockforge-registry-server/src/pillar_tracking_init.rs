@@ -88,53 +88,31 @@ mod tests {
     #[test]
     fn test_pillar_conversion_reality() {
         let core_pillar = CorePillar::Reality;
-
-        // This test verifies the conversion logic exists
-        // The actual conversion happens in the record method
-        match core_pillar {
-            CorePillar::Reality => assert!(true),
-            _ => panic!("Expected Reality pillar"),
-        }
+        assert!(matches!(core_pillar, CorePillar::Reality));
     }
 
     #[test]
     fn test_pillar_conversion_contracts() {
         let core_pillar = CorePillar::Contracts;
-
-        match core_pillar {
-            CorePillar::Contracts => assert!(true),
-            _ => panic!("Expected Contracts pillar"),
-        }
+        assert!(matches!(core_pillar, CorePillar::Contracts));
     }
 
     #[test]
     fn test_pillar_conversion_devx() {
         let core_pillar = CorePillar::DevX;
-
-        match core_pillar {
-            CorePillar::DevX => assert!(true),
-            _ => panic!("Expected DevX pillar"),
-        }
+        assert!(matches!(core_pillar, CorePillar::DevX));
     }
 
     #[test]
     fn test_pillar_conversion_cloud() {
         let core_pillar = CorePillar::Cloud;
-
-        match core_pillar {
-            CorePillar::Cloud => assert!(true),
-            _ => panic!("Expected Cloud pillar"),
-        }
+        assert!(matches!(core_pillar, CorePillar::Cloud));
     }
 
     #[test]
     fn test_pillar_conversion_ai() {
         let core_pillar = CorePillar::Ai;
-
-        match core_pillar {
-            CorePillar::Ai => assert!(true),
-            _ => panic!("Expected Ai pillar"),
-        }
+        assert!(matches!(core_pillar, CorePillar::Ai));
     }
 
     #[tokio::test]
@@ -145,20 +123,14 @@ mod tests {
 
         let db_arc = Arc::new(db);
 
-        // Initialize with database
+        // Initialize with database - should not panic
         init_pillar_tracking(Some(db_arc.clone())).await;
-
-        // If we get here without panicking, initialization succeeded
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_init_pillar_tracking_without_database() {
-        // Initialize without database
+        // Initialize without database - should not panic
         init_pillar_tracking(None).await;
-
-        // If we get here without panicking, initialization succeeded
-        assert!(true);
     }
 
     #[tokio::test]

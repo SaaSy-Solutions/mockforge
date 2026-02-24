@@ -573,13 +573,17 @@ mod tests {
     #[test]
     fn test_incident_replay_generator_new() {
         let generator = IncidentReplayGenerator::new();
-        assert!(true); // Generator created successfully
+        let timeline = create_sample_timeline();
+        let scenario = generator.generate_scenario(&timeline);
+        assert!(!scenario.name.is_empty());
     }
 
     #[test]
     fn test_incident_replay_generator_default() {
         let generator = IncidentReplayGenerator::default();
-        assert!(true); // Generator created successfully
+        let timeline = create_sample_timeline();
+        let scenario = generator.generate_scenario(&timeline);
+        assert!(!scenario.name.is_empty());
     }
 
     #[test]
