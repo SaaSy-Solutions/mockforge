@@ -41,6 +41,8 @@ members = [
     "crates/mockforge-collab",
 
     # Main user-facing crates
+    "crates/mockforge-core",
+    "crates/mockforge-cli",
     "crates/mockforge-ui",
     "crates/mockforge-tui",
 
@@ -59,7 +61,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.68"
+version = "0.3.69"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"

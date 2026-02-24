@@ -1,3 +1,14 @@
+## [0.3.69] - 2026-02-24
+
+### Fixed
+
+- **[Multi]** Replace 36+ `assert!(true)` placeholder tests with meaningful assertions across 16 files
+  - CLI command tests (MQTT, SMTP, governance) now construct and verify command variants
+  - Registry server tests use compile-time type checks instead of no-op assertions
+  - Integration tests (voice workspace, drift GitOps, behavioral cloning, WebSocket, cross-platform sync) use proper verification patterns
+- **[gRPC]** Add `use super::*` to 13 empty `test_module_compiles()` tests so they actually verify module compilation
+- **[HTTP]** Fix misleading "placeholder" doc comment on fully-implemented `get_proxy_inspect` handler
+
 ## [0.3.57] - 2026-02-14
 
 ### Fixed
