@@ -235,8 +235,7 @@ mod cross_platform_tests {
         // On Windows, the first component should be a prefix (drive letter)
         use std::path::Component;
         if let Some(Component::Prefix(_)) = components.first() {
-            // This is expected on Windows
-            assert!(true);
+            // This is expected on Windows - prefix component present
         }
     }
 

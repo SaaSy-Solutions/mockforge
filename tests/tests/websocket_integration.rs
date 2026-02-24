@@ -64,15 +64,12 @@ async fn test_websocket_connection() {
     match response {
         Ok(Some(Ok(Message::Text(_) | Message::Binary(_)))) => {
             // Received a message - connection is working
-            assert!(true);
         }
         Ok(Some(Ok(Message::Close(_)))) => {
             // Server closed connection - this is also valid
-            assert!(true);
         }
         Ok(Some(Ok(Message::Ping(_) | Message::Pong(_) | Message::Frame(_)))) => {
             // Control frames - connection is working
-            assert!(true);
         }
         Ok(Some(Err(e))) => {
             eprintln!("WebSocket error: {}", e);
@@ -80,12 +77,10 @@ async fn test_websocket_connection() {
         }
         Ok(None) => {
             // Stream ended - connection closed
-            assert!(true);
         }
         Err(_) => {
             // Timeout - no response received, but connection was successful
             eprintln!("No response received within timeout, but connection succeeded");
-            assert!(true);
         }
     }
 

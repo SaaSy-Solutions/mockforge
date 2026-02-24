@@ -21,9 +21,9 @@ async fn test_gitops_config_validation() {
         enabled: false,
         ..Default::default()
     };
-    let _handler = DriftGitOpsHandler::new(config).unwrap();
+    let handler = DriftGitOpsHandler::new(config).unwrap();
     // Handler created successfully with disabled config
-    assert!(true);
+    let _ = &handler;
 
     // Test enabled config without PR config (should fail)
     let config = DriftGitOpsConfig {
@@ -32,9 +32,9 @@ async fn test_gitops_config_validation() {
         ..Default::default()
     };
     // Handler can be created but PR generation will fail
-    let _handler = DriftGitOpsHandler::new(config).unwrap();
+    let handler = DriftGitOpsHandler::new(config).unwrap();
     // Handler created successfully with enabled config
-    assert!(true);
+    let _ = &handler;
 }
 
 /// Test GitOps config with PR generation settings
@@ -67,9 +67,9 @@ async fn test_gitops_config_with_pr_settings() {
     };
 
     // Handler creation should succeed with valid config
-    let _handler = DriftGitOpsHandler::new(config).unwrap();
+    let handler = DriftGitOpsHandler::new(config).unwrap();
     // Handler created successfully with enabled config
-    assert!(true);
+    let _ = &handler;
 }
 
 /// Test PR generation from empty incidents (should return None)
@@ -382,7 +382,7 @@ async fn test_gitops_handler_minimal_config() {
         ..Default::default()
     };
 
-    let _handler = DriftGitOpsHandler::new(config).unwrap();
+    let handler = DriftGitOpsHandler::new(config).unwrap();
     // Handler created successfully with disabled config
-    assert!(true);
+    let _ = &handler;
 }

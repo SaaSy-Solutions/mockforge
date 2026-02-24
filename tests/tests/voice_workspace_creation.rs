@@ -18,9 +18,9 @@ use std::collections::HashMap;
 #[tokio::test]
 async fn test_command_parser_creation() {
     let config = IntelligentBehaviorConfig::default();
-    let _parser = VoiceCommandParser::new(config);
-    // Parser should be created successfully
-    assert!(true);
+    let parser = VoiceCommandParser::new(config);
+    // Parser should be created successfully with default config
+    let _ = &parser;
 }
 
 /// Test entity requirement parsing
@@ -161,7 +161,7 @@ async fn test_parsed_workspace_creation() {
 async fn test_workspace_builder_creation() {
     let builder = WorkspaceBuilder::new();
     // Builder should be created successfully
-    assert!(true);
+    let _ = &builder;
 }
 
 /// Test workspace builder with parsed command
@@ -420,10 +420,10 @@ async fn test_parsed_command_complete() {
 /// Test workspace builder creation log
 #[tokio::test]
 async fn test_workspace_builder_log() {
-    let _builder = WorkspaceBuilder::new();
+    let builder = WorkspaceBuilder::new();
     // Builder should have empty creation log initially
-    // (Note: creation_log is private, so we can't directly test it)
-    assert!(true);
+    // (Note: creation_log is private, so we verify construction doesn't panic)
+    let _ = &builder;
 }
 
 /// Test entity requirement validation

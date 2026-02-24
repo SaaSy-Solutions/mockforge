@@ -178,9 +178,9 @@ async fn test_strict_vs_flex_mode() {
 /// Test replay engine creation
 #[tokio::test]
 async fn test_replay_engine_creation() {
-    let _engine = BehavioralScenarioReplayEngine::new();
-    // Engine should be created successfully
-    assert!(true); // Just verify it doesn't panic
+    let engine = BehavioralScenarioReplayEngine::new();
+    // Engine should be created successfully without panicking
+    let _ = &engine;
 }
 
 /// Test scenario activation
