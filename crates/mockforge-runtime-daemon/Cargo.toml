@@ -30,8 +30,8 @@ axum = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
-mockforge-core = { version = "0.3.66", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.66", path = "../mockforge-data", optional = true }
+mockforge-core = { version = "0.3.69", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.69", path = "../mockforge-data", optional = true }
 
 [features]
 default = []

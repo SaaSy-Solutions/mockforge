@@ -39,7 +39,7 @@ chrono = { version = "0.4", features = ["serde"] }
 cron = "0.15"
 
 # MockForge dependencies
-mockforge-chaos = { version = "0.3.66", path = "../mockforge-chaos" }
+mockforge-chaos = { version = "0.3.69", path = "../mockforge-chaos" }
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }

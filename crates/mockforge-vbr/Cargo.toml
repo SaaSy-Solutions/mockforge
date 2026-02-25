@@ -12,9 +12,9 @@ documentation.workspace = true
 
 [dependencies]
 # Core dependencies
-mockforge-core = { version = "0.3.66", path = "../mockforge-core" }
-mockforge-data = { version = "0.3.66", path = "../mockforge-data" }
-mockforge-http = { version = "0.3.66", path = "../mockforge-http" }
+mockforge-core = { version = "0.3.69", path = "../mockforge-core" }
+mockforge-data = { version = "0.3.69", path = "../mockforge-data" }
+mockforge-http = { version = "0.3.69", path = "../mockforge-http" }
 
 # OpenAPI support
 openapiv3 = { workspace = true }
