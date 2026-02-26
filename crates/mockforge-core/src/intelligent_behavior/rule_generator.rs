@@ -813,11 +813,51 @@ impl RuleGenerator {
             schema: None,
         };
 
-        let _response = llm_client.generate(&request).await?;
+        let response = llm_client.generate(&request).await?;
 
-        // Parse rules from LLM response (simplified - in production, use structured output)
-        // For now, return empty vector as LLM rule parsing is complex
-        Ok(Vec::new())
+        // Parse rules from LLM response
+        // The LLM returns JSON with a "rules" array of ConsistencyRule objects
+        let rules = if let Some(rules_array) = response.get("rules").and_then(|v| v.as_array()) {
+            rules_array
+                .iter()
+                .filter_map(|rule_value| {
+                    match serde_json::from_value::<ConsistencyRule>(rule_value.clone()) {
+                        Ok(rule) => Some(rule),
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "Failed to parse LLM-generated rule, skipping"
+                            );
+                            None
+                        }
+                    }
+                })
+                .collect()
+        } else if let Some(text) = response.as_str() {
+            // Try to extract JSON from a text response
+            if let Some(start) = text.find('[') {
+                if let Some(end) = text.rfind(']') {
+                    match serde_json::from_str::<Vec<ConsistencyRule>>(&text[start..=end]) {
+                        Ok(rules) => rules,
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "Failed to parse LLM text response as rules array"
+                            );
+                            Vec::new()
+                        }
+                    }
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        Ok(rules)
     }
 
     /// Enhance system prompt using LLM

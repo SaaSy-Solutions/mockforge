@@ -62,10 +62,12 @@ impl ABTestReport {
         })
     }
 
-    /// Calculate statistical significance (simplified - would need proper statistical test in production)
+    /// Calculate statistical significance using a two-proportion z-test
+    ///
+    /// Compares the best and worst performing variants using the standard
+    /// z-test for two proportions. Returns a confidence percentage (0-100).
+    /// A value >= 95.0 is conventionally considered statistically significant.
     pub fn statistical_significance(&self) -> f64 {
-        // Simplified calculation - in production, use proper statistical tests
-        // like chi-square or t-test
         if self.variant_analytics.len() < 2 {
             return 0.0;
         }
@@ -75,13 +77,57 @@ impl ABTestReport {
             return 0.0;
         }
 
-        // Simple comparison of success rates
-        let success_rates: Vec<f64> = variants.iter().map(|v| v.success_rate()).collect();
-        let max_rate = success_rates.iter().fold(0.0f64, |a, &b| a.max(b));
-        let min_rate = success_rates.iter().fold(1.0f64, |a, &b| a.min(b));
+        // Find the best and worst performing variants
+        let best = variants
+            .iter()
+            .max_by(|a, b| {
+                a.success_rate()
+                    .partial_cmp(&b.success_rate())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
+        let worst = variants
+            .iter()
+            .min_by(|a, b| {
+                a.success_rate()
+                    .partial_cmp(&b.success_rate())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap();
 
-        // Difference between best and worst
-        (max_rate - min_rate) * 100.0
+        let n1 = best.request_count as f64;
+        let n2 = worst.request_count as f64;
+
+        // Need a minimum sample size for meaningful results
+        if n1 < 5.0 || n2 < 5.0 {
+            return 0.0;
+        }
+
+        let p1 = best.success_rate();
+        let p2 = worst.success_rate();
+
+        // Pooled proportion under null hypothesis (H0: p1 == p2)
+        let pooled = (best.success_count as f64 + worst.success_count as f64) / (n1 + n2);
+
+        // Guard against zero variance (all successes or all failures)
+        if pooled <= 0.0 || pooled >= 1.0 {
+            return 0.0;
+        }
+
+        // Standard error of the difference
+        let se = (pooled * (1.0 - pooled) * (1.0 / n1 + 1.0 / n2)).sqrt();
+        if se < f64::EPSILON {
+            return 0.0;
+        }
+
+        // Z-score
+        let z = (p1 - p2).abs() / se;
+
+        // Convert z-score to confidence percentage using the standard normal CDF approximation
+        // Using the Abramowitz and Stegun approximation for the normal CDF
+        let confidence = z_to_confidence(z) * 100.0;
+
+        confidence.min(100.0)
     }
 }
 
@@ -114,4 +160,33 @@ impl VariantComparison {
             request_count_diff: variant_a.request_count as i64 - variant_b.request_count as i64,
         }
     }
+}
+
+/// Convert a z-score to a confidence level (two-tailed) using the standard normal CDF.
+///
+/// Uses the Abramowitz and Stegun approximation (formula 26.2.17) for the
+/// standard normal cumulative distribution function, which is accurate to ~1e-5.
+fn z_to_confidence(z: f64) -> f64 {
+    // For a two-tailed test, confidence = 1 - 2 * (1 - Phi(|z|))
+    let z_abs = z.abs();
+
+    // Abramowitz and Stegun constants
+    let p = 0.2316419;
+    let b1 = 0.319381530;
+    let b2 = -0.356563782;
+    let b3 = 1.781477937;
+    let b4 = -1.821255978;
+    let b5 = 1.330274429;
+
+    let t = 1.0 / (1.0 + p * z_abs);
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    let t5 = t4 * t;
+
+    let pdf = (-0.5 * z_abs * z_abs).exp() / (2.0 * std::f64::consts::PI).sqrt();
+    let cdf = 1.0 - pdf * (b1 * t + b2 * t2 + b3 * t3 + b4 * t4 + b5 * t5);
+
+    // Two-tailed confidence: probability that the difference is real
+    1.0 - 2.0 * (1.0 - cdf)
 }

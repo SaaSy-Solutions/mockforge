@@ -351,8 +351,84 @@ impl DataDriftEngine {
                     Ok(current)
                 }
             }
-            DriftStrategy::Custom(_expr) => {
-                // Custom drift rules (simplified - could use expression evaluation)
+            DriftStrategy::Custom(expr) => {
+                // Custom drift rules using simple expression evaluation
+                // Supported expressions:
+                //   "value + <n>" / "value - <n>" — add/subtract constant
+                //   "value * <n>" — multiply by factor
+                //   "value % <n>" — modulo
+                //   "clamp(<min>, <max>)" — clamp current value to range
+                //   "<literal>" — replace with literal string or number
+                let expr = expr.trim();
+
+                if let Some(num) = current.as_f64() {
+                    // Try arithmetic expressions on numeric values
+                    if let Some(rest) = expr.strip_prefix("value") {
+                        let rest = rest.trim();
+                        let result = if let Some(operand) = rest.strip_prefix('+') {
+                            operand.trim().parse::<f64>().ok().map(|n| num + n)
+                        } else if let Some(operand) = rest.strip_prefix('-') {
+                            operand.trim().parse::<f64>().ok().map(|n| num - n)
+                        } else if let Some(operand) = rest.strip_prefix('*') {
+                            operand.trim().parse::<f64>().ok().map(|n| num * n)
+                        } else if let Some(operand) = rest.strip_prefix('%') {
+                            operand.trim().parse::<f64>().ok().map(|n| {
+                                if n != 0.0 {
+                                    num % n
+                                } else {
+                                    num
+                                }
+                            })
+                        } else {
+                            None
+                        };
+
+                        if let Some(mut new_val) = result {
+                            // Apply bounds from the rule
+                            if let Some(min) = &rule.min_value {
+                                if let Some(min_num) = min.as_f64() {
+                                    new_val = new_val.max(min_num);
+                                }
+                            }
+                            if let Some(max) = &rule.max_value {
+                                if let Some(max_num) = max.as_f64() {
+                                    new_val = new_val.min(max_num);
+                                }
+                            }
+                            return Ok(Value::from(new_val));
+                        }
+                    }
+
+                    // Try clamp expression: "clamp(min, max)"
+                    if let Some(inner) =
+                        expr.strip_prefix("clamp(").and_then(|s| s.strip_suffix(')'))
+                    {
+                        let parts: Vec<&str> = inner.split(',').collect();
+                        if parts.len() == 2 {
+                            if let (Ok(min), Ok(max)) =
+                                (parts[0].trim().parse::<f64>(), parts[1].trim().parse::<f64>())
+                            {
+                                return Ok(Value::from(num.clamp(min, max)));
+                            }
+                        }
+                    }
+
+                    // Try literal number replacement
+                    if let Ok(literal) = expr.parse::<f64>() {
+                        return Ok(Value::from(literal));
+                    }
+                }
+
+                // For string values or unmatched expressions, try literal replacement
+                if !expr.starts_with("value") && !expr.starts_with("clamp") {
+                    // Try as a literal JSON value
+                    if let Ok(parsed) = serde_json::from_str::<Value>(expr) {
+                        return Ok(parsed);
+                    }
+                    // Otherwise treat as a literal string
+                    return Ok(Value::String(expr.to_string()));
+                }
+
                 Ok(current)
             }
         }

@@ -58,11 +58,12 @@ pub fn ecdsa_pem_to_jwk(_pem: &str, kid: &str, alg: &str) -> Result<JwkPublicKey
 }
 
 /// Convert HMAC secret to JWK format (oct key type)
+///
+/// HMAC keys are symmetric secrets and MUST NOT be exposed in JWKS endpoints.
+/// JWKS is designed for public key discovery only. This returns an `oct` key
+/// entry with the key ID and algorithm for identification purposes, but
+/// intentionally omits the secret material (`k` field).
 pub fn hmac_to_jwk(_secret: &str, kid: &str, alg: &str) -> Result<JwkPublicKey, Error> {
-    // For HMAC, we don't expose the secret in JWKS (security)
-    // Instead, return a placeholder or empty key
-    // In practice, HMAC keys are symmetric and shouldn't be in JWKS
-    // But we provide this for completeness
     Ok(JwkPublicKey {
         kid: kid.to_string(),
         kty: "oct".to_string(),

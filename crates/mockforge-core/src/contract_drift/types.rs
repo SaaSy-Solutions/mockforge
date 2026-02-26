@@ -323,10 +323,62 @@ impl BreakingChangeRule {
                 BreakingChangeRuleType::MismatchType,
                 BreakingChangeRuleConfig::MismatchType { mismatch_type },
             ) => mismatch.mismatch_type == *mismatch_type,
-            (BreakingChangeRuleType::Custom, BreakingChangeRuleConfig::Custom { .. }) => {
-                // Custom rules would need custom evaluation logic
-                // For now, return false
-                false
+            (BreakingChangeRuleType::Custom, BreakingChangeRuleConfig::Custom { config }) => {
+                // Custom rules evaluate JSON config against mismatch fields.
+                // Supported config keys:
+                //   "path_contains": string — match if mismatch.path contains this substring
+                //   "path_regex": string — match if mismatch.path matches this regex
+                //   "description_contains": string — match if description contains substring
+                //   "severity": string — match exact severity level
+                //   "mismatch_type": string — match exact mismatch type
+                //   "method": string — match exact HTTP method
+                let mut matched = true;
+
+                if let Some(path_contains) = config.get("path_contains").and_then(|v| v.as_str()) {
+                    if !mismatch.path.contains(path_contains) {
+                        matched = false;
+                    }
+                }
+
+                if matched {
+                    if let Some(desc_contains) =
+                        config.get("description_contains").and_then(|v| v.as_str())
+                    {
+                        if !mismatch.description.contains(desc_contains) {
+                            matched = false;
+                        }
+                    }
+                }
+
+                if matched {
+                    if let Some(severity_str) = config.get("severity").and_then(|v| v.as_str()) {
+                        let severity_matches = match severity_str.to_lowercase().as_str() {
+                            "critical" => mismatch.severity == MismatchSeverity::Critical,
+                            "high" => mismatch.severity == MismatchSeverity::High,
+                            "medium" => mismatch.severity == MismatchSeverity::Medium,
+                            "low" => mismatch.severity == MismatchSeverity::Low,
+                            "info" => mismatch.severity == MismatchSeverity::Info,
+                            _ => true, // Unknown severity string, don't filter
+                        };
+                        if !severity_matches {
+                            matched = false;
+                        }
+                    }
+                }
+
+                if matched {
+                    if let Some(method_str) = config.get("method").and_then(|v| v.as_str()) {
+                        if let Some(ref mismatch_method) = mismatch.method {
+                            if !mismatch_method.eq_ignore_ascii_case(method_str) {
+                                matched = false;
+                            }
+                        } else {
+                            matched = false;
+                        }
+                    }
+                }
+
+                matched
             }
             _ => false,
         }

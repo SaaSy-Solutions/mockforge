@@ -87,11 +87,15 @@ pub fn check_and_update_lifecycle_transitions(
             }
         }
 
-        // Check condition if present (simplified - in production would need proper condition evaluation)
+        // Evaluate condition against persona metadata if present
         if let Some(condition) = &rule.condition {
-            // For now, we'll skip condition evaluation and just check time
-            // In production, this would evaluate the condition against persona metadata
-            debug!("Skipping condition evaluation: {}", condition);
+            if !evaluate_lifecycle_condition(condition, &lifecycle.metadata) {
+                debug!(
+                    "Condition '{}' not met for persona {}, skipping transition",
+                    condition, lifecycle.persona_id
+                );
+                continue;
+            }
         }
 
         // Transition to the new state
@@ -108,4 +112,105 @@ pub fn check_and_update_lifecycle_transitions(
     }
 
     false // No transition occurred
+}
+
+/// Evaluate a lifecycle condition expression against persona metadata
+///
+/// Supports simple comparison expressions like:
+/// - `"payment_failed_count > 2"`
+/// - `"login_count >= 10"`
+/// - `"subscription_tier == premium"`
+/// - `"active == true"`
+///
+/// The left side is looked up as a key in the metadata map.
+/// Numeric comparisons use f64; string comparisons use equality/inequality.
+fn evaluate_lifecycle_condition(
+    condition: &str,
+    metadata: &std::collections::HashMap<String, serde_json::Value>,
+) -> bool {
+    let expr = condition.trim();
+
+    // Handle literal true/false
+    if expr.eq_ignore_ascii_case("true") {
+        return true;
+    }
+    if expr.eq_ignore_ascii_case("false") {
+        return false;
+    }
+
+    // Parse "variable operator value" expressions
+    // Try two-character operators first (>=, <=, ==, !=), then single-character (>, <)
+    let operators = [">=", "<=", "!=", "==", ">", "<"];
+    let mut parts: Option<(&str, &str, &str)> = None;
+
+    for op in &operators {
+        if let Some(idx) = expr.find(op) {
+            let var = expr[..idx].trim();
+            let val = expr[idx + op.len()..].trim();
+            if !var.is_empty() && !val.is_empty() {
+                parts = Some((var, op, val));
+                break;
+            }
+        }
+    }
+
+    let (variable, operator, threshold_str) = match parts {
+        Some(p) => p,
+        None => {
+            debug!(expression = expr, "Unrecognized condition expression, defaulting to true");
+            return true;
+        }
+    };
+
+    // Look up the variable in metadata
+    let meta_value = match metadata.get(variable) {
+        Some(val) => val,
+        None => {
+            debug!(
+                variable = variable,
+                "Condition variable not found in persona metadata, defaulting to false"
+            );
+            return false;
+        }
+    };
+
+    // Try numeric comparison first
+    if let Some(actual_num) = meta_value.as_f64() {
+        if let Ok(threshold_num) = threshold_str.parse::<f64>() {
+            return match operator {
+                ">" => actual_num > threshold_num,
+                "<" => actual_num < threshold_num,
+                ">=" => actual_num >= threshold_num,
+                "<=" => actual_num <= threshold_num,
+                "==" => (actual_num - threshold_num).abs() < f64::EPSILON,
+                "!=" => (actual_num - threshold_num).abs() >= f64::EPSILON,
+                _ => true,
+            };
+        }
+    }
+
+    // Fall back to string comparison
+    let actual_str = match meta_value {
+        serde_json::Value::String(s) => s.as_str(),
+        serde_json::Value::Bool(b) => {
+            if *b {
+                "true"
+            } else {
+                "false"
+            }
+        }
+        _ => {
+            debug!(variable = variable, "Cannot compare non-string/non-numeric metadata value");
+            return false;
+        }
+    };
+
+    match operator {
+        "==" => actual_str == threshold_str,
+        "!=" => actual_str != threshold_str,
+        _ => {
+            debug!(operator = operator, "Operator not supported for string comparison");
+            false
+        }
+    }
 }
