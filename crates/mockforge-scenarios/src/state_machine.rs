@@ -387,14 +387,6 @@ impl ScenarioStateMachineManager {
             Some(format!("{}-{}", instance.current_state, to_state)),
         );
 
-        // Update history manager
-        let mut history_managers = self.history_managers.write().await;
-        let _history = history_managers
-            .entry(instance.resource_type.clone())
-            .or_insert_with(HistoryManager::new);
-        // Note: We'd push the state machine to history here if we were tracking edits
-        // For now, we're just tracking execution state
-
         info!(
             "Resource '{}' transitioned from '{}' to '{}'",
             resource_id, instance.current_state, to_state

@@ -109,13 +109,7 @@ pub fn align_openapi_specs(
     let mut warnings = Vec::new();
     let mut merged = existing_spec.clone();
 
-    // Extract paths from both specs
-    let _existing_paths: Map<String, Value> = existing_spec
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .cloned()
-        .unwrap_or_default();
-
+    // Extract paths from scenario spec to merge into existing
     let scenario_paths: Map<String, Value> = scenario_spec
         .get("paths")
         .and_then(|p| p.as_object())
@@ -219,14 +213,7 @@ pub fn align_openapi_specs(
         }
     }
 
-    // Merge components/schemas
-    let _existing_components: Map<String, Value> = existing_spec
-        .get("components")
-        .and_then(|c| c.get("schemas"))
-        .and_then(|s| s.as_object())
-        .cloned()
-        .unwrap_or_default();
-
+    // Merge components/schemas from scenario into existing
     let scenario_components: Map<String, Value> = scenario_spec
         .get("components")
         .and_then(|c| c.get("schemas"))
