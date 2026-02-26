@@ -58,7 +58,7 @@ pub async fn update_canary_config(
 /// GET /api/v1/deceptive-canary/stats
 pub async fn get_canary_stats(State(state): State<DeceptiveCanaryState>) -> Json<Value> {
     let stats = state.router.stats();
-    let canary_percentage = stats.map(|s| s.canary_percentage()).unwrap_or(0.0);
+    let canary_percentage = stats.canary_percentage();
 
     Json(json!({
         "success": true,

@@ -98,8 +98,9 @@ impl PromotionService {
     /// This ensures the `promotion_history` and `environment_permission_policies` tables exist.
     /// Should be called during service initialization.
     pub async fn run_migrations(&self) -> Result<()> {
-        // Migrations are handled by the collab server's migration system
-        // This is a placeholder for future migration needs specific to promotions
+        // Promotion-specific tables (promotion_history, environment_permission_policies)
+        // are created by the collab server's main SQLx migration system.
+        // No additional promotion-specific migrations needed at this time.
         Ok(())
     }
 

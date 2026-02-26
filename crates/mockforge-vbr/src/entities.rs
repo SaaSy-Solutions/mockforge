@@ -86,15 +86,23 @@ impl Entity {
         new_state: &str,
         state_field_name: Option<&str>,
     ) -> Result<()> {
-        // Determine state field name
-        // Default to "status" if not specified, or use resource_type-based naming
+        // Determine state field name:
+        // 1. Use the explicitly passed name if provided
+        // 2. Look for a matching field in the schema (e.g., "order_status" for resource_type "Order")
+        // 3. Fall back to "status"
+        let derived_field;
         let field_name = if let Some(name) = state_field_name {
             name
         } else if let Some(ref sm) = self.state_machine {
-            // Use resource_type to derive field name (e.g., "Order" -> "order_status")
-            // We'll use a static string for now - in production, this would need to be
-            // stored or passed differently
-            "status"
+            // Derive candidate field name: "Order" -> "order_status"
+            let candidate = format!("{}_status", sm.resource_type.to_ascii_lowercase());
+            // Check if the derived field exists in the schema
+            if self.schema.base.fields.iter().any(|f| f.name == candidate) {
+                derived_field = candidate;
+                &derived_field
+            } else {
+                "status"
+            }
         } else {
             "status"
         };

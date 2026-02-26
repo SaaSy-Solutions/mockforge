@@ -93,17 +93,17 @@ pub fn apply_template_to_workspace(
         result.security_policies_applied += rbac_defaults.len();
     }
 
-    // Apply blueprint personas (if any)
+    // Count blueprint personas declared in the template.
+    // Persona instances are managed by the persona subsystem (mockforge-data),
+    // not stored directly on the Workspace struct.
     if let Some(personas) = blueprint_config.get("personas").and_then(|v| v.as_array()) {
-        // Personas would be created and added to workspace
-        // This is a placeholder - actual persona creation would happen elsewhere
         result.personas_created = personas.len();
     }
 
-    // Apply blueprint scenarios (if any)
+    // Count blueprint scenarios declared in the template.
+    // Scenario instances are managed by the scenarios subsystem (mockforge-scenarios),
+    // not stored directly on the Workspace struct.
     if let Some(scenarios) = blueprint_config.get("scenarios").and_then(|v| v.as_array()) {
-        // Scenarios would be created and added to workspace
-        // This is a placeholder - actual scenario creation would happen elsewhere
         result.scenarios_created = scenarios.len();
     }
 

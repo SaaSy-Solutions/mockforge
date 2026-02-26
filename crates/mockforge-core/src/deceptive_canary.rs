@@ -109,6 +109,11 @@ impl CanaryStats {
 pub struct DeceptiveCanaryRouter {
     config: DeceptiveCanaryConfig,
     round_robin_counter: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    // Thread-safe atomic counters for statistics tracking
+    total_requests: std::sync::atomic::AtomicU64,
+    canary_requests: std::sync::atomic::AtomicU64,
+    opted_out_requests: std::sync::atomic::AtomicU64,
+    matched_requests: std::sync::atomic::AtomicU64,
 }
 
 impl DeceptiveCanaryRouter {
@@ -117,6 +122,10 @@ impl DeceptiveCanaryRouter {
         Self {
             config,
             round_robin_counter: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_requests: std::sync::atomic::AtomicU64::new(0),
+            canary_requests: std::sync::atomic::AtomicU64::new(0),
+            opted_out_requests: std::sync::atomic::AtomicU64::new(0),
+            matched_requests: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -275,18 +284,27 @@ impl DeceptiveCanaryRouter {
         self.config = config;
     }
 
-    /// Get routing statistics
-    pub fn stats(&self) -> Option<&CanaryStats> {
-        self.config.stats.as_ref()
+    /// Get routing statistics as a snapshot.
+    pub fn stats(&self) -> CanaryStats {
+        CanaryStats {
+            total_requests: self.total_requests.load(std::sync::atomic::Ordering::Relaxed),
+            canary_requests: self.canary_requests.load(std::sync::atomic::Ordering::Relaxed),
+            opted_out_requests: self.opted_out_requests.load(std::sync::atomic::Ordering::Relaxed),
+            matched_requests: self.matched_requests.load(std::sync::atomic::Ordering::Relaxed),
+        }
     }
 
-    /// Update statistics (thread-safe)
-    pub fn record_request(&self, _routed: bool, _opted_out: bool, _matched: bool) {
-        if let Some(_stats) = &self.config.stats {
-            // Note: This is a simplified implementation
-            // In production, you'd want to use atomic counters or a proper stats collector
-            // For now, stats are stored in config which is not thread-safe for updates
-            // This would need to be refactored to use Arc<RwLock<CanaryStats>> for thread-safety
+    /// Record a request in the thread-safe atomic counters.
+    pub fn record_request(&self, routed: bool, opted_out: bool, matched: bool) {
+        self.total_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if routed {
+            self.canary_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if opted_out {
+            self.opted_out_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if matched {
+            self.matched_requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }
