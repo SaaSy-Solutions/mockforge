@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 /// A managed MockForge server instance for testing
 pub struct MockForgeServer {
@@ -166,7 +166,7 @@ impl MockForgeServer {
 impl Drop for MockForgeServer {
     fn drop(&mut self) {
         if let Err(e) = self.stop() {
-            eprintln!("Failed to stop MockForge server on drop: {}", e);
+            error!("Failed to stop MockForge server on drop: {}", e);
         }
     }
 }

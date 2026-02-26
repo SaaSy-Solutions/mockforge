@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{info, warn};
 
 /// MQTT fixture for topic-based mocking
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,11 +96,7 @@ impl MqttFixtureRegistry {
                                 loaded_count += 1;
                             }
                             Err(e) => {
-                                eprintln!(
-                                    "Warning: Failed to load fixture from {}: {}",
-                                    path.display(),
-                                    e
-                                );
+                                warn!("Failed to load fixture from {}: {}", path.display(), e);
                             }
                         }
                     }
@@ -107,7 +104,7 @@ impl MqttFixtureRegistry {
             }
         }
 
-        println!("✅ Loaded {} MQTT fixtures from {}", loaded_count, path.display());
+        info!("Loaded {} MQTT fixtures from {}", loaded_count, path.display());
         Ok(())
     }
 

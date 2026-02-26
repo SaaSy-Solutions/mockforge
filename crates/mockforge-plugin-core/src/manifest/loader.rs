@@ -68,7 +68,7 @@ impl ManifestLoader {
             match manifest.validate() {
                 Ok(_) => validated.push(manifest),
                 Err(e) => {
-                    eprintln!("Failed to validate manifest for plugin {}: {}", manifest.id(), e);
+                    warn!("Failed to validate manifest for plugin {}: {}", manifest.id(), e);
                 }
             }
         }

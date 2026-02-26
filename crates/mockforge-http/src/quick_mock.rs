@@ -67,6 +67,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 /// Query parameters for list endpoints
 #[derive(Debug, Deserialize, Serialize)]
@@ -130,7 +131,7 @@ impl QuickMockState {
                         match state.resolver.resolve(&item).await {
                             Ok(resolved) => resolved_items.push(resolved),
                             Err(e) => {
-                                eprintln!("Warning: Failed to resolve tokens in {}: {}", key, e)
+                                warn!("Failed to resolve tokens in {}: {}", key, e)
                             }
                         }
                     }
@@ -141,7 +142,7 @@ impl QuickMockState {
                         Ok(resolved) => {
                             data.insert(key, vec![resolved]);
                         }
-                        Err(e) => eprintln!("Warning: Failed to resolve tokens in {}: {}", key, e),
+                        Err(e) => warn!("Failed to resolve tokens in {}: {}", key, e),
                     }
                 }
             }
@@ -218,7 +219,7 @@ pub async fn build_quick_router(state: QuickMockState) -> Router {
 
         router = router.nest(&format!("/{}", resource), resource_router);
 
-        println!("  ✓ Registered routes for /{}", resource);
+        info!("Registered routes for /{}", resource);
     }
 
     // Add info endpoint
