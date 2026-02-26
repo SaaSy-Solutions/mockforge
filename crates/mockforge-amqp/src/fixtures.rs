@@ -1,5 +1,6 @@
 use crate::exchanges::ExchangeType;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 
 /// Configuration for an exchange in fixtures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,14 +78,14 @@ impl AmqpFixture {
 
     /// Load a single fixture from a YAML file
     fn load_from_file(path: &std::path::Path) -> mockforge_core::Result<Self> {
-        println!("Loading fixture from: {:?}", path);
+        debug!("Loading fixture from: {:?}", path);
         let content = std::fs::read_to_string(path)?;
-        println!("File content length: {}", content.len());
+        debug!("File content length: {}", content.len());
         let fixture: AmqpFixture = serde_yaml::from_str(&content).map_err(|e| {
-            println!("YAML parsing error: {}", e);
+            warn!("YAML parsing error: {}", e);
             e
         })?;
-        println!("Successfully loaded fixture: {}", fixture.identifier);
+        debug!("Successfully loaded fixture: {}", fixture.identifier);
         Ok(fixture)
     }
 }

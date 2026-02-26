@@ -5,6 +5,7 @@ use anyhow::Result;
 use libunftp::ServerBuilder;
 use mockforge_core::config::FtpConfig;
 use std::sync::Arc;
+use tracing::info;
 
 /// FTP Server implementation for MockForge
 #[derive(Debug)]
@@ -28,7 +29,7 @@ impl FtpServer {
 
     pub async fn start(&self) -> Result<()> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
-        println!("Starting FTP server on {}", addr);
+        info!("Starting FTP server on {}", addr);
 
         // Create the storage backend
         let storage = MockForgeStorage::new(self.vfs.clone(), self.spec_registry.clone());
@@ -38,7 +39,7 @@ impl FtpServer {
             .greeting("MockForge FTP Server")
             .passive_ports(49152..=65534); // Use dynamic port range for passive mode
 
-        println!("FTP server listening on {}", addr);
+        info!("FTP server listening on {}", addr);
         let server = server.build()?;
         server.listen(&addr).await?;
 

@@ -5,6 +5,7 @@
 
 use crate::{PluginError, Result};
 use std::path::Path;
+use tracing::warn;
 
 use super::models::PluginManifest;
 
@@ -49,7 +50,7 @@ impl ManifestLoader {
                     Ok(manifest) => manifests.push(manifest),
                     Err(e) => {
                         // Log error but continue loading other manifests
-                        eprintln!("Failed to load manifest from {}: {}", path.display(), e);
+                        warn!("Failed to load manifest from {}: {}", path.display(), e);
                     }
                 }
             }

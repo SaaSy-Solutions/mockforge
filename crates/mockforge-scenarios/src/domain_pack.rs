@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Domain pack manifest
 ///
@@ -333,8 +334,8 @@ impl DomainPackInstaller {
                             packs.push(DomainPackInfo::from_manifest(manifest, Some(pack_path)));
                         }
                         Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to load pack manifest from {}: {}",
+                            warn!(
+                                "Failed to load pack manifest from {}: {}",
                                 pack_path.display(),
                                 e
                             );

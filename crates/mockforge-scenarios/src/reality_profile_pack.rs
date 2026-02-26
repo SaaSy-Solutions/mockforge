@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Reality Profile Pack manifest
 ///
@@ -370,8 +371,8 @@ impl RealityProfilePackInstaller {
                             ));
                         }
                         Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to load reality profile pack manifest from {}: {}",
+                            warn!(
+                                "Failed to load reality profile pack manifest from {}: {}",
                                 pack_path.display(),
                                 e
                             );

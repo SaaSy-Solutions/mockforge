@@ -4,4 +4,6 @@ ignore = [
     # proc-macro-error is unmaintained but not a security vulnerability
     # It's a transitive dependency of gtk-rs (desktop app only)
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained but not a security issue, only affects desktop app GUI dependencies" },
+    { id = "RUSTSEC-2026-0020", reason = "wasmtime WASI resource exhaustion - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
+    { id = "RUSTSEC-2026-0021", reason = "wasmtime wasi:http/types.fields panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
 ]

@@ -39,5 +39,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Semver parsing
 semver = "1.0"
 
+# Logging
+tracing.workspace = true
+
 [dev-dependencies]
 tempfile = "3.0"

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
+use tracing::error;
 
 /// Hot reload manager
 pub struct HotReloadManager {
@@ -332,7 +333,7 @@ impl HotReloadManager {
                     callback(changed);
                 }
                 Err(e) => {
-                    eprintln!("Error checking for changes: {}", e);
+                    error!("Error checking for changes: {}", e);
                 }
                 _ => {}
             }
