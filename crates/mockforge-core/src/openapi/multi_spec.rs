@@ -432,8 +432,14 @@ pub fn merge_specs(
     }
 
     if specs.len() == 1 {
-        // No merging needed
-        return Ok(specs.into_iter().next().unwrap().1);
+        // No merging needed — safe because we just checked len() == 1
+        return specs.into_iter().next().map(|(_, spec)| spec).ok_or_else(|| {
+            MergeConflictError::ComponentConflict {
+                component_type: "general".to_string(),
+                key: "no_specs".to_string(),
+                files: Vec::new(),
+            }
+        });
     }
 
     // Detect conflicts first
@@ -484,7 +490,13 @@ pub fn merge_specs(
     let all_file_paths: Vec<PathBuf> = specs.iter().map(|(p, _)| p.clone()).collect();
 
     // Start with the first spec as the base
-    let base_spec = specs[0].1.clone();
+    let base_spec = specs.first().map(|(_, spec)| spec.clone()).ok_or_else(|| {
+        MergeConflictError::ComponentConflict {
+            component_type: "general".to_string(),
+            key: "no_specs".to_string(),
+            files: Vec::new(),
+        }
+    })?;
     #[allow(unused_mut)]
     let mut base_doc = base_spec
         .raw_document
@@ -492,13 +504,8 @@ pub fn merge_specs(
         .cloned()
         .unwrap_or_else(|| serde_json::json!({}));
 
-    // Determine iteration order based on strategy
-    let specs_to_merge: Vec<&(PathBuf, OpenApiSpec)> =
-        if conflict_strategy == ConflictStrategy::Last {
-            specs.iter().skip(1).collect()
-        } else {
-            specs.iter().skip(1).collect()
-        };
+    // Skip the first spec (used as base) and merge the rest
+    let specs_to_merge: Vec<&(PathBuf, OpenApiSpec)> = specs.iter().skip(1).collect();
 
     // Merge each subsequent spec
     for (_file_path, spec) in specs_to_merge {
@@ -509,7 +516,13 @@ pub fn merge_specs(
             if base_doc.get("paths").is_none() {
                 base_doc["paths"] = serde_json::json!({});
             }
-            let base_paths = base_doc["paths"].as_object_mut().expect("paths must be an object");
+            let base_paths = base_doc["paths"].as_object_mut().ok_or_else(|| {
+                MergeConflictError::ComponentConflict {
+                    component_type: "paths".to_string(),
+                    key: "invalid_type".to_string(),
+                    files: all_file_paths.clone(),
+                }
+            })?;
             for (path, path_item) in paths {
                 if base_paths.contains_key(path) {
                     // Conflict - handle based on strategy
@@ -528,22 +541,28 @@ pub fn merge_specs(
             if base_doc.get("components").is_none() {
                 base_doc["components"] = serde_json::json!({});
             }
-            let base_components =
-                base_doc["components"].as_object_mut().expect("components must be an object");
+            let base_components = base_doc["components"].as_object_mut().ok_or_else(|| {
+                MergeConflictError::ComponentConflict {
+                    component_type: "components".to_string(),
+                    key: "invalid_type".to_string(),
+                    files: all_file_paths.clone(),
+                }
+            })?;
             for (component_type, component_obj) in components {
                 if let Some(component_map) = component_obj.as_object() {
                     let base_component_map = base_components
                         .entry(component_type.clone())
                         .or_insert_with(|| serde_json::json!({}))
                         .as_object_mut()
-                        .expect("component type must be an object");
+                        .ok_or_else(|| MergeConflictError::ComponentConflict {
+                            component_type: component_type.clone(),
+                            key: "invalid_type".to_string(),
+                            files: all_file_paths.clone(),
+                        })?;
 
                     for (key, value) in component_map {
-                        if base_component_map.contains_key(key) {
+                        if let Some(existing) = base_component_map.get(key) {
                             // Check if identical
-                            let existing = base_component_map
-                                .get(key)
-                                .expect("key must exist after contains_key check");
                             if serde_json::to_string(existing).ok()
                                 != serde_json::to_string(value).ok()
                             {

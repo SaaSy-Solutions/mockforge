@@ -618,7 +618,7 @@ pub async fn start_test_server(port: u16) -> crate::Result<SocketAddr> {
             axum::serve(listener, router)
                 .await
                 .map_err(|e| {
-                    eprintln!("Tunnel server error: {}", e);
+                    error!("Tunnel server error: {}", e);
                 })
                 .ok();
         });
@@ -637,7 +637,7 @@ pub async fn start_test_server(port: u16) -> crate::Result<SocketAddr> {
             axum::serve(listener, router)
                 .await
                 .map_err(|e| {
-                    eprintln!("Tunnel server error: {}", e);
+                    error!("Tunnel server error: {}", e);
                 })
                 .ok();
         });
