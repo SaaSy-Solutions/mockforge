@@ -332,9 +332,23 @@ impl ProbabilisticModel {
         let status_prob = model.status_code_distribution.entry(status_code).or_insert(0.0);
         *status_prob = (*status_prob * total + 1.0) / new_total;
 
-        // Update latency distribution (simplified - would need proper percentile tracking)
+        // Update latency distribution using Welford's online algorithm for variance
+        let latency = latency_ms as f64;
         let old_mean = model.latency_distribution.mean;
-        model.latency_distribution.mean = (old_mean * total + latency_ms as f64) / new_total;
+        let new_mean = (old_mean * total + latency) / new_total;
+        model.latency_distribution.mean = new_mean;
+
+        // Welford's online variance: update std_dev incrementally
+        // M2(n) = M2(n-1) + (x - old_mean) * (x - new_mean)
+        // variance = M2(n) / n
+        if total > 0.0 {
+            let old_variance = model.latency_distribution.std_dev.powi(2);
+            let old_m2 = old_variance * total;
+            let new_m2 = old_m2 + (latency - old_mean) * (latency - new_mean);
+            model.latency_distribution.std_dev = (new_m2 / new_total).sqrt();
+        } else {
+            model.latency_distribution.std_dev = 0.0;
+        }
 
         // Update min/max
         if latency_ms < model.latency_distribution.min {
@@ -342,6 +356,56 @@ impl ProbabilisticModel {
         }
         if latency_ms > model.latency_distribution.max {
             model.latency_distribution.max = latency_ms;
+        }
+
+        // Update percentile estimates using the P-square algorithm approximation.
+        // Move each percentile estimate toward the observed value when the observation
+        // is on the "correct" side, using a step proportional to 1/n for stability.
+        let step = 1.0 / new_total;
+        if latency_ms <= model.latency_distribution.p50 {
+            let delta = (model.latency_distribution.p50 as f64
+                - model.latency_distribution.min as f64)
+                * step;
+            model.latency_distribution.p50 =
+                (model.latency_distribution.p50 as f64 - delta).round() as u64;
+        } else {
+            let delta = (model.latency_distribution.max as f64
+                - model.latency_distribution.p50 as f64)
+                * step;
+            model.latency_distribution.p50 =
+                (model.latency_distribution.p50 as f64 + delta).round() as u64;
+        }
+
+        if latency_ms <= model.latency_distribution.p95 {
+            let delta = (model.latency_distribution.p95 as f64
+                - model.latency_distribution.min as f64)
+                * step
+                * 0.05; // Slower movement for high percentiles
+            model.latency_distribution.p95 =
+                (model.latency_distribution.p95 as f64 - delta).round() as u64;
+        } else {
+            let delta = (model.latency_distribution.max as f64
+                - model.latency_distribution.p95 as f64)
+                * step
+                * 0.95;
+            model.latency_distribution.p95 =
+                (model.latency_distribution.p95 as f64 + delta).round() as u64;
+        }
+
+        if latency_ms <= model.latency_distribution.p99 {
+            let delta = (model.latency_distribution.p99 as f64
+                - model.latency_distribution.min as f64)
+                * step
+                * 0.01;
+            model.latency_distribution.p99 =
+                (model.latency_distribution.p99 as f64 - delta).round() as u64;
+        } else {
+            let delta = (model.latency_distribution.max as f64
+                - model.latency_distribution.p99 as f64)
+                * step
+                * 0.99;
+            model.latency_distribution.p99 =
+                (model.latency_distribution.p99 as f64 + delta).round() as u64;
         }
 
         model.sample_count += 1;

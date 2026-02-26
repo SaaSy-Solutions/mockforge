@@ -618,9 +618,38 @@ impl ScenarioStateMachineManager {
                 break;
             }
 
-            // Select transition (for now, take the first valid one)
-            // In the future, this could support probability-based selection or condition evaluation
-            let selected_transition = possible_transitions[0];
+            // Select transition using probability-weighted selection
+            let selected_transition = if possible_transitions.len() == 1 {
+                possible_transitions[0]
+            } else {
+                // Normalize probabilities and pick using hash-based pseudo-randomness
+                let total_weight: f64 = possible_transitions.iter().map(|t| t.probability).sum();
+                if total_weight > 0.0 {
+                    // Use a hash of the current state + iteration for deterministic but varied selection
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    current_state.hash(&mut hasher);
+                    iteration.hash(&mut hasher);
+                    sub_instance_id.hash(&mut hasher);
+                    let hash = hasher.finish();
+                    let random_val = (hash % 10000) as f64 / 10000.0;
+
+                    let scaled = random_val * total_weight;
+                    let mut cumulative = 0.0;
+                    let mut selected = possible_transitions[0];
+                    for t in &possible_transitions {
+                        cumulative += t.probability;
+                        if scaled <= cumulative {
+                            selected = t;
+                            break;
+                        }
+                    }
+                    selected
+                } else {
+                    possible_transitions[0]
+                }
+            };
             let next_state = selected_transition.to_state.clone();
 
             // Evaluate condition if present

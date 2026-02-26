@@ -327,15 +327,25 @@ impl OpenApiSpecGenerator {
 
                 for (key, val) in obj {
                     properties.insert(key.clone(), self.json_to_schema(val));
-                    // Assume all fields are required for now
-                    required.push(key.clone());
+                    // Only mark non-null fields as required.
+                    // Null values indicate the field is optional.
+                    if !val.is_null() {
+                        required.push(key.clone());
+                    }
                 }
 
-                json!({
-                    "type": "object",
-                    "properties": properties,
-                    "required": required
-                })
+                if required.is_empty() {
+                    json!({
+                        "type": "object",
+                        "properties": properties
+                    })
+                } else {
+                    json!({
+                        "type": "object",
+                        "properties": properties,
+                        "required": required
+                    })
+                }
             }
         }
     }
