@@ -276,10 +276,63 @@ impl AlertRule {
                     None
                 }
             }
-            AlertRuleType::ImpactThreshold { .. } => {
-                // This would need ChaosImpact from analytics
-                // For now, return None - would be implemented with full integration
-                None
+            AlertRuleType::ImpactThreshold {
+                threshold,
+                window_minutes,
+            } => {
+                // Filter metrics within the window
+                let cutoff = chrono::Utc::now() - chrono::Duration::minutes(*window_minutes);
+                let windowed: Vec<_> = metrics.iter().filter(|m| m.timestamp >= cutoff).collect();
+
+                if windowed.is_empty() {
+                    return None;
+                }
+
+                // Compute a composite impact severity score (0.0–1.0) from:
+                // - fault ratio (faults / total events)
+                // - latency severity (avg_latency relative to a 1-second baseline)
+                // - rate-limit violation density
+                let total_events: usize = windowed.iter().map(|m| m.total_events).sum();
+                let total_faults: usize = windowed.iter().map(|m| m.total_faults).sum();
+                let total_violations: usize =
+                    windowed.iter().map(|m| m.rate_limit_violations).sum();
+                let avg_latency: f64 = if !windowed.is_empty() {
+                    windowed.iter().map(|m| m.avg_latency_ms).sum::<f64>() / windowed.len() as f64
+                } else {
+                    0.0
+                };
+
+                let fault_ratio = if total_events > 0 {
+                    total_faults as f64 / total_events as f64
+                } else {
+                    0.0
+                };
+                let latency_score = (avg_latency / 1000.0).min(1.0);
+                let violation_ratio = if total_events > 0 {
+                    (total_violations as f64 / total_events as f64).min(1.0)
+                } else {
+                    0.0
+                };
+
+                // Weighted composite: faults 50%, latency 30%, rate-limit 20%
+                let severity_score =
+                    fault_ratio * 0.5 + latency_score * 0.3 + violation_ratio * 0.2;
+
+                if severity_score > *threshold {
+                    Some(Alert::new(
+                        self.severity,
+                        AlertType::HighImpact {
+                            severity_score,
+                            threshold: *threshold,
+                        },
+                        format!(
+                            "High chaos impact detected: {:.2} (threshold: {:.2})",
+                            severity_score, threshold
+                        ),
+                    ))
+                } else {
+                    None
+                }
             }
         }
     }

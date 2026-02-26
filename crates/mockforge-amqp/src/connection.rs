@@ -941,14 +941,56 @@ impl AmqpConnection {
     async fn handle_queue_unbind(&mut self, channel: u16, arguments: &[u8]) -> io::Result<bool> {
         let mut offset = 2; // Skip reserved
 
-        // Parse queue, exchange, routing_key (similar to bind)
+        // Parse queue name
         let queue_len = arguments.get(offset).copied().unwrap_or(0) as usize;
-        offset += 1 + queue_len;
-        let exchange_len = arguments.get(offset).copied().unwrap_or(0) as usize;
-        offset += 1 + exchange_len;
-        let _routing_key_len = arguments.get(offset).copied().unwrap_or(0) as usize;
+        offset += 1;
+        let queue_name = if offset + queue_len <= arguments.len() {
+            String::from_utf8_lossy(&arguments[offset..offset + queue_len]).to_string()
+        } else {
+            String::new()
+        };
+        offset += queue_len;
 
-        // Remove binding (simplified)
+        // Parse exchange name
+        let exchange_len = arguments.get(offset).copied().unwrap_or(0) as usize;
+        offset += 1;
+        let exchange_name = if offset + exchange_len <= arguments.len() {
+            String::from_utf8_lossy(&arguments[offset..offset + exchange_len]).to_string()
+        } else {
+            String::new()
+        };
+        offset += exchange_len;
+
+        // Parse routing key
+        let routing_key_len = arguments.get(offset).copied().unwrap_or(0) as usize;
+        offset += 1;
+        let routing_key = if offset + routing_key_len <= arguments.len() {
+            String::from_utf8_lossy(&arguments[offset..offset + routing_key_len]).to_string()
+        } else {
+            String::new()
+        };
+
+        tracing::debug!(
+            "Queue unbind: queue={}, exchange={}, routing_key={}",
+            queue_name,
+            exchange_name,
+            routing_key
+        );
+
+        // Remove the binding from the exchange
+        {
+            let mut exchanges = self.exchanges.write().await;
+            if let Some(exchange) = exchanges.get_exchange_mut(&exchange_name) {
+                let initial_len = exchange.bindings.len();
+                exchange
+                    .bindings
+                    .retain(|b| !(b.queue == queue_name && b.routing_key == routing_key));
+                if exchange.bindings.len() < initial_len {
+                    tracing::debug!("Removed binding from exchange {}", exchange_name);
+                }
+            }
+        }
+
         let mut payload = Vec::new();
         payload.extend_from_slice(&class_id::QUEUE.to_be_bytes());
         payload.extend_from_slice(&method_id::QUEUE_UNBIND_OK.to_be_bytes());
