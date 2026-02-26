@@ -37,18 +37,50 @@ pub fn discover_chain_relationships(chains: &[ChainDefinition]) -> Vec<GraphEdge
     edges
 }
 
-/// Discover service call relationships from URL patterns
+/// Discover service call relationships from URL patterns.
+///
+/// Extracts service identity from the URL's host component and creates
+/// a graph edge representing a cross-service call. Relative URLs (no host)
+/// are treated as calls within the same service and return None.
 fn discover_service_call_from_url(url: &str) -> Option<GraphEdge> {
-    // Simple heuristic: if URL contains a different service identifier
-    // This is a placeholder - in production, you'd want more sophisticated
-    // URL parsing and service discovery
-    if url.contains("://") {
-        // Could parse URL and identify service boundaries
-        // For now, return None as this requires more context
-        None
-    } else {
-        None
+    // Only process absolute URLs that reference another service
+    let host =
+        if let Some(rest) = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")) {
+            // Extract host (everything before the first '/' or end of string)
+            let host_part = rest.split('/').next().unwrap_or(rest);
+            // Strip port if present
+            host_part.split(':').next().unwrap_or(host_part)
+        } else {
+            // Relative URL — same service, no cross-service edge
+            return None;
+        };
+
+    if host.is_empty() || host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" {
+        return None;
     }
+
+    // Extract the service name from the host (first subdomain or the domain itself)
+    let service_name = host.split('.').next().unwrap_or(host);
+
+    // Extract the path for the edge label
+    let path = url
+        .find("://")
+        .and_then(|i| url[i + 3..].find('/'))
+        .map(|i| &url[url.find("://").unwrap() + 3 + i..])
+        .unwrap_or("/");
+
+    Some(GraphEdge {
+        from: "caller".to_string(),
+        to: format!("service:{service_name}"),
+        edge_type: EdgeType::ServiceCall,
+        label: Some(format!("calls {path}")),
+        metadata: {
+            let mut meta = HashMap::new();
+            meta.insert("target_host".to_string(), serde_json::Value::String(host.to_string()));
+            meta.insert("url".to_string(), serde_json::Value::String(url.to_string()));
+            meta
+        },
+    })
 }
 
 /// Discover state transition relationships from state machines

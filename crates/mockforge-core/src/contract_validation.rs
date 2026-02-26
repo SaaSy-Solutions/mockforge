@@ -316,13 +316,119 @@ impl ContractValidator {
             }
         }
 
-        // Check for new required fields (this is a simplified check)
+        // Compare operations for each path present in both specs
         for (path, new_path_item_ref) in &new_spec.spec.paths.paths {
-            if let openapiv3::ReferenceOr::Item(_new_path_item) = new_path_item_ref {
-                if let Some(_old_path_item_ref) = old_spec.spec.paths.paths.get(path) {
-                    // In a real implementation, we'd do deep comparison of schemas
-                    // This is a placeholder for demonstration
-                    result.add_success();
+            if let openapiv3::ReferenceOr::Item(new_path_item) = new_path_item_ref {
+                if let Some(openapiv3::ReferenceOr::Item(old_path_item)) =
+                    old_spec.spec.paths.paths.get(path)
+                {
+                    let operations = [
+                        ("GET", old_path_item.get.as_ref(), new_path_item.get.as_ref()),
+                        ("POST", old_path_item.post.as_ref(), new_path_item.post.as_ref()),
+                        ("PUT", old_path_item.put.as_ref(), new_path_item.put.as_ref()),
+                        ("DELETE", old_path_item.delete.as_ref(), new_path_item.delete.as_ref()),
+                        ("PATCH", old_path_item.patch.as_ref(), new_path_item.patch.as_ref()),
+                    ];
+
+                    for (method, old_op, new_op) in &operations {
+                        match (old_op, new_op) {
+                            (Some(_), None) => {
+                                // Operation was removed
+                                result.add_breaking_change(BreakingChange {
+                                    change_type: BreakingChangeType::EndpointRemoved,
+                                    path: format!("{} {}", method, path),
+                                    description: format!(
+                                        "{} {} operation was removed",
+                                        method, path
+                                    ),
+                                    severity: ChangeSeverity::Critical,
+                                });
+                            }
+                            (Some(old), Some(new)) => {
+                                // Check for new required parameters
+                                for new_param_ref in &new.parameters {
+                                    if let openapiv3::ReferenceOr::Item(new_param) = new_param_ref {
+                                        let is_required = match new_param {
+                                            openapiv3::Parameter::Query {
+                                                parameter_data, ..
+                                            }
+                                            | openapiv3::Parameter::Header {
+                                                parameter_data, ..
+                                            }
+                                            | openapiv3::Parameter::Path {
+                                                parameter_data, ..
+                                            }
+                                            | openapiv3::Parameter::Cookie {
+                                                parameter_data, ..
+                                            } => parameter_data.required,
+                                        };
+                                        if is_required {
+                                            let param_name = match new_param {
+                                                openapiv3::Parameter::Query {
+                                                    parameter_data,
+                                                    ..
+                                                }
+                                                | openapiv3::Parameter::Header {
+                                                    parameter_data,
+                                                    ..
+                                                }
+                                                | openapiv3::Parameter::Path {
+                                                    parameter_data,
+                                                    ..
+                                                }
+                                                | openapiv3::Parameter::Cookie {
+                                                    parameter_data,
+                                                    ..
+                                                } => &parameter_data.name,
+                                            };
+                                            // Check if this required param existed in old spec
+                                            let existed_before = old.parameters.iter().any(|p| {
+                                                if let openapiv3::ReferenceOr::Item(old_p) = p {
+                                                    let old_name = match old_p {
+                                                        openapiv3::Parameter::Query {
+                                                            parameter_data,
+                                                            ..
+                                                        }
+                                                        | openapiv3::Parameter::Header {
+                                                            parameter_data,
+                                                            ..
+                                                        }
+                                                        | openapiv3::Parameter::Path {
+                                                            parameter_data,
+                                                            ..
+                                                        }
+                                                        | openapiv3::Parameter::Cookie {
+                                                            parameter_data,
+                                                            ..
+                                                        } => &parameter_data.name,
+                                                    };
+                                                    old_name == param_name
+                                                } else {
+                                                    false
+                                                }
+                                            });
+                                            if !existed_before {
+                                                result.add_breaking_change(BreakingChange {
+                                                    change_type: BreakingChangeType::RequiredFieldAdded,
+                                                    path: format!("{} {}", method, path),
+                                                    description: format!(
+                                                        "New required parameter '{}' added to {} {}",
+                                                        param_name, method, path
+                                                    ),
+                                                    severity: ChangeSeverity::Major,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                                result.add_success();
+                            }
+                            _ => {
+                                // New operation added (not breaking) or both absent
+                                result.add_success();
+                            }
+                        }
+                    }
                 }
             }
         }

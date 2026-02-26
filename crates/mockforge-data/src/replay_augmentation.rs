@@ -492,11 +492,71 @@ impl ReplayAugmentationEngine {
             .map_err(|e| Error::generic(format!("Failed to parse LLM response as JSON: {}", e)))
     }
 
-    /// Evaluate condition (simplified)
-    fn evaluate_condition(&self, _condition: &EventCondition, events: &[GeneratedEvent]) -> bool {
-        // Simplified condition evaluation
-        // In a real implementation, this would parse and evaluate the expression
-        events.len() < 100 // Just a placeholder
+    /// Evaluate a condition expression against current event state.
+    ///
+    /// Supported expressions:
+    /// - `count <op> <n>` — compare event count (e.g., "count < 100", "count >= 50")
+    /// - `sequence <op> <n>` — compare current sequence number
+    /// - `events_generated <op> <n>` — compare total events generated in scenario
+    /// - `true` / `false` — literal boolean
+    ///
+    /// where `<op>` is one of: `<`, `>`, `<=`, `>=`, `==`, `!=`
+    fn evaluate_condition(&self, condition: &EventCondition, events: &[GeneratedEvent]) -> bool {
+        let expr = condition.expression.trim();
+
+        // Literal booleans
+        if expr.eq_ignore_ascii_case("true") {
+            return true;
+        }
+        if expr.eq_ignore_ascii_case("false") {
+            return false;
+        }
+
+        // Parse "<variable> <op> <value>" expressions
+        let parts: Vec<&str> = expr.splitn(3, ' ').collect();
+        if parts.len() != 3 {
+            tracing::warn!(
+                expression = expr,
+                "Unrecognized condition expression, defaulting to true"
+            );
+            return true;
+        }
+
+        let variable = parts[0];
+        let operator = parts[1];
+        let threshold: i64 = match parts[2].parse() {
+            Ok(v) => v,
+            Err(_) => {
+                tracing::warn!(
+                    expression = expr,
+                    "Could not parse threshold as integer, defaulting to true"
+                );
+                return true;
+            }
+        };
+
+        let actual: i64 = match variable {
+            "count" => events.len() as i64,
+            "sequence" => self.sequence as i64,
+            "events_generated" => self.scenario_state.events_generated as i64,
+            _ => {
+                tracing::warn!(variable, "Unknown condition variable, defaulting to true");
+                return true;
+            }
+        };
+
+        match operator {
+            "<" => actual < threshold,
+            ">" => actual > threshold,
+            "<=" => actual <= threshold,
+            ">=" => actual >= threshold,
+            "==" => actual == threshold,
+            "!=" => actual != threshold,
+            _ => {
+                tracing::warn!(operator, "Unknown comparison operator, defaulting to true");
+                true
+            }
+        }
     }
 
     /// Reset the engine state
