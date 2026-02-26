@@ -126,7 +126,6 @@ impl Scenario {
                 "to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', ${})",
                 param_index
             ));
-            param_index += 1;
         }
 
         let where_clause = if where_parts.is_empty() {

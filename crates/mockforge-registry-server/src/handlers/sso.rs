@@ -276,7 +276,7 @@ pub async fn enable_sso(
     }
 
     // Check if SSO is configured
-    let config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
+    let _config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
         .await
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| {
@@ -555,6 +555,7 @@ pub async fn initiate_saml_login(
 /// SAML Assertion Consumer Service (ACS)
 /// Receives SAML response from IdP after authentication
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
 pub struct SAMLResponseForm {
     pub SAMLResponse: Option<String>,
     pub RelayState: Option<String>,
@@ -697,6 +698,7 @@ pub async fn saml_acs(
 /// SAML Single Logout Service (SLO)
 /// Handles logout requests from IdP
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
 pub struct SAMLLogoutForm {
     pub SAMLRequest: Option<String>,
     pub SAMLResponse: Option<String>,
@@ -743,7 +745,7 @@ pub async fn saml_slo(
         }
 
         // Generate logout response
-        let app_base_url = std::env::var("APP_BASE_URL")
+        let _app_base_url = std::env::var("APP_BASE_URL")
             .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
 
         let slo_url = config
@@ -809,7 +811,7 @@ fn generate_saml_authn_request(entity_id: &str, acs_url: &str) -> String {
 async fn parse_saml_response(
     response_xml: &[u8],
     config: &SSOConfiguration,
-    org: &Organization,
+    _org: &Organization,
 ) -> Result<SAMLUserInfo, ApiError> {
     // Convert to string for parsing
     let xml_str = std::str::from_utf8(response_xml).map_err(|e| {

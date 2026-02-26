@@ -180,7 +180,6 @@ impl Template {
                 "to_tsvector('english', name || ' ' || COALESCE(description, '')) @@ plainto_tsquery('english', ${})",
                 param_index
             ));
-            param_index += 1;
         }
 
         let where_clause = format!("WHERE {}", where_parts.join(" AND "));

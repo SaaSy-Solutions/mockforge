@@ -186,7 +186,7 @@ pub async fn oauth_callback(
                     .await
                     .map_err(|e| ApiError::Database(e))?;
 
-                if let Some(mut user) = email_user {
+                if let Some(user) = email_user {
                     // Link GitHub account to existing user
                     sqlx::query("UPDATE users SET github_id = $1, auth_provider = 'github', avatar_url = $2 WHERE id = $3")
                         .bind(&user_info.provider_id)
@@ -218,7 +218,7 @@ pub async fn oauth_callback(
                     .await
                     .map_err(|e| ApiError::Database(e))?;
 
-                if let Some(mut user) = email_user {
+                if let Some(user) = email_user {
                     // Link Google account to existing user
                     sqlx::query("UPDATE users SET google_id = $1, auth_provider = 'google', avatar_url = $2 WHERE id = $3")
                         .bind(&user_info.provider_id)

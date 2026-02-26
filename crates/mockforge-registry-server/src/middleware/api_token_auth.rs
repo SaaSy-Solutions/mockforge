@@ -3,18 +3,10 @@
 //! This middleware authenticates requests using Personal Access Tokens (PATs).
 //! Tokens are passed in the Authorization header as "Bearer mfx_..." or "Token mfx_..."
 
-use axum::{
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode},
-    middleware::Next,
-    response::Response,
-};
+use axum::http::StatusCode;
 use uuid::Uuid;
 
-use crate::{
-    models::{ApiToken, User},
-    AppState,
-};
+use crate::{models::ApiToken, AppState};
 
 /// Authentication result containing user and token info
 #[derive(Debug, Clone)]
@@ -67,55 +59,4 @@ pub async fn authenticate_api_token(
         org_id: api_token.org_id,
         token: api_token,
     }))
-}
-
-/// API Token authentication middleware
-///
-/// Supports both "Bearer mfx_..." and "Token mfx_..." formats
-/// Falls back to JWT if token doesn't start with "mfx_"
-pub async fn api_token_auth_middleware(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    // Check if Authorization header exists
-    let auth_header = match headers.get("Authorization") {
-        Some(h) => h.to_str().map_err(|_| StatusCode::BAD_REQUEST)?,
-        None => {
-            // No auth header, let JWT middleware handle it
-            return Ok(next.run(request).await);
-        }
-    };
-
-    // Check if it's an API token (starts with "Bearer mfx_" or "Token mfx_")
-    let token = if auth_header.starts_with("Bearer mfx_") {
-        &auth_header[7..] // Skip "Bearer "
-    } else if auth_header.starts_with("Token mfx_") {
-        &auth_header[6..] // Skip "Token "
-    } else if auth_header.starts_with("mfx_") {
-        auth_header // Direct token format
-    } else {
-        // Not an API token, let JWT middleware handle it
-        return Ok(next.run(request).await);
-    };
-
-    // Authenticate API token
-    match authenticate_api_token(&state, token).await {
-        Ok(Some(auth_result)) => {
-            // Add user_id and org_id to request extensions
-            request.extensions_mut().insert(auth_result.user_id.to_string());
-            request.extensions_mut().insert(format!("org_id:{}", auth_result.org_id));
-            request.extensions_mut().insert(format!("auth_type:api_token"));
-            request.extensions_mut().insert(auth_result.token);
-
-            Ok(next.run(request).await)
-        }
-        Ok(None) => {
-            // Invalid token, but let JWT middleware try
-            // (in case user wants to use JWT instead)
-            Ok(next.run(request).await)
-        }
-        Err(e) => Err(e),
-    }
 }

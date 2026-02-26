@@ -122,7 +122,7 @@ pub struct AnalyticsQuery {
 pub async fn get_analytics(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Query(query): Query<AnalyticsQuery>,
+    Query(_query): Query<AnalyticsQuery>,
 ) -> ApiResult<Json<AnalyticsResponse>> {
     let pool = state.db.pool();
 

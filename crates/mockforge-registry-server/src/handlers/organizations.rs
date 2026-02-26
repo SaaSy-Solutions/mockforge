@@ -369,7 +369,7 @@ pub async fn remove_organization_member(
     }
 
     // Check if member exists
-    let member = OrgMember::find(pool, org_id, member_user_id)
+    let _member = OrgMember::find(pool, org_id, member_user_id)
         .await
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;

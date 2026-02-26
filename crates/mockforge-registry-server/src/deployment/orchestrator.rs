@@ -3,7 +3,6 @@
 //! Listens for deployment requests and manages the lifecycle of hosted mock services
 
 use anyhow::{Context, Result};
-use chrono::Utc;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +13,7 @@ use uuid::Uuid;
 use crate::deployment::flyio::{
     FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioService,
 };
-use crate::models::{DeploymentLog, DeploymentStatus, HealthStatus, HostedMock};
+use crate::models::{DeploymentLog, DeploymentStatus, HostedMock};
 
 /// Deployment orchestrator that manages hosted mock deployments
 pub struct DeploymentOrchestrator {
@@ -173,7 +172,7 @@ impl DeploymentOrchestrator {
         .await?;
 
         // Create or get app
-        let app = match client.get_app(&app_name).await {
+        let _app = match client.get_app(&app_name).await {
             Ok(app) => {
                 DeploymentLog::create(
                     pool,

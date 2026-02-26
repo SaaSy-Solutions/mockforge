@@ -31,7 +31,7 @@ pub async fn promote_scenario(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
-    Path((workspace_id, environment)): Path<(Uuid, String)>,
+    Path((workspace_id, _environment)): Path<(Uuid, String)>,
     Json(request): Json<PromoteScenarioRequest>,
 ) -> ApiResult<Json<PromoteScenarioResponse>> {
     let pool = state.db.pool();

@@ -13,7 +13,6 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use tracing::Span;
 use uuid::Uuid;
 
 /// The header name for request ID

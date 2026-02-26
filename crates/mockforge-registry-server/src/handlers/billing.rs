@@ -1,21 +1,17 @@
 //! Billing and subscription handlers
 
-use axum::{
-    extract::{Path, Query, State},
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use stripe::{
     CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
-    CreateCheckoutSessionLineItems, Event, EventObject, EventType,
+    CreateCheckoutSessionLineItems, EventObject, EventType,
 };
 use uuid::Uuid;
 
 use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
-    middleware::{resolve_org_context, AuthUser, OrgContext},
+    middleware::{resolve_org_context, AuthUser},
     models::{
         record_audit_event, AuditEventType, Organization, Plan, Subscription, SubscriptionStatus,
         UsageCounter, User,
@@ -418,7 +414,7 @@ async fn handle_subscription_event(
         })?;
 
     // Upsert subscription
-    let subscription_record = Subscription::upsert_from_stripe(
+    let _subscription_record = Subscription::upsert_from_stripe(
         pool,
         org_id,
         &stripe_sub_id,

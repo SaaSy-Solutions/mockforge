@@ -1,3 +1,7 @@
+// Many models, handlers, and deployment modules are fully implemented but not yet
+// wired into routes. Suppress dead_code for the binary crate during development.
+#![allow(dead_code)]
+
 //! Pillars: [Cloud]
 //!
 //! MockForge Plugin Registry Server

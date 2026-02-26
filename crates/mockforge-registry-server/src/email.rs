@@ -12,7 +12,7 @@ use lettre::{
     transport::smtp::authentication::Credentials,
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::time::Duration;
 
 /// Email configuration
@@ -117,6 +117,7 @@ impl EmailService {
         let api_key = self.config.api_key.as_ref().context("Postmark requires EMAIL_API_KEY")?;
 
         #[derive(Serialize)]
+        #[allow(non_snake_case)]
         struct PostmarkRequest {
             From: String,
             To: String,
@@ -167,6 +168,7 @@ impl EmailService {
         }
 
         #[derive(Serialize)]
+        #[allow(non_snake_case)]
         struct BrevoRequest {
             sender: BrevoSender,
             to: Vec<BrevoTo>,

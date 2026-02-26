@@ -5,8 +5,7 @@ use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
-use tracing::{error, info, warn};
-use uuid::Uuid;
+use tracing::{error, warn};
 
 use crate::models::{DeploymentLog, HealthStatus, HostedMock};
 

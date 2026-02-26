@@ -10,7 +10,6 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::circuit_breaker::CircuitState;
 use crate::AppState;
 
 /// Component health status

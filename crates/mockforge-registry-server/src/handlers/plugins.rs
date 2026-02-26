@@ -359,7 +359,9 @@ pub async fn publish_plugin(
     crate::validation::validate_base64(&request.wasm_data)?;
 
     // Decode WASM data
-    let wasm_bytes = base64::decode(&request.wasm_data)
+    use base64::Engine;
+    let wasm_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&request.wasm_data)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
 
     // Validate WASM file

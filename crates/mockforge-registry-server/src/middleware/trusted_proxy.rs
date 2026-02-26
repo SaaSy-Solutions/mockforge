@@ -15,7 +15,7 @@
 //! - The last entry in X-Forwarded-For added by your proxy is the client IP
 
 use axum::http::HeaderMap;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 use std::sync::OnceLock;
 
 /// Default trusted proxy ranges (private networks)

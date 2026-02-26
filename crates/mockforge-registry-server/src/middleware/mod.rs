@@ -24,12 +24,7 @@ use crate::AppState;
 
 pub use org_context::resolve_org_context;
 pub use rate_limit::rate_limit_middleware;
-pub use request_id::{request_id_middleware, RequestIdExt, X_REQUEST_ID};
 pub use scope_check::{AuthType, ScopedAuth};
-
-/// Export permission types
-pub use permission_check::PermissionChecker;
-pub use permissions::{Permission, PermissionCategory};
 
 /// Extractor for authenticated user ID from JWT middleware
 #[derive(Debug, Clone)]
@@ -74,9 +69,6 @@ where
         Ok(OptionalAuthUser(None))
     }
 }
-
-/// Organization context for org-scoped operations
-pub use org_context::OrgContext;
 
 /// Extract and verify JWT token or API token from Authorization header
 pub async fn auth_middleware(

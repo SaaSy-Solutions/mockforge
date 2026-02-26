@@ -6,7 +6,7 @@
 //! - OPEN: Too many failures, requests are immediately rejected
 //! - HALF-OPEN: After recovery timeout, allow test requests to check if service recovered
 
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;

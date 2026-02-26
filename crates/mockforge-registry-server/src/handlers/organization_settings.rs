@@ -15,7 +15,7 @@ use crate::{
     middleware::AuthUser,
     models::{
         record_audit_event, AuditEventType, BYOKConfig, OrgAiSettings, OrgMember, OrgRole,
-        OrgSetting, Organization, Subscription, User,
+        OrgSetting, Organization, Subscription,
     },
     AppState,
 };

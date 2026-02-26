@@ -97,7 +97,7 @@ impl AuditLog {
     /// Get audit logs for an organization
     pub async fn get_by_org(
         pool: &sqlx::PgPool,
-        org_id: Uuid,
+        _org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
         event_type: Option<AuditEventType>,
@@ -127,8 +127,8 @@ impl AuditLog {
     /// Get audit logs for a specific user within an organization
     pub async fn get_by_user_in_org(
         pool: &sqlx::PgPool,
-        org_id: Uuid,
-        user_id: Uuid,
+        _org_id: Uuid,
+        _user_id: Uuid,
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
         let mut query = sqlx::QueryBuilder::new(

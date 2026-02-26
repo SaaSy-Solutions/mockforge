@@ -6,7 +6,6 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
-use uuid::Uuid;
 
 use crate::models::{DeploymentMetrics, HostedMock};
 
