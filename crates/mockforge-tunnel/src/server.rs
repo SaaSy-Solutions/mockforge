@@ -437,6 +437,9 @@ async fn forward_request(
         method, uri, target_url, tunnel.tunnel_id, path_override, &target_path
     );
 
+    // Extract headers before consuming the body so they can be forwarded
+    let original_headers = request.headers().clone();
+
     // Read request body
     let body_bytes = match axum::body::to_bytes(request.into_body(), usize::MAX).await {
         Ok(bytes) => bytes.to_vec(),
@@ -474,8 +477,6 @@ async fn forward_request(
     let mut forward_request = client.request(reqwest_method.clone(), &target_url);
 
     // Copy headers from original request (excluding hop-by-hop headers)
-    // Note: We need to extract headers from the Request, but we've already consumed it
-    // For now, we'll make a minimal request. In production, you'd want to preserve headers.
     let excluded_headers = [
         "connection",
         "keep-alive",
@@ -488,9 +489,14 @@ async fn forward_request(
         "host", // Replace with target host
     ];
 
-    // Set Content-Type if body is present
+    for (name, value) in &original_headers {
+        if !excluded_headers.contains(&name.as_str().to_lowercase().as_str()) {
+            forward_request = forward_request.header(name.as_str(), value);
+        }
+    }
+
+    // Set body if present
     if !body_bytes.is_empty() && method != &Method::GET && method != &Method::HEAD {
-        forward_request = forward_request.header("Content-Type", "application/json");
         forward_request = forward_request.body(body_bytes.clone());
     }
 

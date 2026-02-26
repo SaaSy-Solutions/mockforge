@@ -218,26 +218,38 @@ fn find_hottest_path(traces: &[crate::trace_collector::CollectedTrace]) -> Vec<S
         return Vec::new();
     }
 
-    // For simplicity, return the path from the first root span
-    // In a real implementation, you'd find the path with maximum total duration
+    // Find the root span with the longest duration as the starting point
+    let mut best_root = root_spans[0];
+    for &root in &root_spans[1..] {
+        if root.duration_ms > best_root.duration_ms {
+            best_root = root;
+        }
+    }
+
+    // Walk from root, always picking the child with the longest duration
     let mut path = Vec::new();
-    let mut current = root_spans[0];
+    let mut current = best_root;
 
     loop {
         path.push(current.name.clone());
-        let mut found_child = false;
 
-        // Find a child span (simplified - just pick the first one)
+        // Find the child span with the longest duration
+        let mut longest_child: Option<&crate::trace_collector::CollectedTrace> = None;
         for trace in traces {
             if trace.parent_span_id.as_ref() == Some(&current.span_id) {
-                current = trace;
-                found_child = true;
-                break;
+                match longest_child {
+                    None => longest_child = Some(trace),
+                    Some(prev) if trace.duration_ms > prev.duration_ms => {
+                        longest_child = Some(trace);
+                    }
+                    _ => {}
+                }
             }
         }
 
-        if !found_child {
-            break;
+        match longest_child {
+            Some(child) => current = child,
+            None => break,
         }
     }
 

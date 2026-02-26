@@ -110,28 +110,13 @@ impl UserDataProvider for CollabUserDataProvider {
             // Collect roles and permissions
             let roles: Vec<String> = memberships.iter().map(|m| format!("{:?}", m.role)).collect();
 
-            // Map roles to permissions (simplified - in reality would use PermissionChecker)
+            // Use canonical role-permission mapping from RolePermissions
             let permissions: Vec<String> = memberships
                 .iter()
-                .flat_map(|m| match m.role {
-                    crate::models::UserRole::Admin => vec![
-                        "WorkspaceCreate".to_string(),
-                        "WorkspaceRead".to_string(),
-                        "WorkspaceUpdate".to_string(),
-                        "WorkspaceDelete".to_string(),
-                        "WorkspaceManageMembers".to_string(),
-                        "MockCreate".to_string(),
-                        "MockRead".to_string(),
-                        "MockUpdate".to_string(),
-                        "MockDelete".to_string(),
-                    ],
-                    crate::models::UserRole::Editor => vec![
-                        "MockCreate".to_string(),
-                        "MockRead".to_string(),
-                        "MockUpdate".to_string(),
-                        "MockDelete".to_string(),
-                    ],
-                    crate::models::UserRole::Viewer => vec!["MockRead".to_string()],
+                .flat_map(|m| {
+                    crate::permissions::RolePermissions::get_permissions(m.role)
+                        .into_iter()
+                        .map(|p| format!("{p:?}"))
                 })
                 .collect();
 

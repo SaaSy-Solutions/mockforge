@@ -248,25 +248,81 @@ impl ConflictResolver {
     }
 
     /// Merge text with three-way merge algorithm
+    ///
+    /// Uses line-based diffing against a common base to detect whether both
+    /// sides modified the same lines. When only one side changes a line, that
+    /// change is applied. When both sides change the same line differently, a
+    /// conflict is raised.
     pub fn merge_text(&self, base: &str, ours: &str, theirs: &str) -> Result<String> {
         if ours == theirs {
             return Ok(ours.to_string());
         }
 
-        // Simple line-based three-way merge
+        // Build sets of lines changed by each side relative to the base.
+        let base_lines: Vec<&str> = base.lines().collect();
+        let ours_lines: Vec<&str> = ours.lines().collect();
+        let theirs_lines: Vec<&str> = theirs.lines().collect();
+
+        // Collect per-line changes from each diff
         let diff_ours = TextDiff::from_lines(base, ours);
-        let _diff_theirs = TextDiff::from_lines(base, theirs);
+        let diff_theirs = TextDiff::from_lines(base, theirs);
+
+        // Build maps of base-line-index → replacement lines for each side
+        let ours_changes = Self::collect_line_changes(&diff_ours);
+        let theirs_changes = Self::collect_line_changes(&diff_theirs);
 
         let mut result = String::new();
-        let has_conflict = false;
+        let mut has_conflict = false;
 
-        // This is a simplified merge - a real implementation would be more sophisticated
-        for change in diff_ours.iter_all_changes() {
-            match change.tag() {
-                ChangeTag::Equal => result.push_str(change.value()),
-                ChangeTag::Delete => {}
-                ChangeTag::Insert => result.push_str(change.value()),
+        // Walk through base lines, applying non-conflicting changes
+        for (i, base_line) in base_lines.iter().enumerate() {
+            let ours_changed = ours_changes.get(&i);
+            let theirs_changed = theirs_changes.get(&i);
+
+            match (ours_changed, theirs_changed) {
+                (None, None) => {
+                    // Neither side changed this line — keep base
+                    result.push_str(base_line);
+                    result.push('\n');
+                }
+                (Some(ours_replacement), None) => {
+                    // Only ours changed — apply ours
+                    for line in ours_replacement {
+                        result.push_str(line);
+                        result.push('\n');
+                    }
+                }
+                (None, Some(theirs_replacement)) => {
+                    // Only theirs changed — apply theirs
+                    for line in theirs_replacement {
+                        result.push_str(line);
+                        result.push('\n');
+                    }
+                }
+                (Some(ours_replacement), Some(theirs_replacement)) => {
+                    if ours_replacement == theirs_replacement {
+                        // Both sides made the same change — apply once
+                        for line in ours_replacement {
+                            result.push_str(line);
+                            result.push('\n');
+                        }
+                    } else {
+                        // True conflict: both sides changed the same line differently
+                        has_conflict = true;
+                    }
+                }
             }
+        }
+
+        // Append any lines added beyond the base by ours
+        for line in ours_lines.iter().skip(base_lines.len()) {
+            result.push_str(line);
+            result.push('\n');
+        }
+        // Append any lines added beyond the base by theirs
+        for line in theirs_lines.iter().skip(base_lines.len()) {
+            result.push_str(line);
+            result.push('\n');
         }
 
         if has_conflict {
@@ -274,6 +330,38 @@ impl ConflictResolver {
         } else {
             Ok(result)
         }
+    }
+
+    /// Collect line changes from a diff as a map of base-line-index to replacement lines.
+    ///
+    /// A deleted line maps to an empty vec (removed). An inserted line is attached
+    /// to the most recent base-line index. An equal line is skipped (no change).
+    fn collect_line_changes<'a>(
+        diff: &TextDiff<'a, 'a, 'a, str>,
+    ) -> std::collections::HashMap<usize, Vec<&'a str>> {
+        let mut changes: std::collections::HashMap<usize, Vec<&str>> =
+            std::collections::HashMap::new();
+        let mut base_idx: usize = 0;
+
+        for change in diff.iter_all_changes() {
+            match change.tag() {
+                ChangeTag::Equal => {
+                    base_idx += 1;
+                }
+                ChangeTag::Delete => {
+                    // This base line was removed (or replaced by a subsequent Insert)
+                    changes.entry(base_idx).or_default();
+                    base_idx += 1;
+                }
+                ChangeTag::Insert => {
+                    // Inserted line — attach to previous base line's change set
+                    let idx = if base_idx > 0 { base_idx - 1 } else { 0 };
+                    changes.entry(idx).or_default().push(change.value().trim_end_matches('\n'));
+                }
+            }
+        }
+
+        changes
     }
 }
 

@@ -839,19 +839,70 @@ impl OrchestrationLibrary {
         orch.remove(name).is_some()
     }
 
-    /// Import from directory
-    pub fn import_from_directory(&self, _path: &str) -> Result<usize, OrchestrationError> {
-        // In production, this would scan a directory and import files
-        // For now, just return 0
-        Ok(0)
+    /// Import orchestrations from JSON files in a directory
+    pub fn import_from_directory(&self, path: &str) -> Result<usize, OrchestrationError> {
+        let dir = std::path::Path::new(path);
+        if !dir.is_dir() {
+            return Err(OrchestrationError::SerializationError(format!(
+                "Import path is not a directory: {}",
+                path
+            )));
+        }
+
+        let entries = std::fs::read_dir(dir).map_err(|e| {
+            OrchestrationError::SerializationError(format!("Failed to read directory: {e}"))
+        })?;
+
+        let mut count = 0;
+        let mut orch = self.orchestrations.write();
+        for entry in entries.flatten() {
+            let file_path = entry.path();
+            if file_path.extension().and_then(|e| e.to_str()) == Some("json") {
+                let content = std::fs::read_to_string(&file_path).map_err(|e| {
+                    OrchestrationError::SerializationError(format!(
+                        "Failed to read {}: {e}",
+                        file_path.display()
+                    ))
+                })?;
+                let scenario: AdvancedOrchestratedScenario = serde_json::from_str(&content)
+                    .map_err(|e| {
+                        OrchestrationError::SerializationError(format!(
+                            "Failed to parse {}: {e}",
+                            file_path.display()
+                        ))
+                    })?;
+                let name =
+                    file_path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown").to_string();
+                orch.insert(name, scenario);
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 
-    /// Export to directory
-    pub fn export_to_directory(&self, _path: &str) -> Result<usize, OrchestrationError> {
-        // In production, this would export all orchestrations to files
-        // For now, just return count
+    /// Export all orchestrations to JSON files in a directory
+    pub fn export_to_directory(&self, path: &str) -> Result<usize, OrchestrationError> {
+        let dir = std::path::Path::new(path);
+        std::fs::create_dir_all(dir).map_err(|e| {
+            OrchestrationError::SerializationError(format!("Failed to create directory: {e}"))
+        })?;
+
         let orch = self.orchestrations.read();
-        Ok(orch.len())
+        let mut count = 0;
+        for (name, scenario) in orch.iter() {
+            let file_path = dir.join(format!("{}.json", name));
+            let content = serde_json::to_string_pretty(scenario).map_err(|e| {
+                OrchestrationError::SerializationError(format!("Failed to serialize {name}: {e}"))
+            })?;
+            std::fs::write(&file_path, content).map_err(|e| {
+                OrchestrationError::SerializationError(format!(
+                    "Failed to write {}: {e}",
+                    file_path.display()
+                ))
+            })?;
+            count += 1;
+        }
+        Ok(count)
     }
 }
 

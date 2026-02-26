@@ -291,6 +291,23 @@ impl TrendAnalyzer {
 
         let last_timestamp = data_points.last().unwrap().timestamp;
         let first_timestamp = data_points[0].timestamp;
+        let n = data_points.len() as f64;
+
+        // Calculate standard error of the estimate from regression residuals:
+        // SE = sqrt( sum((y_i - predicted_i)^2) / (n - 2) )
+        let std_error = if data_points.len() > 2 {
+            let sum_sq_residuals: f64 = data_points
+                .iter()
+                .map(|dp| {
+                    let x = (dp.timestamp - first_timestamp).num_seconds() as f64 / 86400.0;
+                    let predicted = regression.slope * x + regression.intercept;
+                    (dp.value - predicted).powi(2)
+                })
+                .sum();
+            (sum_sq_residuals / (n - 2.0)).sqrt()
+        } else {
+            0.0
+        };
 
         for i in 1..=periods {
             let future_timestamp = last_timestamp + Duration::days(i as i64);
@@ -299,8 +316,7 @@ impl TrendAnalyzer {
 
             let predicted_value = regression.slope * days_from_start + regression.intercept;
 
-            // Simple confidence interval (±2 std errors)
-            let std_error = 0.1; // Simplified - should be calculated from residuals
+            // Confidence interval: ±2 standard errors
             let confidence_interval =
                 (predicted_value - 2.0 * std_error, predicted_value + 2.0 * std_error);
 
