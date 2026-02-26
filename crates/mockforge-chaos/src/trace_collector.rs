@@ -35,6 +35,8 @@ pub struct TraceCollectorConfig {
     pub timeout: Duration,
     /// Maximum number of traces to return
     pub max_traces: usize,
+    /// Lookback window for trace queries
+    pub lookback_window: Duration,
 }
 
 impl Default for TraceCollectorConfig {
@@ -45,6 +47,7 @@ impl Default for TraceCollectorConfig {
             otlp_endpoint: None,
             timeout: Duration::from_secs(30),
             max_traces: 100,
+            lookback_window: Duration::from_secs(3600), // 1 hour
         }
     }
 }
@@ -107,12 +110,12 @@ impl TraceCollector {
         // Query recent traces from Jaeger API
         let url = format!("{}/api/traces", endpoint);
 
-        // For now, query traces from the last hour
+        // Query traces within the configured lookback window
         let start_time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis()
-            - 3600000; // 1 hour ago
+            - self.config.lookback_window.as_millis();
 
         let params = [
             ("start", start_time.to_string()),
