@@ -96,14 +96,21 @@ impl RouteMatcher {
                 '{' => {
                     // Find the closing brace
                     let mut param_name = String::new();
-                    while let Some(&next_ch) = chars.peek() {
-                        if next_ch == '}' {
-                            chars.next(); // consume '}'
-                                          // Replace with regex group
-                            regex_pattern.push_str("([^/]+)");
-                            break;
+                    loop {
+                        match chars.next() {
+                            Some('}') => {
+                                // Replace with regex group
+                                regex_pattern.push_str("([^/]+)");
+                                break;
+                            }
+                            Some(c) => param_name.push(c),
+                            None => {
+                                // Unclosed brace - escape '{' and treat param name as literal
+                                regex_pattern.push_str("\\{");
+                                regex_pattern.push_str(&param_name);
+                                break;
+                            }
                         }
-                        param_name.push(chars.next().unwrap());
                     }
                 }
                 '*' => {
