@@ -488,18 +488,15 @@ impl OpenApiRouteRegistry {
 
                     let payload = if status_code == 422 {
                         // For 422 responses, use enhanced schema validation with detailed errors
-                        // Note: We need to extract parameters from the request context
-                        // For now, using empty maps as placeholders
-                        let empty_params = Map::new();
                         generate_enhanced_422_response(
                             &validator,
                             &path_template,
                             &method,
                             body_json.as_ref(),
-                            &empty_params, // path_params
-                            &empty_params, // query_params
-                            &empty_params, // header_params
-                            &empty_params, // cookie_params
+                            &path_map,
+                            &query_map,
+                            &header_map,
+                            &cookie_map,
                         )
                     } else {
                         // For other status codes, use generic error format
@@ -1262,8 +1259,26 @@ impl OpenApiRouteRegistry {
                             style,
                             ..
                         } => {
-                            // For query deepObject, reconstruct value from key-likes: name[prop]
-                            let deep_value = None; // Simplified for now
+                            // For deepObject style, reconstruct nested value from keys like name[prop]
+                            // e.g., filter[name]=John&filter[age]=30 -> {"name":"John","age":"30"}
+                            let deep_value = if matches!(style, openapiv3::QueryStyle::DeepObject) {
+                                let prefix_bracket = format!("{}[", parameter_data.name);
+                                let mut obj = serde_json::Map::new();
+                                for (key, val) in query_params.iter() {
+                                    if let Some(rest) = key.strip_prefix(&prefix_bracket) {
+                                        if let Some(prop) = rest.strip_suffix(']') {
+                                            obj.insert(prop.to_string(), val.clone());
+                                        }
+                                    }
+                                }
+                                if obj.is_empty() {
+                                    None
+                                } else {
+                                    Some(Value::Object(obj))
+                                }
+                            } else {
+                                None
+                            };
                             let style_str = match style {
                                 openapiv3::QueryStyle::Form => Some("form"),
                                 openapiv3::QueryStyle::SpaceDelimited => Some("spaceDelimited"),
