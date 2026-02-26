@@ -37,6 +37,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 /// Configuration for mock generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -233,7 +234,7 @@ pub async fn load_generate_config_with_fallback<P: AsRef<Path>>(path: P) -> Gene
     match load_generate_config(path).await {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Warning: Failed to load config file: {}. Using defaults.", e);
+            warn!("Failed to load config file: {}. Using defaults.", e);
             GenerateConfig::default()
         }
     }

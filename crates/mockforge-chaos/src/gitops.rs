@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::{fs, path::Path};
+use tracing::{error, info};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ManifestChange {
@@ -249,10 +250,10 @@ impl GitOpsManager {
         loop {
             match self.sync().await {
                 Ok(status) => {
-                    println!("Sync completed: {:?}", status.status);
+                    info!("Sync completed: {:?}", status.status);
                 }
                 Err(e) => {
-                    eprintln!("Sync failed: {}", e);
+                    error!("Sync failed: {}", e);
                 }
             }
 

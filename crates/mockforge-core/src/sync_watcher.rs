@@ -159,9 +159,10 @@ impl SyncWatcher {
                 "Started monitoring workspace {} in directory {}",
                 workspace_id_for_processing, directory_str
             );
-            println!(
-                "📂 Monitoring workspace '{}' in directory: {}",
-                workspace_id_for_processing, directory_str
+            info!(
+                workspace_id = %workspace_id_for_processing,
+                directory = %directory_str,
+                "Monitoring workspace directory"
             );
 
             while *is_running.lock().await {
@@ -176,7 +177,6 @@ impl SyncWatcher {
                         .await
                         {
                             error!("Failed to process sync event: {}", e);
-                            eprintln!("❌ Sync error: {}", e);
                         }
                     }
                     Ok(None) => break,  // Channel closed
@@ -188,9 +188,10 @@ impl SyncWatcher {
                 "Stopped monitoring workspace {} in directory {}",
                 workspace_id_for_processing, directory_str
             );
-            println!(
-                "⏹️  Stopped monitoring workspace '{}' in directory: {}",
-                workspace_id_for_processing, directory_str
+            info!(
+                workspace_id = %workspace_id_for_processing,
+                directory = %directory_str,
+                "Stopped monitoring workspace directory"
             );
         });
 
@@ -301,18 +302,17 @@ impl SyncWatcher {
             info!("Processing {} file changes for workspace {}", changes.len(), workspace_id);
 
             if !changes.is_empty() {
-                println!(
-                    "🔄 Detected {} file change{} in workspace '{}'",
-                    changes.len(),
-                    if changes.len() == 1 { "" } else { "s" },
-                    workspace_id
+                info!(
+                    workspace_id = %workspace_id,
+                    count = changes.len(),
+                    "Detected file changes in workspace"
                 );
             }
 
             for change in changes {
                 match change.kind {
                     ChangeKind::Created => {
-                        println!("  ➕ Created: {}", change.path.display());
+                        info!(path = %change.path.display(), "File created");
                         if let Some(content) = change.content {
                             if let Err(e) = Self::import_yaml_content(
                                 persistence,
@@ -323,14 +323,13 @@ impl SyncWatcher {
                             .await
                             {
                                 warn!("Failed to import file {}: {}", change.path.display(), e);
-                                eprintln!("     ⚠️  Failed to import: {}", e);
                             } else {
-                                println!("     ✅ Successfully imported");
+                                info!(path = %change.path.display(), "Successfully imported");
                             }
                         }
                     }
                     ChangeKind::Modified => {
-                        println!("  📝 Modified: {}", change.path.display());
+                        info!(path = %change.path.display(), "File modified");
                         if let Some(content) = change.content {
                             if let Err(e) = Self::import_yaml_content(
                                 persistence,
@@ -341,16 +340,14 @@ impl SyncWatcher {
                             .await
                             {
                                 warn!("Failed to import file {}: {}", change.path.display(), e);
-                                eprintln!("     ⚠️  Failed to import: {}", e);
                             } else {
-                                println!("     ✅ Successfully updated");
+                                info!(path = %change.path.display(), "Successfully updated");
                             }
                         }
                     }
                     ChangeKind::Deleted => {
-                        println!("  🗑️  Deleted: {}", change.path.display());
-                        println!("     ℹ️  Auto-deletion from workspace is disabled");
                         debug!("File deleted: {}", change.path.display());
+                        debug!("Auto-deletion from workspace is disabled");
                         // For now, we don't auto-delete from workspace on file deletion
                         // This could be configurable in the future
                     }

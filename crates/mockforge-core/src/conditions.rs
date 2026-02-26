@@ -8,6 +8,7 @@ use roxmltree::{Document, Node};
 use serde_json::Value;
 use std::collections::HashMap;
 use thiserror::Error;
+use tracing::debug;
 
 /// Errors that can occur during condition evaluation
 #[derive(Debug, Error)]
@@ -329,23 +330,23 @@ fn evaluate_xpath(query: &str, context: &ConditionContext) -> Result<bool, Condi
     };
 
     let Some(xml_content) = xml_content else {
-        println!("Debug - No XML content available for query: {}", query);
+        debug!("No XML content available for query: {}", query);
         return Ok(false); // No XML content to query
     };
 
-    println!("Debug - Evaluating XPath '{}' against XML content: {}", query, xml_content);
+    debug!("Evaluating XPath '{}' against XML content: {}", query, xml_content);
 
     match Document::parse(xml_content) {
         Ok(doc) => {
             // Simple XPath evaluation - check if any nodes match
             let root = doc.root_element();
-            println!("Debug - XML root element: {}", root.tag_name().name());
+            debug!("XML root element: {}", root.tag_name().name());
             let matches = evaluate_xpath_simple(&root, query);
-            println!("Debug - XPath result: {}", matches);
+            debug!("XPath result: {}", matches);
             Ok(matches)
         }
         Err(e) => {
-            println!("Debug - Failed to parse XML: {}", e);
+            debug!("Failed to parse XML: {}", e);
             Err(ConditionError::InvalidXml(xml_content.clone()))
         }
     }
@@ -358,19 +359,19 @@ fn evaluate_xpath_simple(node: &Node, xpath: &str) -> bool {
 
     // Handle descendant-or-self axis: //element (check this FIRST before stripping //)
     if let Some(element_name) = xpath.strip_prefix("//") {
-        println!(
-            "Debug - Checking descendant-or-self for element '{}' on node '{}'",
+        debug!(
+            "Checking descendant-or-self for element '{}' on node '{}'",
             element_name,
             node.tag_name().name()
         );
         if node.tag_name().name() == element_name {
-            println!("Debug - Found match: {} == {}", node.tag_name().name(), element_name);
+            debug!("Found match: {} == {}", node.tag_name().name(), element_name);
             return true;
         }
         // Check descendants
         for child in node.children() {
             if child.is_element() {
-                println!("Debug - Checking child element: {}", child.tag_name().name());
+                debug!("Checking child element: {}", child.tag_name().name());
                 if evaluate_xpath_simple(&child, &format!("//{}", element_name)) {
                     return true;
                 }

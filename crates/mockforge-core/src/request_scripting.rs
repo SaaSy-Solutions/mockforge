@@ -5,6 +5,7 @@
 
 use crate::{Error, Result};
 use rquickjs::{Context, Ctx, Function, Object, Runtime};
+use tracing::debug;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -518,14 +519,14 @@ fn add_global_functions_static<'js>(
     // Add console object for logging
     let console_obj = Object::new(ctx.clone())?;
     let log_func = Function::new(ctx.clone(), || {
-        println!("Script log called");
+        debug!("Script log called");
     })?;
     console_obj.set("log", log_func)?;
     global.set("console", console_obj)?;
 
     // Add utility functions for scripts
     let log_func = Function::new(ctx.clone(), |msg: String| {
-        println!("Script log: {}", msg);
+        debug!("Script log: {}", msg);
     })?;
     global.set("log", log_func)?;
 

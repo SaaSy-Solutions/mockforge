@@ -8,6 +8,7 @@ use crate::encryption::errors::{EncryptionError, EncryptionResult};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::warn;
 
 /// Configuration for automatic encryption
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,7 +546,7 @@ impl AutoEncryptionProcessor {
                 }
                 Err(e) => {
                     // Log error but continue with other patterns
-                    eprintln!("Failed to compile regex pattern '{}': {}", pattern.pattern, e);
+                    warn!("Failed to compile regex pattern '{}': {}", pattern.pattern, e);
                 }
             }
         }
