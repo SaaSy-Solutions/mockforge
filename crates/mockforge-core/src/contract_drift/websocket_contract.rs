@@ -58,7 +58,6 @@ pub struct WebSocketContract {
     /// Map of topics to message types that can be sent on that topic
     topics: HashMap<String, Vec<String>>,
     /// Compiled JSON schemas for validation (cached)
-    #[allow(dead_code)]
     schema_cache: HashMap<String, JSONSchema>,
     /// Cached contract operations for quick lookup
     operations_cache: HashMap<String, ContractOperation>,

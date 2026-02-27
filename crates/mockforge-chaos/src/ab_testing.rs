@@ -3,7 +3,8 @@
 //! Compare different chaos configurations and strategies to determine
 //! which approach is most effective for testing system resilience.
 
-use crate::analytics::ChaosAnalytics;
+use crate::analytics::{ChaosAnalytics, TimeBucket};
+use crate::scenario_recorder::{ChaosEvent, ChaosEventType};
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -184,7 +185,6 @@ pub struct SingleMetricComparison {
 /// A/B testing engine
 pub struct ABTestingEngine {
     tests: Arc<RwLock<HashMap<String, ABTest>>>,
-    #[allow(dead_code)]
     analytics: Arc<ChaosAnalytics>,
     max_concurrent_tests: usize,
 }
@@ -197,6 +197,20 @@ impl ABTestingEngine {
             analytics,
             max_concurrent_tests: 5,
         }
+    }
+
+    /// Record an A/B test event to the analytics engine
+    fn record_ab_event(&self, event_description: &str, metadata: HashMap<String, String>) {
+        let event = ChaosEvent {
+            timestamp: Utc::now(),
+            event_type: ChaosEventType::ProtocolEvent {
+                protocol: "ab_testing".to_string(),
+                event: event_description.to_string(),
+                details: metadata,
+            },
+            metadata: HashMap::new(),
+        };
+        self.analytics.record_event(&event, TimeBucket::Minute);
     }
 
     /// Create a new A/B test
@@ -235,9 +249,19 @@ impl ABTestingEngine {
         };
 
         let test_id = test.id.clone();
+        let test_name = test.config.name.clone();
 
         let mut tests = self.tests.write();
         tests.insert(test_id.clone(), test);
+        drop(tests);
+
+        self.record_ab_event(
+            "test_created",
+            HashMap::from([
+                ("test_id".to_string(), test_id.clone()),
+                ("test_name".to_string(), test_name),
+            ]),
+        );
 
         Ok(test_id)
     }
@@ -253,6 +277,17 @@ impl ABTestingEngine {
 
         test.status = ABTestStatus::Running;
         test.started_at = Some(Utc::now());
+        let test_name = test.config.name.clone();
+        let tid = test_id.to_string();
+        drop(tests);
+
+        self.record_ab_event(
+            "test_started",
+            HashMap::from([
+                ("test_id".to_string(), tid),
+                ("test_name".to_string(), test_name),
+            ]),
+        );
 
         Ok(())
     }
@@ -272,6 +307,20 @@ impl ABTestingEngine {
         // Analyze results
         let conclusion = self.analyze_results(test)?;
         test.conclusion = Some(conclusion.clone());
+        let test_name = test.config.name.clone();
+        let tid = test_id.to_string();
+        drop(tests);
+
+        self.record_ab_event(
+            "test_completed",
+            HashMap::from([
+                ("test_id".to_string(), tid),
+                ("test_name".to_string(), test_name),
+                ("winner".to_string(), conclusion.winner.clone()),
+                ("improvement_pct".to_string(), format!("{:.2}", conclusion.improvement_pct)),
+                ("significant".to_string(), conclusion.statistically_significant.to_string()),
+            ]),
+        );
 
         Ok(conclusion)
     }

@@ -228,11 +228,7 @@ pub fn create_chaos_api_router(
         .route("/api/chaos/schedule/{id}", delete(remove_schedule))
         .route("/api/chaos/schedule/{id}/enable", post(enable_schedule))
         .route("/api/chaos/schedule/{id}/disable", post(disable_schedule))
-        // NOTE: Manual trigger endpoint has a known Rust/Axum type inference issue
-        // when combining State + Path extractors with nested async calls.
-        // The trigger_schedule_by_path handler is implemented but cannot be registered.
-        // Workaround: Use the scheduler's automatic execution or recreate the schedule.
-        // .route("/api/chaos/schedule/{id}/trigger", post(trigger_schedule_by_path))
+        .route("/api/chaos/schedule/{id}/trigger", post(trigger_schedule_by_path))
         .route("/api/chaos/schedules", get(list_schedules))
 
         // AI-powered recommendation endpoints
@@ -1183,40 +1179,22 @@ async fn disable_schedule(
     }
 }
 
-/// Manually trigger a schedule (using Path parameter)
-///
-/// NOTE: This handler is fully implemented but cannot be registered as a route
-/// due to a Rust/Axum type inference issue. The problem occurs when:
-/// 1. A handler has State + Path/Json extractors
-/// 2. The handler makes two consecutive `.await` calls:
-///    - First await: acquiring the RwLock (`scheduler.read().await`)
-///    - Second await: calling an async method (`trigger_now(&id).await`)
-///
-/// This causes Axum's Handler trait inference to fail with:
-/// "the trait `Handler<_, _>` is not implemented for fn item..."
-///
-/// Root cause: Complex interaction between Rust's type inference, async/await
-/// semantics, and Axum's Handler trait bounds when futures are composed.
-///
-/// Workarounds:
-/// - Use the scheduler's automatic time-based execution
-/// - Recreate the schedule to reset its execution state
-/// - Call scheduler.trigger_now() directly from application code
-#[allow(dead_code)]
+/// Manually trigger a schedule by ID
 async fn trigger_schedule_by_path(
     State(state): State<ChaosApiState>,
     Path(id): Path<String>,
 ) -> Result<Json<StatusResponse>, ChaosApiError> {
-    let scheduler = state.scheduler.read().await;
-    let schedule_exists = scheduler.get_schedule(&id).is_some();
-
-    if !schedule_exists {
-        return Err(ChaosApiError::NotFound(format!("Schedule '{}' not found", id)));
+    // Check existence first, then drop the lock before the async trigger_now call.
+    // This avoids holding the RwLock guard across an await point.
+    {
+        let scheduler = state.scheduler.read().await;
+        if scheduler.get_schedule(&id).is_none() {
+            return Err(ChaosApiError::NotFound(format!("Schedule '{}' not found", id)));
+        }
     }
 
-    let trigger_result = scheduler.trigger_now(&id).await;
-
-    match trigger_result {
+    let scheduler = state.scheduler.read().await;
+    match scheduler.trigger_now(&id).await {
         Ok(_) => {
             info!("Schedule '{}' triggered", id);
             Ok(Json(StatusResponse {

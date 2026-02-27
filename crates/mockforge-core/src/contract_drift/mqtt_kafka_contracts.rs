@@ -48,7 +48,6 @@ pub struct MqttContract {
     /// Map of topic names to topic schemas
     topics: HashMap<String, MqttTopicSchema>,
     /// Compiled JSON schemas for validation (cached)
-    #[allow(dead_code)]
     schema_cache: HashMap<String, JSONSchema>,
     /// Cached contract operations for quick lookup
     operations_cache: HashMap<String, ContractOperation>,
@@ -905,7 +904,6 @@ pub struct KafkaContract {
     /// Map of topic names to topic schemas
     topics: HashMap<String, KafkaTopicSchema>,
     /// Compiled JSON schemas for validation (cached)
-    #[allow(dead_code)]
     schema_cache: HashMap<String, (Option<JSONSchema>, JSONSchema)>, // (key_schema, value_schema)
     /// Cached contract operations for quick lookup
     operations_cache: HashMap<String, ContractOperation>,

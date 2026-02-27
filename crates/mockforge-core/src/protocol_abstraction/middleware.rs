@@ -8,8 +8,7 @@ use std::time::Instant;
 pub struct LoggingMiddleware {
     /// Middleware name
     name: String,
-    /// Whether to log request bodies
-    #[allow(dead_code)]
+    /// Whether to log request/response bodies in debug traces
     log_bodies: bool,
 }
 
@@ -40,12 +39,23 @@ impl ProtocolMiddleware for LoggingMiddleware {
             Instant::now().elapsed().as_millis().to_string(),
         );
 
-        tracing::debug!(
-            protocol = %request.protocol,
-            operation = %request.operation,
-            path = %request.path,
-            "Processing request through logging middleware"
-        );
+        if self.log_bodies {
+            tracing::debug!(
+                protocol = %request.protocol,
+                operation = %request.operation,
+                path = %request.path,
+                body_size = request.body.as_ref().map(|b| b.len()).unwrap_or(0),
+                body = ?request.body.as_deref().and_then(|b| std::str::from_utf8(b).ok()),
+                "Processing request through logging middleware (with body)"
+            );
+        } else {
+            tracing::debug!(
+                protocol = %request.protocol,
+                operation = %request.operation,
+                path = %request.path,
+                "Processing request through logging middleware"
+            );
+        }
 
         Ok(())
     }
@@ -228,14 +238,27 @@ impl ProtocolMiddleware for LoggingMiddleware {
         // Log to centralized logger
         log_request_global(log_entry).await;
 
-        tracing::debug!(
-            protocol = %request.protocol,
-            operation = %request.operation,
-            path = %request.path,
-            duration_ms = duration_ms,
-            success = response.status.is_success(),
-            "Request processed"
-        );
+        if self.log_bodies {
+            tracing::debug!(
+                protocol = %request.protocol,
+                operation = %request.operation,
+                path = %request.path,
+                duration_ms = duration_ms,
+                success = response.status.is_success(),
+                response_body_size = response.body.len(),
+                response_body = ?std::str::from_utf8(&response.body).ok(),
+                "Request processed (with body)"
+            );
+        } else {
+            tracing::debug!(
+                protocol = %request.protocol,
+                operation = %request.operation,
+                path = %request.path,
+                duration_ms = duration_ms,
+                success = response.status.is_success(),
+                "Request processed"
+            );
+        }
 
         Ok(())
     }
