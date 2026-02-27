@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { X, Cookie, Settings } from 'lucide-react';
+import { logger } from '@/utils/logger';
 
 const COOKIE_CONSENT_KEY = 'mockforge-cookie-consent';
 const COOKIE_CONSENT_EXPIRY_DAYS = 365;
@@ -88,23 +89,23 @@ export function CookieConsentBanner() {
       // Note: Sentry is initialized in main.tsx, but we can control its behavior
       // by setting a global flag that Sentry respects
       (window as any).__MOCKFORGE_ANALYTICS_ENABLED = true;
-      console.log('Analytics cookies enabled');
+      logger.debug('Analytics cookies enabled');
     } else {
       // Disable Sentry tracking
       (window as any).__MOCKFORGE_ANALYTICS_ENABLED = false;
       // Note: Sentry is already initialized, but we can prevent future events
       // by setting this flag. For full compliance, Sentry should be initialized
       // conditionally in main.tsx based on consent.
-      console.log('Analytics cookies disabled');
+      logger.debug('Analytics cookies disabled');
     }
 
     // Marketing cookies (not currently used, but prepared for future use)
     if (prefs.marketing) {
       (window as any).__MOCKFORGE_MARKETING_ENABLED = true;
-      console.log('Marketing cookies enabled');
+      logger.debug('Marketing cookies enabled');
     } else {
       (window as any).__MOCKFORGE_MARKETING_ENABLED = false;
-      console.log('Marketing cookies disabled');
+      logger.debug('Marketing cookies disabled');
     }
   };
 

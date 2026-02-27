@@ -1019,7 +1019,7 @@ export function useUpdatePersonaLifecycles() {
       });
       // Handle 405 (Method Not Allowed) gracefully - endpoint may not be implemented
       if (response.status === 405) {
-        console.debug('[TimeTravel] Persona lifecycle update endpoint not available (405)');
+        logger.debug('[TimeTravel] Persona lifecycle update endpoint not available (405)');
         return null; // Return null instead of throwing to prevent error UI
       }
       if (!response.ok) {
@@ -1035,7 +1035,7 @@ export function useUpdatePersonaLifecycles() {
     onError: (error) => {
       // Only log errors that aren't 405 (which we handle gracefully)
       if (!error.message?.includes('405')) {
-        console.warn('[TimeTravel] Failed to update persona lifecycles:', error);
+        logger.warn('[TimeTravel] Failed to update persona lifecycles', error);
       }
     },
   });

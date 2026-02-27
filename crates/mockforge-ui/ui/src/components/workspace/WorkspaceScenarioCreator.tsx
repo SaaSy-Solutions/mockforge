@@ -7,6 +7,7 @@ import { Loader2, CheckCircle2, XCircle, Download, Copy, Building2 } from 'lucid
 import { Button } from '../ui/button';
 import { Card } from '../ui/Card';
 import { cn } from '../../utils/cn';
+import { logger } from '@/utils/logger';
 
 interface WorkspaceScenarioCreatorProps {
   onScenarioCreated?: (scenario: WorkspaceScenarioResult) => void;
@@ -98,7 +99,7 @@ export function WorkspaceScenarioCreator({
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(
       () => {
-        console.log('Copied to clipboard');
+        logger.debug('Copied to clipboard');
       },
       (err) => {
         console.error('Failed to copy:', err);
@@ -343,4 +344,3 @@ export function WorkspaceScenarioCreator({
     </div>
   );
 }
-

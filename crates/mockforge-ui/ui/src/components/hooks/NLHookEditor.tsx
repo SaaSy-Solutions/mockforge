@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Copy, Download, Code2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
+import { logger } from '@/utils/logger';
 
 interface NLHookEditorProps {
   onHookGenerated?: (hook: HookResult) => void;
@@ -83,7 +84,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
     navigator.clipboard.writeText(text).then(
       () => {
         // Could show a toast notification here
-        console.log('Copied to clipboard');
+        logger.debug('Copied to clipboard');
       },
       (err) => {
         console.error('Failed to copy:', err);
@@ -216,4 +217,3 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
     </div>
   );
 }
-

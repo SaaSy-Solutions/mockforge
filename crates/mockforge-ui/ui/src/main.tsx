@@ -32,11 +32,9 @@ if (import.meta.env.DEV) {
 if (import.meta.env.PROD) {
   registerServiceWorker({
     onSuccess: (registration) => {
-      console.log('[PWA] Service worker registered successfully');
       logger.info('PWA: Service worker registered', { registration });
     },
     onUpdate: (registration) => {
-      console.log('[PWA] New service worker available');
       logger.info('PWA: New service worker available', { registration });
       // Optionally show update notification to user
       if (window.confirm('New version available! Reload to update?')) {

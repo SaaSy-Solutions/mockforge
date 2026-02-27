@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useConnectionStore } from '@/components/layout/ConnectionStatus';
+import { logger } from '@/utils/logger';
 
 export interface MetricsUpdate {
   timestamp: number;
@@ -81,7 +82,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const attemptReconnect = () => {
     // Check if we've exceeded max retries (0 means infinite)
     if (reconnectMaxRetries > 0 && reconnectAttemptsRef.current >= reconnectMaxRetries) {
-      console.warn(
+      logger.warn(
         `Max reconnection attempts (${reconnectMaxRetries}) reached. Stopping reconnection.`
       );
       setError('Max reconnection attempts reached');
@@ -97,7 +98,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
       reconnectMaxDelay
     );
 
-    console.log(
+    logger.debug(
       `Attempting to reconnect analytics stream in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${reconnectMaxRetries || '∞'})`
     );
 
@@ -137,7 +138,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     const ws = new WebSocket(url);
 
     ws.onopen = () => {
-      console.log('Analytics stream connected');
+      logger.debug('Analytics stream connected');
       setIsConnected(true);
       setWsState('connected');
       setError(null);
@@ -170,7 +171,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     };
 
     ws.onclose = () => {
-      console.log('Analytics stream disconnected');
+      logger.debug('Analytics stream disconnected');
       setIsConnected(false);
       onDisconnect?.();
 
