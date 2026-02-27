@@ -1903,6 +1903,17 @@ enum Commands {
         /// Example: --conformance-header "X-CSRFToken: real-token" --conformance-header "Cookie: sessionid=abc"
         #[arg(long = "conformance-header", value_name = "HEADER")]
         conformance_headers: Vec<String>,
+
+        /// Test ALL API operations in conformance mode (not just representative samples)
+        ///
+        /// By default, spec-driven conformance picks one representative operation per
+        /// feature check (e.g., one GET, one POST). This flag tests every operation
+        /// for method, response code, and body categories, using path-qualified check
+        /// names like "method:GET:/api/users".
+        ///
+        /// Example: --conformance-all-operations
+        #[arg(long)]
+        conformance_all_operations: bool,
     },
 }
 
@@ -3237,6 +3248,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_categories,
             conformance_report_format,
             conformance_headers,
+            conformance_all_operations,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3319,6 +3331,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_categories,
                 conformance_report_format,
                 conformance_headers,
+                conformance_all_operations,
             };
 
             if let Err(e) = bench_cmd.execute().await {

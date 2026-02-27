@@ -577,8 +577,14 @@ impl SpecDrivenConformanceGenerator {
         }
     }
 
-    /// Generate the k6 conformance script
-    pub fn generate(&self) -> Result<String> {
+    /// Returns the number of operations being tested
+    pub fn operation_count(&self) -> usize {
+        self.operations.len()
+    }
+
+    /// Generate the k6 conformance script.
+    /// Returns (script, check_count) where check_count is the number of unique checks emitted.
+    pub fn generate(&self) -> Result<(String, usize)> {
         let mut script = String::with_capacity(16384);
 
         // Imports
@@ -592,6 +598,9 @@ impl SpecDrivenConformanceGenerator {
         if self.config.skip_tls_verify {
             script.push_str("  insecureSkipTLSVerify: true,\n");
         }
+        if self.config.has_cookie_header() {
+            script.push_str("  noCookies: true,\n");
+        }
         script.push_str("  thresholds: {\n");
         script.push_str("    checks: ['rate>0'],\n");
         script.push_str("  },\n");
@@ -600,14 +609,6 @@ impl SpecDrivenConformanceGenerator {
         // Base URL (includes base_path if configured)
         script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
-
-        // Custom auth headers (injected via --conformance-header)
-        if self.config.has_custom_headers() {
-            script.push_str(&format!(
-                "const CUSTOM_HEADERS = {};\n\n",
-                self.config.custom_headers_js_object()
-            ));
-        }
 
         // Default function
         script.push_str("export default function () {\n");
@@ -628,18 +629,29 @@ impl SpecDrivenConformanceGenerator {
         }
 
         // Emit grouped tests
+        let mut total_checks = 0usize;
         for (category, ops) in &category_ops {
             script.push_str(&format!("  group('{}', function () {{\n", category));
 
-            // Track which check names we've already emitted to avoid duplicates
-            let mut emitted_checks: HashSet<&str> = HashSet::new();
-
-            for (op, feature) in ops {
-                if !emitted_checks.insert(feature.check_name()) {
-                    continue; // Skip duplicate check names
+            if self.config.all_operations {
+                // All-operations mode: test every operation, using path-qualified check names
+                let mut emitted_checks: HashSet<String> = HashSet::new();
+                for (op, feature) in ops {
+                    let qualified = format!("{}:{}", feature.check_name(), op.path);
+                    if emitted_checks.insert(qualified.clone()) {
+                        self.emit_check_named(&mut script, op, feature, &qualified);
+                        total_checks += 1;
+                    }
                 }
-
-                self.emit_check(&mut script, op, feature);
+            } else {
+                // Default: one representative operation per feature check name
+                let mut emitted_checks: HashSet<&str> = HashSet::new();
+                for (op, feature) in ops {
+                    if emitted_checks.insert(feature.check_name()) {
+                        self.emit_check(&mut script, op, feature);
+                        total_checks += 1;
+                    }
+                }
             }
 
             script.push_str("  });\n\n");
@@ -650,15 +662,26 @@ impl SpecDrivenConformanceGenerator {
         // handleSummary
         self.generate_handle_summary(&mut script);
 
-        Ok(script)
+        Ok((script, total_checks))
     }
 
-    /// Emit a single k6 check for an operation + feature
+    /// Emit a single k6 check for an operation + feature using the feature's default check name
     fn emit_check(
         &self,
         script: &mut String,
         op: &AnnotatedOperation,
         feature: &ConformanceFeature,
+    ) {
+        self.emit_check_named(script, op, feature, feature.check_name());
+    }
+
+    /// Emit a single k6 check for an operation + feature with a custom check name
+    fn emit_check_named(
+        &self,
+        script: &mut String,
+        op: &AnnotatedOperation,
+        feature: &ConformanceFeature,
+        check_name: &str,
     ) {
         script.push_str("    {\n");
 
@@ -751,7 +774,6 @@ impl SpecDrivenConformanceGenerator {
         }
 
         // Check: emit assertion based on feature type
-        let check_name = feature.check_name();
         if matches!(
             feature,
             ConformanceFeature::Response200
@@ -867,6 +889,17 @@ impl SpecDrivenConformanceGenerator {
 
     /// handleSummary — same format as reference mode for report compatibility
     fn generate_handle_summary(&self, script: &mut String) {
+        // Use absolute path for report output so k6 writes where the CLI expects
+        let report_path = match &self.config.output_dir {
+            Some(dir) => {
+                let abs = std::fs::canonicalize(dir)
+                    .unwrap_or_else(|_| dir.clone())
+                    .join("conformance-report.json");
+                abs.to_string_lossy().to_string()
+            }
+            None => "conformance-report.json".to_string(),
+        };
+
         script.push_str("export function handleSummary(data) {\n");
         script.push_str("  let checks = {};\n");
         script.push_str("  if (data.metrics && data.metrics.checks) {\n");
@@ -892,7 +925,10 @@ impl SpecDrivenConformanceGenerator {
         script.push_str("    walkGroups(data.root_group);\n");
         script.push_str("  }\n");
         script.push_str("  return {\n");
-        script.push_str("    'conformance-report.json': JSON.stringify({ checks: checkResults, overall: checks }, null, 2),\n");
+        script.push_str(&format!(
+            "    '{}': JSON.stringify({{ checks: checkResults, overall: checks }}, null, 2),\n",
+            report_path
+        ));
         script.push_str("    stdout: textSummary(data, { indent: '  ', enableColors: true }),\n");
         script.push_str("  };\n");
         script.push_str("}\n\n");
@@ -997,6 +1033,8 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1015,7 +1053,7 @@ mod tests {
         }];
 
         let gen = SpecDrivenConformanceGenerator::new(config, operations);
-        let script = gen.generate().unwrap();
+        let (script, _check_count) = gen.generate().unwrap();
 
         assert!(script.contains("import http from 'k6/http'"));
         assert!(script.contains("/users/test-value"));
@@ -1034,6 +1072,8 @@ mod tests {
             categories: Some(vec!["Parameters".to_string()]),
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1052,7 +1092,7 @@ mod tests {
         }];
 
         let gen = SpecDrivenConformanceGenerator::new(config, operations);
-        let script = gen.generate().unwrap();
+        let (script, _check_count) = gen.generate().unwrap();
 
         assert!(script.contains("group('Parameters'"));
         assert!(!script.contains("group('HTTP Methods'"));
@@ -1102,9 +1142,11 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
-        let script = gen.generate().unwrap();
+        let (script, _check_count) = gen.generate().unwrap();
 
         assert!(
             script.contains("response:schema:validation"),
@@ -1240,9 +1282,11 @@ mod tests {
             categories: None,
             base_path: Some("/api".to_string()),
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
-        let script = gen.generate().unwrap();
+        let (script, _check_count) = gen.generate().unwrap();
 
         assert!(
             script.contains("const BASE_URL = 'https://192.168.2.86/api'"),
@@ -1279,9 +1323,11 @@ mod tests {
                 ("X-CSRFToken".to_string(), "real-csrf-token".to_string()),
                 ("Cookie".to_string(), "sessionid=abc123".to_string()),
             ],
+            output_dir: None,
+            all_operations: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
-        let script = gen.generate().unwrap();
+        let (script, _check_count) = gen.generate().unwrap();
 
         // Custom headers should override spec-derived test-value placeholders
         assert!(
@@ -1317,6 +1363,8 @@ mod tests {
                 ("X-Auth".to_string(), "real-token".to_string()),
                 ("Cookie".to_string(), "session=abc".to_string()),
             ],
+            output_dir: None,
+            all_operations: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![]);
 

@@ -1,10 +1,17 @@
 [workspace]
 members = [
     # Core foundation crates
+    "crates/mockforge-core",
     "crates/mockforge-data",
     "crates/mockforge-template-expansion",
+    "crates/mockforge-world-state",
+    "crates/mockforge-scenarios",
 
     # Protocol implementations
+    "crates/mockforge-http",
+    "crates/mockforge-grpc",
+    "crates/mockforge-ws",
+    "crates/mockforge-graphql",
     "crates/mockforge-amqp",
     "crates/mockforge-ftp",
     "crates/mockforge-kafka",
@@ -35,12 +42,20 @@ members = [
     "crates/mockforge-schema",
 
     # SDK
+    "crates/mockforge-sdk",
+
+    # Testing & Benchmarking
+    "crates/mockforge-bench",
+    "crates/mockforge-test",
 
     # Infrastructure
+    "crates/mockforge-vbr",
+    "crates/mockforge-runtime-daemon",
     "crates/mockforge-tunnel",
     "crates/mockforge-collab",
 
     # Main user-facing crates
+    "crates/mockforge-cli",
     "crates/mockforge-ui",
     "crates/mockforge-tui",
 

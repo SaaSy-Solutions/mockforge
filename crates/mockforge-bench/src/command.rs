@@ -140,6 +140,9 @@ pub struct BenchCommand {
     /// Custom headers to inject into every conformance request (for authentication).
     /// Each entry is "Header-Name: value" format.
     pub conformance_headers: Vec<String>,
+    /// When true, test ALL operations for method/response/body categories
+    /// instead of just one representative per feature check.
+    pub conformance_all_operations: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -541,6 +544,7 @@ impl BenchCommand {
                 conformance_categories: None,
                 conformance_report_format: "json".to_string(),
                 conformance_headers: vec![],
+                conformance_all_operations: false,
             },
             targets,
             max_concurrency,
@@ -1870,6 +1874,9 @@ impl BenchCommand {
             ));
         }
 
+        // Ensure output dir exists so canonicalize works for the report path
+        std::fs::create_dir_all(&self.output)?;
+
         let config = ConformanceConfig {
             target_url: self.target.clone(),
             api_key: self.conformance_api_key.clone(),
@@ -1878,6 +1885,8 @@ impl BenchCommand {
             categories,
             base_path: self.base_path.clone(),
             custom_headers,
+            output_dir: Some(self.output.clone()),
+            all_operations: self.conformance_all_operations,
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -1901,7 +1910,21 @@ impl BenchCommand {
             let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
                 config, annotated,
             );
-            gen.generate()?
+            let op_count = gen.operation_count();
+            let (script, check_count) = gen.generate()?;
+
+            // Print coverage summary
+            TerminalReporter::print_success(&format!(
+                "Conformance: {} operations analyzed, {} unique checks generated",
+                op_count, check_count
+            ));
+            if !self.conformance_all_operations && check_count < op_count {
+                TerminalReporter::print_progress(
+                    "Tip: Use --conformance-all-operations to test every endpoint",
+                );
+            }
+
+            script
         } else {
             // Reference mode: uses /conformance/ endpoints
             let generator = ConformanceGenerator::new(config);
@@ -1909,7 +1932,6 @@ impl BenchCommand {
         };
 
         // Write script
-        std::fs::create_dir_all(&self.output)?;
         let script_path = self.output.join("k6-conformance.js");
         std::fs::write(&script_path, &script)
             .map_err(|e| BenchError::Other(format!("Failed to write conformance script: {}", e)))?;
@@ -2177,6 +2199,7 @@ mod tests {
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
+            conformance_all_operations: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2245,6 +2268,7 @@ mod tests {
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
+            conformance_all_operations: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2309,6 +2333,7 @@ mod tests {
             conformance_categories: None,
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
+            conformance_all_operations: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

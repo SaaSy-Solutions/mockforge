@@ -1,9 +1,10 @@
 //! k6 script generator for OpenAPI 3.0.0 conformance testing
 
 use crate::error::{BenchError, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Configuration for conformance test generation
+#[derive(Default)]
 pub struct ConformanceConfig {
     /// Target base URL
     pub target_url: String,
@@ -21,6 +22,13 @@ pub struct ConformanceConfig {
     /// Each entry is (header_name, header_value). When a custom header matches
     /// a spec-derived header name, the custom value replaces the placeholder.
     pub custom_headers: Vec<(String, String)>,
+    /// Output directory for the conformance report (absolute path).
+    /// Used to write `conformance-report.json` to a deterministic location
+    /// so the CLI can find it after k6 execution.
+    pub output_dir: Option<PathBuf>,
+    /// When true, test ALL operations for method/response/body categories
+    /// instead of just one representative per feature check name.
+    pub all_operations: bool,
 }
 
 impl ConformanceConfig {
@@ -35,6 +43,13 @@ impl ConformanceConfig {
     /// Returns true if custom headers are configured
     pub fn has_custom_headers(&self) -> bool {
         !self.custom_headers.is_empty()
+    }
+
+    /// Returns true if custom headers contain a Cookie header.
+    /// When true, k6's automatic cookie jar should be disabled to prevent
+    /// duplicate cookies on subsequent requests.
+    pub fn has_cookie_header(&self) -> bool {
+        self.custom_headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("cookie"))
     }
 
     /// Format custom headers as a JS object literal string
@@ -91,6 +106,9 @@ impl ConformanceGenerator {
         if self.config.skip_tls_verify {
             script.push_str("  insecureSkipTLSVerify: true,\n");
         }
+        if self.config.has_cookie_header() {
+            script.push_str("  noCookies: true,\n");
+        }
         script.push_str("  thresholds: {\n");
         script.push_str("    checks: ['rate>0'],\n");
         script.push_str("  },\n");
@@ -101,14 +119,6 @@ impl ConformanceGenerator {
 
         // Helper: JSON headers
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
-
-        // Custom auth headers (injected via --conformance-header)
-        if self.config.has_custom_headers() {
-            script.push_str(&format!(
-                "const CUSTOM_HEADERS = {};\n\n",
-                self.config.custom_headers_js_object()
-            ));
-        }
 
         // Default function
         script.push_str("export default function () {\n");
@@ -164,10 +174,14 @@ impl ConformanceGenerator {
 
     /// Returns a JS expression for merging custom headers with provided headers.
     /// If no custom headers, returns the input as-is.
-    /// If custom headers exist, wraps with Object.assign.
+    /// If custom headers exist, wraps with Object.assign using inline header object.
     fn merge_with_custom_headers(&self, headers_expr: &str) -> String {
         if self.config.has_custom_headers() {
-            format!("Object.assign({{}}, {}, CUSTOM_HEADERS)", headers_expr)
+            format!(
+                "Object.assign({{}}, {}, {})",
+                headers_expr,
+                self.config.custom_headers_js_object()
+            )
         } else {
             headers_expr.to_string()
         }
@@ -176,14 +190,15 @@ impl ConformanceGenerator {
     /// Emit a GET request with optional custom headers merged in.
     fn emit_get(&self, script: &mut String, url: &str, extra_headers: Option<&str>) {
         let has_custom = self.config.has_custom_headers();
+        let custom_obj = self.config.custom_headers_js_object();
         match (extra_headers, has_custom) {
             (None, false) => {
                 script.push_str(&format!("      let res = http.get(`{}`);\n", url));
             }
             (None, true) => {
                 script.push_str(&format!(
-                    "      let res = http.get(`{}`, {{ headers: CUSTOM_HEADERS }});\n",
-                    url
+                    "      let res = http.get(`{}`, {{ headers: {} }});\n",
+                    url, custom_obj
                 ));
             }
             (Some(hdrs), false) => {
@@ -194,8 +209,8 @@ impl ConformanceGenerator {
             }
             (Some(hdrs), true) => {
                 script.push_str(&format!(
-                    "      let res = http.get(`{}`, {{ headers: Object.assign({{}}, {}, CUSTOM_HEADERS) }});\n",
-                    url, hdrs
+                    "      let res = http.get(`{}`, {{ headers: Object.assign({{}}, {}, {}) }});\n",
+                    url, hdrs, custom_obj
                 ));
             }
         }
@@ -221,8 +236,10 @@ impl ConformanceGenerator {
     fn emit_no_body(&self, script: &mut String, method: &str, url: &str) {
         if self.config.has_custom_headers() {
             script.push_str(&format!(
-                "      let res = http.{}(`{}`, {{ headers: CUSTOM_HEADERS }});\n",
-                method, url
+                "      let res = http.{}(`{}`, {{ headers: {} }});\n",
+                method,
+                url,
+                self.config.custom_headers_js_object()
             ));
         } else {
             script.push_str(&format!("      let res = http.{}(`{}`);\n", method, url));
@@ -317,9 +334,10 @@ impl ConformanceGenerator {
         // Form-urlencoded body
         script.push_str("    {\n");
         if self.config.has_custom_headers() {
-            script.push_str(
-                "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' }, { headers: CUSTOM_HEADERS });\n",
-            );
+            script.push_str(&format!(
+                "      let res = http.post(`${{BASE_URL}}/conformance/body/form`, {{ field1: 'value1', field2: 'value2' }}, {{ headers: {} }});\n",
+                self.config.custom_headers_js_object()
+            ));
         } else {
             script.push_str(
                 "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' });\n",
@@ -336,9 +354,10 @@ impl ConformanceGenerator {
             "      let data = { field: http.file('test content', 'test.txt', 'text/plain') };\n",
         );
         if self.config.has_custom_headers() {
-            script.push_str(
-                "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data, { headers: CUSTOM_HEADERS });\n",
-            );
+            script.push_str(&format!(
+                "      let res = http.post(`${{BASE_URL}}/conformance/body/multipart`, data, {{ headers: {} }});\n",
+                self.config.custom_headers_js_object()
+            ));
         } else {
             script.push_str(
                 "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data);\n",
@@ -622,6 +641,18 @@ impl ConformanceGenerator {
     }
 
     fn generate_handle_summary(&self, script: &mut String) {
+        // Determine the report output path. When output_dir is set, use an absolute
+        // path so k6 writes the file where the CLI expects to find it regardless of CWD.
+        let report_path = match &self.config.output_dir {
+            Some(dir) => {
+                let abs = std::fs::canonicalize(dir)
+                    .unwrap_or_else(|_| dir.clone())
+                    .join("conformance-report.json");
+                abs.to_string_lossy().to_string()
+            }
+            None => "conformance-report.json".to_string(),
+        };
+
         script.push_str("export function handleSummary(data) {\n");
         script.push_str("  // Extract check results for conformance reporting\n");
         script.push_str("  let checks = {};\n");
@@ -650,7 +681,10 @@ impl ConformanceGenerator {
         script.push_str("    walkGroups(data.root_group);\n");
         script.push_str("  }\n");
         script.push_str("  return {\n");
-        script.push_str("    'conformance-report.json': JSON.stringify({ checks: checkResults, overall: checks }, null, 2),\n");
+        script.push_str(&format!(
+            "    '{}': JSON.stringify({{ checks: checkResults, overall: checks }}, null, 2),\n",
+            report_path
+        ));
         script.push_str("    stdout: textSummary(data, { indent: '  ', enableColors: true }),\n");
         script.push_str("  };\n");
         script.push_str("}\n\n");
@@ -701,6 +735,8 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -739,6 +775,8 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -758,6 +796,8 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -774,6 +814,8 @@ mod tests {
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -792,6 +834,8 @@ mod tests {
             categories: Some(vec!["Parameters".to_string(), "Security".to_string()]),
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -813,6 +857,8 @@ mod tests {
             categories: None,
             base_path: None,
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -827,6 +873,8 @@ mod tests {
             categories: None,
             base_path: Some("/api".to_string()),
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -841,6 +889,8 @@ mod tests {
             categories: None,
             base_path: Some("/api".to_string()),
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -855,6 +905,8 @@ mod tests {
             categories: None,
             base_path: Some("/api".to_string()),
             custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -877,22 +929,19 @@ mod tests {
                 ("X-Avi-Tenant".to_string(), "admin".to_string()),
                 ("X-CSRFToken".to_string(), "real-token".to_string()),
             ],
+            output_dir: None,
+            all_operations: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
 
-        // Should declare CUSTOM_HEADERS constant
+        // Custom headers should be inlined into requests (no separate const)
         assert!(
-            script.contains("const CUSTOM_HEADERS = "),
-            "Script should declare CUSTOM_HEADERS"
+            !script.contains("const CUSTOM_HEADERS"),
+            "Script should NOT declare a CUSTOM_HEADERS const"
         );
         assert!(script.contains("'X-Avi-Tenant': 'admin'"));
         assert!(script.contains("'X-CSRFToken': 'real-token'"));
-        // GET requests should merge with CUSTOM_HEADERS
-        assert!(
-            script.contains("CUSTOM_HEADERS"),
-            "Script should reference CUSTOM_HEADERS in requests"
-        );
     }
 
     #[test]
@@ -908,6 +957,8 @@ mod tests {
                 ("Authorization".to_string(), "Bearer abc123".to_string()),
                 ("X-Custom".to_string(), "value".to_string()),
             ],
+            output_dir: None,
+            all_operations: false,
         };
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));
