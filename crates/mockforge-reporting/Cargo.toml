@@ -21,6 +21,9 @@ printpdf = "0.7"
 # Email
 lettre = { version = "0.11", features = ["smtp-transport", "builder"] }
 
+# Flamegraph generation
+inferno = "0.12"
+
 # Charting
 plotters = { version = "0.3", features = ["all_elements", "bitmap_backend"] }
 

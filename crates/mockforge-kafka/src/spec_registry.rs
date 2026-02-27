@@ -191,8 +191,30 @@ impl SpecRegistry for KafkaSpecRegistry {
                     self.template_engine.expand_str_with_context(key_pattern, &templating_context)
                 });
 
-                // For now, return a mock offset since we don't have actual broker integration
-                let offset = 0i64;
+                // Produce through the broker to get a real offset
+                let offset = if let Ok(mut topics) = self.topics.try_write() {
+                    let topic_entry = topics.entry(topic.to_string()).or_insert_with(|| {
+                        crate::topics::Topic::new(
+                            topic.to_string(),
+                            crate::topics::TopicConfig::default(),
+                        )
+                    });
+                    let partition_id =
+                        topic_entry.assign_partition(_key.as_ref().map(|k| k.as_bytes()));
+                    let message = crate::partitions::KafkaMessage {
+                        offset: 0,
+                        timestamp: chrono::Utc::now().timestamp_millis(),
+                        key: _key.as_ref().map(|k| k.as_bytes().to_vec()),
+                        value: serde_json::to_vec(&value).map_err(mockforge_core::Error::Json)?,
+                        headers: vec![],
+                    };
+                    topic_entry
+                        .get_partition_mut(partition_id)
+                        .map(|p| p.append(message))
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
 
                 Ok(ProtocolResponse {
                     status: ResponseStatus::KafkaStatus(0), // No error
@@ -210,11 +232,24 @@ impl SpecRegistry for KafkaSpecRegistry {
                 let partition = request
                     .partition
                     .ok_or_else(|| mockforge_core::Error::generic("Missing partition"))?;
-                let _offset =
+                let offset: i64 =
                     request.metadata.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
 
-                // For now, return empty messages since we don't have actual broker integration
-                let messages: Vec<crate::partitions::KafkaMessage> = vec![];
+                // Fetch real messages from the broker
+                let messages: Vec<crate::partitions::KafkaMessage> =
+                    if let Ok(topics) = self.topics.try_read() {
+                        if let Some(topic_entry) = topics.get(topic) {
+                            if let Some(partition_entry) = topic_entry.get_partition(partition) {
+                                partition_entry.fetch(offset, 1000).into_iter().cloned().collect()
+                            } else {
+                                vec![]
+                            }
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        vec![]
+                    };
 
                 Ok(ProtocolResponse {
                     status: ResponseStatus::KafkaStatus(0),

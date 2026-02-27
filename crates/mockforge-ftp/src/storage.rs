@@ -37,16 +37,13 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
                 file: Some(file),
                 is_dir: false,
             })
+        } else if self.vfs.directory_exists(path) {
+            Ok(MockForgeMetadata {
+                file: None,
+                is_dir: true,
+            })
         } else {
-            // Check if it's a directory (for now, assume root is a directory)
-            if path == Path::new("/") || path == Path::new("") {
-                Ok(MockForgeMetadata {
-                    file: None,
-                    is_dir: true,
-                })
-            } else {
-                Err(Error::from(ErrorKind::PermanentFileNotAvailable))
-            }
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
         }
     }
 
@@ -158,29 +155,53 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
         }
     }
 
-    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, _path: P) -> Result<()> {
-        // For now, directories are not supported in VFS
-        Err(Error::new(ErrorKind::PermissionDenied, "Directory creation not supported"))
+    async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
+        let path = path.as_ref();
+        if self.vfs.directory_exists(path) {
+            return Err(Error::new(
+                ErrorKind::PermanentFileNotAvailable,
+                "Directory already exists",
+            ));
+        }
+        self.vfs
+            .create_directory(path.to_path_buf())
+            .map_err(|e| Error::new(ErrorKind::LocalError, e))
     }
 
-    async fn rename<P: AsRef<Path> + Send + Debug>(
-        &self,
-        _user: &U,
-        _from: P,
-        _to: P,
-    ) -> Result<()> {
-        // For now, renaming is not supported
-        Err(Error::new(ErrorKind::PermissionDenied, "Rename not supported"))
+    async fn rename<P: AsRef<Path> + Send + Debug>(&self, _user: &U, from: P, to: P) -> Result<()> {
+        let from = from.as_ref();
+        let to = to.as_ref();
+
+        if let Some(file) = self.vfs.get_file(from) {
+            self.vfs.remove_file(from).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+            self.vfs
+                .add_file(
+                    to.to_path_buf(),
+                    VirtualFile::new(to.to_path_buf(), file.content, file.metadata),
+                )
+                .map_err(|e| Error::new(ErrorKind::LocalError, e))
+        } else {
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+        }
     }
 
-    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, _path: P) -> Result<()> {
-        // For now, directory removal is not supported
-        Err(Error::new(ErrorKind::PermissionDenied, "Directory removal not supported"))
+    async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
+        let path = path.as_ref();
+        if !self.vfs.directory_exists(path) {
+            return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
+        }
+        self.vfs
+            .remove_directory(path)
+            .map_err(|e| Error::new(ErrorKind::PermissionDenied, e))
     }
 
-    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, _path: P) -> Result<()> {
-        // For now, directory changes are not supported
-        Err(Error::new(ErrorKind::PermissionDenied, "Directory changes not supported"))
+    async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
+        let path = path.as_ref();
+        if self.vfs.directory_exists(path) {
+            Ok(())
+        } else {
+            Err(Error::from(ErrorKind::PermanentFileNotAvailable))
+        }
     }
 }
 

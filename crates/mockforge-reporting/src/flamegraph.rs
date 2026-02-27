@@ -149,80 +149,22 @@ impl FlamegraphGenerator {
         }
     }
 
-    /// Generate SVG flamegraph from folded stacks
+    /// Generate SVG flamegraph from folded stacks using inferno
     fn generate_svg(&self, folded_path: &str, output_path: &str) -> Result<()> {
-        // For now, generate a simple HTML representation
-        // In production, you'd use inferno or flamegraph crate
-        let svg_content = self.create_svg_content(folded_path)?;
+        use std::io::BufReader;
 
-        let mut file = File::create(output_path)?;
-        file.write_all(svg_content.as_bytes())?;
+        let folded_file = File::open(folded_path)?;
+        let reader = BufReader::new(folded_file);
+        let mut output_file = File::create(output_path)?;
+
+        let mut opts = inferno::flamegraph::Options::default();
+        opts.title = "Flamegraph - Trace Visualization".to_string();
+        opts.count_name = "microseconds".to_string();
+
+        inferno::flamegraph::from_reader(&mut opts, reader, &mut output_file)
+            .map_err(|e| ReportingError::Io(std::io::Error::other(e.to_string())))?;
 
         Ok(())
-    }
-
-    /// Create SVG content (simplified version)
-    fn create_svg_content(&self, folded_path: &str) -> Result<String> {
-        use std::io::BufRead;
-
-        let file = File::open(folded_path)?;
-        let reader = std::io::BufReader::new(file);
-
-        let mut max_duration = 0u64;
-        let mut stacks_data = Vec::new();
-
-        for line in reader.lines() {
-            let line = line?;
-            let parts: Vec<&str> = line.rsplitn(2, ' ').collect();
-            if parts.len() == 2 {
-                let duration = parts[0].parse::<u64>().unwrap_or(0);
-                max_duration = max_duration.max(duration);
-                stacks_data.push((parts[1].to_string(), duration));
-            }
-        }
-
-        // Generate simple SVG representation
-        let mut svg = String::from(
-            r#"<?xml version="1.0" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" width="1200" height="800" xmlns="http://www.w3.org/2000/svg">
-<style>
-  text { font-family: Verdana, sans-serif; font-size: 12px; }
-  rect { stroke: white; stroke-width: 1; }
-  .frame { fill: rgb(230,120,50); }
-  .frame:hover { fill: rgb(250,140,70); stroke: black; stroke-width: 2; }
-</style>
-<text x="600" y="30" text-anchor="middle" font-size="18" font-weight="bold">Flamegraph - Trace Visualization</text>
-"#,
-        );
-
-        let width = 1160.0;
-        let mut y = 50.0;
-        let height = 20.0;
-
-        for (stack, duration) in stacks_data {
-            let bar_width = (duration as f64 / max_duration as f64) * width;
-            let depth = stack.matches(';').count();
-            let x = 20.0 + (depth as f64 * 10.0);
-
-            svg.push_str(&format!(
-                r#"<rect class="frame" x="{}" y="{}" width="{}" height="{}" title="{} ({}μs)" />"#,
-                x, y, bar_width, height, stack, duration
-            ));
-
-            svg.push_str(&format!(
-                r#"<text x="{}" y="{}" fill="white">{}</text>"#,
-                x + 5.0,
-                y + 14.0,
-                stack.split(';').next_back().unwrap_or(&stack)
-            ));
-
-            y += height + 2.0;
-        }
-
-        svg.push_str("</svg>");
-
-        Ok(svg)
     }
 }
 

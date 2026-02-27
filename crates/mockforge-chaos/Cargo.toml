@@ -41,6 +41,9 @@ parking_lot = { workspace = true }
 # Metrics (updated to 0.14+ to fix protobuf vulnerability RUSTSEC-2024-0437)
 prometheus = { version = "0.14", features = ["process"] }
 
+# Cron scheduling
+cron = "0.15"
+
 # Rate limiting
 governor = "0.8"
 nonzero_ext = "0.3"

@@ -94,6 +94,14 @@ pub struct QueueManager {
     notify_tx: QueueNotifySender,
 }
 
+impl std::fmt::Debug for QueueManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueueManager")
+            .field("queues", &self.queues.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
 impl Default for QueueManager {
     fn default() -> Self {
         Self::new()

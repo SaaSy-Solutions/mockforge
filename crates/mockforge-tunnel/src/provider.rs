@@ -183,6 +183,350 @@ impl TunnelProvider for SelfHostedProvider {
     }
 }
 
+/// ngrok tunnel provider using the ngrok REST API
+pub struct NgrokProvider {
+    api_key: String,
+    client: reqwest::Client,
+}
+
+impl NgrokProvider {
+    /// Create a new ngrok provider
+    pub fn new(api_key: impl Into<String>) -> Self {
+        Self {
+            api_key: api_key.into(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    fn auth_header(&self) -> String {
+        format!("Bearer {}", self.api_key)
+    }
+}
+
+#[async_trait]
+impl TunnelProvider for NgrokProvider {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> Result<TunnelStatus> {
+        let payload = serde_json::json!({
+            "proto": "http",
+            "addr": config.local_url,
+            "subdomain": config.subdomain,
+        });
+
+        let response = self
+            .client
+            .post("https://api.ngrok.com/tunnels")
+            .header("Authorization", self.auth_header())
+            .header("Ngrok-Version", "2")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to create ngrok tunnel: {}",
+                error_text
+            )));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        Ok(TunnelStatus {
+            tunnel_id: body["id"].as_str().unwrap_or_default().to_string(),
+            public_url: body["public_url"].as_str().unwrap_or_default().to_string(),
+            active: true,
+            request_count: 0,
+            bytes_transferred: 0,
+            created_at: Some(chrono::Utc::now()),
+            expires_at: None,
+            local_url: Some(config.local_url.clone()),
+        })
+    }
+
+    async fn get_tunnel_status(&self, tunnel_id: &str) -> Result<TunnelStatus> {
+        let url = format!("https://api.ngrok.com/tunnels/{}", tunnel_id);
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .header("Ngrok-Version", "2")
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::NotFound(tunnel_id.to_string()));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        Ok(TunnelStatus {
+            tunnel_id: body["id"].as_str().unwrap_or_default().to_string(),
+            public_url: body["public_url"].as_str().unwrap_or_default().to_string(),
+            active: true,
+            request_count: 0,
+            bytes_transferred: 0,
+            created_at: None,
+            expires_at: None,
+            local_url: None,
+        })
+    }
+
+    async fn delete_tunnel(&self, tunnel_id: &str) -> Result<()> {
+        let url = format!("https://api.ngrok.com/tunnels/{}", tunnel_id);
+        let response = self
+            .client
+            .delete(&url)
+            .header("Authorization", self.auth_header())
+            .header("Ngrok-Version", "2")
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to delete ngrok tunnel: {}",
+                response.status()
+            )));
+        }
+
+        Ok(())
+    }
+
+    async fn list_tunnels(&self) -> Result<Vec<TunnelStatus>> {
+        let response = self
+            .client
+            .get("https://api.ngrok.com/tunnels")
+            .header("Authorization", self.auth_header())
+            .header("Ngrok-Version", "2")
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to list ngrok tunnels: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let tunnels = body["tunnels"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|t| TunnelStatus {
+                tunnel_id: t["id"].as_str().unwrap_or_default().to_string(),
+                public_url: t["public_url"].as_str().unwrap_or_default().to_string(),
+                active: true,
+                request_count: 0,
+                bytes_transferred: 0,
+                created_at: None,
+                expires_at: None,
+                local_url: None,
+            })
+            .collect();
+
+        Ok(tunnels)
+    }
+
+    async fn is_available(&self) -> bool {
+        self.client
+            .get("https://api.ngrok.com/tunnels")
+            .header("Authorization", self.auth_header())
+            .header("Ngrok-Version", "2")
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .map(|r| r.status().is_success() || r.status().as_u16() == 401)
+            .unwrap_or(false)
+    }
+}
+
+/// Cloudflare Tunnel provider using the Cloudflare API
+pub struct CloudflareProvider {
+    api_token: String,
+    account_id: String,
+    client: reqwest::Client,
+}
+
+impl CloudflareProvider {
+    /// Create a new Cloudflare tunnel provider
+    pub fn new(api_token: impl Into<String>, account_id: impl Into<String>) -> Self {
+        Self {
+            api_token: api_token.into(),
+            account_id: account_id.into(),
+            client: reqwest::Client::new(),
+        }
+    }
+
+    fn base_url(&self) -> String {
+        format!("https://api.cloudflare.com/client/v4/accounts/{}/cfd_tunnel", self.account_id)
+    }
+
+    fn auth_header(&self) -> String {
+        format!("Bearer {}", self.api_token)
+    }
+}
+
+#[async_trait]
+impl TunnelProvider for CloudflareProvider {
+    async fn create_tunnel(&self, config: &TunnelConfig) -> Result<TunnelStatus> {
+        let tunnel_name = config
+            .subdomain
+            .clone()
+            .unwrap_or_else(|| format!("mockforge-{}", uuid::Uuid::new_v4()));
+
+        let payload = serde_json::json!({
+            "name": tunnel_name,
+            "tunnel_secret": base64_secret(),
+        });
+
+        let response = self
+            .client
+            .post(self.base_url())
+            .header("Authorization", self.auth_header())
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to create Cloudflare tunnel: {}",
+                error_text
+            )));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let result = &body["result"];
+        let tunnel_id = result["id"].as_str().unwrap_or_default().to_string();
+
+        Ok(TunnelStatus {
+            tunnel_id: tunnel_id.clone(),
+            public_url: format!("https://{}.cfargotunnel.com", tunnel_id),
+            active: true,
+            request_count: 0,
+            bytes_transferred: 0,
+            created_at: Some(chrono::Utc::now()),
+            expires_at: None,
+            local_url: Some(config.local_url.clone()),
+        })
+    }
+
+    async fn get_tunnel_status(&self, tunnel_id: &str) -> Result<TunnelStatus> {
+        let url = format!("{}/{}", self.base_url(), tunnel_id);
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::NotFound(tunnel_id.to_string()));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let result = &body["result"];
+        let status_str = result["status"].as_str().unwrap_or("unknown");
+
+        Ok(TunnelStatus {
+            tunnel_id: result["id"].as_str().unwrap_or_default().to_string(),
+            public_url: format!(
+                "https://{}.cfargotunnel.com",
+                result["id"].as_str().unwrap_or_default()
+            ),
+            active: status_str == "active" || status_str == "healthy",
+            request_count: 0,
+            bytes_transferred: 0,
+            created_at: None,
+            expires_at: None,
+            local_url: None,
+        })
+    }
+
+    async fn delete_tunnel(&self, tunnel_id: &str) -> Result<()> {
+        let url = format!("{}/{}", self.base_url(), tunnel_id);
+        let response = self
+            .client
+            .delete(&url)
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to delete Cloudflare tunnel: {}",
+                response.status()
+            )));
+        }
+
+        Ok(())
+    }
+
+    async fn list_tunnels(&self) -> Result<Vec<TunnelStatus>> {
+        let response = self
+            .client
+            .get(self.base_url())
+            .header("Authorization", self.auth_header())
+            .send()
+            .await
+            .map_err(|e| crate::TunnelError::ConnectionFailed(e.to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(crate::TunnelError::ProviderError(format!(
+                "Failed to list Cloudflare tunnels: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response.json().await?;
+        let tunnels = body["result"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .iter()
+            .map(|t| {
+                let tid = t["id"].as_str().unwrap_or_default().to_string();
+                let status_str = t["status"].as_str().unwrap_or("unknown");
+                TunnelStatus {
+                    tunnel_id: tid.clone(),
+                    public_url: format!("https://{}.cfargotunnel.com", tid),
+                    active: status_str == "active" || status_str == "healthy",
+                    request_count: 0,
+                    bytes_transferred: 0,
+                    created_at: None,
+                    expires_at: None,
+                    local_url: None,
+                }
+            })
+            .collect();
+
+        Ok(tunnels)
+    }
+
+    async fn is_available(&self) -> bool {
+        self.client
+            .get(self.base_url())
+            .header("Authorization", self.auth_header())
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .map(|r| r.status().is_success() || r.status().as_u16() == 401)
+            .unwrap_or(false)
+    }
+}
+
+/// Generate a random secret for Cloudflare tunnel (hex-encoded)
+fn base64_secret() -> String {
+    // Use two UUIDs concatenated for 256 bits of randomness
+    let id1 = uuid::Uuid::new_v4();
+    let id2 = uuid::Uuid::new_v4();
+    format!("{}{}", id1.as_simple(), id2.as_simple())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

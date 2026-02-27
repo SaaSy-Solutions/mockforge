@@ -103,21 +103,29 @@ impl ScheduledScenario {
                 }
             }
             ScheduleType::Cron {
-                hour: _,
-                minute: _,
-                day_of_week: _,
+                hour,
+                minute,
+                day_of_week,
                 max_executions,
             } => {
                 if *max_executions > 0 && self.execution_count >= *max_executions {
                     None
                 } else {
-                    // Simplified cron calculation - just add 1 hour for next execution
-                    // In a production system, you'd use a cron library
-                    let next = now + Duration::hours(1);
+                    // Build cron expression from decomposed fields
+                    let min = minute.unwrap_or(0).to_string();
+                    let hr = hour.map(|h| h.to_string()).unwrap_or_else(|| "*".to_string());
+                    let dow = day_of_week.map(|d| d.to_string()).unwrap_or_else(|| "*".to_string());
+                    let cron_expr = format!("0 {} {} * * {} *", min, hr, dow);
 
-                    // This is a simplified implementation
-                    // For full cron support, integrate with a cron parsing library like `cron`
-                    Some(next)
+                    if let Ok(schedule) = cron_expr.parse::<cron::Schedule>() {
+                        schedule.after(&now).next().map(|dt| dt.with_timezone(&Utc))
+                    } else {
+                        warn!(
+                            "Failed to parse cron expression '{}', falling back to 1 hour",
+                            cron_expr
+                        );
+                        Some(now + Duration::hours(1))
+                    }
                 }
             }
         };

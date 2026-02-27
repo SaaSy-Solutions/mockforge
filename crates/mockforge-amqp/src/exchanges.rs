@@ -134,6 +134,7 @@ impl Exchange {
 }
 
 /// Manager for all exchanges
+#[derive(Debug)]
 pub struct ExchangeManager {
     exchanges: HashMap<String, Exchange>,
 }

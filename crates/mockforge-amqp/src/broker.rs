@@ -37,10 +37,16 @@ impl AmqpBroker {
         exchanges.declare_exchange("amq.headers".to_string(), ExchangeType::Headers, true, false);
         exchanges.declare_exchange("amq.match".to_string(), ExchangeType::Headers, true, false);
 
+        let exchanges = Arc::new(RwLock::new(exchanges));
+        let queues = Arc::new(RwLock::new(QueueManager::new()));
+
+        // Wire broker managers into spec registry for PUBLISH/CONSUME integration
+        spec_registry.set_broker_managers(Arc::clone(&exchanges), Arc::clone(&queues));
+
         Self {
             config,
-            exchanges: Arc::new(RwLock::new(exchanges)),
-            queues: Arc::new(RwLock::new(QueueManager::new())),
+            exchanges,
+            queues,
             spec_registry,
             metrics: Arc::new(AmqpMetrics::new()),
         }
@@ -62,10 +68,16 @@ impl AmqpBroker {
         exchanges.declare_exchange("amq.headers".to_string(), ExchangeType::Headers, true, false);
         exchanges.declare_exchange("amq.match".to_string(), ExchangeType::Headers, true, false);
 
+        let exchanges = Arc::new(RwLock::new(exchanges));
+        let queues = Arc::new(RwLock::new(QueueManager::new()));
+
+        // Wire broker managers into spec registry for PUBLISH/CONSUME integration
+        spec_registry.set_broker_managers(Arc::clone(&exchanges), Arc::clone(&queues));
+
         Self {
             config,
-            exchanges: Arc::new(RwLock::new(exchanges)),
-            queues: Arc::new(RwLock::new(QueueManager::new())),
+            exchanges,
+            queues,
             spec_registry,
             metrics,
         }

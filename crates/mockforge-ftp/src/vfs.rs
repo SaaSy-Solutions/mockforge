@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use handlebars::Handlebars;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -15,14 +15,18 @@ pub struct VirtualFileSystem {
     root: PathBuf,
     files: Arc<RwLock<HashMap<PathBuf, VirtualFile>>>,
     fixtures: Arc<RwLock<HashMap<PathBuf, FileFixture>>>,
+    directories: Arc<RwLock<HashSet<PathBuf>>>,
 }
 
 impl VirtualFileSystem {
     pub fn new(root: PathBuf) -> Self {
+        let mut dirs = HashSet::new();
+        dirs.insert(PathBuf::from("/"));
         Self {
             root,
             files: Arc::new(RwLock::new(HashMap::new())),
             fixtures: Arc::new(RwLock::new(HashMap::new())),
+            directories: Arc::new(RwLock::new(dirs)),
         }
     }
 
@@ -79,6 +83,45 @@ impl VirtualFileSystem {
             self.add_fixture(fixture)?;
         }
         Ok(())
+    }
+
+    /// Create a directory in the virtual filesystem
+    pub fn create_directory(&self, path: PathBuf) -> Result<()> {
+        let mut dirs = self.directories.blocking_write();
+        dirs.insert(path);
+        Ok(())
+    }
+
+    /// Remove a directory (must be empty)
+    pub fn remove_directory(&self, path: &Path) -> Result<()> {
+        if self.is_directory_empty(path) {
+            let mut dirs = self.directories.blocking_write();
+            dirs.remove(path);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Directory is not empty"))
+        }
+    }
+
+    /// Check if a directory exists
+    pub fn directory_exists(&self, path: &Path) -> bool {
+        let dirs = self.directories.blocking_read();
+        dirs.contains(path)
+    }
+
+    /// Check if a directory is empty (no files or subdirectories inside)
+    pub fn is_directory_empty(&self, path: &Path) -> bool {
+        let files = self.files.blocking_read();
+        let has_files =
+            files.keys().any(|file_path| file_path != path && file_path.starts_with(path));
+        if has_files {
+            return false;
+        }
+
+        let dirs = self.directories.blocking_read();
+        let has_subdirs =
+            dirs.iter().any(|dir_path| dir_path != path && dir_path.starts_with(path));
+        !has_subdirs
     }
 
     /// Async version of add_file - use this in async contexts

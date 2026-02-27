@@ -2,7 +2,11 @@ use async_trait::async_trait;
 use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
+use crate::exchanges::ExchangeManager;
+use crate::messages::{Message, MessageProperties, QueuedMessage};
+use crate::queues::QueueManager;
 use mockforge_core::protocol_abstraction::{
     ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError, ValidationResult,
@@ -10,10 +14,19 @@ use mockforge_core::protocol_abstraction::{
 use mockforge_core::{Protocol, Result};
 
 /// AMQP-specific spec registry implementation
-#[derive(Debug)]
 pub struct AmqpSpecRegistry {
     fixtures: Vec<Arc<crate::fixtures::AmqpFixture>>,
     template_engine: mockforge_core::templating::TemplateEngine,
+    exchanges: std::sync::OnceLock<Arc<RwLock<ExchangeManager>>>,
+    queues: std::sync::OnceLock<Arc<RwLock<QueueManager>>>,
+}
+
+impl std::fmt::Debug for AmqpSpecRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AmqpSpecRegistry")
+            .field("fixtures", &self.fixtures.len())
+            .finish()
+    }
 }
 
 impl AmqpSpecRegistry {
@@ -33,7 +46,20 @@ impl AmqpSpecRegistry {
         Ok(Self {
             fixtures,
             template_engine,
+            exchanges: std::sync::OnceLock::new(),
+            queues: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Set the exchange and queue managers for broker integration.
+    /// Can be called on a shared `&self` reference (thread-safe, set-once).
+    pub fn set_broker_managers(
+        &self,
+        exchanges: Arc<RwLock<ExchangeManager>>,
+        queues: Arc<RwLock<QueueManager>>,
+    ) {
+        let _ = self.exchanges.set(exchanges);
+        let _ = self.queues.set(queues);
     }
 
     /// Find fixture by queue name
@@ -134,7 +160,7 @@ impl SpecRegistry for AmqpSpecRegistry {
 
         match operation.as_str() {
             "PUBLISH" => {
-                let exchange = request
+                let exchange_name = request
                     .metadata
                     .get("exchange")
                     .ok_or_else(|| mockforge_core::Error::generic("Missing exchange"))?;
@@ -143,12 +169,44 @@ impl SpecRegistry for AmqpSpecRegistry {
                     .as_ref()
                     .ok_or_else(|| mockforge_core::Error::generic("Missing routing key"))?;
 
-                // For now, just acknowledge the publish
+                let body_bytes = request.body.clone().unwrap_or_default();
+
+                // Route through exchange to target queues if broker is wired
+                let mut routed_queues = Vec::new();
+                if let (Some(exchanges), Some(queues)) = (self.exchanges.get(), self.queues.get()) {
+                    let message = Message {
+                        properties: MessageProperties::default(),
+                        body: body_bytes,
+                        routing_key: routing_key.clone(),
+                    };
+
+                    // Look up exchange and route
+                    let target_queues = if let Ok(exchanges_guard) = exchanges.try_read() {
+                        if let Some(exchange) = exchanges_guard.get_exchange(exchange_name) {
+                            exchange.route_message(&message, routing_key)
+                        } else {
+                            vec![]
+                        }
+                    } else {
+                        vec![]
+                    };
+
+                    // Enqueue to each target queue
+                    if let Ok(mut queues_guard) = queues.try_write() {
+                        for queue_name in &target_queues {
+                            let queued_msg = QueuedMessage::new(message.clone());
+                            let _ = queues_guard.enqueue_and_notify(queue_name, queued_msg);
+                        }
+                    }
+                    routed_queues = target_queues;
+                }
+
                 Ok(ProtocolResponse {
                     status: ResponseStatus::AmqpStatus(200),
                     metadata: HashMap::from([
-                        ("exchange".to_string(), exchange.clone()),
+                        ("exchange".to_string(), exchange_name.clone()),
                         ("routing_key".to_string(), routing_key.clone()),
+                        ("routed_queues".to_string(), routed_queues.join(",")),
                     ]),
                     body: vec![],
                     content_type: "application/octet-stream".to_string(),
@@ -157,29 +215,44 @@ impl SpecRegistry for AmqpSpecRegistry {
             "CONSUME" => {
                 let queue = &request.path;
 
-                // Find fixture and queue config
-                let fixture = self.find_fixture_for_queue(queue);
-                let queue_config =
-                    fixture.as_ref().and_then(|f| f.queues.iter().find(|q| q.name == *queue));
+                // Try to dequeue a real message from the broker first
+                let dequeued = if let Some(queues) = self.queues.get() {
+                    if let Ok(mut queues_guard) = queues.try_write() {
+                        queues_guard.get_queue_mut(queue).and_then(|q| q.dequeue())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
 
-                let body = if let Some(queue_config) = queue_config {
-                    if let Some(message_template) = &queue_config.message_template {
-                        // Use template engine to expand the message template
-                        let templating_context =
-                            mockforge_core::templating::TemplatingContext::with_env(
-                                request.metadata.clone(),
-                            );
-                        let expanded = self
-                            .template_engine
-                            .expand_tokens_with_context(message_template, &templating_context);
-                        serde_json::to_string(&expanded)
-                            .map_err(mockforge_core::Error::Json)?
-                            .into_bytes()
+                let body = if let Some(queued_msg) = dequeued {
+                    // Return the real dequeued message body
+                    queued_msg.message.body
+                } else {
+                    // Fall back to template-generated message from fixtures
+                    let fixture = self.find_fixture_for_queue(queue);
+                    let queue_config =
+                        fixture.as_ref().and_then(|f| f.queues.iter().find(|q| q.name == *queue));
+
+                    if let Some(queue_config) = queue_config {
+                        if let Some(message_template) = &queue_config.message_template {
+                            let templating_context =
+                                mockforge_core::templating::TemplatingContext::with_env(
+                                    request.metadata.clone(),
+                                );
+                            let expanded = self
+                                .template_engine
+                                .expand_tokens_with_context(message_template, &templating_context);
+                            serde_json::to_string(&expanded)
+                                .map_err(mockforge_core::Error::Json)?
+                                .into_bytes()
+                        } else {
+                            vec![]
+                        }
                     } else {
                         vec![]
                     }
-                } else {
-                    vec![]
                 };
 
                 Ok(ProtocolResponse {

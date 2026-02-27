@@ -215,15 +215,28 @@ impl Reconciler {
     /// Check if scheduled orchestration should run
     fn should_run_scheduled(
         &self,
-        _schedule: &str,
+        schedule: &str,
         orchestration: &ChaosOrchestration,
     ) -> Result<bool> {
-        // Simplified implementation - just check if enough time has passed
         if let Some(status) = &orchestration.status {
             if let Some(last_scheduled) = status.last_scheduled_time {
-                let elapsed = chrono::Utc::now() - last_scheduled;
-                // Run if more than 1 hour has passed (simplified)
-                Ok(elapsed.num_hours() >= 1)
+                // Parse cron expression and check if next occurrence has passed
+                if let Ok(cron_schedule) = schedule.parse::<cron::Schedule>() {
+                    let next = cron_schedule.after(&last_scheduled).next();
+                    if let Some(next_time) = next {
+                        Ok(chrono::Utc::now() >= next_time)
+                    } else {
+                        Ok(false) // No more occurrences
+                    }
+                } else {
+                    // Fall back to 1 hour if cron parse fails
+                    warn!(
+                        "Failed to parse cron schedule '{}', falling back to 1-hour check",
+                        schedule
+                    );
+                    let elapsed = chrono::Utc::now() - last_scheduled;
+                    Ok(elapsed.num_hours() >= 1)
+                }
             } else {
                 Ok(true) // Never run before
             }

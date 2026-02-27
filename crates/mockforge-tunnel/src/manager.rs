@@ -32,18 +32,32 @@ impl TunnelManager {
                 Arc::new(SelfHostedProvider::new(server_url, config.auth_token.clone()))
             }
             crate::config::TunnelProvider::Cloudflare => {
-                return Err(TunnelError::ProviderError(
-                    "Cloudflare tunnel support coming soon".to_string(),
-                ));
+                let api_token = config.auth_token.clone().ok_or_else(|| {
+                    TunnelError::ConfigError(
+                        "auth_token (Cloudflare API token) required for Cloudflare provider"
+                            .to_string(),
+                    )
+                })?;
+                let account_id = config.server_url.clone().ok_or_else(|| {
+                    TunnelError::ConfigError(
+                        "server_url (Cloudflare account ID) required for Cloudflare provider"
+                            .to_string(),
+                    )
+                })?;
+                Arc::new(CloudflareProvider::new(api_token, account_id))
             }
             crate::config::TunnelProvider::Ngrok => {
-                return Err(TunnelError::ProviderError(
-                    "ngrok tunnel support coming soon".to_string(),
-                ));
+                let api_key = config.auth_token.clone().ok_or_else(|| {
+                    TunnelError::ConfigError(
+                        "auth_token (ngrok API key) required for ngrok provider".to_string(),
+                    )
+                })?;
+                Arc::new(NgrokProvider::new(api_key))
             }
             crate::config::TunnelProvider::Localtunnel => {
                 return Err(TunnelError::ProviderError(
-                    "localtunnel support coming soon".to_string(),
+                    "localtunnel support is not available (localtunnel.me service is defunct)"
+                        .to_string(),
                 ));
             }
         };
@@ -208,39 +222,61 @@ mod tests {
     }
 
     #[test]
-    fn test_tunnel_manager_new_cloudflare_provider() {
+    fn test_tunnel_manager_new_cloudflare_provider_with_auth() {
         let mut config = create_test_config();
         config.provider = crate::config::TunnelProvider::Cloudflare;
+        // server_url serves as account_id for Cloudflare
+        config.server_url = Some("my-account-id".to_string());
+        config.auth_token = Some("cf-api-token".to_string());
+
+        let result = TunnelManager::new(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tunnel_manager_new_cloudflare_provider_missing_token() {
+        let mut config = create_test_config();
+        config.provider = crate::config::TunnelProvider::Cloudflare;
+        config.auth_token = None;
 
         let result = TunnelManager::new(&config);
         assert!(result.is_err());
 
         if let Err(e) = result {
             match e {
-                TunnelError::ProviderError(msg) => {
-                    assert!(msg.contains("Cloudflare"));
-                    assert!(msg.contains("coming soon"));
+                TunnelError::ConfigError(msg) => {
+                    assert!(msg.contains("auth_token"));
                 }
-                _ => panic!("Expected ProviderError"),
+                _ => panic!("Expected ConfigError"),
             }
         }
     }
 
     #[test]
-    fn test_tunnel_manager_new_ngrok_provider() {
+    fn test_tunnel_manager_new_ngrok_provider_with_auth() {
         let mut config = create_test_config();
         config.provider = crate::config::TunnelProvider::Ngrok;
+        config.auth_token = Some("ngrok-api-key".to_string());
+
+        let result = TunnelManager::new(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tunnel_manager_new_ngrok_provider_missing_token() {
+        let mut config = create_test_config();
+        config.provider = crate::config::TunnelProvider::Ngrok;
+        config.auth_token = None;
 
         let result = TunnelManager::new(&config);
         assert!(result.is_err());
 
         if let Err(e) = result {
             match e {
-                TunnelError::ProviderError(msg) => {
-                    assert!(msg.contains("ngrok"));
-                    assert!(msg.contains("coming soon"));
+                TunnelError::ConfigError(msg) => {
+                    assert!(msg.contains("auth_token"));
                 }
-                _ => panic!("Expected ProviderError"),
+                _ => panic!("Expected ConfigError"),
             }
         }
     }
@@ -257,7 +293,7 @@ mod tests {
             match e {
                 TunnelError::ProviderError(msg) => {
                     assert!(msg.contains("localtunnel"));
-                    assert!(msg.contains("coming soon"));
+                    assert!(msg.contains("defunct"));
                 }
                 _ => panic!("Expected ProviderError"),
             }
