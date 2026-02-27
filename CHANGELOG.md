@@ -1,3 +1,27 @@
+## [0.3.70] - 2026-02-27
+
+### Fixed
+
+- **[Bench]** Remove dead `CUSTOM_HEADERS` JS const from conformance generators (#79)
+  - Custom header values are now inlined directly into each request instead of referencing an unused JS constant
+  - Eliminates confusing dead code in generated k6 scripts
+- **[Bench]** Add `noCookies: true` to k6 options when Cookie header is in custom headers (#79)
+  - Prevents k6's automatic cookie jar from duplicating cookies on subsequent requests
+  - Fixes duplicate session ID / authentication failures reported by @srikr
+- **[Bench]** Fix conformance report file not found after k6 execution (#79)
+  - `handleSummary` now writes `conformance-report.json` to an absolute path matching the output directory
+  - Previously wrote to a relative path based on k6's CWD, causing the CLI to report "Conformance report not generated"
+
+### Added
+
+- **[Bench]** `--conformance-all-operations` flag for full-endpoint conformance testing (#79)
+  - Default mode tests one representative operation per feature check (fast feature-coverage)
+  - New flag tests ALL operations with path-qualified check names (e.g., `method:GET:/api/users`)
+  - Addresses user confusion about "only 5 endpoints tested"
+- **[Bench]** Conformance coverage summary output (#79)
+  - After generating conformance tests, prints "Conformance: N operations analyzed, M unique checks generated"
+  - When using default mode with fewer checks than operations, shows tip about `--conformance-all-operations`
+
 ## [0.3.69] - 2026-02-24
 
 ### Fixed
