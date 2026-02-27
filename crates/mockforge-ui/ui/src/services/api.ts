@@ -1943,6 +1943,160 @@ class ConsistencyApiService {
       lifecycle_state: string;
     }>;
   }
+
+  /**
+   * List all entities for a workspace
+   */
+  async listEntities(workspace = 'default'): Promise<{
+    workspace: string;
+    entities: Array<{
+      entity_type: string;
+      entity_id: string;
+      data: Record<string, unknown>;
+      seen_in_protocols: string[];
+      created_at: string;
+      updated_at: string;
+      persona_id: string | null;
+    }>;
+    count: number;
+  }> {
+    return this.fetchJson(`/api/v1/consistency/entities?workspace=${encodeURIComponent(workspace)}`) as Promise<{
+      workspace: string;
+      entities: Array<{
+        entity_type: string;
+        entity_id: string;
+        data: Record<string, unknown>;
+        seen_in_protocols: string[];
+        created_at: string;
+        updated_at: string;
+        persona_id: string | null;
+      }>;
+      count: number;
+    }>;
+  }
+
+  /**
+   * Get a specific entity by type and ID
+   */
+  async getEntity(entityType: string, entityId: string, workspace = 'default'): Promise<{
+    entity_type: string;
+    entity_id: string;
+    data: Record<string, unknown>;
+    seen_in_protocols: string[];
+    created_at: string;
+    updated_at: string;
+    persona_id: string | null;
+  }> {
+    return this.fetchJson(
+      `/api/v1/consistency/entities/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}?workspace=${encodeURIComponent(workspace)}`
+    ) as Promise<{
+      entity_type: string;
+      entity_id: string;
+      data: Record<string, unknown>;
+      seen_in_protocols: string[];
+      created_at: string;
+      updated_at: string;
+      persona_id: string | null;
+    }>;
+  }
+}
+
+class SnapshotsApiService {
+  private async fetchJson(url: string, options?: RequestInit): Promise<unknown> {
+    const response = await authenticatedFetch(url, options);
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required');
+      }
+      if (response.status === 403) {
+        throw new Error('Access denied');
+      }
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    }
+    const json = await response.json();
+    return json.data || json;
+  }
+
+  /**
+   * List all snapshots for a workspace
+   */
+  async listSnapshots(workspace = 'default'): Promise<{
+    workspace: string;
+    snapshots: Array<{
+      name: string;
+      description: string | null;
+      created_at: string;
+      workspace: string;
+      components: Record<string, boolean>;
+    }>;
+    count: number;
+  }> {
+    return this.fetchJson(`/api/v1/snapshots?workspace=${encodeURIComponent(workspace)}`) as Promise<{
+      workspace: string;
+      snapshots: Array<{
+        name: string;
+        description: string | null;
+        created_at: string;
+        workspace: string;
+        components: Record<string, boolean>;
+      }>;
+      count: number;
+    }>;
+  }
+
+  /**
+   * Save a new snapshot
+   */
+  async saveSnapshot(
+    name: string,
+    workspace = 'default',
+    description?: string
+  ): Promise<{ success: boolean; manifest: Record<string, unknown> }> {
+    return this.fetchJson(`/api/v1/snapshots?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    }) as Promise<{ success: boolean; manifest: Record<string, unknown> }>;
+  }
+
+  /**
+   * Load a snapshot
+   */
+  async loadSnapshot(
+    name: string,
+    workspace = 'default'
+  ): Promise<{ success: boolean; manifest: Record<string, unknown> }> {
+    return this.fetchJson(`/api/v1/snapshots/${encodeURIComponent(name)}/load?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }) as Promise<{ success: boolean; manifest: Record<string, unknown> }>;
+  }
+
+  /**
+   * Delete a snapshot
+   */
+  async deleteSnapshot(
+    name: string,
+    workspace = 'default'
+  ): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson(`/api/v1/snapshots/${encodeURIComponent(name)}?workspace=${encodeURIComponent(workspace)}`, {
+      method: 'DELETE',
+    }) as Promise<{ success: boolean; message: string }>;
+  }
+
+  /**
+   * Get snapshot info
+   */
+  async getSnapshotInfo(
+    name: string,
+    workspace = 'default'
+  ): Promise<{ success: boolean; manifest: Record<string, unknown> }> {
+    return this.fetchJson(
+      `/api/v1/snapshots/${encodeURIComponent(name)}?workspace=${encodeURIComponent(workspace)}`
+    ) as Promise<{ success: boolean; manifest: Record<string, unknown> }>;
+  }
 }
 
 class PluginsApiService {
@@ -2744,6 +2898,7 @@ export const chaosApi = new ChaosApiService();
 export const timeTravelApi = new TimeTravelApiService();
 export const realityApi = new RealityApiService();
 export const consistencyApi = new ConsistencyApiService();
+export const snapshotsApi = new SnapshotsApiService();
 export const verificationApi = new VerificationApiService();
 export const contractDiffApi = new ContractDiffApiService();
 export type { ProxyRule, ProxyRuleRequest, ProxyRulesResponse, ProxyInspectResponse };
