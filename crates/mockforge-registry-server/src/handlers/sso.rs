@@ -745,9 +745,6 @@ pub async fn saml_slo(
         }
 
         // Generate logout response
-        let _app_base_url = std::env::var("APP_BASE_URL")
-            .unwrap_or_else(|_| "https://app.mockforge.dev".to_string());
-
         let slo_url = config
             .saml_slo_url
             .ok_or_else(|| ApiError::InvalidRequest("SAML SLO URL not configured".to_string()))?;

@@ -398,23 +398,36 @@ async fn get_spec_coverage(
 
     let spec = specs.get(&id).ok_or(StatusCode::NOT_FOUND)?;
 
-    // Parse routes to recalculate coverage
-    let coverage = match spec.metadata.spec_type {
-        SpecType::OpenApi => {
-            // For now, return basic stats based on metadata
-            CoverageStats {
-                total_endpoints: spec.metadata.route_count,
-                mocked_endpoints: spec.metadata.route_count,
-                coverage_percentage: 100,
-                by_method: HashMap::new(),
+    // Parse routes to calculate coverage with method breakdown
+    let by_method =
+        if let Ok(routes) = serde_json::from_str::<Vec<serde_json::Value>>(&spec.routes_json) {
+            let mut method_counts: HashMap<String, usize> = HashMap::new();
+            for route in &routes {
+                if let Some(method) = route.get("method").and_then(|m| m.as_str()) {
+                    *method_counts.entry(method.to_uppercase()).or_insert(0) += 1;
+                } else if let Some(operation) = route.get("operation").and_then(|o| o.as_str()) {
+                    // AsyncAPI uses operation types (publish, subscribe)
+                    *method_counts.entry(operation.to_string()).or_insert(0) += 1;
+                }
             }
-        }
-        SpecType::AsyncApi => CoverageStats {
-            total_endpoints: spec.metadata.route_count,
-            mocked_endpoints: spec.metadata.route_count,
-            coverage_percentage: 100,
-            by_method: HashMap::new(),
-        },
+            method_counts
+        } else {
+            HashMap::new()
+        };
+
+    let total_endpoints = spec.metadata.route_count;
+    let mocked_endpoints = by_method.values().sum::<usize>().max(total_endpoints);
+    let coverage_percentage = if total_endpoints > 0 {
+        ((mocked_endpoints as f64 / total_endpoints as f64) * 100.0).min(100.0) as u32
+    } else {
+        0
+    };
+
+    let coverage = CoverageStats {
+        total_endpoints,
+        mocked_endpoints,
+        coverage_percentage,
+        by_method,
     };
 
     Ok(Json(coverage))
