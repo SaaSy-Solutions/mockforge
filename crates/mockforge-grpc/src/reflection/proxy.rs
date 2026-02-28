@@ -1200,8 +1200,20 @@ impl ReflectionProxy {
                     "object".to_string()
                 }
                 prost_reflect::Kind::Enum(_) => "string".to_string(),
-                // Simplified type mapping - default to string for all scalar types
-                _ => "string".to_string(),
+                prost_reflect::Kind::Bool => "boolean".to_string(),
+                prost_reflect::Kind::Int32
+                | prost_reflect::Kind::Sint32
+                | prost_reflect::Kind::Sfixed32
+                | prost_reflect::Kind::Uint32
+                | prost_reflect::Kind::Fixed32
+                | prost_reflect::Kind::Int64
+                | prost_reflect::Kind::Sint64
+                | prost_reflect::Kind::Sfixed64
+                | prost_reflect::Kind::Uint64
+                | prost_reflect::Kind::Fixed64 => "integer".to_string(),
+                prost_reflect::Kind::Float | prost_reflect::Kind::Double => "number".to_string(),
+                prost_reflect::Kind::String => "string".to_string(),
+                prost_reflect::Kind::Bytes => "string".to_string(),
             };
 
             let mut field_def = FieldDefinition::new(field_name, field_type);

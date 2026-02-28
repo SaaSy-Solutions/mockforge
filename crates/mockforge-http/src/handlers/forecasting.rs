@@ -501,7 +501,7 @@ pub async fn refresh_forecasts(
     }
 
     for ((endpoint, method), group_incidents) in endpoint_groups {
-        if let Some(_forecast) = state.forecaster.generate_forecast(
+        if let Some(forecast) = state.forecaster.generate_forecast(
             &group_incidents,
             request.workspace_id.clone(),
             None, // service_id
@@ -510,6 +510,10 @@ pub async fn refresh_forecasts(
             method,
             30, // forecast_window_days
         ) {
+            // Persist forecast to database
+            if let Err(e) = store_forecast(pool, &forecast, request.workspace_id.as_deref()).await {
+                tracing::warn!("Failed to store forecast: {}", e);
+            }
             forecasts_generated += 1;
         }
     }

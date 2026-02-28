@@ -113,19 +113,19 @@ impl Project {
         let mut updates = Vec::new();
         let mut param_count = 1;
 
-        if let Some(_n) = name {
+        if name.is_some() {
             updates.push(format!("name = ${}", param_count));
             param_count += 1;
         }
-        if let Some(_d) = description {
+        if description.is_some() {
             updates.push(format!("description = ${}", param_count));
             param_count += 1;
         }
-        if let Some(_v) = visibility {
+        if visibility.is_some() {
             updates.push(format!("visibility = ${}", param_count));
             param_count += 1;
         }
-        if let Some(_e) = default_env {
+        if default_env.is_some() {
             updates.push(format!("default_env = ${}", param_count));
             param_count += 1;
         }

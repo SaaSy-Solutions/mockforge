@@ -117,9 +117,13 @@ impl MockReflectionProxy {
     }
 
     /// Check if a service method should be mocked
-    pub fn should_mock_service_method(&self, service_name: &str, _method_name: &str) -> bool {
-        // Check if service is in registry
-        self.service_registry.get(service_name).is_some()
+    pub fn should_mock_service_method(&self, service_name: &str, method_name: &str) -> bool {
+        // Check if service is in registry and has the specific method
+        if let Some(service) = self.service_registry.get(service_name) {
+            service.methods().iter().any(|m| m.name == method_name)
+        } else {
+            false
+        }
     }
 
     /// Get the timeout duration for requests
