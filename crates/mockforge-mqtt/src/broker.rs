@@ -109,9 +109,27 @@ impl MqttBroker {
         let mut clients = self.clients.write().await;
         let mut sessions = self.session_store.write().await;
 
-        if let Some(_existing_client) = clients.get(client_id) {
-            // Client already connected - this shouldn't happen in normal operation
-            info!("Client {} already connected, updating session", client_id);
+        if let Some(existing_client) = clients.remove(client_id) {
+            // MQTT-3.1.4-2: If the ClientId represents a Client already connected to the Server,
+            // the Server MUST disconnect the existing Client.
+            info!(
+                "Client {} already connected, disconnecting existing session per MQTT-3.1.4-2",
+                client_id
+            );
+
+            let existing_session = existing_client.session;
+            if existing_session.clean_session {
+                // Clean up subscriptions for the old session
+                let mut topics = self.topics.write().await;
+                for filter in existing_session.subscriptions.keys() {
+                    topics.unsubscribe(filter, client_id);
+                }
+            } else {
+                // Persist the old session before overwriting
+                let mut persistent_session = existing_session.clone();
+                persistent_session.last_seen = now;
+                sessions.insert(client_id.to_string(), persistent_session);
+            }
         }
 
         let session = if clean_session {
