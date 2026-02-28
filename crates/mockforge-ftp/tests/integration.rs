@@ -5,9 +5,8 @@ use mockforge_ftp::{FtpServer, FtpSpecRegistry};
 fn test_ftp_server_creation() {
     let config = FtpConfig::default();
     let server = FtpServer::new(config);
-    assert!(
-        !server.spec_registry().fixtures.is_empty() || server.spec_registry().fixtures.is_empty()
-    ); // Just check it doesn't panic
+    // Default config should create a server with no fixtures
+    assert!(server.spec_registry().fixtures.is_empty());
 }
 
 #[test]
@@ -29,33 +28,26 @@ fn test_vfs_operations() {
 }
 
 #[test]
-fn test_ftp_server_with_client() {
-    // For now, this is a placeholder test
-    // Full FTP client integration testing would require:
-    // 1. Starting the server on a random port
-    // 2. Connecting with a real FTP client (suppaftp)
-    // 3. Testing LIST, RETR, STOR operations
-    // 4. Verifying upload rules and file content
-
-    // This test currently just validates that the server can be created
-    // without panicking. Full integration tests will be added once
-    // the server port binding is exposed for testing.
-
-    let config = FtpConfig::default();
+fn test_ftp_server_with_custom_config() {
+    let config = FtpConfig {
+        port: 2121,
+        host: "127.0.0.1".to_string(),
+        passive_ports: (30000, 30010),
+        ..Default::default()
+    };
 
     let server = FtpServer::new(config);
-
-    // Just verify the server was created successfully
-    assert_eq!(server.spec_registry().fixtures.len(), 0);
+    assert!(server.spec_registry().fixtures.is_empty());
 }
 
 #[test]
 fn test_spec_registry_basic() {
-    let _registry = FtpSpecRegistry::new();
+    use mockforge_core::protocol_abstraction::{Protocol, SpecRegistry};
 
-    // Test that registry is created successfully
-    // assert_eq!(mockforge_core::SpecRegistry::protocol(&registry), mockforge_core::protocol_abstraction::Protocol::Ftp);
-    // assert!(mockforge_core::SpecRegistry::operations(&registry).is_empty()); // No fixtures by default
+    let registry = FtpSpecRegistry::new();
+
+    assert_eq!(registry.protocol(), Protocol::Ftp);
+    assert!(registry.operations().is_empty());
 }
 
 #[test]
