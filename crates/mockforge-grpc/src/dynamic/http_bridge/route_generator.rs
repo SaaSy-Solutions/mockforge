@@ -38,10 +38,12 @@ impl RouteGenerator {
     }
 
     /// Generate URL pattern from route path
-    pub fn generate_url_pattern(&self, _service_name: &str, _method_name: &str) -> String {
+    pub fn generate_url_pattern(&self, service_name: &str, method_name: &str) -> String {
+        let clean_service = regex::escape(&self.clean_service_name(service_name));
+        let clean_method = regex::escape(&self.clean_method_name(method_name));
         let template = format!("{}{}", self.config.base_path, self.config.route_pattern);
-        // Replace path parameters with regex patterns
-        template.replace("{service}", "[^/]+").replace("{method}", "[^/]+")
+        // Replace path parameters with regex-escaped actual names
+        template.replace("{service}", &clean_service).replace("{method}", &clean_method)
     }
 
     /// Clean service name for HTTP routing
@@ -902,14 +904,18 @@ mod tests {
         for (service, method) in test_cases {
             let pattern = generator.generate_url_pattern(service, method);
             assert!(pattern.starts_with("/api/"), "Pattern should start with /api/: {}", pattern);
+            let clean_service = generator.clean_service_name(service);
+            let clean_method = generator.clean_method_name(method);
             assert!(
-                pattern.contains("[^/]+"),
-                "Pattern should contain regex for service: {}",
+                pattern.contains(&clean_service),
+                "Pattern should contain actual service name '{}': {}",
+                clean_service,
                 pattern
             );
             assert!(
-                pattern.contains("[^/]+"),
-                "Pattern should contain regex for method: {}",
+                pattern.contains(&clean_method),
+                "Pattern should contain actual method name '{}': {}",
+                clean_method,
                 pattern
             );
         }

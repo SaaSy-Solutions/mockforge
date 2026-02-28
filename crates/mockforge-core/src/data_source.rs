@@ -535,15 +535,12 @@ impl DataSourceManager {
 
     /// Check if a source has been updated
     pub async fn check_updated(&self, name: &str) -> Result<bool> {
-        // Note: This requires mutable access, so we need to handle this differently
-        // For now, we'll return false if source doesn't exist
-        if let Some(_source) = self.sources.get(name) {
-            // In a real implementation, we'd need to handle this better
-            // For now, we'll just return true to indicate we should check
-            Ok(true)
-        } else {
-            Err(Error::generic(format!("Data source '{}' not found", name)))
-        }
+        let source = self
+            .sources
+            .get(name)
+            .ok_or_else(|| Error::generic(format!("Data source '{}' not found", name)))?;
+
+        source.check_updated().await
     }
 
     /// List all registered sources
