@@ -2,12 +2,11 @@
 
 use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, OptionalAuthUser},
+    middleware::OptionalAuthUser,
     models::Organization,
     AppState,
 };
@@ -47,11 +46,10 @@ pub async fn submit_contact(
     }
 
     // Get user info if authenticated
-    let (user_email, username, org_name, plan) = if let Some(user_id) = user_id.0 {
+    let (user_email, username, org_name, plan) = if let Some(user_id) = user_id {
         use crate::models::User;
-        if let Some(user) = User::find_by_id(pool, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?
+        if let Some(user) =
+            User::find_by_id(pool, user_id).await.map_err(|e| ApiError::Database(e))?
         {
             // Try to get org context for plan info
             let orgs = Organization::find_by_user(pool, user_id)
@@ -78,7 +76,20 @@ pub async fn submit_contact(
     let ticket_id = format!("SUP-{}", ticket_suffix);
 
     // Send email to support team
-    let email_service = EmailService::from_env();
+    let email_service = match EmailService::from_env() {
+        Ok(svc) => svc,
+        Err(e) => {
+            tracing::warn!("Failed to create email service: {}", e);
+            // Still return success - we don't want to fail the support request
+            // just because email isn't configured
+            return Ok(Json(ContactResponse {
+                success: true,
+                message: "Support request received. We'll respond within your plan's SLA."
+                    .to_string(),
+                ticket_id: Some(ticket_id),
+            }));
+        }
+    };
 
     // Build email content
     let user_info = if let (Some(email), Some(name)) = (user_email.as_ref(), username.as_ref()) {
@@ -169,8 +180,8 @@ This support request was submitted through the MockForge Cloud support form.
     );
 
     // Send to support email
-    let support_email = std::env::var("SUPPORT_EMAIL")
-        .unwrap_or_else(|_| "support@mockforge.dev".to_string());
+    let support_email =
+        std::env::var("SUPPORT_EMAIL").unwrap_or_else(|_| "support@mockforge.dev".to_string());
 
     let email_msg = crate::email::EmailMessage {
         to: support_email,
@@ -180,33 +191,40 @@ This support request was submitted through the MockForge Cloud support form.
     };
 
     // Send email (non-blocking)
+    let ticket_id_clone = ticket_id.clone();
+    let subject_clone = request.subject.clone();
+    let user_email_clone = user_email.clone();
+    let username_clone = username.clone();
     tokio::spawn(async move {
         if let Err(e) = email_service.send(email_msg).await {
             tracing::warn!("Failed to send support request email: {}", e);
         }
-    });
 
-    // Send confirmation email to user if authenticated
-    if let (Some(email), Some(name)) = (user_email, username) {
-        let confirmation_email = email_service.generate_support_confirmation(
-            &name,
-            &email,
-            &ticket_id,
-            &request.subject,
-        );
-
-        tokio::spawn(async move {
+        // Send confirmation email to user if authenticated
+        if let (Some(email), Some(name)) = (user_email_clone, username_clone) {
+            let confirmation_email = EmailService::generate_support_confirmation(
+                &name,
+                &email,
+                &ticket_id_clone,
+                &subject_clone,
+            );
             if let Err(e) = email_service.send(confirmation_email).await {
                 tracing::warn!("Failed to send support confirmation email: {}", e);
             }
-        });
-    }
+        }
+    });
 
-    tracing::info!("Support request submitted: ticket_id={}, category={}, priority={}", ticket_id, request.category, request.priority);
+    tracing::info!(
+        "Support request submitted: ticket_id={}, category={}, priority={}",
+        ticket_id,
+        request.category,
+        request.priority
+    );
 
     Ok(Json(ContactResponse {
         success: true,
-        message: "Support request submitted successfully. We'll respond within your plan's SLA.".to_string(),
+        message: "Support request submitted successfully. We'll respond within your plan's SLA."
+            .to_string(),
         ticket_id: Some(ticket_id),
     }))
 }

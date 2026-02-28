@@ -3,19 +3,15 @@
 //! Provides endpoints for organizations to view their current usage
 //! and limits across requests, storage, AI tokens, etc.
 
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use chrono::Datelike;
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{UsageCounter, Organization},
+    middleware::{resolve_org_context, AuthUser},
+    models::UsageCounter,
     AppState,
 };
 
@@ -28,7 +24,8 @@ pub async fn get_usage(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get current usage counter
@@ -47,18 +44,13 @@ pub async fn get_usage(
         usage: UsageBreakdown {
             requests: UsageMetric {
                 used: usage.requests,
-                limit: limits
-                    .get("requests_per_30d")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(10000),
+                limit: limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000),
                 unit: "requests".to_string(),
             },
             storage: UsageMetric {
                 used: usage.storage_bytes,
-                limit: limits
-                    .get("storage_gb")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1) * 1_000_000_000, // Convert GB to bytes
+                limit: limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1)
+                    * 1_000_000_000, // Convert GB to bytes
                 unit: "bytes".to_string(),
             },
             egress: UsageMetric {
@@ -68,10 +60,7 @@ pub async fn get_usage(
             },
             ai_tokens: UsageMetric {
                 used: usage.ai_tokens_used,
-                limit: limits
-                    .get("ai_tokens_per_month")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(0),
+                limit: limits.get("ai_tokens_per_month").and_then(|v| v.as_i64()).unwrap_or(0),
                 unit: "tokens".to_string(),
             },
         },
@@ -89,7 +78,8 @@ pub async fn get_usage_history(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all usage counters for this org

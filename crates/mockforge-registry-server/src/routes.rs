@@ -33,6 +33,14 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/auth/password/reset", post(handlers::auth::confirm_password_reset))
         // Email verification (public, token-based auth)
         .route("/api/v1/auth/verify-email", get(handlers::verification::verify_email))
+        // FAQ, legal, status (public)
+        .route("/api/v1/faq", get(handlers::faq::get_faq))
+        .route("/api/v1/legal/terms", get(handlers::legal::get_terms))
+        .route("/api/v1/legal/privacy", get(handlers::legal::get_privacy))
+        .route("/api/v1/legal/dpa", get(handlers::legal::get_dpa))
+        .route("/api/v1/status", get(handlers::status::get_status))
+        // Support contact (public, works with or without auth)
+        .route("/api/v1/support/contact", post(handlers::support::submit_contact))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
@@ -93,6 +101,13 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/logs", get(handlers::hosted_mocks::get_deployment_logs))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
+        // API token management routes
+        .route("/api/v1/tokens", post(handlers::tokens::create_token))
+        .route("/api/v1/tokens", get(handlers::tokens::list_tokens))
+        .route("/api/v1/tokens/{token_id}", delete(handlers::tokens::delete_token))
+        // Usage tracking routes
+        .route("/api/v1/usage", get(handlers::usage::get_usage))
+        .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
         .route_layer(middleware::from_fn(auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

@@ -10,8 +10,11 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{ApiToken, AuditEventType, FeatureType, FeatureUsage, SuspiciousActivityType, TokenScope, record_audit_event, record_suspicious_activity},
+    middleware::{resolve_org_context, AuthUser},
+    models::{
+        record_audit_event, record_suspicious_activity, ApiToken, AuditEventType, FeatureType,
+        FeatureUsage, SuspiciousActivityType, TokenScope,
+    },
     AppState,
 };
 
@@ -43,13 +46,18 @@ pub async fn create_token(
     let pool = state.db.pool();
 
     // Resolve org context (extensions not available in handler, use None)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Parse scopes
-    let scopes: Result<Vec<TokenScope>, _> = request.scopes
+    let scopes: Result<Vec<TokenScope>, _> = request
+        .scopes
         .iter()
-        .map(|s| TokenScope::from_string(s).ok_or_else(|| ApiError::InvalidRequest(format!("Invalid scope: {}", s))))
+        .map(|s| {
+            TokenScope::from_string(s)
+                .ok_or_else(|| ApiError::InvalidRequest(format!("Invalid scope: {}", s)))
+        })
         .collect();
 
     let scopes = scopes?;
@@ -59,18 +67,19 @@ pub async fn create_token(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let tokens_last_hour = recent_tokens.iter()
+    let tokens_last_hour = recent_tokens
+        .iter()
         .filter(|t| t.created_at > chrono::Utc::now() - chrono::Duration::hours(1))
         .count();
 
     // If more than 5 tokens created in the last hour, flag as suspicious
     if tokens_last_hour >= 5 {
-        let ip_address = headers.get("X-Forwarded-For")
+        let ip_address = headers
+            .get("X-Forwarded-For")
             .or_else(|| headers.get("X-Real-IP"))
             .and_then(|h| h.to_str().ok())
             .map(|s| s.split(',').next().unwrap_or(s).trim());
-        let user_agent = headers.get("User-Agent")
-            .and_then(|h| h.to_str().ok());
+        let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
         record_suspicious_activity(
             pool,
@@ -78,7 +87,10 @@ pub async fn create_token(
             Some(user_id),
             SuspiciousActivityType::RapidApiTokenCreation,
             "medium",
-            format!("Rapid API token creation detected: {} tokens created in the last hour", tokens_last_hour + 1),
+            format!(
+                "Rapid API token creation detected: {} tokens created in the last hour",
+                tokens_last_hour + 1
+            ),
             Some(serde_json::json!({
                 "tokens_created_last_hour": tokens_last_hour + 1,
                 "new_token_name": request.name,
@@ -116,19 +128,23 @@ pub async fn create_token(
     .await;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
         org_ctx.org_id,
         Some(user_id),
         AuditEventType::ApiTokenCreated,
-        format!("API token '{}' created with scopes: {}", request.name, request.scopes.join(", ")),
+        format!(
+            "API token '{}' created with scopes: {}",
+            request.name,
+            request.scopes.join(", ")
+        ),
         Some(serde_json::json!({
             "token_id": token.id,
             "token_name": request.name,
@@ -172,7 +188,8 @@ pub async fn list_tokens(
     let pool = state.db.pool();
 
     // Resolve org context (extensions not available in handler, use None)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all tokens
@@ -184,6 +201,7 @@ pub async fn list_tokens(
         .into_iter()
         .map(|t| {
             let age_days = t.age_days();
+            let needs_rotation = t.needs_rotation(90); // 90 days threshold
             TokenListItem {
                 id: t.id,
                 name: t.name,
@@ -193,7 +211,7 @@ pub async fn list_tokens(
                 expires_at: t.expires_at,
                 created_at: t.created_at,
                 age_days,
-                needs_rotation: t.needs_rotation(90), // 90 days threshold
+                needs_rotation,
             }
         })
         .collect();
@@ -211,7 +229,8 @@ pub async fn delete_token(
     let pool = state.db.pool();
 
     // Resolve org context (extensions not available in handler, use None)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify token belongs to org
@@ -221,16 +240,18 @@ pub async fn delete_token(
         .ok_or_else(|| ApiError::InvalidRequest("Token not found".to_string()))?;
 
     if token.org_id != org_ctx.org_id {
-        return Err(ApiError::InvalidRequest("Token does not belong to this organization".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Token does not belong to this organization".to_string(),
+        ));
     }
 
     // Record audit log before deletion
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
@@ -249,9 +270,7 @@ pub async fn delete_token(
     .await;
 
     // Delete token
-    ApiToken::delete(pool, token_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    ApiToken::delete(pool, token_id).await.map_err(|e| ApiError::Database(e))?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

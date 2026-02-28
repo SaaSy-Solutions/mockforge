@@ -42,4 +42,6 @@ pub use subscription::{Subscription, SubscriptionStatus, UsageCounter};
 pub use user::User;
 
 // Re-export deployment-related models for convenience
+pub use feature_usage::{FeatureType, FeatureUsage};
 pub use hosted_mock::{DeploymentLog, DeploymentMetrics};
+pub use suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};

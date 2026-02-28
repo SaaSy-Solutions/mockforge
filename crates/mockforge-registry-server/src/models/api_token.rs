@@ -71,11 +71,12 @@ impl ApiToken {
     ) -> sqlx::Result<(String, Self)> {
         // Generate token: mfx_<random_base64>
         use base64::{engine::general_purpose, Engine as _};
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        // Use base64 crate version 0.21 API
-        let token_suffix = general_purpose::STANDARD.encode(&random_bytes);
+        let token_suffix = {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            general_purpose::STANDARD.encode(&random_bytes)
+        };
         let full_token = format!("mfx_{}", token_suffix);
         let token_prefix = full_token.chars().take(12).collect::<String>(); // "mfx_" + 8 chars
 
