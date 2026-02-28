@@ -115,16 +115,15 @@ pub enum LearningMode {
 /// Drift Learning Engine
 ///
 /// Extends DataDriftEngine with learning capabilities from recorded traffic.
-#[allow(dead_code)]
 pub struct DriftLearningEngine {
     /// Base drift engine
     drift_engine: DataDriftEngine,
     /// Learning configuration
     learning_config: LearningConfig,
-    /// Traffic pattern learner
-    traffic_learner: Option<Arc<RwLock<TrafficPatternLearner>>>,
-    /// Persona behavior learner
-    persona_learner: Option<Arc<RwLock<PersonaBehaviorLearner>>>,
+    /// Traffic pattern learner (constructed for config validation; wiring pending)
+    _traffic_learner: Option<Arc<RwLock<TrafficPatternLearner>>>,
+    /// Persona behavior learner (constructed for config validation; wiring pending)
+    _persona_learner: Option<Arc<RwLock<PersonaBehaviorLearner>>>,
     /// Learned patterns cache
     learned_patterns: Arc<RwLock<HashMap<String, LearnedPattern>>>,
 }
@@ -179,8 +178,8 @@ impl DriftLearningEngine {
         Ok(Self {
             drift_engine,
             learning_config,
-            traffic_learner,
-            persona_learner,
+            _traffic_learner: traffic_learner,
+            _persona_learner: persona_learner,
             learned_patterns: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -278,86 +277,52 @@ impl DriftLearningEngine {
 /// Traffic Pattern Learner
 ///
 /// Analyzes recorded traffic to detect patterns and trends.
-#[allow(dead_code)]
 pub struct TrafficPatternLearner {
-    /// Learning configuration
-    config: LearningConfig,
-    /// Pattern window for analysis
-    pattern_window: Duration,
-    /// Detected patterns
-    patterns: HashMap<String, TrafficPattern>,
-}
-
-/// Traffic pattern detected from analysis
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct TrafficPattern {
-    /// Pattern identifier
-    pattern_id: String,
-    /// Pattern type
-    pattern_type: PatternType,
-    /// Pattern parameters
-    parameters: HashMap<String, Value>,
-    /// Sample count
-    sample_count: usize,
-    /// First seen timestamp
-    first_seen: chrono::DateTime<chrono::Utc>,
-    /// Last seen timestamp
-    last_seen: chrono::DateTime<chrono::Utc>,
+    /// Learning configuration (reserved for future per-learner config checks)
+    _config: LearningConfig,
 }
 
 impl TrafficPatternLearner {
     /// Create a new traffic pattern learner
     pub fn new(config: LearningConfig) -> Result<Self> {
-        Ok(Self {
-            config,
-            pattern_window: Duration::from_secs(3600), // 1 hour window
-            patterns: HashMap::new(),
-        })
+        Ok(Self { _config: config })
     }
 
-    /// Analyze traffic patterns from recorded requests
+    /// Analyze traffic patterns from recorded requests.
     ///
-    /// NOTE: This method is disabled to break circular dependencies.
-    /// The recorder integration has been moved to a higher-level crate.
+    /// Accepts JSON values with fields: `method`, `path`, `duration_ms`, `status_code`, `trace_id`.
+    /// Returns detected latency, error rate, and sequence patterns.
     pub async fn analyze_traffic_patterns(
         &mut self,
-        _database: &dyn std::any::Any, // Use Any to avoid dependency on mockforge-recorder
+        requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
-        // Disabled to break circular dependency
-        Ok(Vec::new())
+        let mut patterns = Vec::new();
+        patterns.extend(self.detect_latency_patterns_from_requests(requests).await?);
+        patterns.extend(self.detect_error_patterns_from_requests(requests).await?);
+        patterns.extend(self.detect_sequence_patterns_from_requests(requests).await?);
+        Ok(patterns)
     }
 
-    /// Internal method to detect latency patterns from requests
+    /// Detect latency patterns from recorded request data.
     ///
-    /// NOTE: This method is disabled to break circular dependency.
-    /// The recorder integration has been moved to a higher-level crate.
-    #[allow(dead_code)]
+    /// Each request value should contain `method` (string), `path` (string),
+    /// and `duration_ms` (integer) fields.
     pub async fn detect_latency_patterns_from_requests(
         &self,
-        _requests: &[Value],
+        requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
-        // Disabled to break circular dependency
-        Ok(Vec::new())
-    }
-
-    // NOTE: The following code is disabled to break circular dependency
-    // Original implementation would process requests here
-    /*
-    fn _detect_latency_patterns_original(
-        &self,
-        requests: &[serde_json::Value],
-    ) -> Result<Vec<LearnedPattern>> {
-        use std::collections::HashMap;
         use chrono::Utc;
 
-        // Group requests by endpoint/method
         let mut endpoint_latencies: HashMap<String, Vec<i64>> = HashMap::new();
 
         for request in requests {
-            if let Some(duration) = request.duration_ms {
-                let key = format!("{} {}", request.method, request.path);
-                endpoint_latencies.entry(key).or_insert_with(Vec::new).push(duration);
+            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("UNKNOWN");
+            let path = request.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+            let duration = request.get("duration_ms").and_then(|v| v.as_i64());
+
+            if let Some(duration_ms) = duration {
+                let key = format!("{} {}", method, path);
+                endpoint_latencies.entry(key).or_default().push(duration_ms);
             }
         }
 
@@ -365,23 +330,19 @@ impl TrafficPatternLearner {
 
         for (endpoint_key, latencies) in endpoint_latencies {
             if latencies.len() < 10 {
-                // Need at least 10 samples for meaningful analysis
                 continue;
             }
 
-            // Calculate statistics
             let sum: i64 = latencies.iter().sum();
             let count = latencies.len();
             let avg_latency = sum as f64 / count as f64;
 
-            // Calculate percentiles
             let mut sorted = latencies.clone();
             sorted.sort();
-            let p50 = sorted[sorted.len() / 2];
-            let p95 = sorted[(sorted.len() * 95) / 100];
-            let p99 = sorted[(sorted.len() * 99) / 100];
+            let p50 = sorted[count / 2];
+            let p95 = sorted[(count * 95) / 100];
+            let p99 = sorted[(count * 99) / 100];
 
-            // Detect if latency is increasing (trend analysis)
             let recent_avg = if latencies.len() >= 20 {
                 let recent: Vec<i64> = latencies.iter().rev().take(10).copied().collect();
                 let recent_sum: i64 = recent.iter().sum();
@@ -398,8 +359,7 @@ impl TrafficPatternLearner {
                 "stable"
             };
 
-            // Create pattern if there's significant variation or trend
-            if p99 > p50 * 2.0 || latency_trend != "stable" {
+            if p99 > p50 * 2 || latency_trend != "stable" {
                 let mut parameters = HashMap::new();
                 parameters.insert("endpoint".to_string(), serde_json::json!(endpoint_key));
                 parameters.insert("avg_latency_ms".to_string(), serde_json::json!(avg_latency));
@@ -409,11 +369,10 @@ impl TrafficPatternLearner {
                 parameters.insert("sample_count".to_string(), serde_json::json!(count));
                 parameters.insert("trend".to_string(), serde_json::json!(latency_trend));
 
-                // Confidence based on sample size
                 let confidence = (count as f64 / 100.0).min(1.0);
 
                 patterns.push(LearnedPattern {
-                    pattern_id: format!("latency_{}", endpoint_key.replace('/', "_").replace(' ', "_")),
+                    pattern_id: format!("latency_{}", endpoint_key.replace(['/', ' '], "_")),
                     pattern_type: PatternType::Latency,
                     parameters,
                     confidence,
@@ -425,48 +384,44 @@ impl TrafficPatternLearner {
 
         Ok(patterns)
     }
-    */
 
-    /// Internal method to detect error rate patterns from requests
-    /// NOTE: Disabled to break circular dependency
-    #[allow(dead_code)]
-    async fn detect_error_patterns_internal(
+    /// Detect error rate patterns from recorded request data.
+    ///
+    /// Each request value should contain `method` (string), `path` (string),
+    /// and `status_code` (integer) fields.
+    async fn detect_error_patterns_from_requests(
         &self,
-        _requests: &[Value],
+        requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
         use chrono::Utc;
-        use std::collections::HashMap;
 
-        // Disabled to break circular dependency
-        let endpoint_errors: HashMap<String, (usize, usize)> = HashMap::new(); // (total, errors)
+        let mut endpoint_errors: HashMap<String, (usize, usize)> = HashMap::new();
 
-        // Disabled - would iterate over requests here
-        /*
         for request in requests {
-            let key = format!("{} {}", request.method, request.path);
+            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("UNKNOWN");
+            let path = request.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+            let status_code = request.get("status_code").and_then(|v| v.as_u64());
+
+            let key = format!("{} {}", method, path);
             let entry = endpoint_errors.entry(key).or_insert((0, 0));
             entry.0 += 1;
 
-            // Consider 4xx and 5xx as errors
-            if let Some(status) = request.status_code {
+            if let Some(status) = status_code {
                 if status >= 400 {
                     entry.1 += 1;
                 }
             }
         }
-        */
 
         let mut patterns = Vec::new();
 
         for (endpoint_key, (total, errors)) in endpoint_errors {
             if total < 20 {
-                // Need at least 20 samples for meaningful analysis
                 continue;
             }
 
             let error_rate = errors as f64 / total as f64;
 
-            // Create pattern if error rate is significant (>5%) or increasing
             if error_rate > 0.05 {
                 let mut parameters = HashMap::new();
                 parameters.insert("endpoint".to_string(), serde_json::json!(endpoint_key));
@@ -474,7 +429,6 @@ impl TrafficPatternLearner {
                 parameters.insert("total_requests".to_string(), serde_json::json!(total));
                 parameters.insert("error_count".to_string(), serde_json::json!(errors));
 
-                // Confidence based on sample size and error rate
                 let confidence = ((total as f64 / 100.0).min(1.0) * error_rate * 10.0).min(1.0);
 
                 patterns.push(LearnedPattern {
@@ -491,42 +445,34 @@ impl TrafficPatternLearner {
         Ok(patterns)
     }
 
-    /// Internal method to detect request sequence patterns
-    /// NOTE: Disabled to break circular dependency
-    #[allow(dead_code)]
-    async fn detect_sequence_patterns_internal(
+    /// Detect request sequence patterns from recorded request data.
+    ///
+    /// Each request value should contain `method` (string), `path` (string),
+    /// and optionally `trace_id` (string) fields.
+    async fn detect_sequence_patterns_from_requests(
         &self,
-        _requests: &[Value],
+        requests: &[Value],
     ) -> Result<Vec<LearnedPattern>> {
         use chrono::Utc;
-        use std::collections::HashMap;
 
-        // Disabled to break circular dependency
-        if _requests.len() < 50 {
-            // Need sufficient data for sequence detection
+        if requests.len() < 50 {
             return Ok(Vec::new());
         }
 
-        // Disabled - would process requests here
-        let trace_sequences: HashMap<Option<String>, Vec<String>> = HashMap::new();
+        let mut trace_sequences: HashMap<Option<String>, Vec<String>> = HashMap::new();
 
-        /*
         for request in requests {
-            let trace_id = request.trace_id.clone();
-            let endpoint_key = format!("{} {}", request.method, request.path);
-            trace_sequences
-                .entry(trace_id)
-                .or_insert_with(Vec::new)
-                .push(endpoint_key);
+            let trace_id = request.get("trace_id").and_then(|v| v.as_str()).map(String::from);
+            let method = request.get("method").and_then(|v| v.as_str()).unwrap_or("UNKNOWN");
+            let path = request.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+            let endpoint_key = format!("{} {}", method, path);
+            trace_sequences.entry(trace_id).or_default().push(endpoint_key);
         }
-        */
 
-        // Find common sequences (patterns that appear multiple times)
         let mut sequence_counts: HashMap<String, usize> = HashMap::new();
 
         for sequence in trace_sequences.values() {
             if sequence.len() >= 2 {
-                // Create sequence signature (first 3 endpoints)
                 let signature: Vec<String> = sequence.iter().take(3).cloned().collect();
                 let signature_str = signature.join(" -> ");
                 *sequence_counts.entry(signature_str).or_insert(0) += 1;
@@ -537,12 +483,10 @@ impl TrafficPatternLearner {
 
         for (sequence_str, count) in sequence_counts {
             if count >= 5 {
-                // Pattern appears at least 5 times
                 let mut parameters = HashMap::new();
                 parameters.insert("sequence".to_string(), serde_json::json!(sequence_str));
                 parameters.insert("occurrence_count".to_string(), serde_json::json!(count));
 
-                // Confidence based on occurrence frequency
                 let confidence = (count as f64 / 20.0).min(1.0);
 
                 patterns.push(LearnedPattern {
@@ -562,22 +506,24 @@ impl TrafficPatternLearner {
         Ok(patterns)
     }
 
-    /// Detect latency patterns
+    /// Detect latency patterns from recorded requests.
     ///
-    /// This method is a convenience wrapper that requires a database.
-    /// Use `analyze_traffic_patterns` with a RecorderDatabase for full analysis.
-    pub async fn detect_latency_patterns(&mut self) -> Result<Vec<LearnedPattern>> {
-        // This method now requires database access - use analyze_traffic_patterns instead
-        Ok(Vec::new())
+    /// Convenience wrapper — pass request data as JSON values.
+    pub async fn detect_latency_patterns(
+        &mut self,
+        requests: &[Value],
+    ) -> Result<Vec<LearnedPattern>> {
+        self.detect_latency_patterns_from_requests(requests).await
     }
 
-    /// Detect error rate patterns
+    /// Detect error rate patterns from recorded requests.
     ///
-    /// This method is a convenience wrapper that requires a database.
-    /// Use `analyze_traffic_patterns` with a RecorderDatabase for full analysis.
-    pub async fn detect_error_patterns(&mut self) -> Result<Vec<LearnedPattern>> {
-        // This method now requires database access - use analyze_traffic_patterns instead
-        Ok(Vec::new())
+    /// Convenience wrapper — pass request data as JSON values.
+    pub async fn detect_error_patterns(
+        &mut self,
+        requests: &[Value],
+    ) -> Result<Vec<LearnedPattern>> {
+        self.detect_error_patterns_from_requests(requests).await
     }
 }
 
@@ -907,7 +853,7 @@ mod tests {
             ..Default::default()
         };
         let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
-        assert!(engine.traffic_learner.is_none());
+        assert!(engine._traffic_learner.is_none());
     }
 
     #[test]
@@ -918,7 +864,7 @@ mod tests {
             ..Default::default()
         };
         let engine = DriftLearningEngine::new(drift_config, learning_config).unwrap();
-        assert!(engine.persona_learner.is_none());
+        assert!(engine._persona_learner.is_none());
     }
 
     #[test]
@@ -1113,11 +1059,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_traffic_pattern_learner_analyze_traffic_patterns() {
+    async fn test_traffic_pattern_learner_analyze_empty() {
         let config = LearningConfig::default();
         let mut learner = TrafficPatternLearner::new(config).unwrap();
-        // Returns empty since database integration is disabled
-        let patterns = learner.analyze_traffic_patterns(&()).await.unwrap();
+        let patterns = learner.analyze_traffic_patterns(&[]).await.unwrap();
         assert!(patterns.is_empty());
     }
 
@@ -1125,16 +1070,36 @@ mod tests {
     async fn test_traffic_pattern_learner_detect_latency_patterns() {
         let config = LearningConfig::default();
         let mut learner = TrafficPatternLearner::new(config).unwrap();
-        let patterns = learner.detect_latency_patterns().await.unwrap();
-        assert!(patterns.is_empty()); // Returns empty since disabled
+        // Not enough samples (< 10) should return empty
+        let requests: Vec<Value> = (0..5)
+            .map(|i| {
+                serde_json::json!({
+                    "method": "GET",
+                    "path": "/api/test",
+                    "duration_ms": 100 + i * 10,
+                })
+            })
+            .collect();
+        let patterns = learner.detect_latency_patterns(&requests).await.unwrap();
+        assert!(patterns.is_empty());
     }
 
     #[tokio::test]
     async fn test_traffic_pattern_learner_detect_error_patterns() {
         let config = LearningConfig::default();
         let mut learner = TrafficPatternLearner::new(config).unwrap();
-        let patterns = learner.detect_error_patterns().await.unwrap();
-        assert!(patterns.is_empty()); // Returns empty since disabled
+        // Not enough samples (< 20) should return empty
+        let requests: Vec<Value> = (0..10)
+            .map(|_| {
+                serde_json::json!({
+                    "method": "GET",
+                    "path": "/api/test",
+                    "status_code": 500,
+                })
+            })
+            .collect();
+        let patterns = learner.detect_error_patterns(&requests).await.unwrap();
+        assert!(patterns.is_empty());
     }
 
     // =========================================================================

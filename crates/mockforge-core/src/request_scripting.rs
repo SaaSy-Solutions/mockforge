@@ -113,91 +113,6 @@ impl ScriptEngine {
             }
         }
     }
-
-    /// Execute script within the JavaScript context (blocking)
-    #[allow(dead_code)]
-    fn execute_in_context_blocking(
-        &self,
-        script: &str,
-        script_context: &ScriptContext,
-    ) -> Result<ScriptResult> {
-        // Create a new runtime for this execution
-        let runtime = Runtime::new()?;
-        let context = Context::full(&runtime)?;
-
-        context.with(|ctx| self.execute_in_context(ctx, script, script_context, 0))
-    }
-
-    /// Execute script within the JavaScript context
-    #[allow(dead_code)]
-    fn execute_in_context<'js>(
-        &self,
-        ctx: Ctx<'js>,
-        script: &str,
-        script_context: &ScriptContext,
-        timeout_ms: u64,
-    ) -> Result<ScriptResult> {
-        // Clone ctx for use in multiple places
-        let ctx_clone = ctx.clone();
-
-        // Create the global context object
-        let global = ctx.globals();
-        let mockforge_obj = Object::new(ctx_clone.clone())?;
-
-        // Expose context data
-        self.expose_script_context(ctx.clone(), &mockforge_obj, script_context)?;
-
-        // Add the mockforge object to global scope
-        global.set("mockforge", mockforge_obj)?;
-
-        // Add utility functions
-        self.add_global_functions(ctx_clone, &global, script_context)?;
-
-        // Execute the script
-        let result = eval_script_with_timeout(&ctx, script, timeout_ms)?;
-
-        // Extract modified variables and return value
-        let modified_vars = extract_modified_variables(&ctx, script_context)?;
-        let return_value = extract_return_value(&ctx, &result)?;
-
-        Ok(ScriptResult {
-            return_value,
-            modified_variables: modified_vars,
-            errors: vec![],       // No errors if we reach here
-            execution_time_ms: 0, // Will be set by the caller
-        })
-    }
-
-    /// Expose script context as a global object
-    #[allow(dead_code)]
-    fn expose_script_context<'js>(
-        &self,
-        ctx: Ctx<'js>,
-        mockforge_obj: &Object<'js>,
-        script_context: &ScriptContext,
-    ) -> Result<()> {
-        expose_script_context_static(ctx, mockforge_obj, script_context)
-    }
-
-    /// Add global utility functions to the script context
-    #[allow(dead_code)]
-    fn add_global_functions<'js>(
-        &self,
-        ctx: Ctx<'js>,
-        global: &Object<'js>,
-        script_context: &ScriptContext,
-    ) -> Result<()> {
-        add_global_functions_static(ctx, global, script_context)
-    }
-}
-
-/// Extract return value from script execution
-#[allow(dead_code)]
-fn extract_return_value<'js>(
-    ctx: &Ctx<'js>,
-    result: &rquickjs::Value<'js>,
-) -> Result<Option<Value>> {
-    extract_return_value_static(ctx, result)
 }
 
 /// Execute script in a new JavaScript runtime (blocking helper)
@@ -217,7 +132,7 @@ fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Re
             .map_err(|e| Error::generic(format!("Failed to create mockforge object: {:?}", e)))?;
 
         // Expose context data
-        expose_script_context_static(ctx.clone(), &mockforge_obj, script_context)
+        expose_script_context(ctx.clone(), &mockforge_obj, script_context)
             .map_err(|e| Error::generic(format!("Failed to expose script context: {:?}", e)))?;
 
         // Add the mockforge object to global scope
@@ -226,7 +141,7 @@ fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Re
         })?;
 
         // Add utility functions
-        add_global_functions_static(ctx.clone(), &global, script_context)
+        add_global_functions(ctx.clone(), &global, script_context)
             .map_err(|e| Error::generic(format!("Failed to add global functions: {:?}", e)))?;
 
         // Execute the script
@@ -235,12 +150,11 @@ fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Re
             .map_err(|e| Error::generic(format!("Script execution failed: {:?}", e)))?;
 
         // Extract modified variables and return value
-        let modified_vars =
-            extract_modified_variables_static(&ctx, script_context).map_err(|e| {
-                Error::generic(format!("Failed to extract modified variables: {:?}", e))
-            })?;
+        let modified_vars = extract_modified_variables(&ctx, script_context).map_err(|e| {
+            Error::generic(format!("Failed to extract modified variables: {:?}", e))
+        })?;
 
-        let return_value = extract_return_value_static(&ctx, &result)
+        let return_value = extract_return_value(&ctx, &result)
             .map_err(|e| Error::generic(format!("Failed to extract return value: {:?}", e)))?;
 
         Ok(ScriptResult {
@@ -252,8 +166,8 @@ fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Re
     })
 }
 
-/// Extract return value from script execution (static version)
-fn extract_return_value_static<'js>(
+/// Extract return value from script execution
+fn extract_return_value<'js>(
     _ctx: &Ctx<'js>,
     result: &rquickjs::Value<'js>,
 ) -> Result<Option<Value>> {
@@ -307,16 +221,7 @@ fn extract_return_value_static<'js>(
 }
 
 /// Extract modified variables from the script context
-#[allow(dead_code)]
 fn extract_modified_variables<'js>(
-    ctx: &Ctx<'js>,
-    original_context: &ScriptContext,
-) -> Result<HashMap<String, Value>> {
-    extract_modified_variables_static(ctx, original_context)
-}
-
-/// Extract modified variables from the script context (static version)
-fn extract_modified_variables_static<'js>(
     ctx: &Ctx<'js>,
     original_context: &ScriptContext,
 ) -> Result<HashMap<String, Value>> {
@@ -382,31 +287,14 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
     }
 }
 
-/// Execute script in the sandboxed rquickjs engine.
-///
-/// Timeout enforcement is handled at the async level by `execute_script()`
-/// via `tokio::time::timeout` wrapping `spawn_blocking`. The `timeout_ms`
-/// parameter is reserved for future interrupt-handler-based enforcement.
-#[allow(dead_code)]
-fn eval_script_with_timeout<'js>(
-    ctx: &Ctx<'js>,
-    script: &str,
-    _timeout_ms: u64,
-) -> Result<rquickjs::Value<'js>> {
-    // Note: rquickjs interrupt handlers require access to the Runtime (not Ctx).
-    // Timeout is enforced at the async boundary in execute_script() instead.
-    ctx.eval(script)
-        .map_err(|e| Error::generic(format!("JavaScript execution error: {:?}", e)))
-}
-
 impl Default for ScriptEngine {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Expose script context as a global object (static version)
-fn expose_script_context_static<'js>(
+/// Expose script context as a global object
+fn expose_script_context<'js>(
     ctx: Ctx<'js>,
     mockforge_obj: &Object<'js>,
     script_context: &ScriptContext,
@@ -519,8 +407,8 @@ fn expose_script_context_static<'js>(
     Ok(())
 }
 
-/// Add global utility functions to the script context (static version)
-fn add_global_functions_static<'js>(
+/// Add global utility functions to the script context
+fn add_global_functions<'js>(
     ctx: Ctx<'js>,
     global: &Object<'js>,
     _script_context: &ScriptContext,
@@ -1339,11 +1227,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_execute_in_context_blocking() {
+    async fn test_execute_simple_string() {
         let engine = ScriptEngine::new();
         let ctx = create_empty_script_context();
 
-        let result = engine.execute_in_context_blocking(r#""test""#, &ctx);
+        let result = engine.execute_script(r#""test""#, &ctx, 1000).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().return_value, Some(json!("test")));
     }
