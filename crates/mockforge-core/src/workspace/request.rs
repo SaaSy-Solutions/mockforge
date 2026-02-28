@@ -1001,7 +1001,7 @@ impl RequestProcessor {
 
     /// Clear all caches
     pub async fn clear_caches(&self) {
-        self.response_cache.get_response("").await; // Dummy call to access underlying cache
+        self.response_cache.clear().await;
         self.validation_cache.clear().await;
     }
 }

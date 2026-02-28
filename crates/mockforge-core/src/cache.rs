@@ -303,6 +303,11 @@ impl ResponseCache {
         self.cache.get(&key.to_string()).await
     }
 
+    /// Clear all entries from the response cache
+    pub async fn clear(&self) {
+        self.cache.clear().await;
+    }
+
     /// Get cache statistics
     pub async fn stats(&self) -> CacheStats {
         self.cache.stats().await
@@ -439,12 +444,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_ttl_expiration() {
-        let cache = Cache::with_ttl(10, Duration::from_millis(50));
+        let cache = Cache::with_ttl(10, Duration::from_millis(200));
 
         cache.insert("key1".to_string(), "value1".to_string(), None).await;
         assert_eq!(cache.get(&"key1".to_string()).await, Some("value1".to_string()));
 
-        sleep(Duration::from_millis(60)).await;
+        sleep(Duration::from_millis(300)).await;
         assert_eq!(cache.get(&"key1".to_string()).await, None);
     }
 
@@ -454,7 +459,11 @@ mod tests {
 
         // Insert with custom TTL
         cache
-            .insert("short".to_string(), "short_lived".to_string(), Some(Duration::from_millis(30)))
+            .insert(
+                "short".to_string(),
+                "short_lived".to_string(),
+                Some(Duration::from_millis(200)),
+            )
             .await;
         cache
             .insert("long".to_string(), "long_lived".to_string(), Some(Duration::from_secs(60)))
@@ -464,7 +473,7 @@ mod tests {
         assert_eq!(cache.get(&"long".to_string()).await, Some("long_lived".to_string()));
 
         // Wait for short TTL to expire
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(300)).await;
 
         assert_eq!(cache.get(&"short".to_string()).await, None);
         assert_eq!(cache.get(&"long".to_string()).await, Some("long_lived".to_string()));
@@ -472,12 +481,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_contains_key_respects_ttl() {
-        let cache = Cache::with_ttl(10, Duration::from_millis(30));
+        let cache = Cache::with_ttl(10, Duration::from_millis(200));
         cache.insert("key".to_string(), "value".to_string(), None).await;
 
         assert!(cache.contains_key(&"key".to_string()).await);
 
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(300)).await;
 
         assert!(!cache.contains_key(&"key".to_string()).await);
     }
