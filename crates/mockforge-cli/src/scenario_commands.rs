@@ -1794,16 +1794,16 @@ pub async fn handle_behavior_rule_command(command: BehaviorRuleCommands) -> anyh
 
             // Create rule
             let rule = if rule_type == "scriptable" {
-                if script.is_none() || script_language.is_none() {
+                let (Some(script_val), Some(lang_val)) = (script, script_language) else {
                     anyhow::bail!("Scriptable rules require --script and --script-language");
-                }
+                };
                 BehaviorRule::scriptable(
                     name,
                     behavior_condition,
                     behavior_action,
                     priority,
-                    script.unwrap(),
-                    script_language.unwrap(),
+                    script_val,
+                    lang_val,
                 )
             } else {
                 BehaviorRule::declarative(name, behavior_condition, behavior_action, priority)

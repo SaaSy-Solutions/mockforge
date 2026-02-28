@@ -6,7 +6,6 @@
 use crate::mock_generator::{MockDataGenerator, MockDataResult, MockGeneratorConfig, MockResponse};
 use crate::{Error, Result};
 use axum::{
-    extract::Query,
     http::{HeaderMap, StatusCode},
     response::Json,
     routing::get,
@@ -162,7 +161,8 @@ impl MockServer {
             .route("/health", get(Self::health_handler))
             .route("/openapi.json", get(Self::openapi_handler))
             .route("/mock-data", get(Self::mock_data_handler))
-            // Dynamic routes will be added based on OpenAPI spec
+            // Catch-all fallback for dynamic mock endpoints
+            .fallback(Self::generic_handler)
             .with_state(MockServerState {
                 mock_data,
                 config: config.clone(),
@@ -268,21 +268,20 @@ impl MockServer {
 
     /// Generic endpoint handler that serves mock data based on the request
     ///
-    /// This handler can be used for catch-all routes to serve mock data
+    /// Catch-all fallback route that serves mock data
     /// based on the request method and path.
-    #[allow(dead_code)]
     async fn generic_handler(
         axum::extract::State(state): axum::extract::State<MockServerState>,
         method: axum::http::Method,
-        path: axum::extract::Path<String>,
-        query: Query<HashMap<String, String>>,
+        uri: axum::http::Uri,
         _headers: HeaderMap,
     ) -> std::result::Result<Json<Value>, StatusCode> {
-        let endpoint_key = format!("{} /{}", method.as_str().to_uppercase(), path.as_str());
+        let path = uri.path();
+        let endpoint_key = format!("{} {}", method.as_str().to_uppercase(), path);
 
         // Log request if enabled
         if state.config.log_requests {
-            info!("Handling request: {} with query: {:?}", endpoint_key, query);
+            info!("Handling request: {}", endpoint_key);
         }
 
         // Apply response delay if configured

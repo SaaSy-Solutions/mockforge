@@ -106,9 +106,6 @@ pub struct MockDataGenerator {
     config: MockGeneratorConfig,
     /// Enhanced faker instance
     faker: EnhancedFaker,
-    /// Schema registry for complex types
-    #[allow(dead_code)]
-    schema_registry: HashMap<String, SchemaDefinition>,
     /// Field name patterns for intelligent mapping
     field_patterns: HashMap<String, String>,
     /// Persona registry for consistent persona-based generation
@@ -130,7 +127,6 @@ impl MockDataGenerator {
         let mut generator = Self {
             config,
             faker: EnhancedFaker::new(),
-            schema_registry: HashMap::new(),
             field_patterns: Self::create_field_patterns(),
             persona_registry: None,
             consistency_store: None,
@@ -151,7 +147,6 @@ impl MockDataGenerator {
         let mut generator = Self {
             config,
             faker: EnhancedFaker::new(),
-            schema_registry: HashMap::new(),
             field_patterns: Self::create_field_patterns(),
             persona_registry: Some(persona_registry),
             consistency_store: Some(consistency_store),
@@ -184,8 +179,8 @@ impl MockDataGenerator {
     pub fn generate_from_openapi_spec(&mut self, spec: &Value) -> Result<MockDataResult> {
         info!("Generating mock data from OpenAPI specification");
 
-        // Parse the OpenAPI spec
-        let openapi_spec = self.parse_openapi_spec(spec)?;
+        // Parse the OpenAPI spec info
+        let spec_info = self.parse_openapi_spec_info(spec)?;
 
         // Extract all schemas from the spec
         let schemas = self.extract_schemas_from_spec(spec)?;
@@ -304,7 +299,7 @@ impl MockDataGenerator {
             schemas: generated_data,
             responses: mock_responses,
             warnings,
-            spec_info: openapi_spec.info,
+            spec_info,
         })
     }
 
@@ -346,61 +341,6 @@ impl MockDataGenerator {
         Ok(Value::Object(object))
     }
 
-    /// Generate mock response for an OpenAPI operation
-    #[allow(dead_code)]
-    fn generate_endpoint_response(
-        &mut self,
-        operation: &openapiv3::Operation,
-    ) -> Result<Option<MockResponse>> {
-        // Find the best response to mock (prefer 200, then 201, then any 2xx)
-        let response_schema = self.find_best_response_schema(operation)?;
-
-        if let Some(schema) = response_schema {
-            let mock_data = self.generate_from_json_schema(&schema)?;
-
-            Ok(Some(MockResponse {
-                status: 200, // Default to 200 for successful responses
-                headers: HashMap::new(),
-                body: mock_data,
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Find the best response schema from an operation
-    #[allow(dead_code)]
-    fn find_best_response_schema(&self, operation: &openapiv3::Operation) -> Result<Option<Value>> {
-        let responses = &operation.responses;
-
-        // Look for 200 response first
-        if let Some(response) = responses.responses.get(&openapiv3::StatusCode::Code(200)) {
-            if let Some(schema) = self.extract_response_schema(response)? {
-                return Ok(Some(schema));
-            }
-        }
-
-        // Look for 201 response
-        if let Some(response) = responses.responses.get(&openapiv3::StatusCode::Code(201)) {
-            if let Some(schema) = self.extract_response_schema(response)? {
-                return Ok(Some(schema));
-            }
-        }
-
-        // Look for any 2xx response
-        for (code, response) in &responses.responses {
-            if let openapiv3::StatusCode::Code(status_code) = code {
-                if *status_code >= 200 && *status_code < 300 {
-                    if let Some(schema) = self.extract_response_schema(response)? {
-                        return Ok(Some(schema));
-                    }
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
     /// Extract schema from an OpenAPI response (JSON format)
     fn extract_response_schema_from_json(&self, response: &Value) -> Result<Option<Value>> {
         // Check for content -> application/json -> schema
@@ -440,38 +380,6 @@ impl MockDataGenerator {
             }
         }
         Ok(None)
-    }
-
-    /// Extract schema from an OpenAPI response
-    #[allow(dead_code)]
-    fn extract_response_schema(
-        &self,
-        response: &openapiv3::ReferenceOr<openapiv3::Response>,
-    ) -> Result<Option<Value>> {
-        match response {
-            openapiv3::ReferenceOr::Item(response) => {
-                let content = &response.content;
-                // Prefer application/json content
-                if let Some(json_content) = content.get("application/json") {
-                    if let Some(schema) = &json_content.schema {
-                        return Ok(Some(serde_json::to_value(schema)?));
-                    }
-                }
-
-                // Fall back to any content type
-                for (_, media_type) in content {
-                    if let Some(schema) = &media_type.schema {
-                        return Ok(Some(serde_json::to_value(schema)?));
-                    }
-                }
-
-                Ok(None)
-            }
-            openapiv3::ReferenceOr::Reference { .. } => {
-                // Handle reference responses (could be expanded)
-                Ok(None)
-            }
-        }
     }
 
     /// Determine the best faker type for a field based on its name and type
@@ -805,10 +713,8 @@ impl MockDataGenerator {
         Ok(constrained_value)
     }
 
-    /// Parse OpenAPI specification
-    fn parse_openapi_spec(&self, spec: &Value) -> Result<OpenApiSpec> {
-        // This is a simplified parser - in a real implementation,
-        // you'd want to use a proper OpenAPI parser
+    /// Parse OpenAPI specification info section
+    fn parse_openapi_spec_info(&self, spec: &Value) -> Result<OpenApiInfo> {
         let spec_obj = spec
             .as_object()
             .ok_or_else(|| Error::generic("Invalid OpenAPI specification"))?;
@@ -823,13 +729,10 @@ impl MockDataGenerator {
 
         let description = info.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
 
-        Ok(OpenApiSpec {
-            info: OpenApiInfo {
-                title,
-                version,
-                description,
-            },
-            paths: HashMap::new(), // Simplified for this example
+        Ok(OpenApiInfo {
+            title,
+            version,
+            description,
         })
     }
 
@@ -1018,28 +921,6 @@ pub struct OpenApiInfo {
     pub version: String,
     /// API description
     pub description: Option<String>,
-}
-
-/// Simplified OpenAPI spec structure
-#[derive(Debug)]
-#[allow(dead_code)]
-struct OpenApiSpec {
-    info: OpenApiInfo,
-    paths: HashMap<String, PathItem>,
-}
-
-/// Simplified path item structure
-#[derive(Debug)]
-#[allow(dead_code)]
-struct PathItem {
-    operations: HashMap<String, openapiv3::Operation>,
-}
-
-impl PathItem {
-    #[allow(dead_code)]
-    fn operations(&self) -> &HashMap<String, openapiv3::Operation> {
-        &self.operations
-    }
 }
 
 #[cfg(test)]

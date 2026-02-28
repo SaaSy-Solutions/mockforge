@@ -190,9 +190,6 @@ impl DataGenerator {
 pub struct BatchGenerator {
     /// Generators for different schemas
     generators: Vec<DataGenerator>,
-    /// Global configuration
-    #[allow(dead_code)]
-    config: DataConfig,
 }
 
 impl BatchGenerator {
@@ -205,7 +202,7 @@ impl BatchGenerator {
             generators.push(generator);
         }
 
-        Ok(Self { generators, config })
+        Ok(Self { generators })
     }
 
     /// Generate data for all schemas

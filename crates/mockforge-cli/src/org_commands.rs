@@ -43,7 +43,13 @@ async fn list_organizations() -> Result<()> {
     let client = reqwest::Client::new();
     let response = client
         .get(format!("{}/api/v1/organizations", config.url))
-        .header("Authorization", format!("Bearer {}", config.token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                config.token.as_deref().expect("token checked above")
+            ),
+        )
         .send()
         .await
         .context("Failed to fetch organizations")?;
@@ -83,7 +89,13 @@ async fn set_active_org(org: &str) -> Result<()> {
     let client = reqwest::Client::new();
     let response = client
         .get(format!("{}/api/v1/organizations", config.url))
-        .header("Authorization", format!("Bearer {}", config.token.as_ref().unwrap()))
+        .header(
+            "Authorization",
+            format!(
+                "Bearer {}",
+                config.token.as_deref().expect("token checked above")
+            ),
+        )
         .send()
         .await
         .context("Failed to fetch organizations")?;

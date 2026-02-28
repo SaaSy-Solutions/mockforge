@@ -160,7 +160,8 @@ async fn handle_mod_init(
             .unwrap_or_else(|| "my-mod-project".to_string())
     });
 
-    let output_dir = output.unwrap_or_else(|| std::env::current_dir().unwrap());
+    let output_dir =
+        output.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
     println!("🚀 Initializing MOD project: {}", project_name);
     println!("   Template: {}", template);

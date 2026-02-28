@@ -140,7 +140,10 @@ async fn execute_reload_command(command: &str, spec_files: &[PathBuf]) -> Result
     // Add spec file paths as additional arguments
     let mut all_args = args;
     for spec_file in spec_files {
-        all_args.push(spec_file.to_str().unwrap());
+        let path_str = spec_file
+            .to_str()
+            .ok_or_else(|| Error::generic(format!("Non-UTF8 path: {}", spec_file.display())))?;
+        all_args.push(path_str);
     }
 
     let output = Command::new(program)

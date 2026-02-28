@@ -298,9 +298,6 @@ impl Dataset {
 pub struct DatasetCollection {
     /// Datasets indexed by name
     datasets: HashMap<String, Dataset>,
-    /// Collection metadata
-    #[allow(dead_code)]
-    metadata: HashMap<String, String>,
 }
 
 impl DatasetCollection {
@@ -308,7 +305,6 @@ impl DatasetCollection {
     pub fn new() -> Self {
         Self {
             datasets: HashMap::new(),
-            metadata: HashMap::new(),
         }
     }
 
