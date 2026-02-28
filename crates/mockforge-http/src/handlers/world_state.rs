@@ -192,15 +192,25 @@ pub async fn query_world_state(
     let mut query = WorldStateQuery::new();
 
     if let Some(ref node_types) = request.node_types {
-        let _types: HashSet<_> = node_types
+        use mockforge_world_state::model::NodeType;
+        let types: HashSet<NodeType> = node_types
             .iter()
-            .filter_map(|s| {
-                // Try to parse as NodeType - for now just store as string
-                // This would need proper parsing in a real implementation
-                Some(s.as_str())
+            .filter_map(|s| match s.as_str() {
+                "persona" => Some(NodeType::Persona),
+                "entity" => Some(NodeType::Entity),
+                "session" => Some(NodeType::Session),
+                "protocol" => Some(NodeType::Protocol),
+                "behavior" => Some(NodeType::Behavior),
+                "schema" => Some(NodeType::Schema),
+                "recorded" => Some(NodeType::Recorded),
+                "ai_modifier" => Some(NodeType::AiModifier),
+                "system" => Some(NodeType::System),
+                _ => None,
             })
             .collect();
-        // Note: This is a simplified version - would need proper NodeType parsing
+        if !types.is_empty() {
+            query = query.with_node_types(types);
+        }
     }
 
     if let Some(ref layers) = request.layers {

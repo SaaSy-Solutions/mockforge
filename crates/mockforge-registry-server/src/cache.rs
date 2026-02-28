@@ -97,37 +97,27 @@ impl Cache {
         Ok(())
     }
 
-    /// Delete multiple keys matching a pattern
-    /// Note: This is a simple implementation. For production, consider using SCAN
+    /// Delete multiple keys matching a glob pattern using Redis SCAN
     pub async fn delete_pattern(&self, pattern: &str) -> Result<()> {
-        // For now, we'll just delete the exact key
-        // In production, you might want to use Redis SCAN to find matching keys
-        self.redis.delete(pattern).await?;
+        let keys = self.redis.scan_keys(pattern).await?;
+        for key in keys {
+            let _ = self.redis.delete(&key).await;
+        }
         Ok(())
     }
 
     /// Invalidate organization-related caches
     pub async fn invalidate_org(&self, org_id: &Uuid) -> Result<()> {
-        let keys = vec![
-            format!("{}:{}", keys::ORG, org_id),
-            format!("{}:{}", keys::ORG_MEMBERS, org_id),
-            format!("{}:{}:*", keys::ORG_SETTING, org_id), // Pattern - would need SCAN in production
-        ];
-        for key in keys {
-            let _ = self.delete(&key).await;
-        }
+        let _ = self.delete(&format!("{}:{}", keys::ORG, org_id)).await;
+        let _ = self.delete(&format!("{}:{}", keys::ORG_MEMBERS, org_id)).await;
+        let _ = self.delete_pattern(&format!("{}:{}:*", keys::ORG_SETTING, org_id)).await;
         Ok(())
     }
 
     /// Invalidate user-related caches
     pub async fn invalidate_user(&self, user_id: &Uuid) -> Result<()> {
-        let keys = vec![
-            format!("{}:{}", keys::USER, user_id),
-            format!("{}:{}:*", keys::USER_SETTING, user_id), // Pattern - would need SCAN in production
-        ];
-        for key in keys {
-            let _ = self.delete(&key).await;
-        }
+        let _ = self.delete(&format!("{}:{}", keys::USER, user_id)).await;
+        let _ = self.delete_pattern(&format!("{}:{}:*", keys::USER_SETTING, user_id)).await;
         Ok(())
     }
 

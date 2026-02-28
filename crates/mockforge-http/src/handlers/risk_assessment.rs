@@ -125,25 +125,41 @@ pub async fn create_risk(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Set optional fields
-    if let Some(_subcategory) = request.subcategory {
-        // Note: Risk struct doesn't have a setter for subcategory in the engine
-        // This would need to be added to the engine or handled differently
+    // Set optional fields on the risk and persist via update
+    let mut risk = risk;
+    let mut needs_update = false;
+
+    if let Some(subcategory) = request.subcategory {
+        risk.subcategory = Some(subcategory);
+        needs_update = true;
     }
-    if let Some(_threat) = request.threat {
-        // Similar note - would need engine support
+    if let Some(threat) = request.threat {
+        risk.threat = Some(threat);
+        needs_update = true;
     }
-    if let Some(_vulnerability) = request.vulnerability {
-        // Similar note
+    if let Some(vulnerability) = request.vulnerability {
+        risk.vulnerability = Some(vulnerability);
+        needs_update = true;
     }
-    if let Some(_asset) = request.asset {
-        // Similar note
+    if let Some(asset) = request.asset {
+        risk.asset = Some(asset);
+        needs_update = true;
     }
-    if let Some(_controls) = request.existing_controls {
-        // Similar note
+    if let Some(controls) = request.existing_controls {
+        risk.existing_controls = controls;
+        needs_update = true;
     }
-    if let Some(_requirements) = request.compliance_requirements {
-        // Similar note
+    if let Some(requirements) = request.compliance_requirements {
+        risk.compliance_requirements = requirements;
+        needs_update = true;
+    }
+
+    if needs_update {
+        let risk_id = risk.risk_id.clone();
+        engine.update_risk(&risk_id, risk.clone()).await.map_err(|e| {
+            error!("Failed to update risk with optional fields: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     }
 
     info!("Risk created: {}", risk.risk_id);

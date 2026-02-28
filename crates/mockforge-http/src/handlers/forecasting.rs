@@ -250,11 +250,20 @@ pub async fn get_service_forecasts(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    // Map rows to forecasts (simplified - would need proper FromRow implementation)
-    Ok(Json(ForecastListResponse {
-        forecasts: Vec::new(),
-        total: rows.len(),
-    }))
+    // Map rows to forecasts
+    let mut forecasts = Vec::new();
+    for row in rows {
+        match map_row_to_change_forecast(&row) {
+            Ok(forecast) => forecasts.push(forecast),
+            Err(e) => {
+                tracing::warn!("Failed to map service forecast row: {}", e);
+                continue;
+            }
+        }
+    }
+
+    let total = forecasts.len();
+    Ok(Json(ForecastListResponse { forecasts, total }))
 }
 
 /// Get service-level forecasts (no database)
@@ -307,10 +316,20 @@ pub async fn get_endpoint_forecasts(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(Json(ForecastListResponse {
-        forecasts: Vec::new(),
-        total: rows.len(),
-    }))
+    // Map rows to forecasts
+    let mut forecasts = Vec::new();
+    for row in rows {
+        match map_row_to_change_forecast(&row) {
+            Ok(forecast) => forecasts.push(forecast),
+            Err(e) => {
+                tracing::warn!("Failed to map endpoint forecast row: {}", e);
+                continue;
+            }
+        }
+    }
+
+    let total = forecasts.len();
+    Ok(Json(ForecastListResponse { forecasts, total }))
 }
 
 /// Get endpoint-level forecasts (no database)

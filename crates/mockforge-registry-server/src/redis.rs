@@ -75,6 +75,33 @@ impl RedisPool {
         Ok(())
     }
 
+    /// Scan for keys matching a glob pattern using Redis SCAN
+    pub async fn scan_keys(&self, pattern: &str) -> Result<Vec<String>> {
+        let mut conn = (*self.manager).clone();
+        let mut cursor: u64 = 0;
+        let mut keys = Vec::new();
+
+        loop {
+            let (next_cursor, batch): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await?;
+
+            keys.extend(batch);
+            cursor = next_cursor;
+
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        Ok(keys)
+    }
+
     /// Health check - verify Redis connectivity
     pub async fn ping(&self) -> Result<()> {
         let mut conn = (*self.manager).clone();
