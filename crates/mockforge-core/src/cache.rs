@@ -354,6 +354,11 @@ impl TemplateCache {
         self.cache.get(&key.to_string()).await
     }
 
+    /// Clear all entries from the template cache
+    pub async fn clear(&self) {
+        self.cache.clear().await;
+    }
+
     /// Get cache statistics
     pub async fn stats(&self) -> CacheStats {
         self.cache.stats().await

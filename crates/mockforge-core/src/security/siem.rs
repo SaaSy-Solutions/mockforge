@@ -515,8 +515,6 @@ pub struct HttpTransport {
     url: String,
     method: String,
     headers: HashMap<String, String>,
-    #[allow(dead_code)]
-    timeout: u64,
     retry: RetryConfig,
     client: reqwest::Client,
 }
@@ -546,7 +544,6 @@ impl HttpTransport {
             url,
             method,
             headers,
-            timeout,
             retry,
             client,
         }

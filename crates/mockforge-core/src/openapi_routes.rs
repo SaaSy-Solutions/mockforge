@@ -196,12 +196,6 @@ impl OpenApiRouteRegistry {
         }
     }
 
-    /// Generate routes from the OpenAPI specification
-    #[allow(dead_code)]
-    fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
-        Self::generate_routes_with_persona(spec, None)
-    }
-
     /// Generate routes from the OpenAPI specification with optional persona
     fn generate_routes_with_persona(
         spec: &Arc<OpenApiSpec>,

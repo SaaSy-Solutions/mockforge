@@ -101,23 +101,36 @@ impl Cache {
     pub async fn delete_pattern(&self, pattern: &str) -> Result<()> {
         let keys = self.redis.scan_keys(pattern).await?;
         for key in keys {
-            let _ = self.redis.delete(&key).await;
+            if let Err(e) = self.redis.delete(&key).await {
+                tracing::warn!("Failed to delete cache key {}: {}", key, e);
+            }
         }
         Ok(())
     }
 
     /// Invalidate organization-related caches
     pub async fn invalidate_org(&self, org_id: &Uuid) -> Result<()> {
-        let _ = self.delete(&format!("{}:{}", keys::ORG, org_id)).await;
-        let _ = self.delete(&format!("{}:{}", keys::ORG_MEMBERS, org_id)).await;
-        let _ = self.delete_pattern(&format!("{}:{}:*", keys::ORG_SETTING, org_id)).await;
+        if let Err(e) = self.delete(&format!("{}:{}", keys::ORG, org_id)).await {
+            tracing::warn!("Failed to invalidate org cache for {}: {}", org_id, e);
+        }
+        if let Err(e) = self.delete(&format!("{}:{}", keys::ORG_MEMBERS, org_id)).await {
+            tracing::warn!("Failed to invalidate org members cache for {}: {}", org_id, e);
+        }
+        if let Err(e) = self.delete_pattern(&format!("{}:{}:*", keys::ORG_SETTING, org_id)).await {
+            tracing::warn!("Failed to invalidate org settings cache for {}: {}", org_id, e);
+        }
         Ok(())
     }
 
     /// Invalidate user-related caches
     pub async fn invalidate_user(&self, user_id: &Uuid) -> Result<()> {
-        let _ = self.delete(&format!("{}:{}", keys::USER, user_id)).await;
-        let _ = self.delete_pattern(&format!("{}:{}:*", keys::USER_SETTING, user_id)).await;
+        if let Err(e) = self.delete(&format!("{}:{}", keys::USER, user_id)).await {
+            tracing::warn!("Failed to invalidate user cache for {}: {}", user_id, e);
+        }
+        if let Err(e) = self.delete_pattern(&format!("{}:{}:*", keys::USER_SETTING, user_id)).await
+        {
+            tracing::warn!("Failed to invalidate user settings cache for {}: {}", user_id, e);
+        }
         Ok(())
     }
 

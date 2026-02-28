@@ -238,7 +238,6 @@ impl Default for ComplianceDashboardConfig {
 /// Aggregates data from various security systems to provide real-time
 /// compliance monitoring and reporting.
 pub struct ComplianceDashboardEngine {
-    #[allow(dead_code)]
     config: ComplianceDashboardConfig,
     /// Compliance gaps
     gaps: std::sync::Arc<tokio::sync::RwLock<HashMap<String, ComplianceGap>>>,
@@ -260,11 +259,20 @@ impl ComplianceDashboardEngine {
         }
     }
 
+    /// Get the dashboard configuration
+    pub fn config(&self) -> &ComplianceDashboardConfig {
+        &self.config
+    }
+
     /// Get dashboard data
     ///
     /// Aggregates data from all security systems to provide comprehensive
     /// compliance status.
     pub async fn get_dashboard_data(&self) -> Result<ComplianceDashboardData, Error> {
+        if !self.config.enabled {
+            return Err(Error::Generic("Compliance dashboard is disabled".to_string()));
+        }
+
         // Calculate compliance scores
         let soc2_compliance = self.calculate_soc2_compliance().await?;
         let iso27001_compliance = self.calculate_iso27001_compliance().await?;
