@@ -2,13 +2,15 @@
 //!
 //! Tests the complete SaaS onboarding path:
 //! 1. User registration (signup)
-//! 2. Email verification (direct DB token lookup, simulating email click)
-//! 3. Login with verified account
+//! 2. Email verification (resend endpoint)
+//! 3. Login with registered account
 //! 4. Organization creation
-//! 5. Hosted mock deployment creation
-//! 6. Billing endpoint verification (Stripe not configured = graceful error)
-//! 7. Token refresh
-//! 8. Organization settings & usage endpoints
+//! 5. Organization listing
+//! 6. Hosted mock deployment listing
+//! 7. Billing endpoint verification (Stripe not configured = graceful error)
+//! 8. Subscription info
+//! 9. Token refresh
+//! 10. Organization settings & usage endpoints
 //!
 //! Requires:
 //!   - PostgreSQL + MinIO running (docker-compose up db minio minio-init)
@@ -107,13 +109,27 @@ async fn test_signup_onboarding_flow() {
     );
 
     // ─────────────────────────────────────────────────────────────────
-    // Step 2: Email verification
+    // Step 2: Email verification (resend)
     // ─────────────────────────────────────────────────────────────────
-    // Email verification endpoint is not yet wired into routes.
-    // In production, users would receive a verification email.
-    // For now, we verify the user can still proceed (login works without verification).
-    println!(
-        "Step 2: Email verification (skipped — endpoint not yet wired, login works without it)"
+    // The verify-email endpoint requires a token from the email, which we
+    // can't easily obtain in an E2E test without DB access. Instead, we
+    // test that the resend-verification endpoint is reachable.
+    println!("Step 2: Testing email verification resend endpoint");
+    let res = h
+        .client
+        .post(format!("{}/api/v1/auth/verify-email/resend", base_url))
+        .header("Authorization", h.auth_header())
+        .send()
+        .await
+        .expect("resend verification request failed");
+
+    let status = res.status();
+    println!("  -> Resend verification: status={}", status);
+    // Endpoint should be reachable (200 or 429 if rate-limited)
+    assert!(
+        status.is_success() || status == StatusCode::TOO_MANY_REQUESTS,
+        "Resend verification should succeed or rate-limit, got {}",
+        status
     );
 
     // ─────────────────────────────────────────────────────────────────
@@ -194,11 +210,21 @@ async fn test_signup_onboarding_flow() {
     println!("  -> Found {} organization(s)", orgs.len());
 
     // ─────────────────────────────────────────────────────────────────
-    // Step 6: Hosted mock deployment (route not yet wired)
+    // Step 6: Hosted mock deployment
     // ─────────────────────────────────────────────────────────────────
-    // Hosted mock routes are defined in handlers/hosted_mocks.rs but not yet
-    // wired into routes.rs. This is a known gap for the SaaS launch.
-    println!("Step 6: Hosted mock deployment (skipped — route not yet wired into routes.rs)");
+    println!("Step 6: Testing hosted mock deployment endpoints");
+    let res = h
+        .client
+        .get(format!("{}/api/v1/hosted-mocks", base_url))
+        .header("Authorization", h.auth_header())
+        .header("X-Org-Id", h.org_id.as_ref().unwrap())
+        .send()
+        .await
+        .expect("list hosted mocks request failed");
+
+    let status = res.status();
+    println!("  -> List hosted mocks: status={}", status);
+    assert!(status.is_success(), "List hosted mocks should succeed, got {}", status);
 
     // ─────────────────────────────────────────────────────────────────
     // Step 7: Billing - verify checkout endpoint exists

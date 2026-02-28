@@ -128,17 +128,5 @@ impl Controller {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_controller_creation() {
-        // This test requires a Kubernetes cluster, so it's just a placeholder
-        // In a real test environment, you would:
-        // 1. Create a test Kubernetes cluster (e.g., using kind)
-        // 2. Create a Client
-        // 3. Instantiate the Controller
-        // 4. Test reconciliation logic
-    }
-}
+// Unit tests for Controller require a Kubernetes cluster (kube::Client).
+// See reconciler.rs for tests of reconciliation logic that don't need a cluster.
