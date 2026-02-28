@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.70"
+version.workspace = true
 edition = "2021"
 authors = ["MockForge Team"]
 description = "Example GraphQL response generator plugin for MockForge"

@@ -1,6 +1,6 @@
 [package]
 name = "mockforge-registry-server"
-version = "0.3.70"
+version.workspace = true
 edition = "2021"
 resolver = "2"
 authors = ["MockForge Contributors"]
