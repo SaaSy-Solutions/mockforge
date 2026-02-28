@@ -4,8 +4,7 @@
 //! Supports time-based progression, manual configuration, and per-route/group/global settings.
 
 use super::blender::ResponseBlender;
-#[allow(unused_imports)]
-use super::config::{ContinuumConfig, ContinuumRule, TransitionMode};
+use super::config::{ContinuumConfig, TransitionMode};
 use super::schedule::TimeSchedule;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -235,6 +234,7 @@ impl Default for RealityContinuumEngine {
 
 #[cfg(test)]
 mod tests {
+    use super::super::config::ContinuumRule;
     use super::*;
 
     #[tokio::test]

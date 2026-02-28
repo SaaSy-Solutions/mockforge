@@ -705,7 +705,13 @@ pub async fn update_incident(
                     .await
                     .ok_or(StatusCode::NOT_FOUND)?;
             }
-            _ => {}
+            other => {
+                tracing::warn!(
+                    "Invalid incident status '{}': expected acknowledged, resolved, or closed",
+                    other
+                );
+                return Err(StatusCode::BAD_REQUEST);
+            }
         }
     }
 

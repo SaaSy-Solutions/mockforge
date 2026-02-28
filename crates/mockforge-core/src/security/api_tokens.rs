@@ -4,8 +4,6 @@
 
 use crate::security::access_review::ApiTokenInfo;
 use crate::Error;
-#[allow(unused_imports)]
-use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -97,6 +95,7 @@ impl ApiTokenStorage for InMemoryApiTokenStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
 
     #[tokio::test]
     async fn test_in_memory_storage() {

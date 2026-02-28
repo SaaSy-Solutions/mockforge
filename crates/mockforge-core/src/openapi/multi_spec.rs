@@ -497,7 +497,6 @@ pub fn merge_specs(
             files: Vec::new(),
         }
     })?;
-    #[allow(unused_mut)]
     let mut base_doc = base_spec
         .raw_document
         .as_ref()

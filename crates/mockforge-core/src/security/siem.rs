@@ -1183,7 +1183,7 @@ impl AzureTransport {
         method: &str,
         content_type: &str,
         resource: &str,
-    ) -> String {
+    ) -> Result<String, Error> {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
 
@@ -1192,14 +1192,15 @@ impl AzureTransport {
         let string_to_sign =
             format!("{}\n{}\n{}\n{}\n{}", method, content_length, content_type, date, resource);
 
-        let mut mac = HmacSha256::new_from_slice(
-            base64::decode(&self.shared_key).unwrap_or_default().as_slice(),
-        )
-        .expect("HMAC can take key of any size");
+        let key_bytes = base64::decode(&self.shared_key)
+            .map_err(|e| Error::generic(format!("Azure shared_key is not valid base64: {}", e)))?;
+
+        let mut mac =
+            HmacSha256::new_from_slice(&key_bytes).expect("HMAC can take key of any size");
 
         mac.update(string_to_sign.as_bytes());
         let result = mac.finalize();
-        base64::encode(result.into_bytes())
+        Ok(base64::encode(result.into_bytes()))
     }
 }
 
@@ -1219,7 +1220,7 @@ impl SiemTransport for AzureTransport {
         let resource = "/api/logs?api-version=2016-04-01".to_string();
 
         let signature =
-            self.generate_signature(&date, content_length, method, content_type, &resource);
+            self.generate_signature(&date, content_length, method, content_type, &resource)?;
 
         let mut last_error = None;
         for attempt in 0..=self.retry.max_attempts {
