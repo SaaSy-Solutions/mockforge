@@ -25,18 +25,18 @@ pub struct Dependency {
 }
 
 /// Dependency source
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DependencySource {
+    #[default]
     Registry,
-    Git { url: String, rev: Option<String> },
-    Path { path: String },
-}
-
-impl Default for DependencySource {
-    fn default() -> Self {
-        Self::Registry
-    }
+    Git {
+        url: String,
+        rev: Option<String>,
+    },
+    Path {
+        path: String,
+    },
 }
 
 /// Resolved dependency

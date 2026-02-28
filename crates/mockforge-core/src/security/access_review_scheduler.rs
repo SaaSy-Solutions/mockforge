@@ -18,6 +18,7 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone)]
 struct ReviewSchedule {
     /// Review type
+    #[allow(dead_code)]
     review_type: ReviewType,
     /// Review frequency
     frequency: ReviewFrequency,

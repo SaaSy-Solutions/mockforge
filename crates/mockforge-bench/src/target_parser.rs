@@ -51,6 +51,7 @@ impl TargetConfig {
 
 /// JSON format for target file (array of targets)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct JsonTargetFile {
     #[serde(rename = "targets")]
     targets: Option<Vec<JsonTarget>>,

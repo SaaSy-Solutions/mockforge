@@ -62,6 +62,7 @@ impl SnapshotManager {
     /// * `workspace_persistence` - Optional workspace persistence for config
     /// * `vbr_state` - Optional VBR state (pre-extracted JSON)
     /// * `recorder_state` - Optional Recorder state (pre-extracted JSON)
+    #[allow(clippy::too_many_arguments)]
     pub async fn save_snapshot(
         &self,
         name: String,
@@ -91,6 +92,7 @@ impl SnapshotManager {
     ///
     /// Extended version that accepts a map of protocol state exporters
     /// for capturing state from multiple protocols.
+    #[allow(clippy::too_many_arguments)]
     pub async fn save_snapshot_with_exporters(
         &self,
         name: String,

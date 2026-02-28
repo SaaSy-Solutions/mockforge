@@ -362,10 +362,11 @@ impl SemanticAnalyzer {
             for key in responses.keys() {
                 // Match 4xx and 5xx status codes
                 if let Some(first_char) = key.chars().next() {
-                    if (first_char == '4' || first_char == '5') && key.len() == 3 {
-                        if key.chars().all(|c| c.is_ascii_digit()) {
-                            codes.push(key.clone());
-                        }
+                    if (first_char == '4' || first_char == '5')
+                        && key.len() == 3
+                        && key.chars().all(|c| c.is_ascii_digit())
+                    {
+                        codes.push(key.clone());
                     }
                 }
             }

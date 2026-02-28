@@ -80,8 +80,8 @@ mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 
 [features]
-default = ["git-support"]
-git-support = ["git2"]
+default = ["git"]
+git = ["git2"]
 studio-packs = []
 
 [dev-dependencies]

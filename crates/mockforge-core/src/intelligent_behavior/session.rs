@@ -13,19 +13,15 @@ use crate::Result;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SessionTrackingMethod {
     /// Track via cookie
+    #[default]
     Cookie,
     /// Track via HTTP header
     Header,
     /// Track via query parameter
     QueryParam,
-}
-
-impl Default for SessionTrackingMethod {
-    fn default() -> Self {
-        Self::Cookie
-    }
 }
 
 /// Session tracking configuration

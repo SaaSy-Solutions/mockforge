@@ -25,9 +25,9 @@ pub fn format_jira_issue(incident: &DriftIncident, project_key: &str, issue_type
         incident.method, incident.endpoint
     );
 
-    description.push_str(&format!("*Type:* {}\n", format!("{:?}", incident.incident_type)));
-    description.push_str(&format!("*Severity:* {}\n", format!("{:?}", incident.severity)));
-    description.push_str(&format!("*Status:* {}\n", format!("{:?}", incident.status)));
+    description.push_str(&format!("*Type:* {:?}\n", incident.incident_type));
+    description.push_str(&format!("*Severity:* {:?}\n", incident.severity));
+    description.push_str(&format!("*Status:* {:?}\n", incident.status));
 
     if let Some(breaking_changes) = incident.details.get("breaking_changes") {
         description.push_str(&format!("*Breaking Changes:* {}\n", breaking_changes));

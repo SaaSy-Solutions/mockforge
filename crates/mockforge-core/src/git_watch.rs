@@ -88,8 +88,8 @@ impl GitWatchService {
         // - https://github.com/user/repo.git
         // - git@github.com:user/repo.git
         // - https://github.com/user/repo
-        let name = if url.ends_with(".git") {
-            &url[..url.len() - 4]
+        let name = if let Some(stripped) = url.strip_suffix(".git") {
+            stripped
         } else {
             url
         };

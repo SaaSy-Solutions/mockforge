@@ -453,6 +453,7 @@ impl PrivilegedAccessManager {
     }
 
     /// Record a privileged action
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_action(
         &self,
         user_id: Uuid,

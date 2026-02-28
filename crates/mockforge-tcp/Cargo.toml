@@ -8,6 +8,7 @@ description = "TCP protocol mocking support for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/mockforge"
+readme = "README.md"
 keywords = ["tcp", "mock", "testing", "api", "network"]
 categories = ["development-tools", "network-programming"]
 

@@ -67,7 +67,7 @@ impl SchemaComparator {
         };
 
         // Combine scores
-        (coverage_score * 0.7 + (1.0 - error_penalty.min(1.0)) * 0.3).max(0.0).min(1.0)
+        (coverage_score * 0.7 + (1.0 - error_penalty.min(1.0)) * 0.3).clamp(0.0, 1.0)
     }
 
     /// Count the number of fields in a schema
@@ -104,7 +104,7 @@ impl SampleComparator {
         let distribution_score = self.compare_distributions(mock_samples, real_samples);
 
         // Combine scores
-        (structure_score * 0.6 + distribution_score * 0.4).max(0.0).min(1.0)
+        (structure_score * 0.6 + distribution_score * 0.4).clamp(0.0, 1.0)
     }
 
     /// Compare response structures
@@ -235,6 +235,7 @@ impl FidelityCalculator {
     ///
     /// # Returns
     /// Fidelity score
+    #[allow(clippy::too_many_arguments)]
     pub fn calculate(
         &self,
         mock_schema: &Value,
@@ -267,8 +268,7 @@ impl FidelityCalculator {
             + sample_similarity * 0.4
             + response_time_similarity * 0.1
             + error_pattern_similarity * 0.1)
-            .max(0.0)
-            .min(1.0);
+            .clamp(0.0, 1.0);
 
         FidelityScore {
             overall,
@@ -297,7 +297,7 @@ impl FidelityCalculator {
         // Calculate similarity based on ratio
         let ratio = mock_avg / real_avg;
         // Score is highest when ratio is close to 1.0
-        (1.0 - (ratio - 1.0).abs()).max(0.0).min(1.0)
+        (1.0 - (ratio - 1.0).abs()).clamp(0.0, 1.0)
     }
 
     /// Compare error patterns

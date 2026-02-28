@@ -23,6 +23,7 @@ pub enum KeyDerivationMethod {
         parallelism: u32,
     },
     /// PBKDF2-HMAC-SHA256
+    #[allow(dead_code)]
     Pbkdf2 { iterations: u32 },
 }
 
@@ -78,6 +79,7 @@ impl KeyDerivationManager {
     /// Derive a master key from a password (async version using spawn_blocking)
     ///
     /// This method offloads the CPU-intensive Argon2 computation to a blocking thread pool.
+    #[allow(dead_code)]
     pub async fn derive_master_key_async(
         &self,
         password: String,
@@ -101,6 +103,7 @@ impl KeyDerivationManager {
     }
 
     /// Derive a workspace key from workspace ID and master key
+    #[allow(dead_code)]
     pub fn derive_workspace_key(
         &self,
         master_key: &EncryptionKey,
@@ -211,6 +214,7 @@ impl KeyDerivationManager {
     /// Verify a password against a derived key (synchronous version)
     ///
     /// Note: This is CPU-intensive. Use `verify_password_async` when calling from async context.
+    #[allow(dead_code)]
     pub fn verify_password(
         &self,
         password: &str,
@@ -224,6 +228,7 @@ impl KeyDerivationManager {
     /// Verify a password against a derived key (async version using spawn_blocking)
     ///
     /// This method offloads the CPU-intensive Argon2 computation to a blocking thread pool.
+    #[allow(dead_code)]
     pub async fn verify_password_async(
         &self,
         password: String,
@@ -242,6 +247,7 @@ impl KeyDerivationManager {
     }
 
     /// Generate a secure random salt
+    #[allow(dead_code)]
     pub fn generate_salt() -> String {
         let mut salt = [0u8; 16];
         let mut rng = thread_rng();
@@ -250,6 +256,7 @@ impl KeyDerivationManager {
     }
 
     /// Validate key derivation parameters
+    #[allow(dead_code)]
     pub fn validate_parameters(&self, method: &KeyDerivationMethod) -> EncryptionResult<()> {
         match method {
             KeyDerivationMethod::Argon2 {

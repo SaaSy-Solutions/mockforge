@@ -322,7 +322,7 @@ impl MqttContract {
             .collect();
 
         // Check for removed fields (breaking change)
-        for (field_name, _old_field) in &old_fields_map {
+        for field_name in old_fields_map.keys() {
             if !new_fields_map.contains_key(field_name) {
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(false));

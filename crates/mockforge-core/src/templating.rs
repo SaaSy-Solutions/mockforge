@@ -444,6 +444,7 @@ fn replace_randint_ranges(input: &str) -> String {
 /// Replace `{{ now+1d }}` style templates in input string
 ///
 /// This is a convenience wrapper around `replace_now_offset_with_time` that uses the current time.
+#[allow(dead_code)]
 fn replace_now_offset(input: &str) -> String {
     replace_now_offset_with_time(input, Utc::now())
 }

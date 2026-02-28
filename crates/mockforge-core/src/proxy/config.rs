@@ -7,6 +7,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum MigrationMode {
     /// Always use mock (ignore proxy even if rule matches)
     Mock,
@@ -15,13 +16,8 @@ pub enum MigrationMode {
     /// Always use real backend (proxy)
     Real,
     /// Use existing priority chain (default, backward compatible)
+    #[default]
     Auto,
-}
-
-impl Default for MigrationMode {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 /// Configuration for proxy behavior
@@ -496,19 +492,15 @@ pub struct BodyTransform {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum TransformOperation {
     /// Replace the value at the path
+    #[default]
     Replace,
     /// Add a new field at the path
     Add,
     /// Remove the field at the path
     Remove,
-}
-
-impl Default for TransformOperation {
-    fn default() -> Self {
-        Self::Replace
-    }
 }
 
 impl Default for ProxyConfig {

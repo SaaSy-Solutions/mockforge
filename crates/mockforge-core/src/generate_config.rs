@@ -80,8 +80,10 @@ pub struct InputConfig {
 /// Barrel file type for organizing exports
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum BarrelType {
     /// No barrel files generated
+    #[default]
     None,
     /// Generate index.ts (TypeScript/JavaScript)
     #[serde(rename = "index")]
@@ -89,12 +91,6 @@ pub enum BarrelType {
     /// Generate index.ts and similar barrel files (full barrel pattern)
     #[serde(rename = "barrel")]
     Barrel,
-}
-
-impl Default for BarrelType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Output configuration

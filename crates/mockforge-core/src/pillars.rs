@@ -135,6 +135,7 @@ impl Pillar {
     /// assert_eq!(Pillar::from_str("devx"), Some(Pillar::DevX));
     /// assert_eq!(Pillar::from_str("invalid"), None);
     /// ```
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "reality" => Some(Pillar::Reality),

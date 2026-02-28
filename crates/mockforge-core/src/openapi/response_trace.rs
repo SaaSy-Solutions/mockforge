@@ -30,6 +30,7 @@ use std::time::Instant;
 ///
 /// # Returns
 /// A tuple of (response_value, trace_data)
+#[allow(clippy::too_many_arguments)]
 pub fn generate_response_with_trace(
     spec: &OpenApiSpec,
     operation: &Operation,

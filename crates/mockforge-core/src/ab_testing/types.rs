@@ -114,8 +114,10 @@ impl VariantAllocation {
 /// Strategy for selecting variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum VariantSelectionStrategy {
     /// Random selection based on allocation percentages
+    #[default]
     Random,
     /// Consistent hashing based on request attributes (e.g., user ID, IP)
     ConsistentHash,
@@ -123,12 +125,6 @@ pub enum VariantSelectionStrategy {
     RoundRobin,
     /// Sticky session (same variant for same session)
     StickySession,
-}
-
-impl Default for VariantSelectionStrategy {
-    fn default() -> Self {
-        Self::Random
-    }
 }
 
 /// A/B test configuration for an endpoint

@@ -23,6 +23,7 @@ pub struct GrpcContract {
     /// Contract version
     version: String,
     /// Descriptor pool containing the proto definitions
+    #[allow(dead_code)]
     descriptor_pool: Arc<DescriptorPool>,
     /// Map of service names to service descriptors
     services: HashMap<String, ServiceDescriptor>,
@@ -250,6 +251,7 @@ impl GrpcContract {
     /// Returns (is_additive, is_breaking) tuple
     /// - Additive: New methods, new optional fields, new services
     /// - Breaking: Removed methods, required field additions, type changes, signature changes
+    #[allow(dead_code)]
     fn classify_proto_change(mismatch: &Mismatch) -> (bool, bool) {
         match mismatch.mismatch_type {
             // Breaking changes
@@ -947,7 +949,7 @@ impl ProtocolContract for GrpcContract {
         }
 
         // Validate streaming configuration
-        if method.is_client_streaming() && request.metadata.get("streaming").is_none() {
+        if method.is_client_streaming() && !request.metadata.contains_key("streaming") {
             warnings.push(
                 "Method is client-streaming but request doesn't indicate streaming".to_string(),
             );

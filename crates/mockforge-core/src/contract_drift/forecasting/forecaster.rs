@@ -36,6 +36,7 @@ impl Forecaster {
     }
 
     /// Generate forecast for a service or endpoint
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_forecast(
         &self,
         incidents: &[DriftIncident],

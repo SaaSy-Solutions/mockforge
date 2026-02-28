@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
+#[allow(clippy::type_complexity)]
 static GLOBAL_RISK_ASSESSMENT_ENGINE: Lazy<Arc<RwLock<Option<Arc<RwLock<RiskAssessmentEngine>>>>>> =
     Lazy::new(|| Arc::new(RwLock::new(None)));
 

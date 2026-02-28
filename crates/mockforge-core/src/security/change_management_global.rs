@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
+#[allow(clippy::type_complexity)]
 static GLOBAL_CHANGE_MANAGEMENT_ENGINE: Lazy<
     Arc<RwLock<Option<Arc<RwLock<ChangeManagementEngine>>>>>,
 > = Lazy::new(|| Arc::new(RwLock::new(None)));

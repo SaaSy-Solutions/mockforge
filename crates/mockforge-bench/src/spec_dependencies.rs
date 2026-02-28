@@ -156,13 +156,11 @@ impl DependencyDetector {
         all_specs: &[(PathBuf, OpenApiSpec)],
         _api_path: &str,
     ) {
-        if let Some(request_body) = &operation.request_body {
-            if let openapiv3::ReferenceOr::Item(body) = request_body {
-                // Check JSON content
-                if let Some(media_type) = body.content.get("application/json") {
-                    if let Some(schema_ref) = &media_type.schema {
-                        self.analyze_schema_for_refs(current_path, schema_ref, all_specs, "");
-                    }
+        if let Some(openapiv3::ReferenceOr::Item(body)) = &operation.request_body {
+            // Check JSON content
+            if let Some(media_type) = body.content.get("application/json") {
+                if let Some(schema_ref) = &media_type.schema {
+                    self.analyze_schema_for_refs(current_path, schema_ref, all_specs, "");
                 }
             }
         }

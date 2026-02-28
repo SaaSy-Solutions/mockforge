@@ -8,6 +8,7 @@ description = "Runtime daemon for zero-config auto-mock generation from 404s"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
 documentation = "https://docs.rs/mockforge-runtime-daemon"
+readme = "README.md"
 keywords = ["mock", "api", "testing", "daemon", "auto-generation"]
 categories = ["development-tools::testing", "web-programming"]
 

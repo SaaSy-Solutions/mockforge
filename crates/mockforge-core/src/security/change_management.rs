@@ -156,6 +156,7 @@ pub struct ChangeHistoryEntry {
 
 impl ChangeRequest {
     /// Create a new change request
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         change_id: String,
         title: String,
@@ -380,6 +381,7 @@ impl ChangeManagementEngine {
     }
 
     /// Create a new change request
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_change_request(
         &self,
         title: String,

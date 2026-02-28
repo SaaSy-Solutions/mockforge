@@ -93,6 +93,7 @@ pub struct PriorityHttpHandler {
     /// Behavioral Economics Engine for reactive mock behavior
     behavioral_economics_engine: Option<Arc<RwLock<BehavioralEconomicsEngine>>>,
     /// Request tracking for metrics (endpoint -> (request_count, error_count, last_request_time))
+    #[allow(dead_code, clippy::type_complexity)]
     request_metrics: Arc<RwLock<HashMap<String, (u64, u64, std::time::Instant)>>>,
 }
 
@@ -756,6 +757,7 @@ impl PriorityHttpHandler {
     ///
     /// Updates condition evaluator with current metrics and evaluates rules,
     /// then applies any matching actions to modify the response.
+    #[allow(dead_code)]
     async fn apply_behavioral_economics(
         &self,
         response: PriorityResponse,

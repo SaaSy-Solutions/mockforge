@@ -84,6 +84,7 @@ impl Default for OrgRateLimitConfig {
 }
 
 /// Trait for accessing org controls from database
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait OrgControlsAccessor: Send + Sync {
     /// Load org controls configuration
@@ -280,6 +281,7 @@ impl OrgControls {
     }
 
     /// Record usage for audit
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_usage(
         &self,
         org_id: &str,

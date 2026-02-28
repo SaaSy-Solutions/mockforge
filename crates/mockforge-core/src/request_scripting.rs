@@ -115,6 +115,7 @@ impl ScriptEngine {
     }
 
     /// Execute script within the JavaScript context (blocking)
+    #[allow(dead_code)]
     fn execute_in_context_blocking(
         &self,
         script: &str,
@@ -128,6 +129,7 @@ impl ScriptEngine {
     }
 
     /// Execute script within the JavaScript context
+    #[allow(dead_code)]
     fn execute_in_context<'js>(
         &self,
         ctx: Ctx<'js>,
@@ -167,6 +169,7 @@ impl ScriptEngine {
     }
 
     /// Expose script context as a global object
+    #[allow(dead_code)]
     fn expose_script_context<'js>(
         &self,
         ctx: Ctx<'js>,
@@ -177,6 +180,7 @@ impl ScriptEngine {
     }
 
     /// Add global utility functions to the script context
+    #[allow(dead_code)]
     fn add_global_functions<'js>(
         &self,
         ctx: Ctx<'js>,
@@ -188,6 +192,7 @@ impl ScriptEngine {
 }
 
 /// Extract return value from script execution
+#[allow(dead_code)]
 fn extract_return_value<'js>(
     ctx: &Ctx<'js>,
     result: &rquickjs::Value<'js>,
@@ -302,6 +307,7 @@ fn extract_return_value_static<'js>(
 }
 
 /// Extract modified variables from the script context
+#[allow(dead_code)]
 fn extract_modified_variables<'js>(
     ctx: &Ctx<'js>,
     original_context: &ScriptContext,
@@ -377,6 +383,7 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
 }
 
 /// Execute script with timeout
+#[allow(dead_code)]
 fn eval_script_with_timeout<'js>(
     ctx: &Ctx<'js>,
     script: &str,

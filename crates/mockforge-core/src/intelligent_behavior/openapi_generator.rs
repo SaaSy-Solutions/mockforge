@@ -107,6 +107,7 @@ pub struct OpenApiSpecGenerator {
     /// LLM client for AI-assisted generation
     llm_client: Option<LlmClient>,
     /// Configuration
+    #[allow(dead_code)]
     config: OpenApiGenerationConfig,
 }
 
@@ -299,6 +300,7 @@ impl OpenApiSpecGenerator {
     }
 
     /// Convert JSON value to JSON Schema
+    #[allow(clippy::only_used_in_recursion)]
     pub fn json_to_schema(&self, value: &Value) -> Value {
         match value {
             Value::Null => json!({"type": "null"}),

@@ -263,7 +263,7 @@ pub fn group_specs_by_openapi_version(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        groups.entry(version.clone()).or_insert_with(Vec::new).push((path, spec));
+        groups.entry(version.clone()).or_default().push((path, spec));
     }
 
     info!("Grouped specs into {} OpenAPI version groups", groups.len());
@@ -294,7 +294,7 @@ pub fn group_specs_by_api_version(
             .map(|s| s.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        groups.entry(api_version.clone()).or_insert_with(Vec::new).push((path, spec));
+        groups.entry(api_version.clone()).or_default().push((path, spec));
     }
 
     info!("Grouped specs into {} API version groups", groups.len());
@@ -330,7 +330,7 @@ pub fn detect_conflicts(specs: &[(PathBuf, OpenApiSpec)]) -> Vec<Conflict> {
                 for (method, operation) in methods {
                     if operation.is_some() {
                         let key = (method.to_string(), route_path.clone());
-                        routes.entry(key).or_insert_with(Vec::new).push(path.clone());
+                        routes.entry(key).or_default().push(path.clone());
                     }
                 }
             }
@@ -370,7 +370,7 @@ pub fn detect_conflicts(specs: &[(PathBuf, OpenApiSpec)]) -> Vec<Conflict> {
             {
                 if let Some(components_map) = components_obj.as_object() {
                     for key in components_map.keys() {
-                        components.entry(key.clone()).or_insert_with(Vec::new).push(path.clone());
+                        components.entry(key.clone()).or_default().push(path.clone());
                     }
                 }
             }

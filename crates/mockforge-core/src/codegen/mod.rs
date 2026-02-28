@@ -27,7 +27,7 @@ pub struct CodegenConfig {
 }
 
 /// Strategy for generating mock data in generated code
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MockDataStrategy {
     /// Generate random data from schemas (fuzzing-style)
     Random,
@@ -36,13 +36,8 @@ pub enum MockDataStrategy {
     /// Use schema defaults when available
     Defaults,
     /// Prefer examples, fallback to random when examples are missing
+    #[default]
     ExamplesOrRandom,
-}
-
-impl Default for MockDataStrategy {
-    fn default() -> Self {
-        Self::ExamplesOrRandom
-    }
 }
 
 /// Generate mock server code from OpenAPI spec

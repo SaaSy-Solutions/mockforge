@@ -164,8 +164,8 @@ impl ConditionEvaluator {
     /// Evaluate logical expressions (&&, ||, !)
     fn evaluate_logical(&self, expr: &str) -> ConditionResult<Option<bool>> {
         // Handle NOT operator
-        if expr.starts_with('!') {
-            let inner = expr[1..].trim();
+        if let Some(stripped) = expr.strip_prefix('!') {
+            let inner = stripped.trim();
             let inner_result = self.evaluate(inner)?;
             return Ok(Some(!inner_result));
         }

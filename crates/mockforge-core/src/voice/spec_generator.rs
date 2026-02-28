@@ -435,6 +435,7 @@ impl VoiceSpecGenerator {
     }
 
     /// Convert JSON value to OpenAPI schema
+    #[allow(clippy::only_used_in_recursion)]
     fn json_value_to_schema(&self, value: &Value) -> Schema {
         match value {
             Value::Object(obj) => {

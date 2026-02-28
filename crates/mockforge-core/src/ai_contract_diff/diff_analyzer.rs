@@ -312,30 +312,31 @@ impl DiffAnalyzer {
         if let Some(op) = operation {
             // Check parameters
             for param in &op.parameters {
-                if let openapiv3::ReferenceOr::Item(param) = param {
-                    // Check if parameter is a query parameter
-                    if let openapiv3::Parameter::Query { parameter_data, .. } = param {
-                        let param_name = &parameter_data.name;
-                        let required = parameter_data.required;
+                if let openapiv3::ReferenceOr::Item(openapiv3::Parameter::Query {
+                    parameter_data,
+                    ..
+                }) = param
+                {
+                    let param_name = &parameter_data.name;
+                    let required = parameter_data.required;
 
-                        let found = query_params.contains_key(param_name);
+                    let found = query_params.contains_key(param_name);
 
-                        if required && !found {
-                            mismatches.push(Mismatch {
-                                mismatch_type: MismatchType::QueryParamMismatch,
-                                path: format!("{}?{}", path, param_name),
-                                method: None,
-                                expected: Some(format!("Required query parameter: {}", param_name)),
-                                actual: Some("Parameter missing".to_string()),
-                                description: format!(
-                                    "Required query parameter '{}' is missing",
-                                    param_name
-                                ),
-                                severity: MismatchSeverity::High,
-                                confidence: 1.0,
-                                context: HashMap::new(),
-                            });
-                        }
+                    if required && !found {
+                        mismatches.push(Mismatch {
+                            mismatch_type: MismatchType::QueryParamMismatch,
+                            path: format!("{}?{}", path, param_name),
+                            method: None,
+                            expected: Some(format!("Required query parameter: {}", param_name)),
+                            actual: Some("Parameter missing".to_string()),
+                            description: format!(
+                                "Required query parameter '{}' is missing",
+                                param_name
+                            ),
+                            severity: MismatchSeverity::High,
+                            confidence: 1.0,
+                            context: HashMap::new(),
+                        });
                     }
                 }
             }
@@ -372,6 +373,7 @@ impl DiffAnalyzer {
     /// Convert a Schema directly (helper for Box<Schema> case)
     ///
     /// This method resolves `$ref` references for nested properties using the spec.
+    #[allow(clippy::only_used_in_recursion)]
     fn openapi_schema_to_json_from_schema(
         &self,
         schema: &openapiv3::Schema,

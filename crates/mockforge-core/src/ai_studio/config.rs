@@ -11,19 +11,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AiMode {
     /// Generate once and freeze - AI is only used to produce config/templates.
     /// Runtime mocks use frozen artifacts (no LLM calls).
     GenerateOnceFreeze,
 
     /// Live mode - AI is used dynamically at runtime for each request.
+    #[default]
     Live,
-}
-
-impl Default for AiMode {
-    fn default() -> Self {
-        Self::Live
-    }
 }
 
 /// AI Studio configuration
@@ -47,17 +43,13 @@ pub struct AiStudioConfig {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum FreezeMode {
     /// Auto-freeze: Automatically freeze artifacts after generation
     Auto,
     /// Manual freeze: Require explicit user action to freeze artifacts
+    #[default]
     Manual,
-}
-
-impl Default for FreezeMode {
-    fn default() -> Self {
-        Self::Manual
-    }
 }
 
 /// Deterministic mode configuration

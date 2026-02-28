@@ -116,22 +116,20 @@ fn extract_route_info(
     // Extract query parameters
     let mut query_params = Vec::new();
     for param_ref in &operation.parameters {
-        if let Some(param) = param_ref.as_item() {
-            if let openapiv3::Parameter::Query { parameter_data, .. } = param {
-                let schema =
-                    if let ParameterSchemaOrContent::Schema(schema_ref) = &parameter_data.format {
-                        schema_ref.as_item().cloned()
-                    } else {
-                        None
-                    };
+        if let Some(openapiv3::Parameter::Query { parameter_data, .. }) = param_ref.as_item() {
+            let schema =
+                if let ParameterSchemaOrContent::Schema(schema_ref) = &parameter_data.format {
+                    schema_ref.as_item().cloned()
+                } else {
+                    None
+                };
 
-                query_params.push(QueryParamInfo {
-                    name: parameter_data.name.clone(),
-                    required: parameter_data.required,
-                    schema,
-                    description: parameter_data.description.clone(),
-                });
-            }
+            query_params.push(QueryParamInfo {
+                name: parameter_data.name.clone(),
+                required: parameter_data.required,
+                schema,
+                description: parameter_data.description.clone(),
+            });
         }
     }
 
@@ -353,8 +351,6 @@ pub fn sanitize_name(name: &str) -> String {
         .map(|c| {
             if c.is_alphanumeric() || c == '_' {
                 c
-            } else if c == '-' || c == ' ' {
-                '_'
             } else {
                 '_'
             }

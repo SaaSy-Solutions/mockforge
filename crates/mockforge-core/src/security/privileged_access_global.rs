@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::debug;
 
+#[allow(clippy::type_complexity)]
 static GLOBAL_PRIVILEGED_ACCESS_MANAGER: Lazy<
     Arc<RwLock<Option<Arc<RwLock<PrivilegedAccessManager>>>>>,
 > = Lazy::new(|| Arc::new(RwLock::new(None)));

@@ -732,6 +732,7 @@ impl FitnessFunctionRegistry {
     }
 
     /// Evaluate all applicable fitness functions
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_all(
         &self,
         old_spec: Option<&OpenApiSpec>,
@@ -1210,7 +1211,7 @@ fn extract_response_schema<'a>(
     let raw = spec.raw_document.as_ref()?;
     let paths = raw.get("paths")?.as_object()?;
     let path_item = paths.get(endpoint)?;
-    let operation = path_item.get(&method.to_lowercase())?;
+    let operation = path_item.get(method.to_lowercase())?;
     let responses = operation.get("responses")?.as_object()?;
 
     let response = responses

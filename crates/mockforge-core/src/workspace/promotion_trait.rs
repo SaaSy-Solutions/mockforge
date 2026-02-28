@@ -9,6 +9,7 @@ use crate::Result;
 use uuid::Uuid;
 
 /// Trait for services that can perform promotions
+#[allow(clippy::too_many_arguments)]
 #[async_trait::async_trait]
 pub trait PromotionService: Send + Sync {
     /// Promote an entity from one environment to another

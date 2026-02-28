@@ -190,8 +190,6 @@ impl ThreatAnalyzer {
             ThreatLevel::High
         } else if score >= 0.5 {
             ThreatLevel::Medium
-        } else if score >= 0.25 {
-            ThreatLevel::Low
         } else {
             ThreatLevel::Low
         }

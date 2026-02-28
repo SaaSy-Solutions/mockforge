@@ -679,11 +679,7 @@ impl OwaspValidator {
             } else {
                 format!("Expected behavior not observed: {}", expected_desc)
             },
-            confidence: if vulnerable {
-                Confidence::Medium
-            } else {
-                Confidence::Medium
-            },
+            confidence: Confidence::Medium,
             details: HashMap::new(),
         }
     }

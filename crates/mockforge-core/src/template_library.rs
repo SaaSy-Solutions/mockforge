@@ -339,7 +339,7 @@ impl TemplateLibrary {
 
                 // Clone template to avoid borrow checker issues
                 let template_clone = template.clone();
-                drop(template); // Explicitly drop mutable borrow
+                let _ = template; // Explicitly drop mutable borrow
 
                 // Save updated template
                 self.save_template(&template_clone)?;

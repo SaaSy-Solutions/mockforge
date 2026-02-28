@@ -108,6 +108,7 @@ pub enum ChatIntent {
 /// Chat orchestrator that routes commands to appropriate handlers
 pub struct ChatOrchestrator {
     /// LLM client for intent detection and processing
+    #[allow(dead_code)]
     llm_client: LlmClient,
 
     /// Configuration
@@ -138,6 +139,7 @@ impl ChatOrchestrator {
     }
 
     /// Helper to track usage and return token/cost info
+    #[allow(dead_code)]
     async fn track_usage(
         &self,
         org_id: Option<&str>,

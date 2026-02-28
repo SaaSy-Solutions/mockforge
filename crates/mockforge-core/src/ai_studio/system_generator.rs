@@ -289,7 +289,7 @@ impl SystemGenerator {
                     llm_provider: Some(self.config.behavior_model.llm_provider.clone()),
                     llm_model: Some(self.config.behavior_model.model.clone()),
                     llm_version: None,
-                    prompt_hash: Some(self.hash_description(&artifact_type)),
+                    prompt_hash: Some(self.hash_description(artifact_type)),
                     output_hash: None,
                     original_prompt: None,
                 }),

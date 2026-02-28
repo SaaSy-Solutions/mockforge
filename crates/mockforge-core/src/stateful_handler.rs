@@ -481,6 +481,7 @@ impl StatefulResponseHandler {
     /// - `Ok(Some(StateInfo))` if state machine config exists and state was processed
     /// - `Ok(None)` if no state machine config or state processing not applicable
     /// - `Err` if there was an error processing state
+    #[allow(clippy::too_many_arguments)]
     pub async fn process_stub_state(
         &self,
         method: &Method,

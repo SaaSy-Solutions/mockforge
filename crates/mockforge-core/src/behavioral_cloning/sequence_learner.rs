@@ -167,6 +167,7 @@ impl SequenceLearner {
             .collect();
 
         // Step 2: Find exact sequence matches
+        #[allow(clippy::type_complexity)]
         let mut sequence_counts: HashMap<Vec<(String, String)>, (usize, Vec<usize>)> =
             HashMap::new();
         for (idx, seq) in normalized.iter().enumerate() {

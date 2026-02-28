@@ -203,6 +203,7 @@ pub struct RuleGenerator {
     /// LLM client for intelligent rule generation
     llm_client: Option<LlmClient>,
     /// Configuration
+    #[allow(dead_code)]
     config: BehaviorModelConfig,
 }
 
@@ -605,6 +606,7 @@ impl RuleGenerator {
     }
 
     /// Infer JSON Schema from a JSON value
+    #[allow(clippy::only_used_in_recursion)]
     fn infer_schema_from_value(&self, value: &Value) -> Option<Value> {
         match value {
             Value::Object(obj) => {

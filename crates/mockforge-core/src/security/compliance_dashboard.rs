@@ -238,12 +238,14 @@ impl Default for ComplianceDashboardConfig {
 /// Aggregates data from various security systems to provide real-time
 /// compliance monitoring and reporting.
 pub struct ComplianceDashboardEngine {
+    #[allow(dead_code)]
     config: ComplianceDashboardConfig,
     /// Compliance gaps
     gaps: std::sync::Arc<tokio::sync::RwLock<HashMap<String, ComplianceGap>>>,
     /// Compliance alerts
     alerts: std::sync::Arc<tokio::sync::RwLock<HashMap<String, ComplianceAlert>>>,
     /// Control effectiveness cache
+    #[allow(dead_code)]
     control_effectiveness:
         std::sync::Arc<tokio::sync::RwLock<HashMap<ControlCategory, ControlEffectiveness>>>,
 }

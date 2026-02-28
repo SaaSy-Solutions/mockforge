@@ -10,19 +10,15 @@ use std::collections::HashMap;
 /// AI response generation mode
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum AiResponseMode {
     /// Static response (no AI)
+    #[default]
     Static,
     /// Generate response using LLM
     Intelligent,
     /// Use static template enhanced with LLM
     Hybrid,
-}
-
-impl Default for AiResponseMode {
-    fn default() -> Self {
-        Self::Static
-    }
 }
 
 /// Configuration for AI-assisted response generation per endpoint

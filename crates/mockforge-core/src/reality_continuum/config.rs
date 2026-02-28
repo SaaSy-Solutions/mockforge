@@ -261,8 +261,7 @@ impl ContinuumRule {
         if self.pattern.ends_with("/*") {
             let prefix = &self.pattern[..self.pattern.len() - 2];
             // For wildcard patterns, path must start with prefix and have at least one more segment
-            if path.starts_with(prefix) {
-                let remaining = &path[prefix.len()..];
+            if let Some(remaining) = path.strip_prefix(prefix) {
                 // Must have at least one segment after the prefix (not just a trailing slash)
                 !remaining.is_empty() && remaining != "/"
             } else {

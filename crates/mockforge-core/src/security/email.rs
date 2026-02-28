@@ -26,6 +26,7 @@ pub enum EmailProvider {
 
 impl EmailProvider {
     /// Parse provider from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "postmark" => EmailProvider::Postmark,
@@ -154,6 +155,7 @@ impl EmailService {
             .context("Postmark requires EMAIL_API_KEY environment variable")?;
 
         #[derive(Serialize)]
+        #[allow(non_snake_case)]
         struct PostmarkRequest {
             From: String,
             To: String,
@@ -210,6 +212,7 @@ impl EmailService {
         }
 
         #[derive(Serialize)]
+        #[allow(non_snake_case)]
         struct BrevoRequest {
             sender: BrevoSender,
             to: Vec<BrevoTo>,

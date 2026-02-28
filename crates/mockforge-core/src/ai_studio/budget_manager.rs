@@ -78,6 +78,7 @@ struct WorkspaceUsage {
     /// Number of AI calls made
     calls_made: u64,
     /// Last reset time
+    #[allow(dead_code)]
     last_reset: DateTime<Utc>,
     /// Per-day call tracking (for rate limiting)
     daily_calls: HashMap<chrono::NaiveDate, u64>,

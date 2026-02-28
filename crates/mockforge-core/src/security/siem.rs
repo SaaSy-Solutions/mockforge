@@ -515,6 +515,7 @@ pub struct HttpTransport {
     url: String,
     method: String,
     headers: HashMap<String, String>,
+    #[allow(dead_code)]
     timeout: u64,
     retry: RetryConfig,
     client: reqwest::Client,
@@ -920,11 +921,15 @@ impl SiemTransport for DatadogTransport {
 
 /// AWS CloudWatch Logs transport implementation
 pub struct CloudwatchTransport {
+    #[allow(dead_code)]
     region: String,
     log_group: String,
     stream: String,
+    #[allow(dead_code)]
     credentials: HashMap<String, String>,
+    #[allow(dead_code)]
     retry: RetryConfig,
+    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
@@ -986,8 +991,11 @@ impl SiemTransport for CloudwatchTransport {
 pub struct GcpTransport {
     project_id: String,
     log_name: String,
+    #[allow(dead_code)]
     credentials_path: String,
+    #[allow(dead_code)]
     retry: RetryConfig,
+    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
@@ -1120,7 +1128,7 @@ impl SiemTransport for AzureTransport {
         let content_type = "application/json";
         let content_length = event_json.len();
         let method = "POST";
-        let resource = format!("/api/logs?api-version=2016-04-01");
+        let resource = "/api/logs?api-version=2016-04-01".to_string();
 
         let signature =
             self.generate_signature(&date, content_length, method, content_type, &resource);

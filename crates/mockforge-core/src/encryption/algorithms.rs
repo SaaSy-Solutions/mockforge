@@ -400,11 +400,13 @@ impl EncryptionEngine {
     }
 
     /// Encrypt a string using the default algorithm (AES-256-GCM)
+    #[allow(dead_code)]
     pub fn encrypt_string(key: &EncryptionKey, plaintext: &str) -> EncryptionResult<EncryptedData> {
         Self::encrypt(key, plaintext.as_bytes(), None)
     }
 
     /// Decrypt a string using the default algorithm (AES-256-GCM)
+    #[allow(dead_code)]
     pub fn decrypt_string(
         key: &EncryptionKey,
         encrypted_data: &EncryptedData,
@@ -416,6 +418,7 @@ impl EncryptionEngine {
     }
 
     /// Validate key strength
+    #[allow(dead_code)]
     pub fn validate_key_strength(key: &EncryptionKey) -> EncryptionResult<()> {
         match key.algorithm() {
             EncryptionAlgorithm::Aes256Gcm => {
@@ -448,6 +451,7 @@ pub mod utils {
     use crate::encryption::errors::EncryptionResult;
 
     /// Generate a cryptographically secure random nonce
+    #[allow(dead_code)]
     pub fn generate_nonce(algorithm: &EncryptionAlgorithm) -> EncryptionResult<Vec<u8>> {
         let nonce_len = match algorithm {
             EncryptionAlgorithm::Aes256Gcm => 12,        // 96 bits
@@ -462,6 +466,7 @@ pub mod utils {
     }
 
     /// Validate nonce length for algorithm
+    #[allow(dead_code)]
     pub fn validate_nonce(nonce: &[u8], algorithm: &EncryptionAlgorithm) -> EncryptionResult<()> {
         let expected_len = match algorithm {
             EncryptionAlgorithm::Aes256Gcm => 12,
@@ -481,6 +486,7 @@ pub mod utils {
     }
 
     /// Check if two nonces are equal (constant-time comparison)
+    #[allow(dead_code)]
     pub fn nonces_equal(a: &[u8], b: &[u8]) -> bool {
         if a.len() != b.len() {
             return false;
@@ -495,6 +501,7 @@ pub mod utils {
     }
 
     /// Zeroize sensitive data in memory
+    #[allow(dead_code)]
     pub fn zeroize(data: &mut [u8]) {
         for byte in data.iter_mut() {
             *byte = 0;

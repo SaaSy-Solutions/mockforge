@@ -215,6 +215,7 @@ impl DriftBudgetEngine {
     ///
     /// This method is similar to `evaluate_with_context` but accepts old and new OpenAPI specs
     /// to enable fitness function evaluation.
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_with_specs(
         &self,
         old_spec: Option<&OpenApiSpec>,
@@ -413,6 +414,7 @@ impl DriftBudgetEngine {
     }
 
     /// Get budget for a specific endpoint (backward compatibility)
+    #[allow(dead_code)]
     fn get_budget_for_endpoint_legacy(&self, endpoint: &str, method: &str) -> DriftBudget {
         self.get_budget_for_endpoint(endpoint, method, None, None, None)
     }

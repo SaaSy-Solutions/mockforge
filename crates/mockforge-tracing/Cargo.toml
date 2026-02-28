@@ -8,6 +8,9 @@ description = "OpenTelemetry and distributed tracing integration for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 # Previously internal, now published to crates.io
 
 [dependencies]

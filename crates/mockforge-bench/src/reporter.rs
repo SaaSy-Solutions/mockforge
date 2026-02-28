@@ -170,14 +170,14 @@ impl TerminalReporter {
                     result.results.vus_max.to_string().white(),
                 );
                 println!(
-                    "      Latency: min={}ms avg={}ms med={}ms p90={}ms p95={}ms p99={}ms max={}ms",
-                    format!("{:.1}", result.results.min_duration_ms),
-                    format!("{:.1}", result.results.avg_duration_ms),
-                    format!("{:.1}", result.results.med_duration_ms),
-                    format!("{:.1}", result.results.p90_duration_ms),
-                    format!("{:.1}", result.results.p95_duration_ms),
-                    format!("{:.1}", result.results.p99_duration_ms),
-                    format!("{:.1}", result.results.max_duration_ms),
+                    "      Latency: min={:.1}ms avg={:.1}ms med={:.1}ms p90={:.1}ms p95={:.1}ms p99={:.1}ms max={:.1}ms",
+                    result.results.min_duration_ms,
+                    result.results.avg_duration_ms,
+                    result.results.med_duration_ms,
+                    result.results.p90_duration_ms,
+                    result.results.p95_duration_ms,
+                    result.results.p99_duration_ms,
+                    result.results.max_duration_ms,
                 );
             }
             if let Some(error) = &result.error {

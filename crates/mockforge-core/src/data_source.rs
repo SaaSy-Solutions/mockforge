@@ -156,8 +156,8 @@ impl GitDataSource {
 
     /// Extract repository name from URL
     fn extract_repo_name(url: &str) -> Result<String> {
-        let name = if url.ends_with(".git") {
-            &url[..url.len() - 4]
+        let name = if let Some(stripped) = url.strip_suffix(".git") {
+            stripped
         } else {
             url
         };

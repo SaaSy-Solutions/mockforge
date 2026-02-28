@@ -137,12 +137,12 @@ impl AccessReviewNotificationService {
 
         let subject = format!("Access Review Started: {}", review.review_id);
         let message = format!(
-            "A new {} review has been started.\n\n\
+            "A new {:?} review has been started.\n\n\
             Review ID: {}\n\
             Total Items: {}\n\
             Due Date: {}\n\
             Next Review: {}",
-            format!("{:?}", review.review_type),
+            review.review_type,
             review.review_id,
             review.total_items,
             review.due_date,

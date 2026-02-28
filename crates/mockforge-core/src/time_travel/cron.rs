@@ -412,6 +412,7 @@ impl CronScheduler {
 }
 
 // Helper function to parse cron schedule string
+#[allow(dead_code)]
 pub(crate) fn parse_cron_schedule(schedule: &str) -> Result<CronSchedule, String> {
     // Trim whitespace including newlines that might cause parsing issues
     let trimmed = schedule.trim();

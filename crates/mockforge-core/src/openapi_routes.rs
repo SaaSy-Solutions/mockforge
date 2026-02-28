@@ -197,6 +197,7 @@ impl OpenApiRouteRegistry {
     }
 
     /// Generate routes from the OpenAPI specification
+    #[allow(dead_code)]
     fn generate_routes(spec: &Arc<OpenApiSpec>) -> Vec<OpenApiRoute> {
         Self::generate_routes_with_persona(spec, None)
     }
@@ -437,6 +438,7 @@ impl OpenApiRouteRegistry {
                     .unwrap_or(false);
 
                 // Extract multipart data if applicable
+                #[allow(unused_assignments)]
                 let mut multipart_fields = HashMap::new();
                 let mut _multipart_files = HashMap::new();
                 let mut body_json: Option<Value> = None;
@@ -932,6 +934,7 @@ impl OpenApiRouteRegistry {
                     .unwrap_or(false);
 
                 // Extract multipart data if applicable
+                #[allow(unused_assignments)]
                 let mut multipart_fields = HashMap::new();
                 let mut _multipart_files = HashMap::new();
                 let mut body_json: Option<Value> = None;
@@ -1599,7 +1602,7 @@ impl OpenApiRouteRegistry {
 
                             // Convert body to bytes for fingerprint
                             let body_bytes =
-                                body.as_ref().map(|Json(b)| serde_json::to_vec(b).ok()).flatten();
+                                body.as_ref().and_then(|Json(b)| serde_json::to_vec(b).ok());
                             let body_slice = body_bytes.as_deref();
 
                             let fingerprint =

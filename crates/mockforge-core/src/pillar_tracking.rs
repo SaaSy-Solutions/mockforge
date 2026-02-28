@@ -12,6 +12,7 @@ use tokio::sync::RwLock;
 
 /// Optional analytics database for recording pillar usage
 /// This is set globally and can be None if analytics is not enabled
+#[allow(clippy::type_complexity)]
 static ANALYTICS_DB: Lazy<Arc<RwLock<Option<Arc<dyn PillarUsageRecorder>>>>> =
     Lazy::new(|| Arc::new(RwLock::new(None)));
 

@@ -86,8 +86,8 @@ dirs = "5.0"
 tempfile = "3.0"
 
 [features]
-default = ["git-support"]
-git-support = ["git2"]
+default = ["git"]
+git = ["git2"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

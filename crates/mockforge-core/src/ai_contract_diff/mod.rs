@@ -96,6 +96,7 @@ pub struct ContractDiffAnalyzer {
     semantic_analyzer: SemanticAnalyzer,
 
     /// Correction proposer for generating patches
+    #[allow(dead_code)]
     correction_proposer: CorrectionProposer,
 
     /// Configuration

@@ -8,6 +8,7 @@ description = "WebSocket protocol support for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+readme.workspace = true
 keywords = ["websocket", "ws", "api", "mock", "testing"]
 categories = ["development-tools::testing", "web-programming::websocket"]
 

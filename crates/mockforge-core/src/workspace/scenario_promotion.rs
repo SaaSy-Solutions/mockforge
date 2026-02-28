@@ -247,8 +247,6 @@ impl ScenarioPromotionWorkflow {
                         "High-impact scenario tag '{}' requires approval for test environment",
                         tag
                     )
-                } else if target_environment == MockEnvironmentName::Test {
-                    format!("High-impact scenario tag '{}' requires approval", tag)
                 } else {
                     format!("High-impact scenario tag '{}' requires approval", tag)
                 };

@@ -127,8 +127,8 @@ impl NamingRules {
         }
 
         // Words ending in -f or -fe
-        if singular.ends_with("fe") {
-            return format!("{}ves", &singular[..singular.len() - 2]);
+        if let Some(stripped) = singular.strip_suffix("fe") {
+            return format!("{}ves", stripped);
         }
         if singular.ends_with('f') && !singular.ends_with("ff") {
             return format!("{}ves", &singular[..singular.len() - 1]);

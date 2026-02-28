@@ -505,7 +505,7 @@ impl WebSocketContract {
             .collect();
 
         // Check for removed fields (breaking change)
-        for (field_name, _old_field) in &old_fields_map {
+        for field_name in old_fields_map.keys() {
             if !new_fields_map.contains_key(field_name) {
                 let mut context = HashMap::new();
                 context.insert("is_additive".to_string(), serde_json::json!(false));
@@ -933,7 +933,7 @@ impl ProtocolContract for WebSocketContract {
         // Try to find by message type only (if operation_id doesn't include topic)
         if !operation_id.contains(':') {
             // Search for operation with this message type
-            for (_op_id, operation) in &self.operations_cache {
+            for operation in self.operations_cache.values() {
                 if let OperationType::WebSocketMessage { message_type, .. } =
                     &operation.operation_type
                 {

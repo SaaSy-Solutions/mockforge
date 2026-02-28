@@ -475,8 +475,10 @@ pub struct RouteLatencyConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum LatencyDistribution {
     /// Fixed delay
+    #[default]
     Fixed,
     /// Normal distribution (requires mean and std_dev)
     Normal {
@@ -492,12 +494,6 @@ pub enum LatencyDistribution {
     },
     /// Uniform distribution (uses random_delay_range_ms)
     Uniform,
-}
-
-impl Default for LatencyDistribution {
-    fn default() -> Self {
-        Self::Fixed
-    }
 }
 
 impl Default for RouteFaultInjectionConfig {
@@ -651,6 +647,7 @@ impl From<ProductionOAuthConfig> for OAuth2Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Default)]
 pub struct PerformanceConfig {
     /// Response compression configuration
     pub compression: CompressionConfig,
@@ -662,18 +659,6 @@ pub struct PerformanceConfig {
     pub workers: WorkerConfig,
     /// Circuit breaker configuration
     pub circuit_breaker: CircuitBreakerConfig,
-}
-
-impl Default for PerformanceConfig {
-    fn default() -> Self {
-        Self {
-            compression: CompressionConfig::default(),
-            connection_pool: ConnectionPoolConfig::default(),
-            request_limits: RequestLimitsConfig::default(),
-            workers: WorkerConfig::default(),
-            circuit_breaker: CircuitBreakerConfig::default(),
-        }
-    }
 }
 
 /// Response compression configuration

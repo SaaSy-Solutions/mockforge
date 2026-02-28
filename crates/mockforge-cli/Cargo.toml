@@ -8,6 +8,9 @@ description = "CLI interface for MockForge"
 repository.workspace = true
 homepage.workspace = true
 documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [[bin]]
 name = "mockforge"

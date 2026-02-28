@@ -135,7 +135,7 @@ impl StatisticalModel {
         let t = forecast_window_days as f64;
         let prob = 1.0 - (-lambda * t).exp();
 
-        prob.min(1.0).max(0.0)
+        prob.clamp(0.0, 1.0)
     }
 
     /// Predict probability from pattern
@@ -179,7 +179,7 @@ impl StatisticalModel {
                 let lambda = 1.0 / avg_breaking_interval;
                 let t = forecast_window_days as f64;
                 let prob = 1.0 - (-lambda * t).exp();
-                return prob.min(1.0).max(0.0);
+                return prob.clamp(0.0, 1.0);
             }
         }
 

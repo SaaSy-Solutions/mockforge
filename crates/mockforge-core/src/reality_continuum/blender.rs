@@ -22,6 +22,7 @@ impl ResponseBlender {
     }
 
     /// Create a new response blender with default field-level strategy
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self {
             strategy: MergeStrategy::FieldLevel,
@@ -61,7 +62,10 @@ impl ResponseBlender {
         let global_ratio = global_ratio.clamp(0.0, 1.0);
 
         // If no field config, use global ratio
-        if field_config.is_none() {
+        if let Some(config) = field_config {
+            // Use field-level blending
+            self.blend_with_field_config(mock, real, global_ratio, config)
+        } else {
             // If ratio is 0.0, return mock entirely
             if global_ratio == 0.0 {
                 return mock.clone();
@@ -78,9 +82,6 @@ impl ResponseBlender {
                 MergeStrategy::Weighted => self.blend_weighted(mock, real, global_ratio),
                 MergeStrategy::BodyBlend => self.blend_body(mock, real, global_ratio),
             }
-        } else {
-            // Use field-level blending
-            self.blend_with_field_config(mock, real, global_ratio, field_config.unwrap())
         }
     }
 
@@ -165,6 +166,7 @@ impl ResponseBlender {
     /// Field-level intelligent merge
     ///
     /// Deep merges objects, combines arrays, and uses weighted selection for primitives.
+    #[allow(clippy::only_used_in_recursion)]
     fn blend_field_level(&self, mock: &Value, real: &Value, ratio: f64) -> Value {
         match (mock, real) {
             // Both are objects - deep merge
@@ -308,6 +310,7 @@ impl ResponseBlender {
     /// Body blending strategy
     ///
     /// Merges arrays, averages numeric fields, and deep merges objects.
+    #[allow(clippy::only_used_in_recursion)]
     fn blend_body(&self, mock: &Value, real: &Value, ratio: f64) -> Value {
         // Similar to field-level but with different array handling
         match (mock, real) {

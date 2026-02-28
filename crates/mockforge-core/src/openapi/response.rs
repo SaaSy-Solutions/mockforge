@@ -137,6 +137,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response with token expansion, selection mode, and persona
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_response_with_expansion_and_mode_and_persona(
         spec: &OpenApiSpec,
         operation: &Operation,
@@ -206,6 +207,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response with scenario support and selection mode
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_response_with_scenario_and_mode(
         spec: &OpenApiSpec,
         operation: &Operation,
@@ -230,6 +232,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response with scenario support, selection mode, and persona
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_response_with_scenario_and_mode_and_persona(
         spec: &OpenApiSpec,
         operation: &Operation,
@@ -328,6 +331,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a Response object
+    #[allow(dead_code)]
     fn generate_from_response(
         spec: &OpenApiSpec,
         response: &Response,
@@ -344,6 +348,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a Response object with scenario support
+    #[allow(dead_code)]
     fn generate_from_response_with_scenario(
         spec: &OpenApiSpec,
         response: &Response,
@@ -385,6 +390,8 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a Response object with scenario support, selection mode, and persona
+    #[allow(clippy::too_many_arguments)]
+    #[allow(dead_code)]
     fn generate_from_response_with_scenario_and_mode_and_persona(
         spec: &OpenApiSpec,
         response: &Response,
@@ -445,6 +452,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a MediaType with optional scenario selection
+    #[allow(dead_code)]
     fn generate_from_media_type(
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
@@ -454,6 +462,7 @@ impl ResponseGenerator {
     }
 
     /// Generate response from a MediaType with scenario support and selection mode
+    #[allow(dead_code)]
     fn generate_from_media_type_with_scenario(
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
@@ -470,7 +479,8 @@ impl ResponseGenerator {
         )
     }
 
-    /// Generate response from a MediaType with scenario support and selection mode
+    /// Generate response from a MediaType with scenario support and selection mode (6 args)
+    #[allow(dead_code)]
     fn generate_from_media_type_with_scenario_and_mode(
         spec: &OpenApiSpec,
         media_type: &openapiv3::MediaType,
@@ -650,6 +660,7 @@ impl ResponseGenerator {
 
     /// Extract value from an example reference
     /// Optionally expands items arrays based on pagination metadata if persona is provided
+    #[allow(dead_code)]
     fn extract_example_value(
         spec: &OpenApiSpec,
         example_ref: &ReferenceOr<openapiv3::Example>,
@@ -1537,6 +1548,7 @@ impl ResponseGenerator {
 
     /// Infer relationship count from parent entity schema
     /// When generating a child entity list, check if parent entity has a count field
+    #[allow(dead_code)]
     fn infer_count_from_parent_schema(
         spec: &OpenApiSpec,
         parent_entity_name: &str,

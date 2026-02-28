@@ -10,7 +10,7 @@
 use super::*;
 use std::path::{Path, PathBuf};
 
-#[cfg(feature = "git-support")]
+#[cfg(feature = "git")]
 use git2::{build::RepoBuilder, FetchOptions, Repository};
 
 /// Git repository reference (tag, branch, or commit)
@@ -144,12 +144,12 @@ impl Default for GitPluginConfig {
 }
 
 /// Git plugin loader for cloning plugins from Git repositories
-#[cfg(feature = "git-support")]
+#[cfg(feature = "git")]
 pub struct GitPluginLoader {
     config: GitPluginConfig,
 }
 
-#[cfg(feature = "git-support")]
+#[cfg(feature = "git")]
 impl GitPluginLoader {
     /// Create a new Git plugin loader
     pub fn new(config: GitPluginConfig) -> LoaderResult<Self> {
@@ -500,33 +500,25 @@ impl GitPluginLoader {
     }
 }
 
-#[cfg(not(feature = "git-support"))]
+#[cfg(not(feature = "git"))]
 pub struct GitPluginLoader;
 
-#[cfg(not(feature = "git-support"))]
+#[cfg(not(feature = "git"))]
 impl GitPluginLoader {
     pub fn new(_config: GitPluginConfig) -> LoaderResult<Self> {
-        Err(PluginLoaderError::load(
-            "Git support not enabled. Recompile with 'git-support' feature",
-        ))
+        Err(PluginLoaderError::load("Git support not enabled. Recompile with 'git' feature"))
     }
 
     pub async fn clone_from_git(&self, _source: &GitPluginSource) -> LoaderResult<PathBuf> {
-        Err(PluginLoaderError::load(
-            "Git support not enabled. Recompile with 'git-support' feature",
-        ))
+        Err(PluginLoaderError::load("Git support not enabled. Recompile with 'git' feature"))
     }
 
     pub async fn clear_cache(&self) -> LoaderResult<()> {
-        Err(PluginLoaderError::load(
-            "Git support not enabled. Recompile with 'git-support' feature",
-        ))
+        Err(PluginLoaderError::load("Git support not enabled. Recompile with 'git' feature"))
     }
 
     pub fn get_cache_size(&self) -> LoaderResult<u64> {
-        Err(PluginLoaderError::load(
-            "Git support not enabled. Recompile with 'git-support' feature",
-        ))
+        Err(PluginLoaderError::load("Git support not enabled. Recompile with 'git' feature"))
     }
 }
 

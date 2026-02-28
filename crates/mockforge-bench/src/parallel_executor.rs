@@ -311,10 +311,10 @@ impl ParallelExecutor {
         let scenario = LoadScenario::from_str(&self.base_command.scenario)
             .map_err(BenchError::InvalidScenario)?;
 
-        let duration_secs = BenchCommand::parse_duration(&self.base_command.duration)?;
+        let duration_secs_val = BenchCommand::parse_duration(&self.base_command.duration)?;
 
         // Compute security testing flag
-        let security_testing_enabled =
+        let security_testing_enabled_val =
             self.base_command.security_test || self.base_command.wafbench_dir.is_some();
 
         // Pre-compute enhancement code once (same for all targets)
@@ -385,12 +385,12 @@ impl ParallelExecutor {
 
             let base_headers = base_headers.clone();
             let scenario = scenario.clone();
-            let duration_secs = duration_secs;
+            let duration_secs = duration_secs_val;
             let base_output = self.base_output.clone();
             let semaphore = semaphore.clone();
             let progress_bar = progress_bars[index].clone();
             let target_index = index;
-            let security_testing_enabled = security_testing_enabled;
+            let security_testing_enabled = security_testing_enabled_val;
             let enhancement_code = enhancement_code.clone();
 
             let handle = tokio::spawn(async move {

@@ -18,6 +18,7 @@ use tracing::{debug, info, warn};
 pub struct LifecycleTimeManager {
     /// Callback to update persona lifecycles
     /// Takes (old_time, new_time) and returns list of updated personas
+    #[allow(clippy::type_complexity)]
     update_callback: Arc<dyn Fn(DateTime<Utc>, DateTime<Utc>) -> Vec<String> + Send + Sync>,
 }
 

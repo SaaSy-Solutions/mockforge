@@ -113,11 +113,13 @@ pub enum MismatchType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum MismatchSeverity {
     /// Critical - will cause request to fail
     Critical,
 
     /// High - likely to cause issues
+    #[default]
     High,
 
     /// Medium - may cause issues
@@ -128,12 +130,6 @@ pub enum MismatchSeverity {
 
     /// Info - informational only
     Info,
-}
-
-impl Default for MismatchSeverity {
-    fn default() -> Self {
-        Self::High
-    }
 }
 
 /// AI-generated recommendation for fixing a mismatch

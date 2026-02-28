@@ -683,6 +683,10 @@ impl SpecDrivenConformanceGenerator {
         feature: &ConformanceFeature,
         check_name: &str,
     ) {
+        // Escape single quotes in check name since it's embedded in JS single-quoted strings
+        let check_name = check_name.replace('\'', "\\'");
+        let check_name = check_name.as_str();
+
         script.push_str("    {\n");
 
         // Build the URL path with parameters substituted

@@ -17,10 +17,12 @@ use serde::{Deserialize, Serialize};
 /// Contract diff handler for NL queries
 pub struct ContractDiffHandler {
     /// LLM client for parsing queries
+    #[allow(dead_code)]
     llm_client: LlmClient,
     /// Contract diff analyzer
     analyzer: ContractDiffAnalyzer,
     /// Configuration
+    #[allow(dead_code)]
     config: IntelligentBehaviorConfig,
 }
 

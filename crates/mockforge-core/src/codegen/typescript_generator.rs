@@ -20,6 +20,7 @@ struct RouteInfo {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct QueryParam {
     name: String,
     required: bool,
@@ -150,13 +151,11 @@ fn extract_query_parameters(operation: &Operation) -> Vec<QueryParam> {
     let mut params = Vec::new();
 
     for param_ref in &operation.parameters {
-        if let Some(param) = param_ref.as_item() {
-            if let openapiv3::Parameter::Query { parameter_data, .. } = param {
-                params.push(QueryParam {
-                    name: parameter_data.name.clone(),
-                    required: parameter_data.required,
-                });
-            }
+        if let Some(openapiv3::Parameter::Query { parameter_data, .. }) = param_ref.as_item() {
+            params.push(QueryParam {
+                name: parameter_data.name.clone(),
+                required: parameter_data.required,
+            });
         }
     }
 
@@ -204,12 +203,8 @@ fn extract_response_schema_and_example(
                     };
 
                     // Extract schema if available
-                    let schema = if let Some(schema_ref) = &content.schema {
-                        if let ReferenceOr::Item(schema) = schema_ref {
-                            Some(schema.clone())
-                        } else {
-                            None
-                        }
+                    let schema = if let Some(ReferenceOr::Item(schema)) = &content.schema {
+                        Some(schema.clone())
                     } else {
                         None
                     };
@@ -366,6 +361,7 @@ fn generate_interface_from_schema(
 }
 
 /// Convert an OpenAPI schema to a TypeScript type string
+#[allow(clippy::only_used_in_recursion)]
 fn schema_to_typescript_type(schema: &Schema, spec: &OpenApiSpec) -> Result<String> {
     match &schema.schema_kind {
         openapiv3::SchemaKind::Type(openapiv3::Type::String(string_type)) => {

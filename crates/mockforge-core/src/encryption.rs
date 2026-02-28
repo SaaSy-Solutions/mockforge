@@ -1180,10 +1180,12 @@ pub fn decrypt_with_key(
 }
 
 mod algorithms;
+#[allow(dead_code)]
 mod auto_encryption;
 mod derivation;
 mod errors;
 mod key_management;
+#[allow(dead_code)]
 mod key_rotation;
 
 #[cfg(test)]

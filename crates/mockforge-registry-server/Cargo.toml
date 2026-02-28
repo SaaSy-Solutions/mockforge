@@ -9,6 +9,9 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
 documentation = "https://docs.rs/mockforge-registry-server"
+readme = "README.md"
+keywords = ["mock", "api", "testing", "registry", "plugin"]
+categories = ["development-tools", "web-programming"]
 
 [dependencies]
 # Web framework

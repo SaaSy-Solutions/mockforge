@@ -308,7 +308,7 @@ impl ScenarioInstaller {
     }
 
     /// Clone scenario from Git repository
-    #[cfg(feature = "git-support")]
+    #[cfg(feature = "git")]
     async fn clone_from_git(
         &self,
         url: &str,
@@ -390,7 +390,7 @@ impl ScenarioInstaller {
         Ok(scenario_path)
     }
 
-    #[cfg(not(feature = "git-support"))]
+    #[cfg(not(feature = "git"))]
     async fn clone_from_git(
         &self,
         _url: &str,
@@ -398,7 +398,7 @@ impl ScenarioInstaller {
         _subdirectory: Option<&str>,
     ) -> Result<PathBuf> {
         Err(ScenarioError::Generic(
-            "Git support not enabled. Enable 'git-support' feature.".to_string(),
+            "Git support not enabled. Enable 'git' feature.".to_string(),
         ))
     }
 

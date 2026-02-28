@@ -16,6 +16,7 @@ pub struct FailureNarrativeGenerator {
     /// LLM client for generating narratives
     llm_client: LlmClient,
     /// Configuration
+    #[allow(dead_code)]
     config: IntelligentBehaviorConfig,
 }
 

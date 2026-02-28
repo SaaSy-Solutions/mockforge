@@ -116,6 +116,7 @@ impl RequestGenerator {
     }
 
     /// Process a parameter and add it to the template
+    #[allow(dead_code)]
     fn process_parameter(param: &Parameter, template: &mut RequestTemplate) -> Result<()> {
         Self::process_parameter_with_overrides(param, template, None)
     }

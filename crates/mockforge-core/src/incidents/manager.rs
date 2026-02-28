@@ -44,6 +44,7 @@ impl IncidentManager {
     }
 
     /// Create a new incident from drift result
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_incident(
         &self,
         endpoint: String,
@@ -74,6 +75,7 @@ impl IncidentManager {
     }
 
     /// Create a new incident with before/after samples and traceability
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_incident_with_samples(
         &self,
         endpoint: String,

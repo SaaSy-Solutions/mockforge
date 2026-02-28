@@ -86,6 +86,7 @@ pub struct ValidationGenerator {
     /// LLM client for generating error messages
     llm_client: Option<LlmClient>,
     /// Configuration
+    #[allow(dead_code)]
     config: BehaviorModelConfig,
     /// Learned error examples
     error_examples: Vec<ValidationErrorExample>,
@@ -387,13 +388,10 @@ impl ValidationGenerator {
             "Generate a validation error response for:\n\
              Method: {}\n\
              Path: {}\n\
-             Error: {}\n\
+             Error: {:?}\n\
              Message: {}\n\n\
              Return a JSON object with error details. Use a realistic API error format.",
-            context.method,
-            context.path,
-            format!("{:?}", issue.issue_type),
-            message
+            context.method, context.path, issue.issue_type, message
         );
 
         let request = LlmGenerationRequest {

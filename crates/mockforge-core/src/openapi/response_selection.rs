@@ -11,8 +11,10 @@ use std::sync::Arc;
 /// Mode for selecting responses when multiple options are available
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ResponseSelectionMode {
     /// Use first available (default behavior)
+    #[default]
     First,
     /// Select by scenario name (requires X-Mockforge-Scenario header)
     Scenario,
@@ -24,14 +26,9 @@ pub enum ResponseSelectionMode {
     WeightedRandom,
 }
 
-impl Default for ResponseSelectionMode {
-    fn default() -> Self {
-        Self::First
-    }
-}
-
 impl ResponseSelectionMode {
     /// Parse from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "first" => Some(Self::First),

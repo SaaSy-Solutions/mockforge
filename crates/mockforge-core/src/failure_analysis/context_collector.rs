@@ -69,6 +69,7 @@ impl FailureContextCollector {
     }
 
     /// Collect context with additional details
+    #[allow(clippy::too_many_arguments)]
     pub fn collect_context_with_details(
         &self,
         method: &str,

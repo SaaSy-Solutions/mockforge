@@ -8,6 +8,9 @@ description = "Kubernetes operator for MockForge - manage mock services as Kuber
 repository = "https://github.com/SaaSy-Solutions/mockforge"
 homepage = "https://mockforge.dev"
 documentation = "https://docs.rs/mockforge"
+readme = "README.md"
+keywords = ["mock", "api", "testing", "kubernetes", "operator"]
+categories = ["development-tools", "api-bindings"]
 
 [dependencies]
 # Kubernetes client

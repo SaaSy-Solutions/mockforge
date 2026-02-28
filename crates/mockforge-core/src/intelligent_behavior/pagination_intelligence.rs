@@ -53,6 +53,7 @@ pub struct PaginationIntelligence {
     /// LLM client for generating realistic totals
     llm_client: Option<LlmClient>,
     /// Configuration
+    #[allow(dead_code)]
     config: BehaviorModelConfig,
     /// Learned pagination examples
     examples: Vec<PaginatedResponse>,

@@ -15,6 +15,7 @@ pub struct VoiceCommandParser {
     /// LLM client for parsing commands
     llm_client: LlmClient,
     /// Configuration
+    #[allow(dead_code)]
     config: IntelligentBehaviorConfig,
 }
 

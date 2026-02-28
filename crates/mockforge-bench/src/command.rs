@@ -459,7 +459,7 @@ impl BenchCommand {
     }
 
     /// Execute multi-target bench testing
-    async fn execute_multi_target(&self, targets_file: &PathBuf) -> Result<()> {
+    async fn execute_multi_target(&self, targets_file: &Path) -> Result<()> {
         TerminalReporter::print_progress("Parsing targets file...");
         let targets = parse_targets_file(targets_file)?;
         let num_targets = targets.len();

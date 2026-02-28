@@ -113,22 +113,20 @@ impl CorrectionProposer {
 
         if let Some(op) = operation {
             // Try request body schema
-            if let Some(ref body) = op.request_body {
-                if let openapiv3::ReferenceOr::Item(ref body_item) = body {
-                    if let Some(media) = body_item.content.get("application/json") {
-                        if let Some(ref schema) = media.schema {
-                            if let Ok(schema_val) = serde_json::to_value(schema) {
-                                if let Some(field_val) =
-                                    schema_val.pointer(&format!("/item/properties/{}", field_name))
-                                {
-                                    return field_val.clone();
-                                }
-                                // Also try without the item wrapper
-                                if let Some(field_val) =
-                                    schema_val.pointer(&format!("/properties/{}", field_name))
-                                {
-                                    return field_val.clone();
-                                }
+            if let Some(openapiv3::ReferenceOr::Item(ref body_item)) = op.request_body {
+                if let Some(media) = body_item.content.get("application/json") {
+                    if let Some(ref schema) = media.schema {
+                        if let Ok(schema_val) = serde_json::to_value(schema) {
+                            if let Some(field_val) =
+                                schema_val.pointer(&format!("/item/properties/{}", field_name))
+                            {
+                                return field_val.clone();
+                            }
+                            // Also try without the item wrapper
+                            if let Some(field_val) =
+                                schema_val.pointer(&format!("/properties/{}", field_name))
+                            {
+                                return field_val.clone();
                             }
                         }
                     }
@@ -136,21 +134,21 @@ impl CorrectionProposer {
             }
 
             // Try response schema (200)
-            if let Some(resp) = op.responses.responses.get(&openapiv3::StatusCode::Code(200)) {
-                if let openapiv3::ReferenceOr::Item(ref resp_item) = resp {
-                    if let Some(media) = resp_item.content.get("application/json") {
-                        if let Some(ref schema) = media.schema {
-                            if let Ok(schema_val) = serde_json::to_value(schema) {
-                                if let Some(field_val) =
-                                    schema_val.pointer(&format!("/item/properties/{}", field_name))
-                                {
-                                    return field_val.clone();
-                                }
-                                if let Some(field_val) =
-                                    schema_val.pointer(&format!("/properties/{}", field_name))
-                                {
-                                    return field_val.clone();
-                                }
+            if let Some(openapiv3::ReferenceOr::Item(ref resp_item)) =
+                op.responses.responses.get(&openapiv3::StatusCode::Code(200))
+            {
+                if let Some(media) = resp_item.content.get("application/json") {
+                    if let Some(ref schema) = media.schema {
+                        if let Ok(schema_val) = serde_json::to_value(schema) {
+                            if let Some(field_val) =
+                                schema_val.pointer(&format!("/item/properties/{}", field_name))
+                            {
+                                return field_val.clone();
+                            }
+                            if let Some(field_val) =
+                                schema_val.pointer(&format!("/properties/{}", field_name))
+                            {
+                                return field_val.clone();
                             }
                         }
                     }

@@ -101,6 +101,7 @@ fn init_jaeger_tracer(
 
     // Install the tracer provider (this sets it as global)
     // opentelemetry-jaeger 0.21 uses a different runtime API
+    #[allow(deprecated)]
     let _tracer_provider = opentelemetry_jaeger::new_agent_pipeline()
         .with_service_name(&config.service_name)
         .with_endpoint(&endpoint)

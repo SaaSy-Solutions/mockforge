@@ -26,9 +26,13 @@ use crate::Result;
 // Hook types are defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
 // When used, they should be deserialized from JSON
 type Hook = serde_json::Value;
+#[allow(dead_code)]
 type Condition = serde_json::Value;
+#[allow(dead_code)]
 type HookAction = serde_json::Value;
+#[allow(dead_code)]
 type HookType = serde_json::Value;
+#[allow(dead_code)]
 type LogLevel = serde_json::Value;
 
 /// Transpiler that converts natural language hook descriptions to Hook structs
@@ -36,6 +40,7 @@ pub struct HookTranspiler {
     /// LLM client for parsing descriptions
     llm_client: LlmClient,
     /// Configuration
+    #[allow(dead_code)]
     config: IntelligentBehaviorConfig,
 }
 
