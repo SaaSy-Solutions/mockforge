@@ -175,12 +175,35 @@ async fn test_fault_injection_different_status_codes() {
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
-    // This test would need access to the actual failure injection configuration
-    // For now, it's a placeholder showing the expected test structure
+    let failure_config = Some(FailureConfig {
+        global_error_rate: 0.0,
+        default_status_codes: vec![500],
+        tag_configs: std::collections::HashMap::from([
+            (
+                "error-502".to_string(),
+                mockforge_core::failure_injection::TagFailureConfig {
+                    error_rate: 1.0,
+                    status_codes: Some(vec![502]),
+                    error_message: Some("Bad Gateway".to_string()),
+                },
+            ),
+            (
+                "error-503".to_string(),
+                mockforge_core::failure_injection::TagFailureConfig {
+                    error_rate: 1.0,
+                    status_codes: Some(vec![503]),
+                    error_message: Some("Service Unavailable".to_string()),
+                },
+            ),
+        ]),
+        include_tags: Vec::new(),
+        exclude_tags: Vec::new(),
+    });
+
     let app: Router = build_router(
         Some(path.to_string_lossy().to_string()),
         Some(ValidationOptions::default()),
-        None,
+        failure_config,
     )
     .await;
 
@@ -194,15 +217,23 @@ async fn test_fault_injection_different_status_codes() {
 
     let client = reqwest::Client::new();
 
-    // Test endpoint that should return 502
+    // Test endpoint tagged "error-502" should return 502
     let url_502 = format!("http://{}/error-502", addr);
-    let _res_502 = client.get(&url_502).send().await.unwrap();
-    // In real implementation, this should be 502 when fault injection is configured
+    let res_502 = client.get(&url_502).send().await.unwrap();
+    assert_eq!(
+        res_502.status(),
+        reqwest::StatusCode::BAD_GATEWAY,
+        "error-502 tagged endpoint should return 502"
+    );
 
-    // Test endpoint that should return 503
+    // Test endpoint tagged "error-503" should return 503
     let url_503 = format!("http://{}/error-503", addr);
-    let _res_503 = client.get(&url_503).send().await.unwrap();
-    // In real implementation, this should be 503 when fault injection is configured
+    let res_503 = client.get(&url_503).send().await.unwrap();
+    assert_eq!(
+        res_503.status(),
+        reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        "error-503 tagged endpoint should return 503"
+    );
 
     drop(server);
 }
@@ -254,10 +285,26 @@ async fn test_fault_injection_tag_filters() {
     let path = dir.path().join("spec.json");
     tokio::fs::write(&path, serde_json::to_vec(&spec).unwrap()).await.unwrap();
 
+    // Configure fault injection with include_tags to only affect "included" tag
+    let failure_config = Some(FailureConfig {
+        global_error_rate: 0.0,
+        default_status_codes: vec![500],
+        tag_configs: std::collections::HashMap::from([(
+            "included".to_string(),
+            mockforge_core::failure_injection::TagFailureConfig {
+                error_rate: 1.0,
+                status_codes: Some(vec![500]),
+                error_message: Some("Included tag fault".to_string()),
+            },
+        )]),
+        include_tags: vec!["included".to_string()],
+        exclude_tags: vec!["excluded".to_string()],
+    });
+
     let app: Router = build_router(
         Some(path.to_string_lossy().to_string()),
         Some(ValidationOptions::default()),
-        None,
+        failure_config,
     )
     .await;
 
@@ -271,28 +318,32 @@ async fn test_fault_injection_tag_filters() {
 
     let client = reqwest::Client::new();
 
-    // These tests would need actual fault injection configuration
-    // For now, they serve as placeholders for the expected behavior
-
+    // "included" tag endpoint should fail (100% error rate configured)
     let url_included = format!("http://{}/included-endpoint", addr);
-    let url_excluded = format!("http://{}/excluded-endpoint", addr);
-    let url_normal = format!("http://{}/normal-endpoint", addr);
-
-    // When fault injection is configured with include_tags: ["included"]
-    // and exclude_tags: ["excluded"], we expect:
-    // - /included-endpoint should sometimes fail
-    // - /excluded-endpoint should never fail
-    // - /normal-endpoint should never fail
-
     let res_included = client.get(&url_included).send().await.unwrap();
-    let res_excluded = client.get(&url_excluded).send().await.unwrap();
-    let res_normal = client.get(&url_normal).send().await.unwrap();
+    assert!(
+        res_included.status().is_server_error(),
+        "Included tag endpoint should fail, got {}",
+        res_included.status()
+    );
 
-    // In a real test with fault injection enabled, we'd assert specific behaviors
-    // For now, we just verify the endpoints are accessible
-    assert!(res_included.status().is_success() || res_included.status().is_server_error());
-    assert!(res_excluded.status().is_success() || res_excluded.status().is_server_error());
-    assert!(res_normal.status().is_success() || res_normal.status().is_server_error());
+    // "excluded" tag endpoint should succeed (explicitly excluded from fault injection)
+    let url_excluded = format!("http://{}/excluded-endpoint", addr);
+    let res_excluded = client.get(&url_excluded).send().await.unwrap();
+    assert!(
+        res_excluded.status().is_success(),
+        "Excluded tag endpoint should succeed, got {}",
+        res_excluded.status()
+    );
+
+    // "normal" tag endpoint should succeed (no fault injection configured for it)
+    let url_normal = format!("http://{}/normal-endpoint", addr);
+    let res_normal = client.get(&url_normal).send().await.unwrap();
+    assert!(
+        res_normal.status().is_success(),
+        "Normal tag endpoint should succeed, got {}",
+        res_normal.status()
+    );
 
     drop(server);
 }
