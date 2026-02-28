@@ -36,12 +36,18 @@ impl MultitenantRouter {
         body: axum::body::Body,
     ) -> Result<Response, StatusCode> {
         // Parse org_id
-        let org_id = Uuid::parse_str(&org_id_str).map_err(|_| StatusCode::BAD_REQUEST)?;
+        let org_id = Uuid::parse_str(&org_id_str).map_err(|e| {
+            tracing::warn!("Invalid org_id '{}': {}", org_id_str, e);
+            StatusCode::BAD_REQUEST
+        })?;
 
         // Find deployment
         let deployment = HostedMock::find_by_slug(state.db.pool(), org_id, &slug)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .map_err(|e| {
+                tracing::error!("Database error looking up deployment {}/{}: {}", org_id, slug, e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
             .ok_or(StatusCode::NOT_FOUND)?;
 
         // Check if deployment is active
@@ -67,9 +73,10 @@ impl MultitenantRouter {
         let client = reqwest::Client::new();
 
         // Read body if present
-        let body_bytes = axum::body::to_bytes(body, usize::MAX)
-            .await
-            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let body_bytes = axum::body::to_bytes(body, usize::MAX).await.map_err(|e| {
+            tracing::warn!("Failed to read request body: {}", e);
+            StatusCode::BAD_REQUEST
+        })?;
 
         // Build request based on method
         let request_builder = match method.as_str() {
@@ -118,7 +125,10 @@ impl MultitenantRouter {
             }
         }
 
-        let response = request.send().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+        let response = request.send().await.map_err(|e| {
+            tracing::error!("Failed to proxy request to {}: {}", target_url, e);
+            StatusCode::BAD_GATEWAY
+        })?;
 
         // Convert response - save status and headers before consuming body
         let status = StatusCode::from_u16(response.status().as_u16())
@@ -136,7 +146,10 @@ impl MultitenantRouter {
             }
         }
 
-        let body_bytes = response.bytes().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+        let body_bytes = response.bytes().await.map_err(|e| {
+            tracing::error!("Failed to read proxy response body: {}", e);
+            StatusCode::BAD_GATEWAY
+        })?;
 
         // Build response with headers
         let mut response_builder = Response::builder().status(status);
@@ -146,7 +159,10 @@ impl MultitenantRouter {
 
         let http_response = response_builder
             .body(axum::body::Body::from(body_bytes.to_vec()))
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            .map_err(|e| {
+                tracing::error!("Failed to build proxy response: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
         Ok(http_response)
     }
