@@ -4,18 +4,53 @@
 
 use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     cache::{org_setting_cache_key, ttl, Cache},
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{
-        record_audit_event, record_suspicious_activity, AuditEventType, BYOKConfig, OrgSetting,
-        SuspiciousActivityType,
-    },
+    models::{record_audit_event, AuditEventType, BYOKConfig, OrgSetting},
     AppState,
 };
+
+/// Encryption key salt for BYOK API keys (stable across restarts)
+const BYOK_KEY_SALT: &[u8] = b"mockforge-byok-api-key-encryption";
+
+/// Derive an encryption key for BYOK secrets from the BYOK_ENCRYPTION_KEY
+/// environment variable (falls back to a derived key from JWT_SECRET).
+fn get_byok_encryption_key() -> Result<mockforge_core::encryption::EncryptionKey, ApiError> {
+    let secret = std::env::var("MOCKFORGE_BYOK_ENCRYPTION_KEY")
+        .or_else(|_| std::env::var("JWT_SECRET"))
+        .or_else(|_| std::env::var("MOCKFORGE_JWT_SECRET"))
+        .unwrap_or_else(|_| "mockforge-default-key-change-me".to_string());
+
+    mockforge_core::encryption::EncryptionKey::from_password_pbkdf2(
+        &secret,
+        Some(BYOK_KEY_SALT),
+        mockforge_core::encryption::EncryptionAlgorithm::Aes256Gcm,
+    )
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to derive encryption key: {}", e)))
+}
+
+/// Encrypt a BYOK API key before storing
+fn encrypt_api_key(api_key: &str) -> Result<String, ApiError> {
+    if api_key.is_empty() {
+        return Ok(String::new());
+    }
+    let key = get_byok_encryption_key()?;
+    key.encrypt(api_key, None)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to encrypt API key: {}", e)))
+}
+
+/// Decrypt a stored BYOK API key
+fn decrypt_api_key(encrypted: &str) -> Result<String, ApiError> {
+    if encrypted.is_empty() {
+        return Ok(String::new());
+    }
+    let key = get_byok_encryption_key()?;
+    key.decrypt(encrypted, None)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to decrypt API key: {}", e)))
+}
 
 /// Get BYOK configuration for the current organization
 pub async fn get_byok_config(
@@ -32,7 +67,7 @@ pub async fn get_byok_config(
 
     // Try cache first
     let cache_key = org_setting_cache_key(&org_ctx.org_id, "byok");
-    let config = if let Some(redis) = &state.redis {
+    let mut config = if let Some(redis) = &state.redis {
         let cache = Cache::new(redis.clone());
         cache
             .get_or_set(&cache_key, ttl::SETTINGS, || async {
@@ -75,6 +110,9 @@ pub async fn get_byok_config(
         }
     };
 
+    // Decrypt the stored API key before returning
+    config.api_key = decrypt_api_key(&config.api_key)?;
+
     Ok(Json(config))
 }
 
@@ -107,9 +145,10 @@ pub async fn update_byok_config(
         ));
     }
 
-    // Encrypt API key before storing (in production, use proper encryption)
-    // For now, we'll store it as-is, but in production you should encrypt it
-    let config_value = serde_json::to_value(&config)
+    // Encrypt API key before storing
+    let mut stored_config = config.clone();
+    stored_config.api_key = encrypt_api_key(&config.api_key)?;
+    let config_value = serde_json::to_value(&stored_config)
         .map_err(|_| ApiError::Internal(anyhow::anyhow!("Failed to serialize config")))?;
 
     // Store setting

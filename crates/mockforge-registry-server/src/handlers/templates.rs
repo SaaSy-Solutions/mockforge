@@ -102,6 +102,7 @@ pub async fn search_templates(
         let stats = template.stats_json.clone();
         let compatibility = template.compatibility_json.clone();
         let category = template.category();
+        let template_name = template.name.clone();
 
         entries.push(TemplateRegistryEntry {
             id: template.id.to_string(),
@@ -116,7 +117,12 @@ pub async fn search_templates(
             readme: template.readme,
             example_usage: template.example_usage,
             requirements: template.requirements,
-            compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| {
+            compatibility: serde_json::from_value(compatibility).unwrap_or_else(|e| {
+                tracing::warn!(
+                    "Failed to parse compatibility JSON for template '{}': {}",
+                    template_name,
+                    e
+                );
                 CompatibilityInfo {
                     min_version: "0.1.0".to_string(),
                     max_version: None,
@@ -183,6 +189,7 @@ pub async fn get_template(
     let stats = template.stats_json.clone();
     let compatibility = template.compatibility_json.clone();
     let category = template.category();
+    let template_name = template.name.clone();
 
     // Record metrics
     metrics.record_download_success();
@@ -200,7 +207,12 @@ pub async fn get_template(
         readme: template.readme,
         example_usage: template.example_usage,
         requirements: template.requirements,
-        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| {
+        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|e| {
+            tracing::warn!(
+                "Failed to parse compatibility JSON for template '{}': {}",
+                template_name,
+                e
+            );
             CompatibilityInfo {
                 min_version: "0.1.0".to_string(),
                 max_version: None,

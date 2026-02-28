@@ -475,7 +475,17 @@ pub async fn get_analytics(
             },
         },
         growth: GrowthAnalytics {
-            user_growth_7d: vec![], // Can be calculated from 30d data
+            user_growth_7d: {
+                let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).date_naive();
+                user_growth_30d
+                    .iter()
+                    .filter(|(date, _)| *date >= cutoff)
+                    .map(|(date, count)| DailyCount {
+                        date: date.to_string(),
+                        count: *count,
+                    })
+                    .collect()
+            },
             user_growth_30d: user_growth_30d
                 .into_iter()
                 .map(|(date, count)| DailyCount {
@@ -483,7 +493,17 @@ pub async fn get_analytics(
                     count,
                 })
                 .collect(),
-            org_growth_7d: vec![],
+            org_growth_7d: {
+                let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).date_naive();
+                org_growth_30d
+                    .iter()
+                    .filter(|(date, _)| *date >= cutoff)
+                    .map(|(date, count)| DailyCount {
+                        date: date.to_string(),
+                        count: *count,
+                    })
+                    .collect()
+            },
             org_growth_30d: org_growth_30d
                 .into_iter()
                 .map(|(date, count)| DailyCount {

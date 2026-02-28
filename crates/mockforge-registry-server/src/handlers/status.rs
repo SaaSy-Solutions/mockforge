@@ -97,9 +97,27 @@ pub async fn get_status(State(state): State<AppState>) -> ApiResult<Json<StatusR
         "operational"
     };
 
-    // For now, return empty incidents list
-    // In production, this would query an incidents table
-    let incidents = Vec::new();
+    // Generate incidents from current service health
+    let incidents: Vec<Incident> = services
+        .iter()
+        .filter(|s| s.status != "operational")
+        .enumerate()
+        .map(|(i, service)| {
+            let impact = if service.status == "down" {
+                "critical"
+            } else {
+                "minor"
+            };
+            Incident {
+                id: format!("auto-{}", i + 1),
+                title: format!("{} service {}", service.name, service.status),
+                status: "investigating".to_string(),
+                started_at: Utc::now().to_rfc3339(),
+                resolved_at: None,
+                impact: impact.to_string(),
+            }
+        })
+        .collect();
 
     Ok(Json(StatusResponse {
         status: overall_status.to_string(),
