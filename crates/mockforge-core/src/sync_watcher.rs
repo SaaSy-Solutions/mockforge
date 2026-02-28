@@ -346,10 +346,12 @@ impl SyncWatcher {
                         }
                     }
                     ChangeKind::Deleted => {
-                        debug!("File deleted: {}", change.path.display());
-                        debug!("Auto-deletion from workspace is disabled");
-                        // For now, we don't auto-delete from workspace on file deletion
-                        // This could be configurable in the future
+                        info!(
+                            path = %change.path.display(),
+                            workspace_id = %workspace_id,
+                            "File deleted from watched directory — workspace may be out of sync. \
+                             Re-export workspace or restart sync to reconcile."
+                        );
                     }
                 }
             }

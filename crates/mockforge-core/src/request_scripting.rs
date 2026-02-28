@@ -382,19 +382,21 @@ fn js_value_to_json_value(js_value: &rquickjs::Value) -> Option<Value> {
     }
 }
 
-/// Execute script with timeout
+/// Execute script in the sandboxed rquickjs engine.
+///
+/// Timeout enforcement is handled at the async level by `execute_script()`
+/// via `tokio::time::timeout` wrapping `spawn_blocking`. The `timeout_ms`
+/// parameter is reserved for future interrupt-handler-based enforcement.
 #[allow(dead_code)]
 fn eval_script_with_timeout<'js>(
     ctx: &Ctx<'js>,
     script: &str,
     _timeout_ms: u64,
 ) -> Result<rquickjs::Value<'js>> {
-    // For now, we'll just evaluate without timeout as the JS runtime doesn't support async timeouts
-    // In a future implementation, we could use a separate thread with timeout or implement
-    // a custom timeout mechanism. For now, the timeout is handled at the async boundary.
-
+    // Note: rquickjs interrupt handlers require access to the Runtime (not Ctx).
+    // Timeout is enforced at the async boundary in execute_script() instead.
     ctx.eval(script)
-        .map_err(|e| Error::generic(format!("JavaScript evaluation error: {:?}", e)))
+        .map_err(|e| Error::generic(format!("JavaScript execution error: {:?}", e)))
 }
 
 impl Default for ScriptEngine {

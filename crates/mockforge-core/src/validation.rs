@@ -117,11 +117,12 @@ impl Validator {
                 }
             }
             Self::Protobuf(_) => {
-                // For protobuf validation, we need binary data and descriptors
-                // This is a placeholder since we don't have access to binary data in this context
-                // The actual validation should be done via validate_protobuf() functions
-                tracing::warn!("Protobuf validation requires binary data and descriptors - use validate_protobuf() functions directly");
-                Ok(())
+                // Protobuf validation cannot be performed via the JSON-based validate() method.
+                // Use validate_protobuf(), validate_protobuf_message(), or
+                // validate_protobuf_with_type() with raw bytes instead.
+                Err(Error::validation(
+                    "Protobuf validation requires binary data — use validate_protobuf() functions directly".to_string()
+                ))
             }
         }
     }
@@ -132,7 +133,7 @@ impl Validator {
             Self::JsonSchema(_) => true,
             Self::OpenApi31Schema(_, _) => true,
             Self::OpenApi(_) => true, // Now implemented with schema validation
-            Self::Protobuf(_) => true, // Now implemented with descriptor-based validation
+            Self::Protobuf(_) => false, // JSON-based validate() not supported; use validate_protobuf() functions
         }
     }
 
@@ -156,9 +157,9 @@ impl Validator {
                 }
             }
             Self::Protobuf(_) => {
-                // For protobuf validation, we need binary data and descriptors
-                tracing::warn!("Protobuf validation requires binary data and descriptors - use validate_protobuf() functions directly");
-                Ok(())
+                Err(Error::validation(
+                    "Protobuf validation requires binary data — use validate_protobuf() functions directly".to_string()
+                ))
             }
         }
     }

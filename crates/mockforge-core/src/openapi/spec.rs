@@ -424,13 +424,11 @@ impl OpenApiSpec {
                     _ => Ok(false), // Unsupported scheme
                 }
             }
-            openapiv3::SecurityScheme::APIKey { location, .. } => {
-                match location {
-                    openapiv3::APIKeyLocation::Header => Ok(auth_header.is_some()),
-                    openapiv3::APIKeyLocation::Query => Ok(api_key.is_some()),
-                    _ => Ok(false), // Cookie not supported
-                }
-            }
+            openapiv3::SecurityScheme::APIKey { location, .. } => match location {
+                openapiv3::APIKeyLocation::Header => Ok(auth_header.is_some()),
+                openapiv3::APIKeyLocation::Query => Ok(api_key.is_some()),
+                openapiv3::APIKeyLocation::Cookie => Ok(api_key.is_some()),
+            },
             openapiv3::SecurityScheme::OpenIDConnect { .. } => {
                 // OpenID Connect uses Bearer tokens, same as OAuth2
                 match auth_header {

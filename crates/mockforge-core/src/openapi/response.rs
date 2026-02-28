@@ -1859,11 +1859,14 @@ components:
 
         let result = ResponseGenerator::generate_ai_response(&ai_config, &context, None).await;
 
-        assert!(result.is_ok());
-        let value = result.unwrap();
-        assert_eq!(value["ai_response"], "AI generation placeholder");
-        assert!(value["expanded_prompt"].as_str().unwrap().contains("POST"));
-        assert!(value["expanded_prompt"].as_str().unwrap().contains("/api/users"));
+        // Without a generator, generate_ai_response returns an error
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("no AI generator configured"),
+            "Expected 'no AI generator configured' error, got: {}",
+            err
+        );
     }
 
     #[tokio::test]

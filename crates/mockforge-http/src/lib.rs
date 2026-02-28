@@ -1145,22 +1145,56 @@ pub async fn build_router_with_multi_tenant(
 
 /// Build the base HTTP router with authentication and latency support
 pub async fn build_router_with_auth_and_latency(
-    _spec_path: Option<String>,
+    spec_path: Option<String>,
     _options: Option<()>,
-    _auth_config: Option<mockforge_core::config::AuthConfig>,
-    _latency_injector: Option<LatencyInjector>,
+    auth_config: Option<mockforge_core::config::AuthConfig>,
+    latency_injector: Option<LatencyInjector>,
 ) -> Router {
-    // For now, just use the basic router. Full auth and latency support can be added later.
-    build_router(None, None, None).await
+    // Build auth router first, then layer latency on top
+    let mut app = build_router_with_auth(spec_path.clone(), None, auth_config).await;
+
+    // Apply latency injection middleware if configured
+    if let Some(injector) = latency_injector {
+        let injector = Arc::new(injector);
+        app = app.layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
+            let injector = injector.clone();
+            async move {
+                let _ = injector.inject_latency(&[]).await;
+                next.run(req).await
+            }
+        }));
+    }
+
+    app
 }
 
 /// Build the base HTTP router with latency injection support
 pub async fn build_router_with_latency(
-    _spec_path: Option<String>,
-    _options: Option<ValidationOptions>,
-    _latency_injector: Option<LatencyInjector>,
+    spec_path: Option<String>,
+    options: Option<ValidationOptions>,
+    latency_injector: Option<LatencyInjector>,
 ) -> Router {
-    // For now, fall back to basic router since injectors are complex to implement
+    if let Some(spec) = &spec_path {
+        match OpenApiSpec::from_file(spec).await {
+            Ok(openapi) => {
+                let registry = if let Some(opts) = options {
+                    OpenApiRouteRegistry::new_with_options(openapi, opts)
+                } else {
+                    OpenApiRouteRegistry::new_with_env(openapi)
+                };
+
+                if let Some(injector) = latency_injector {
+                    return registry.build_router_with_latency(injector);
+                } else {
+                    return registry.build_router();
+                }
+            }
+            Err(e) => {
+                warn!("Failed to load OpenAPI spec from {}: {}. Starting without OpenAPI integration.", spec, e);
+            }
+        }
+    }
+
     build_router(None, None, None).await
 }
 

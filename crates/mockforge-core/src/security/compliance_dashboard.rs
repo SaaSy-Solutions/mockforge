@@ -245,7 +245,6 @@ pub struct ComplianceDashboardEngine {
     /// Compliance alerts
     alerts: std::sync::Arc<tokio::sync::RwLock<HashMap<String, ComplianceAlert>>>,
     /// Control effectiveness cache
-    #[allow(dead_code)]
     control_effectiveness:
         std::sync::Arc<tokio::sync::RwLock<HashMap<ControlCategory, ControlEffectiveness>>>,
 }
@@ -373,10 +372,26 @@ impl ComplianceDashboardEngine {
         Ok(score)
     }
 
-    /// Get control effectiveness metrics
+    /// Get control effectiveness metrics (cached for 60 seconds)
     async fn get_control_effectiveness(
         &self,
     ) -> Result<HashMap<ControlCategory, ControlEffectiveness>, Error> {
+        // Return cached data if available and recent
+        {
+            let cached = self.control_effectiveness.read().await;
+            if !cached.is_empty() {
+                // Check if any entry has a recent test date (within cache TTL)
+                let cache_valid = cached.values().any(|ce| {
+                    ce.last_test_date
+                        .map(|d| Utc::now().signed_duration_since(d).num_seconds() < 60)
+                        .unwrap_or(false)
+                });
+                if cache_valid {
+                    return Ok(cached.clone());
+                }
+            }
+        }
+
         use crate::security::{
             get_global_access_review_service, get_global_change_management_engine,
             is_siem_emitter_initialized,
@@ -490,6 +505,12 @@ impl ComplianceDashboardEngine {
                 }),
             },
         );
+
+        // Populate cache for future calls
+        {
+            let mut cache = self.control_effectiveness.write().await;
+            *cache = effectiveness.clone();
+        }
 
         Ok(effectiveness)
     }

@@ -179,7 +179,7 @@ pub fn apply_overrides(shared: &Shared, op: Option<&OperationMeta>, body: &mut V
 fn calculate_request_size<B>(req: &Request<B>) -> u64 {
     let mut size = 0u64;
 
-    // Add header sizes (rough estimate)
+    // Add header sizes
     for (name, value) in req.headers() {
         size += name.as_str().len() as u64;
         size += value.as_bytes().len() as u64;
@@ -188,11 +188,22 @@ fn calculate_request_size<B>(req: &Request<B>) -> u64 {
     // Add URI size
     size += req.uri().to_string().len() as u64;
 
-    // Add body size (if available)
-    // Note: This is a rough estimate since we can't easily get the body size here
-    // without consuming the body. In practice, this would need to be implemented
-    // differently to get accurate body sizes.
-    size += 1024; // Rough estimate for body size
+    // Use Content-Length header for body size when available
+    if let Some(content_length) = req.headers().get(http::header::CONTENT_LENGTH) {
+        if let Ok(len_str) = content_length.to_str() {
+            if let Ok(len) = len_str.parse::<u64>() {
+                size += len;
+                return size;
+            }
+        }
+    }
+
+    // Fallback: estimate body size from method (GET/HEAD/DELETE typically have no body)
+    let method = req.method();
+    if method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
+    {
+        size += 256; // Conservative estimate for requests without Content-Length
+    }
 
     size
 }
@@ -207,12 +218,24 @@ fn calculate_response_size(res: &Response) -> u64 {
         size += value.as_bytes().len() as u64;
     }
 
-    // Add status line size (rough estimate)
-    size += 50;
+    // Add status line size
+    size += 15; // "HTTP/1.1 200 OK\r\n"
 
-    // Add body size (rough estimate)
-    // Similar to request, this is a rough estimate
-    size += 2048; // Rough estimate for response body size
+    // Use Content-Length header for body size when available
+    if let Some(content_length) = res.headers().get(http::header::CONTENT_LENGTH) {
+        if let Ok(len_str) = content_length.to_str() {
+            if let Ok(len) = len_str.parse::<u64>() {
+                size += len;
+                return size;
+            }
+        }
+    }
+
+    // Fallback: estimate from status code (204/304 have no body)
+    match res.status().as_u16() {
+        204 | 304 => {}   // No body
+        _ => size += 256, // Conservative estimate for responses without Content-Length
+    }
 
     size
 }

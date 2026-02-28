@@ -179,8 +179,7 @@ impl DependencyDetector {
                 self.analyze_schema(current_path, schema, all_specs, field_prefix);
             }
             openapiv3::ReferenceOr::Reference { reference } => {
-                // Could analyze $ref to other schemas here
-                let _ = reference; // Silence unused warning for now
+                self.analyze_reference(current_path, reference, all_specs, field_prefix);
             }
         }
     }
@@ -249,7 +248,74 @@ impl DependencyDetector {
                 self.analyze_schema(current_path, boxed_schema.as_ref(), all_specs, field_prefix);
             }
             openapiv3::ReferenceOr::Reference { reference } => {
-                let _ = reference; // Could analyze $ref here
+                self.analyze_reference(current_path, reference, all_specs, field_prefix);
+            }
+        }
+    }
+
+    /// Analyze a `$ref` string to detect cross-spec dependencies
+    fn analyze_reference(
+        &mut self,
+        current_path: &PathBuf,
+        reference: &str,
+        all_specs: &[(PathBuf, OpenApiSpec)],
+        field_prefix: &str,
+    ) {
+        // Handle external file references like "./other-spec.yaml#/components/schemas/Foo"
+        if let Some(hash_pos) = reference.find('#') {
+            let file_part = &reference[..hash_pos];
+            let json_pointer = &reference[hash_pos + 1..];
+
+            if !file_part.is_empty() {
+                // External reference — resolve relative to current spec
+                if let Some(parent) = current_path.parent() {
+                    let resolved = parent.join(file_part);
+                    // Extract the schema name from the JSON pointer (last segment)
+                    let schema_name =
+                        json_pointer.rsplit('/').next().unwrap_or(json_pointer).to_string();
+
+                    // Check if the referenced file is among our known specs
+                    for (other_path, _) in all_specs {
+                        if other_path == current_path {
+                            continue;
+                        }
+                        // Compare by file name since resolved paths may differ in canonicalization
+                        let resolved_name = resolved.file_name();
+                        let other_name = other_path.file_name();
+                        if resolved_name.is_some() && resolved_name == other_name {
+                            self.dependencies.push(SpecDependency {
+                                dependent_spec: current_path.clone(),
+                                dependency_spec: other_path.clone(),
+                                field_name: format!("$ref:{}", reference),
+                                referenced_schema: schema_name.clone(),
+                                extraction_path: format!("$.{}", field_prefix),
+                            });
+                            return;
+                        }
+                    }
+                }
+            } else {
+                // Local reference like "#/components/schemas/Foo" — resolve within same spec
+                let schema_name = json_pointer.rsplit('/').next().unwrap_or(json_pointer);
+
+                // Find the referenced schema in the current spec and recurse into it
+                for (spec_path, spec) in all_specs {
+                    if spec_path == current_path {
+                        if let Some(components) = &spec.spec.components {
+                            if let Some(schema_ref) = components.schemas.get(schema_name) {
+                                if let openapiv3::ReferenceOr::Item(schema) = schema_ref {
+                                    self.analyze_schema(
+                                        current_path,
+                                        schema,
+                                        all_specs,
+                                        &format!("{}.{}", field_prefix, schema_name),
+                                    );
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
     }

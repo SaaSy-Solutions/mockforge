@@ -921,15 +921,11 @@ impl SiemTransport for DatadogTransport {
 
 /// AWS CloudWatch Logs transport implementation
 pub struct CloudwatchTransport {
-    #[allow(dead_code)]
     region: String,
     log_group: String,
     stream: String,
-    #[allow(dead_code)]
     credentials: HashMap<String, String>,
-    #[allow(dead_code)]
     retry: RetryConfig,
-    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
@@ -961,29 +957,79 @@ impl CloudwatchTransport {
 #[async_trait]
 impl SiemTransport for CloudwatchTransport {
     async fn send_event(&self, event: &SecurityEvent) -> Result<(), Error> {
-        // CloudWatch Logs API requires AWS Signature Version 4 signing
-        // For simplicity, we'll use a simplified approach that requires AWS SDK
-        // In production, this should use aws-sdk-cloudwatchlogs
-        warn!(
-            "CloudWatch transport requires AWS SDK for proper implementation. \
-             Using HTTP API fallback (may require additional AWS configuration)"
-        );
-
         let event_json = event.to_json()?;
-        let _log_events = serde_json::json!([{
-            "timestamp": event.timestamp.timestamp_millis(),
-            "message": event_json
-        }]);
+        let log_events = serde_json::json!({
+            "logGroupName": self.log_group,
+            "logStreamName": self.stream,
+            "logEvents": [{
+                "timestamp": event.timestamp.timestamp_millis(),
+                "message": event_json
+            }]
+        });
 
-        // Note: This is a simplified implementation
-        // Full implementation would require AWS SDK for proper signing
-        debug!(
-            "CloudWatch event prepared for log_group={}, stream={}: {}",
-            self.log_group, self.stream, event.event_type
-        );
+        let url = format!("https://logs.{}.amazonaws.com/", self.region);
 
-        // Return success for now - full implementation requires AWS SDK integration
-        Ok(())
+        let mut attempt = 0;
+        loop {
+            let mut req = self
+                .client
+                .post(&url)
+                .header("Content-Type", "application/x-amz-json-1.1")
+                .header("X-Amz-Target", "Logs_20140328.PutLogEvents");
+
+            // Add AWS credentials if provided (access key / security token)
+            if let Some(access_key) = self.credentials.get("access_key_id") {
+                req = req.header("X-Amz-Access-Key", access_key.as_str());
+            }
+            if let Some(token) = self.credentials.get("session_token") {
+                req = req.header("X-Amz-Security-Token", token.as_str());
+            }
+
+            let result = req.json(&log_events).send().await;
+
+            match result {
+                Ok(resp) if resp.status().is_success() => {
+                    debug!(
+                        "CloudWatch event sent to log_group={}, stream={}: {}",
+                        self.log_group, self.stream, event.event_type
+                    );
+                    return Ok(());
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    attempt += 1;
+                    if attempt >= self.retry.max_attempts as usize {
+                        warn!(
+                            "CloudWatch transport failed after {} attempts (status={}): {}",
+                            attempt, status, body
+                        );
+                        return Err(Error::generic(format!(
+                            "CloudWatch PutLogEvents failed with status {}: {}",
+                            status, body
+                        )));
+                    }
+                    let delay = std::time::Duration::from_millis(
+                        self.retry.initial_delay_secs * 1000 * 2u64.pow(attempt as u32 - 1),
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(e) => {
+                    attempt += 1;
+                    if attempt >= self.retry.max_attempts as usize {
+                        warn!("CloudWatch transport failed after {} attempts: {}", attempt, e);
+                        return Err(Error::generic(format!(
+                            "CloudWatch PutLogEvents request failed: {}",
+                            e
+                        )));
+                    }
+                    let delay = std::time::Duration::from_millis(
+                        self.retry.initial_delay_secs * 1000 * 2u64.pow(attempt as u32 - 1),
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
     }
 }
 
@@ -991,11 +1037,8 @@ impl SiemTransport for CloudwatchTransport {
 pub struct GcpTransport {
     project_id: String,
     log_name: String,
-    #[allow(dead_code)]
     credentials_path: String,
-    #[allow(dead_code)]
     retry: RetryConfig,
-    #[allow(dead_code)]
     client: reqwest::Client,
 }
 
@@ -1025,34 +1068,82 @@ impl GcpTransport {
 #[async_trait]
 impl SiemTransport for GcpTransport {
     async fn send_event(&self, event: &SecurityEvent) -> Result<(), Error> {
-        // GCP Logging API requires OAuth2 authentication with service account
-        // For simplicity, we'll use a simplified approach
-        // In production, this should use google-cloud-logging crate
-        warn!(
-            "GCP transport requires google-cloud-logging for proper implementation. \
-             Using HTTP API fallback (may require additional GCP configuration)"
-        );
-
         let event_json = event.to_json()?;
-        let _log_entry = serde_json::json!({
-            "logName": format!("projects/{}/logs/{}", self.project_id, self.log_name),
-            "resource": {
-                "type": "global"
-            },
-            "timestamp": event.timestamp.to_rfc3339(),
-            "jsonPayload": serde_json::from_str::<serde_json::Value>(&event_json)
-                .unwrap_or_else(|_| serde_json::json!({"message": event_json}))
+        let log_entry = serde_json::json!({
+            "entries": [{
+                "logName": format!("projects/{}/logs/{}", self.project_id, self.log_name),
+                "resource": {
+                    "type": "global"
+                },
+                "timestamp": event.timestamp.to_rfc3339(),
+                "jsonPayload": serde_json::from_str::<serde_json::Value>(&event_json)
+                    .unwrap_or_else(|_| serde_json::json!({"message": event_json}))
+            }]
         });
 
-        // Note: This is a simplified implementation
-        // Full implementation would require google-cloud-logging crate
-        debug!(
-            "GCP event prepared for project={}, log={}: {}",
-            self.project_id, self.log_name, event.event_type
-        );
+        let url = "https://logging.googleapis.com/v2/entries:write";
 
-        // Return success for now - full implementation requires GCP SDK integration
-        Ok(())
+        // Read bearer token from credentials file if available
+        let bearer_token =
+            std::fs::read_to_string(&self.credentials_path).ok().and_then(|contents| {
+                serde_json::from_str::<serde_json::Value>(&contents)
+                    .ok()
+                    .and_then(|v| v.get("access_token").and_then(|t| t.as_str().map(String::from)))
+            });
+
+        let mut attempt = 0;
+        loop {
+            let mut req = self.client.post(url).header("Content-Type", "application/json");
+
+            if let Some(ref token) = bearer_token {
+                req = req.bearer_auth(token);
+            }
+
+            let result = req.json(&log_entry).send().await;
+
+            match result {
+                Ok(resp) if resp.status().is_success() => {
+                    debug!(
+                        "GCP event sent to project={}, log={}: {}",
+                        self.project_id, self.log_name, event.event_type
+                    );
+                    return Ok(());
+                }
+                Ok(resp) => {
+                    let status = resp.status();
+                    let body = resp.text().await.unwrap_or_default();
+                    attempt += 1;
+                    if attempt >= self.retry.max_attempts as usize {
+                        warn!(
+                            "GCP transport failed after {} attempts (status={}): {}",
+                            attempt, status, body
+                        );
+                        return Err(Error::generic(format!(
+                            "GCP entries:write failed with status {}: {}",
+                            status, body
+                        )));
+                    }
+                    let delay = std::time::Duration::from_millis(
+                        self.retry.initial_delay_secs * 1000 * 2u64.pow(attempt as u32 - 1),
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(e) => {
+                    attempt += 1;
+                    if attempt >= self.retry.max_attempts as usize {
+                        warn!("GCP transport failed after {} attempts: {}", attempt, e);
+                        return Err(Error::generic(format!(
+                            "GCP entries:write request failed: {}",
+                            e
+                        )));
+                    }
+                    let delay = std::time::Duration::from_millis(
+                        self.retry.initial_delay_secs * 1000 * 2u64.pow(attempt as u32 - 1),
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+            }
+        }
     }
 }
 
