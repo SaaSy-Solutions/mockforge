@@ -942,6 +942,7 @@ pub async fn build_router_with_multi_tenant(
             oidc_state,
             lifecycle_manager,
             auth_codes: Arc::new(RwLock::new(HashMap::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
         };
         app = app.merge(oauth2_server_router(oauth2_state));
         debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
@@ -961,6 +962,7 @@ pub async fn build_router_with_multi_tenant(
             oidc_state: oidc_state.clone(),
             lifecycle_manager: lifecycle_manager.clone(),
             auth_codes: Arc::new(RwLock::new(HashMap::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
         };
         let risk_engine = Arc::new(RiskEngine::default());
         let consent_state = ConsentState {
@@ -1946,6 +1948,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             oidc_state,
             lifecycle_manager,
             auth_codes: Arc::new(RwLock::new(HashMap::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
         };
         app = app.merge(oauth2_server_router(oauth2_state));
         debug!("OAuth2 server endpoints mounted at /oauth2/authorize and /oauth2/token");
@@ -1965,6 +1968,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             oidc_state: oidc_state.clone(),
             lifecycle_manager: lifecycle_manager.clone(),
             auth_codes: Arc::new(RwLock::new(HashMap::new())),
+            refresh_tokens: Arc::new(RwLock::new(HashMap::new())),
         };
         let risk_engine = Arc::new(RiskEngine::default());
         let consent_state = ConsentState {
@@ -2356,6 +2360,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             registry,
             usage_recorder,
             detector,
+            violations: Arc::new(RwLock::new(HashMap::new())),
         };
 
         app = app.merge(consumer_contracts_router(consumer_state));

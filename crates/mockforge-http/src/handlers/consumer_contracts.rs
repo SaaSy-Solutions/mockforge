@@ -10,6 +10,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use mockforge_core::consumer_contracts::{
     ConsumerBreakingChangeDetector, ConsumerIdentifier, ConsumerRegistry, ConsumerType,
@@ -25,6 +26,8 @@ pub struct ConsumerContractsState {
     pub usage_recorder: Arc<UsageRecorder>,
     /// Breaking change detector
     pub detector: Arc<ConsumerBreakingChangeDetector>,
+    /// Stored violations keyed by consumer ID
+    pub violations: Arc<RwLock<HashMap<String, Vec<ConsumerViolation>>>>,
 }
 
 /// Request to register a consumer
@@ -228,14 +231,66 @@ pub async fn get_consumer_usage(
 ///
 /// GET /api/v1/consumers/{id}/violations
 pub async fn get_consumer_violations(
-    State(_state): State<ConsumerContractsState>,
-    Path(_id): Path<String>,
+    State(state): State<ConsumerContractsState>,
+    Path(id): Path<String>,
 ) -> Result<Json<ConsumerViolationsResponse>, StatusCode> {
-    // In a full implementation, this would query violations from storage
-    // For now, return empty list
+    // Verify consumer exists
+    state.registry.get_by_id(&id).await.ok_or(StatusCode::NOT_FOUND)?;
+
+    let violations_store = state.violations.read().await;
+    let violations = violations_store.get(&id).cloned().unwrap_or_default();
+
     Ok(Json(ConsumerViolationsResponse {
-        consumer_id: _id,
-        violations: vec![],
+        consumer_id: id,
+        violations,
+    }))
+}
+
+/// Request to record violations for a consumer
+#[derive(Debug, Deserialize)]
+pub struct RecordViolationsRequest {
+    /// Endpoint path
+    pub endpoint: String,
+    /// HTTP method
+    pub method: String,
+    /// Contract diff result for violation detection
+    pub diff_result: mockforge_core::ai_contract_diff::ContractDiffResult,
+    /// Optional incident ID
+    pub incident_id: Option<String>,
+}
+
+/// Record violations for a consumer
+///
+/// POST /api/v1/consumers/{id}/violations
+pub async fn record_consumer_violations(
+    State(state): State<ConsumerContractsState>,
+    Path(id): Path<String>,
+    Json(request): Json<RecordViolationsRequest>,
+) -> Result<Json<ConsumerViolationsResponse>, StatusCode> {
+    // Verify consumer exists
+    state.registry.get_by_id(&id).await.ok_or(StatusCode::NOT_FOUND)?;
+
+    // Detect violations using the breaking change detector
+    let new_violations = state
+        .detector
+        .detect_violations(
+            &id,
+            &request.endpoint,
+            &request.method,
+            &request.diff_result,
+            request.incident_id,
+        )
+        .await;
+
+    // Store violations
+    let mut violations_store = state.violations.write().await;
+    let entry = violations_store.entry(id.clone()).or_default();
+    entry.extend(new_violations);
+    let all_violations = entry.clone();
+
+    Ok(Json(ConsumerViolationsResponse {
+        consumer_id: id,
+        violations: all_violations,
     }))
 }
 
@@ -248,6 +303,9 @@ pub fn consumer_contracts_router(state: ConsumerContractsState) -> axum::Router 
         .route("/api/v1/consumers", get(list_consumers))
         .route("/api/v1/consumers/{id}", get(get_consumer))
         .route("/api/v1/consumers/{id}/usage", get(get_consumer_usage))
-        .route("/api/v1/consumers/{id}/violations", get(get_consumer_violations))
+        .route(
+            "/api/v1/consumers/{id}/violations",
+            get(get_consumer_violations).post(record_consumer_violations),
+        )
         .with_state(state)
 }

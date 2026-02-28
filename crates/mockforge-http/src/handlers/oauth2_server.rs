@@ -30,6 +30,21 @@ pub struct OAuth2ServerState {
     pub lifecycle_manager: Arc<TokenLifecycleManager>,
     /// Authorization codes (code -> authorization info)
     pub auth_codes: Arc<RwLock<HashMap<String, AuthorizationCodeInfo>>>,
+    /// Refresh tokens (token -> refresh token info)
+    pub refresh_tokens: Arc<RwLock<HashMap<String, RefreshTokenInfo>>>,
+}
+
+/// Refresh token information
+#[derive(Debug, Clone)]
+pub struct RefreshTokenInfo {
+    /// Client ID that issued this refresh token
+    pub client_id: String,
+    /// Scopes associated with this token
+    pub scopes: Vec<String>,
+    /// User/subject ID
+    pub user_id: String,
+    /// Expiration timestamp
+    pub expires_at: i64,
 }
 
 /// Authorization code information
@@ -85,6 +100,8 @@ pub struct TokenRequest {
     pub scope: Option<String>,
     /// Nonce (for OpenID Connect)
     pub nonce: Option<String>,
+    /// Refresh token (for refresh_token grant)
+    pub refresh_token: Option<String>,
 }
 
 /// OAuth2 token response
@@ -227,8 +244,20 @@ async fn handle_authorization_code_grant(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // Generate refresh token (simplified)
+    // Generate refresh token and store it
     let refresh_token = format!("refresh_{}", uuid::Uuid::new_v4());
+    {
+        let mut tokens = state.refresh_tokens.write().await;
+        tokens.insert(
+            refresh_token.clone(),
+            RefreshTokenInfo {
+                client_id: code_info.client_id.clone(),
+                scopes: code_info.scopes.clone(),
+                user_id: code_info.user_id.clone(),
+                expires_at: Utc::now().timestamp() + 86400, // 24 hours
+            },
+        );
+    }
 
     Ok(Json(TokenResponse {
         access_token,
@@ -236,8 +265,6 @@ async fn handle_authorization_code_grant(
         expires_in: 3600,
         refresh_token: Some(refresh_token),
         scope: Some(code_info.scopes.join(" ")),
-        // ID token generation for OpenID Connect can be added by calling generate_oidc_token
-        // with appropriate OpenID Connect claims (sub, iss, aud, exp, iat, nonce, etc.)
         id_token: None,
     }))
 }
@@ -287,44 +314,74 @@ async fn handle_refresh_token_grant(
     state: OAuth2ServerState,
     request: TokenRequest,
 ) -> Result<Json<TokenResponse>, StatusCode> {
-    // For refresh token grant, we would:
-    // 1. Validate the refresh token
-    // 2. Check if it's revoked
-    // 3. Generate a new access token
-    // 4. Optionally generate a new refresh token
+    // Extract and validate the refresh token from the request
+    let refresh_token_value = request.refresh_token.ok_or(StatusCode::BAD_REQUEST)?;
 
-    // Simplified implementation - in production, validate refresh token from storage
-    let client_id = request.client_id.ok_or(StatusCode::BAD_REQUEST)?;
+    // Look up and remove the old refresh token (single-use rotation)
+    let token_info = {
+        let mut tokens = state.refresh_tokens.write().await;
+        tokens.remove(&refresh_token_value).ok_or(StatusCode::UNAUTHORIZED)?
+    };
+
+    // Check expiration
+    if token_info.expires_at < Utc::now().timestamp() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Validate client_id matches if provided
+    if let Some(ref client_id) = request.client_id {
+        if *client_id != token_info.client_id {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+    }
 
     // Generate new access token
     let oidc_state_guard = state.oidc_state.read().await;
     let oidc_state = oidc_state_guard.as_ref().ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let mut additional_claims = HashMap::new();
-    additional_claims.insert("client_id".to_string(), json!(client_id));
-    let scope_clone = request.scope.clone();
-    if let Some(ref scope) = request.scope {
+    additional_claims.insert("client_id".to_string(), json!(token_info.client_id.clone()));
+
+    // Use scopes from stored token, or override with request scope if provided
+    let scopes = if let Some(ref scope) = request.scope {
         additional_claims.insert("scope".to_string(), json!(scope));
-    }
+        scope.clone()
+    } else {
+        let scope_str = token_info.scopes.join(" ");
+        additional_claims.insert("scope".to_string(), json!(scope_str));
+        scope_str
+    };
 
     let access_token = generate_oidc_token(
         oidc_state,
-        format!("client_{}", client_id),
+        token_info.user_id.clone(),
         Some(additional_claims),
         Some(3600),
         None,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Generate new refresh token
-    let refresh_token = format!("refresh_{}", uuid::Uuid::new_v4());
+    // Generate and store new refresh token (rotation)
+    let new_refresh_token = format!("refresh_{}", uuid::Uuid::new_v4());
+    {
+        let mut tokens = state.refresh_tokens.write().await;
+        tokens.insert(
+            new_refresh_token.clone(),
+            RefreshTokenInfo {
+                client_id: token_info.client_id,
+                scopes: token_info.scopes,
+                user_id: token_info.user_id,
+                expires_at: Utc::now().timestamp() + 86400, // 24 hours
+            },
+        );
+    }
 
     Ok(Json(TokenResponse {
         access_token,
         token_type: "Bearer".to_string(),
         expires_in: 3600,
-        refresh_token: Some(refresh_token),
-        scope: scope_clone,
+        refresh_token: Some(new_refresh_token),
+        scope: Some(scopes),
         id_token: None,
     }))
 }

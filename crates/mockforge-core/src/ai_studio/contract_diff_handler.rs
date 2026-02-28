@@ -5,10 +5,13 @@
 //! or "compare the last 3 versions" via the AI Studio chat interface.
 
 use crate::ai_contract_diff::{
-    CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult,
+    CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult, DiffMetadata,
+    Mismatch, MismatchSeverity, MismatchType,
 };
+use crate::contract_validation::ContractValidator;
 use crate::intelligent_behavior::{config::IntelligentBehaviorConfig, llm_client::LlmClient};
 use crate::{OpenApiSpec, Result};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// Contract diff handler for NL queries
@@ -157,16 +160,69 @@ impl ContractDiffHandler {
         }
     }
 
-    /// Compare two contract versions
+    /// Compare two contract versions using ContractValidator
     pub async fn compare_versions(
         &self,
-        _spec1: &OpenApiSpec,
-        _spec2: &OpenApiSpec,
+        spec1: &OpenApiSpec,
+        spec2: &OpenApiSpec,
     ) -> Result<ContractDiffResult> {
-        // Use analyze method with a dummy request for now
-        // In production, compare_specs would be implemented separately
-        // For now, return an error indicating this needs proper implementation
-        Err(crate::Error::generic("Contract version comparison requires proper implementation. Use the Contract Diff page for detailed comparison."))
+        let validator = ContractValidator::new();
+        let validation_result = validator.compare_specs(spec1, spec2);
+
+        // Convert ValidationResult into ContractDiffResult
+        let mismatches: Vec<Mismatch> = validation_result
+            .errors
+            .iter()
+            .map(|err| Mismatch {
+                mismatch_type: if err.is_breaking_change {
+                    MismatchType::SchemaMismatch
+                } else {
+                    MismatchType::ConstraintViolation
+                },
+                path: err.path.clone(),
+                method: None,
+                expected: err.expected.clone(),
+                actual: err.actual.clone(),
+                description: err.message.clone(),
+                severity: if err.is_breaking_change {
+                    MismatchSeverity::Critical
+                } else {
+                    MismatchSeverity::High
+                },
+                confidence: 1.0,
+                context: std::collections::HashMap::new(),
+            })
+            .chain(validation_result.breaking_changes.iter().map(|bc| Mismatch {
+                mismatch_type: MismatchType::SchemaMismatch,
+                path: bc.path.clone(),
+                method: None,
+                expected: None,
+                actual: None,
+                description: bc.description.clone(),
+                severity: MismatchSeverity::Critical,
+                confidence: 1.0,
+                context: std::collections::HashMap::new(),
+            }))
+            .collect();
+
+        Ok(ContractDiffResult {
+            matches: validation_result.passed,
+            confidence: 1.0,
+            mismatches,
+            recommendations: Vec::new(),
+            corrections: Vec::new(),
+            metadata: DiffMetadata {
+                analyzed_at: Utc::now(),
+                request_source: "version_comparison".to_string(),
+                contract_version: None,
+                contract_format: "openapi-3.0".to_string(),
+                endpoint_path: "/".to_string(),
+                http_method: "ALL".to_string(),
+                request_count: 0,
+                llm_provider: None,
+                llm_model: None,
+            },
+        })
     }
 
     /// Summarize contract drift
