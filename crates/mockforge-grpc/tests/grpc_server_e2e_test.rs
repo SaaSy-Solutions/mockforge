@@ -1,110 +1,231 @@
-//! End-to-end test for gRPC server with actual client calls
+//! End-to-end tests for gRPC service discovery and mock response generation
 //!
-//! This test starts a gRPC server and makes actual gRPC calls using a tonic client
-//! to verify that the gRPC server functionality works end-to-end.
+//! These tests verify that the gRPC dynamic service discovery correctly parses
+//! proto files and that the registry can generate mock responses.
 
+use mockforge_core::protocol_abstraction::{
+    MessagePattern, Protocol, ProtocolRequest, SpecRegistry,
+};
 use mockforge_grpc::dynamic::{discover_services, DynamicGrpcConfig};
+use mockforge_grpc::registry::GrpcProtoRegistry;
+use std::collections::HashMap;
 
-#[tokio::test]
-#[ignore] // Ignore by default - requires proto files and can be slow
-async fn test_grpc_server_start_and_call() {
-    // Use the existing proto directory
-    let proto_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .map(|dir| format!("{}/proto", dir))
-        .unwrap_or_else(|_| "proto".to_string());
-
-    // Check if proto directory exists
-    if !std::path::Path::new(&proto_dir).exists() {
-        eprintln!("Proto directory not found at {}, skipping test", proto_dir);
-        return;
-    }
-
-    let config = DynamicGrpcConfig {
-        proto_dir: proto_dir.clone(),
-        enable_reflection: true,
-        excluded_services: vec![],
-        http_bridge: None, // Disable HTTP bridge for pure gRPC test
-        tls: None,
-    };
-
-    // Discover services
-    let registry = discover_services(&config).await;
-    if registry.is_err() {
-        eprintln!("Failed to discover services: {:?}", registry.err());
-        return;
-    }
-
-    let registry = registry.unwrap();
-    let services = registry.service_names();
-
-    if services.is_empty() {
-        eprintln!("No services discovered, skipping test");
-        return;
-    }
-
-    println!("Discovered {} gRPC services: {:?}", services.len(), services);
-
-    // Start gRPC server on a random port
-    let _addr: std::net::SocketAddr = "127.0.0.1:0".parse().unwrap();
-
-    // Note: This is a placeholder for actual server start
-    // The real implementation would look like:
-    // let server_handle = tokio::spawn(async move {
-    //     start_dynamic_server(config, addr).await.unwrap()
-    // });
-    //
-    // For now, we just verify the service discovery works
-
-    println!("✓ gRPC server configuration and service discovery validated");
-    println!("✓ Found services: {:?}", services);
+/// Helper to get the proto directory path for tests
+fn proto_dir() -> String {
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR should be set in tests");
+    format!("{}/proto", manifest_dir)
 }
 
 #[tokio::test]
-async fn test_grpc_reflection_client() {
-    // This test verifies that gRPC reflection works
-    // In a real scenario, you would:
-    // 1. Start a gRPC server with reflection enabled
-    // 2. Connect using tonic reflection client
-    // 3. List services and methods
-    // 4. Make a dynamic call
-
-    println!("✓ gRPC reflection client test placeholder");
-    println!("  Note: Full reflection test requires running gRPC server");
-}
-
-#[tokio::test]
-async fn test_grpc_mock_response_generation() {
-    use mockforge_grpc::dynamic::discover_services;
-
-    let proto_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .map(|dir| format!("{}/proto", dir))
-        .unwrap_or_else(|_| "proto".to_string());
-
-    if !std::path::Path::new(&proto_dir).exists() {
-        println!("Proto directory not found, skipping test");
-        return;
-    }
+async fn test_grpc_service_discovery_from_proto_files() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
 
     let config = DynamicGrpcConfig {
-        proto_dir,
+        proto_dir: dir,
         enable_reflection: true,
         excluded_services: vec![],
         http_bridge: None,
         tls: None,
     };
 
-    let registry = discover_services(&config).await;
+    let registry = discover_services(&config).await.expect("Service discovery should succeed");
 
-    if let Ok(registry) = registry {
-        let services = registry.service_names();
-        println!("✓ Mock response generation test");
-        println!("  Services available for mocking: {:?}", services);
+    let services = registry.service_names();
+    assert!(!services.is_empty(), "Should discover at least one service from proto files");
 
-        // In a full test, you would:
-        // - Get a method descriptor
-        // - Generate a mock response based on the proto schema
-        // - Verify the response matches the expected type
+    // Verify the Greeter service from gretter.proto is discovered
+    let has_greeter = services.iter().any(|s| s.contains("Greeter"));
+    assert!(has_greeter, "Should discover the Greeter service, found: {:?}", services);
+}
 
-        assert!(!services.is_empty(), "Should discover at least one service");
-    }
+#[tokio::test]
+async fn test_grpc_service_discovery_with_exclusion() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let config = DynamicGrpcConfig {
+        proto_dir: dir,
+        enable_reflection: false,
+        excluded_services: vec!["mockforge.greeter.Greeter".to_string()],
+        http_bridge: None,
+        tls: None,
+    };
+
+    let registry = discover_services(&config).await.expect("Service discovery should succeed");
+
+    let services = registry.service_names();
+
+    // The Greeter service should be excluded
+    let has_greeter = services.iter().any(|s| s.contains("Greeter"));
+    assert!(!has_greeter, "Greeter service should be excluded, found: {:?}", services);
+}
+
+#[tokio::test]
+async fn test_grpc_registry_operations_from_proto() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let registry = GrpcProtoRegistry::from_directory(&dir)
+        .await
+        .expect("Should create registry from proto directory");
+
+    let operations = registry.operations();
+    assert!(!operations.is_empty(), "Should have operations from the Greeter service");
+
+    // Verify SayHello unary RPC is discovered
+    let say_hello = operations.iter().find(|op| op.name == "SayHello");
+    assert!(say_hello.is_some(), "Should find SayHello operation");
+    let say_hello = say_hello.unwrap();
+    assert_eq!(say_hello.operation_type, "Unary");
+    assert!(say_hello.input_schema.is_some());
+    assert!(say_hello.output_schema.is_some());
+
+    // Verify streaming RPCs are discovered with correct types
+    let stream_op = operations.iter().find(|op| op.name == "SayHelloStream");
+    assert!(stream_op.is_some(), "Should find SayHelloStream operation");
+    assert_eq!(stream_op.unwrap().operation_type, "ServerStreaming");
+
+    let client_stream_op = operations.iter().find(|op| op.name == "SayHelloClientStream");
+    assert!(client_stream_op.is_some(), "Should find SayHelloClientStream operation");
+    assert_eq!(client_stream_op.unwrap().operation_type, "ClientStreaming");
+
+    let chat_op = operations.iter().find(|op| op.name == "Chat");
+    assert!(chat_op.is_some(), "Should find Chat operation");
+    assert_eq!(chat_op.unwrap().operation_type, "BidirectionalStreaming");
+}
+
+#[tokio::test]
+async fn test_grpc_mock_response_generation() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let registry = GrpcProtoRegistry::from_directory(&dir)
+        .await
+        .expect("Should create registry from proto directory");
+
+    let operations = registry.operations();
+    assert!(!operations.is_empty(), "Should have operations");
+
+    // Find the SayHello operation to test mock generation
+    let say_hello = operations
+        .iter()
+        .find(|op| op.name == "SayHello")
+        .expect("Should find SayHello operation");
+
+    // Generate a mock response
+    let request = ProtocolRequest {
+        protocol: Protocol::Grpc,
+        pattern: MessagePattern::RequestResponse,
+        operation: say_hello.path.clone(),
+        path: say_hello.path.clone(),
+        metadata: HashMap::new(),
+        body: None,
+        ..Default::default()
+    };
+
+    let response = registry
+        .generate_mock_response(&request)
+        .expect("Should generate mock response");
+
+    assert_eq!(response.content_type, "application/grpc+json");
+    assert!(!response.body.is_empty(), "Response body should not be empty");
+
+    // Parse the response body as JSON
+    let body: serde_json::Value =
+        serde_json::from_slice(&response.body).expect("Response body should be valid JSON");
+    assert!(body.is_object(), "Response should be a JSON object");
+}
+
+#[tokio::test]
+async fn test_grpc_validate_request_known_operation() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let registry = GrpcProtoRegistry::from_directory(&dir)
+        .await
+        .expect("Should create registry from proto directory");
+
+    let operations = registry.operations();
+    let say_hello = operations
+        .iter()
+        .find(|op| op.name == "SayHello")
+        .expect("Should find SayHello operation");
+
+    // Valid request should pass validation
+    let request = ProtocolRequest {
+        protocol: Protocol::Grpc,
+        pattern: MessagePattern::RequestResponse,
+        operation: say_hello.path.clone(),
+        path: say_hello.path.clone(),
+        metadata: HashMap::new(),
+        body: None,
+        ..Default::default()
+    };
+
+    let result = registry.validate_request(&request).expect("Validation should not error");
+    assert!(result.valid, "Known operation should pass validation");
+}
+
+#[tokio::test]
+async fn test_grpc_validate_request_unknown_operation() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let registry = GrpcProtoRegistry::from_directory(&dir)
+        .await
+        .expect("Should create registry from proto directory");
+
+    // Unknown operation should fail validation
+    let request = ProtocolRequest {
+        protocol: Protocol::Grpc,
+        pattern: MessagePattern::RequestResponse,
+        operation: "nonexistent.Service/DoSomething".to_string(),
+        path: "nonexistent.Service/DoSomething".to_string(),
+        metadata: HashMap::new(),
+        body: None,
+        ..Default::default()
+    };
+
+    let result = registry.validate_request(&request).expect("Validation should not error");
+    assert!(!result.valid, "Unknown operation should fail validation");
+    assert!(!result.errors.is_empty(), "Should have validation errors for unknown operation");
+}
+
+#[tokio::test]
+async fn test_grpc_descriptor_pool_accessible() {
+    let dir = proto_dir();
+    assert!(std::path::Path::new(&dir).exists(), "Proto directory not found at {}", dir);
+
+    let config = DynamicGrpcConfig {
+        proto_dir: dir,
+        enable_reflection: true,
+        excluded_services: vec![],
+        http_bridge: None,
+        tls: None,
+    };
+
+    let registry = discover_services(&config).await.expect("Service discovery should succeed");
+
+    let pool = registry.descriptor_pool();
+
+    // Should be able to find the HelloReply message type in the descriptor pool
+    let hello_reply = pool.get_message_by_name("mockforge.greeter.HelloReply");
+    assert!(hello_reply.is_some(), "Descriptor pool should contain HelloReply message");
+
+    let descriptor = hello_reply.unwrap();
+    let field_names: Vec<String> = descriptor.fields().map(|f| f.name().to_string()).collect();
+    assert!(
+        field_names.iter().any(|n| n == "message"),
+        "HelloReply should have a 'message' field"
+    );
+    assert!(
+        field_names.iter().any(|n| n == "metadata"),
+        "HelloReply should have a 'metadata' field"
+    );
+    assert!(
+        field_names.iter().any(|n| n == "items"),
+        "HelloReply should have an 'items' field"
+    );
 }
