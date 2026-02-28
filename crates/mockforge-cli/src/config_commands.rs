@@ -872,7 +872,7 @@ async fn validate_config(config_path: &PathBuf, show_warnings: bool) -> Result<(
 async fn show_config(
     config_path: Option<&PathBuf>,
     format: &str,
-    _changed_only: bool,
+    changed_only: bool,
 ) -> Result<()> {
     use mockforge_core::config::ServerConfig;
 
@@ -883,14 +883,69 @@ async fn show_config(
         ServerConfig::default()
     };
 
+    let output_value = if changed_only {
+        let current = serde_json::to_value(&config)?;
+        let defaults = serde_json::to_value(ServerConfig::default())?;
+        let diff = json_diff(&current, &defaults);
+        if diff.is_null() || diff.as_object().is_some_and(|o| o.is_empty()) {
+            println!("No changes from default configuration.");
+            return Ok(());
+        }
+        diff
+    } else {
+        serde_json::to_value(&config)?
+    };
+
     let output = match format {
-        "json" => serde_json::to_string_pretty(&config)?,
-        _ => serde_yaml::to_string(&config)?,
+        "json" => serde_json::to_string_pretty(&output_value)?,
+        _ => {
+            // Convert through JSON value to YAML for consistent output
+            serde_yaml::to_string(&output_value)?
+        }
     };
 
     println!("{}", output);
 
     Ok(())
+}
+
+/// Recursively compute only the keys in `current` that differ from `defaults`.
+/// Returns a JSON object containing only the changed fields, preserving nesting.
+fn json_diff(current: &serde_json::Value, defaults: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+
+    match (current, defaults) {
+        (Value::Object(cur_map), Value::Object(def_map)) => {
+            let mut diff = serde_json::Map::new();
+            for (key, cur_val) in cur_map {
+                match def_map.get(key) {
+                    Some(def_val) => {
+                        let child_diff = json_diff(cur_val, def_val);
+                        if !child_diff.is_null() {
+                            diff.insert(key.clone(), child_diff);
+                        }
+                    }
+                    // Key exists in current but not in defaults — it's new
+                    None => {
+                        diff.insert(key.clone(), cur_val.clone());
+                    }
+                }
+            }
+            if diff.is_empty() {
+                Value::Null
+            } else {
+                Value::Object(diff)
+            }
+        }
+        // For non-object values, return current if it differs from default
+        _ => {
+            if current == defaults {
+                serde_json::Value::Null
+            } else {
+                current.clone()
+            }
+        }
+    }
 }
 
 #[cfg(test)]
