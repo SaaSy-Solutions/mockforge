@@ -1006,7 +1006,7 @@ pub struct BulkConfigUpdateRequest {
 /// Configuration updates are applied to the server configuration if available
 /// in ManagementState. Changes take effect immediately for supported settings.
 async fn bulk_update_config(
-    State(_state): State<ManagementState>,
+    State(state): State<ManagementState>,
     Json(request): Json<BulkConfigUpdateRequest>,
 ) -> impl IntoResponse {
     // Validate the updates structure
@@ -1052,20 +1052,29 @@ async fn bulk_update_config(
 
     // Validate the merged config
     match serde_json::from_value::<ServerConfig>(merged) {
-        Ok(_) => {
-            // Config is valid
-            // Note: Runtime application of config changes would require:
-            // 1. Storing ServerConfig in ManagementState
-            // 2. Implementing hot-reload mechanism for server configuration
-            // 3. Updating router state and middleware based on new config
-            // For now, this endpoint only validates the configuration structure
-            Json(serde_json::json!({
-                "success": true,
-                "message": "Bulk configuration update validated successfully. Note: Runtime application requires ServerConfig in ManagementState and hot-reload support.",
-                "updates_received": request.updates,
-                "validated": true
-            }))
-            .into_response()
+        Ok(validated_config) => {
+            // Apply config if server_config is available in ManagementState
+            if let Some(ref config_lock) = state.server_config {
+                let mut config = config_lock.write().await;
+                *config = validated_config;
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": "Bulk configuration update applied successfully",
+                    "updates_received": request.updates,
+                    "validated": true,
+                    "applied": true
+                }))
+                .into_response()
+            } else {
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": "Bulk configuration update validated but not applied (no server config in state). Use .with_server_config() when building ManagementState.",
+                    "updates_received": request.updates,
+                    "validated": true,
+                    "applied": false
+                }))
+                .into_response()
+            }
         }
         Err(e) => (
             StatusCode::BAD_REQUEST,

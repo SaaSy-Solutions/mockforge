@@ -8,20 +8,21 @@ use axum::response::Response;
 use mockforge_core::deceptive_canary::DeceptiveCanaryRouter;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::debug;
 
 /// Deceptive canary middleware state
 #[derive(Clone)]
 pub struct DeceptiveCanaryState {
-    /// Router for canary routing decisions
-    pub router: Arc<DeceptiveCanaryRouter>,
+    /// Router for canary routing decisions (wrapped in RwLock for config updates)
+    pub router: Arc<RwLock<DeceptiveCanaryRouter>>,
 }
 
 impl DeceptiveCanaryState {
     /// Create new deceptive canary state
     pub fn new(router: DeceptiveCanaryRouter) -> Self {
         Self {
-            router: Arc::new(router),
+            router: Arc::new(RwLock::new(router)),
         }
     }
 }
@@ -84,7 +85,8 @@ pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
         .map(|s| s.to_string());
 
     // Check if request should be routed to canary
-    let should_route = state.router.should_route_to_canary(
+    let router = state.router.read().await;
+    let should_route = router.should_route_to_canary(
         user_agent.as_deref(),
         ip_address.as_deref(),
         &headers_map,
@@ -96,7 +98,8 @@ pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
         debug!("Routing request to deceptive canary: {} {}", req.method(), req.uri().path());
 
         // Get deceptive deploy URL from router config
-        let canary_url = &state.router.config().deceptive_deploy_url;
+        let canary_url = router.config().deceptive_deploy_url.clone();
+        drop(router); // Release read lock before awaiting
 
         if !canary_url.is_empty() {
             // Proxy request to deceptive deploy
@@ -106,6 +109,8 @@ pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
             response.headers_mut().insert("X-Deceptive-Canary", "true".parse().unwrap());
             return response;
         }
+    } else {
+        drop(router); // Release read lock before awaiting
     }
 
     // Continue with normal request processing

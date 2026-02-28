@@ -29,7 +29,8 @@ pub struct CanaryStatsResponse {
 ///
 /// GET /api/v1/deceptive-canary/config
 pub async fn get_canary_config(State(state): State<DeceptiveCanaryState>) -> Json<Value> {
-    let config = state.router.config();
+    let router = state.router.read().await;
+    let config = router.config();
     Json(json!({
         "success": true,
         "config": config,
@@ -40,15 +41,14 @@ pub async fn get_canary_config(State(state): State<DeceptiveCanaryState>) -> Jso
 ///
 /// POST /api/v1/deceptive-canary/config
 pub async fn update_canary_config(
-    State(_state): State<DeceptiveCanaryState>,
+    State(state): State<DeceptiveCanaryState>,
     Json(request): Json<UpdateCanaryConfigRequest>,
 ) -> Json<Value> {
-    // Update router configuration
-    // Note: This requires mutable access, which would need Arc<RwLock<DeceptiveCanaryRouter>>
-    // For now, we'll return the config that should be applied
+    let mut router = state.router.write().await;
+    router.update_config(request.config.clone());
     Json(json!({
         "success": true,
-        "message": "Configuration update requires router state management",
+        "message": "Configuration updated successfully",
         "config": request.config,
     }))
 }
@@ -57,7 +57,8 @@ pub async fn update_canary_config(
 ///
 /// GET /api/v1/deceptive-canary/stats
 pub async fn get_canary_stats(State(state): State<DeceptiveCanaryState>) -> Json<Value> {
-    let stats = state.router.stats();
+    let router = state.router.read().await;
+    let stats = router.stats();
     let canary_percentage = stats.canary_percentage();
 
     Json(json!({

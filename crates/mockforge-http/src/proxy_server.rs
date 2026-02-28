@@ -24,6 +24,12 @@ pub struct ProxyServer {
     log_responses: bool,
     /// Request counter for logging
     request_counter: Arc<RwLock<u64>>,
+    /// Server start time for uptime and rate calculations
+    start_time: std::time::Instant,
+    /// Total response time in milliseconds for average calculation
+    total_response_time_ms: Arc<RwLock<u64>>,
+    /// Error counter for error rate calculation
+    error_counter: Arc<RwLock<u64>>,
 }
 
 impl ProxyServer {
@@ -34,6 +40,9 @@ impl ProxyServer {
             log_requests,
             log_responses,
             request_counter: Arc::new(RwLock::new(0)),
+            start_time: std::time::Instant::now(),
+            total_response_time_ms: Arc::new(RwLock::new(0)),
+            error_counter: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -271,7 +280,7 @@ async fn proxy_handler(
 
 /// Middleware for logging requests and responses
 async fn logging_middleware(
-    axum::extract::State(_state): axum::extract::State<Arc<ProxyServer>>,
+    axum::extract::State(state): axum::extract::State<Arc<ProxyServer>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -295,6 +304,18 @@ async fn logging_middleware(
 
     let response = next.run(request).await;
     let duration = start.elapsed();
+
+    // Track response time
+    {
+        let mut total_time = state.total_response_time_ms.write().await;
+        *total_time += duration.as_millis() as u64;
+    }
+
+    // Track server errors
+    if response.status().is_server_error() {
+        let mut errors = state.error_counter.write().await;
+        *errors += 1;
+    }
 
     debug!(
         method = %method,
@@ -323,14 +344,33 @@ pub struct ProxyStats {
 /// Get proxy statistics
 pub async fn get_proxy_stats(state: &ProxyServer) -> ProxyStats {
     let total_requests = *state.request_counter.read().await;
+    let total_response_time_ms = *state.total_response_time_ms.read().await;
+    let error_count = *state.error_counter.read().await;
 
-    // For now, return basic stats. In a real implementation,
-    // you'd track more detailed metrics over time.
+    let elapsed_secs = state.start_time.elapsed().as_secs_f64();
+    let requests_per_second = if elapsed_secs > 0.0 {
+        total_requests as f64 / elapsed_secs
+    } else {
+        0.0
+    };
+
+    let avg_response_time_ms = if total_requests > 0 {
+        total_response_time_ms as f64 / total_requests as f64
+    } else {
+        0.0
+    };
+
+    let error_rate_percent = if total_requests > 0 {
+        (error_count as f64 / total_requests as f64) * 100.0
+    } else {
+        0.0
+    };
+
     ProxyStats {
         total_requests,
-        requests_per_second: 0.0,  // Would need time-based tracking
-        avg_response_time_ms: 0.0, // Would need timing data
-        error_rate_percent: 0.0,   // Would need error tracking
+        requests_per_second,
+        avg_response_time_ms,
+        error_rate_percent,
     }
 }
 
@@ -368,9 +408,9 @@ mod tests {
         let config = ProxyConfig::default();
         let server = ProxyServer::new(config, false, false);
 
+        // With zero requests, all derived stats should be zero
         let stats = get_proxy_stats(&server).await;
         assert_eq!(stats.total_requests, 0);
-        assert_eq!(stats.requests_per_second, 0.0);
         assert_eq!(stats.avg_response_time_ms, 0.0);
         assert_eq!(stats.error_rate_percent, 0.0);
     }
