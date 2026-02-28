@@ -358,10 +358,27 @@ async fn execute_fixtures_command(
             }
 
             if !loaded_fixtures.is_empty() {
-                // Note: This is a simplified implementation. In a real scenario,
-                // we'd need to update the spec_registry properly, but since it's Arc,
-                // we'd need a different approach. For now, we'll just report what we found.
-                println!("Found {} fixture files. (Note: Loading not fully implemented in this CLI context)", loaded_fixtures.len());
+                // Load virtual files from fixtures into the VFS
+                let mut total_files = 0;
+                for fixture in &loaded_fixtures {
+                    for virtual_file in &fixture.virtual_files {
+                        let vfs_file = virtual_file.clone().to_file_fixture();
+                        if let Err(e) = spec_registry.vfs.load_fixtures(vec![vfs_file]) {
+                            eprintln!(
+                                "Warning: Failed to load file {}: {}",
+                                virtual_file.path.display(),
+                                e
+                            );
+                        } else {
+                            total_files += 1;
+                        }
+                    }
+                }
+                println!(
+                    "Loaded {} fixtures ({} virtual files into VFS)",
+                    loaded_fixtures.len(),
+                    total_files
+                );
             } else {
                 println!("No YAML fixture files found in {}", dir.display());
             }

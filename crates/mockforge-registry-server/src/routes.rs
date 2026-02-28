@@ -138,6 +138,17 @@ pub fn create_router() -> Router<AppState> {
         // Marketplace: templates (authenticated)
         .route("/api/v1/marketplace/templates/publish", post(handlers::templates::publish_template))
         .route("/api/v1/marketplace/templates/{name}/{version}/reviews", post(handlers::template_reviews::submit_template_review))
+        // Organization templates
+        .route("/api/v1/organizations/{org_id}/templates", get(handlers::org_templates::list_templates))
+        .route("/api/v1/organizations/{org_id}/templates", post(handlers::org_templates::create_template))
+        .route("/api/v1/organizations/{org_id}/templates/{template_id}", get(handlers::org_templates::get_template))
+        .route("/api/v1/organizations/{org_id}/templates/{template_id}", patch(handlers::org_templates::update_template))
+        .route("/api/v1/organizations/{org_id}/templates/{template_id}", delete(handlers::org_templates::delete_template))
+        // Scenario promotions
+        .route("/api/v1/workspaces/{workspace_id}/environments/{env}/promote-scenario", post(handlers::scenario_promotions::promote_scenario))
+        .route("/api/v1/workspaces/{workspace_id}/promotions", get(handlers::scenario_promotions::list_promotions))
+        .route("/api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/approve", post(handlers::scenario_promotions::approve_promotion))
+        .route("/api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/reject", post(handlers::scenario_promotions::reject_promotion))
         .route_layer(middleware::from_fn(auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

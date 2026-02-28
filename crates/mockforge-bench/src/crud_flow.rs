@@ -814,8 +814,8 @@ default_extract_fields:
         );
 
         let fields = flow.get_all_extract_fields();
-        assert!(fields.contains(&"id".to_string()));
-        assert!(fields.contains(&"uuid".to_string()));
+        assert!(fields.contains("id"));
+        assert!(fields.contains("uuid"));
         assert_eq!(fields.len(), 2);
     }
 

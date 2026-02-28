@@ -1,5 +1,5 @@
-// Many models, handlers, and deployment modules are fully implemented but not yet
-// wired into routes. Suppress dead_code for the binary crate during development.
+// Some models and internal modules are not yet wired into routes.
+// Suppress dead_code for the binary crate during development.
 #![allow(dead_code)]
 
 //! Pillars: [Cloud]
@@ -196,6 +196,17 @@ async fn main() -> Result<()> {
 
     // Start background workers
     workers::saml_cleanup::start_saml_cleanup_worker(db.pool().clone());
+
+    // Start deployment orchestrator for hosted mocks
+    let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();
+    let flyio_org_slug = std::env::var("FLYIO_ORG_SLUG").ok();
+    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::new(
+        Arc::new(db.pool().clone()),
+        flyio_token,
+        flyio_org_slug,
+    ));
+    let _orchestrator_handle = orchestrator.start();
+    tracing::info!("Deployment orchestrator started");
 
     // Build router
     let app = create_app(state, rate_limiter);

@@ -302,15 +302,15 @@ impl DependencyDetector {
                 for (spec_path, spec) in all_specs {
                     if spec_path == current_path {
                         if let Some(components) = &spec.spec.components {
-                            if let Some(schema_ref) = components.schemas.get(schema_name) {
-                                if let openapiv3::ReferenceOr::Item(schema) = schema_ref {
-                                    self.analyze_schema(
-                                        current_path,
-                                        schema,
-                                        all_specs,
-                                        &format!("{}.{}", field_prefix, schema_name),
-                                    );
-                                }
+                            if let Some(openapiv3::ReferenceOr::Item(schema)) =
+                                components.schemas.get(schema_name)
+                            {
+                                self.analyze_schema(
+                                    current_path,
+                                    schema,
+                                    all_specs,
+                                    &format!("{}.{}", field_prefix, schema_name),
+                                );
                             }
                         }
                         break;

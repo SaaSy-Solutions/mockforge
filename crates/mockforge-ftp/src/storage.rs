@@ -255,9 +255,6 @@ impl Metadata for MockForgeMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fixtures::{
-        FileContentConfig, FileValidation, FtpFixture, UploadRule, UploadStorage, VirtualFileConfig,
-    };
     use crate::vfs::{FileContent, FileMetadata};
 
     #[test]

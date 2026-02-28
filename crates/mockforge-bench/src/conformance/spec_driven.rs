@@ -997,8 +997,10 @@ mod tests {
     #[test]
     fn test_annotate_post_with_json_body() {
         let mut op = Operation::default();
-        let mut body = openapiv3::RequestBody::default();
-        body.required = true;
+        let mut body = openapiv3::RequestBody {
+            required: true,
+            ..Default::default()
+        };
         body.content
             .insert("application/json".to_string(), openapiv3::MediaType::default());
         op.request_body = Some(ReferenceOr::Item(body));
