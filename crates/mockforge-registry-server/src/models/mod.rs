@@ -44,4 +44,15 @@ pub use user::User;
 // Re-export deployment-related models for convenience
 pub use feature_usage::{FeatureType, FeatureUsage};
 pub use hosted_mock::{DeploymentLog, DeploymentMetrics};
-pub use suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};
+pub use suspicious_activity::{
+    record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
+};
+
+// Re-export types needed by handler modules
+pub use audit_log::AuditLog;
+pub use project::Project;
+pub use scenario::ScenarioVersion;
+pub use scenario_review::ScenarioReview;
+pub use settings::UserSetting;
+pub use template::{Template, TemplateCategory, TemplateVersion};
+pub use template_review::TemplateReview;

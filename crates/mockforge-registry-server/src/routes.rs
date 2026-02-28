@@ -2,7 +2,7 @@
 
 use axum::{
     middleware,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 
@@ -41,6 +41,15 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/status", get(handlers::status::get_status))
         // Support contact (public, works with or without auth)
         .route("/api/v1/support/contact", post(handlers::support::submit_contact))
+        // Marketplace: scenarios (public)
+        .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
+        .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))
+        .route("/api/v1/marketplace/scenarios/{name}/versions/{version}", get(handlers::scenarios::get_scenario_version))
+        .route("/api/v1/marketplace/scenarios/{name}/reviews", get(handlers::scenario_reviews::get_scenario_reviews))
+        // Marketplace: templates (public)
+        .route("/api/v1/marketplace/templates/search", post(handlers::templates::search_templates))
+        .route("/api/v1/marketplace/templates/{name}/{version}", get(handlers::templates::get_template))
+        .route("/api/v1/marketplace/templates/{name}/{version}/reviews", get(handlers::template_reviews::get_template_reviews))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
@@ -108,6 +117,27 @@ pub fn create_router() -> Router<AppState> {
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
+        // Audit logs
+        .route("/api/v1/organizations/{org_id}/audit-logs", get(handlers::audit::get_audit_logs))
+        // GDPR compliance
+        .route("/api/v1/gdpr/export", get(handlers::gdpr::export_data))
+        .route("/api/v1/gdpr/erase", delete(handlers::gdpr::delete_data))
+        // Security: suspicious activities
+        .route("/api/v1/security/suspicious-activities", get(handlers::security::get_suspicious_activities))
+        .route("/api/v1/security/suspicious-activities/{id}/resolve", post(handlers::security::resolve_suspicious_activity))
+        // BYOK settings
+        .route("/api/v1/settings/byok", get(handlers::settings::get_byok_config))
+        .route("/api/v1/settings/byok", put(handlers::settings::update_byok_config))
+        .route("/api/v1/settings/byok", delete(handlers::settings::delete_byok_config))
+        // Token rotation
+        .route("/api/v1/tokens/{token_id}/rotate", post(handlers::token_rotation::rotate_token))
+        .route("/api/v1/tokens/rotation-status", get(handlers::token_rotation::get_tokens_needing_rotation))
+        // Marketplace: scenarios (authenticated)
+        .route("/api/v1/marketplace/scenarios/publish", post(handlers::scenarios::publish_scenario))
+        .route("/api/v1/marketplace/scenarios/{name}/reviews", post(handlers::scenario_reviews::submit_scenario_review))
+        // Marketplace: templates (authenticated)
+        .route("/api/v1/marketplace/templates/publish", post(handlers::templates::publish_template))
+        .route("/api/v1/marketplace/templates/{name}/{version}/reviews", post(handlers::template_reviews::submit_template_review))
         .route_layer(middleware::from_fn(auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

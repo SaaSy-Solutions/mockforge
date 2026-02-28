@@ -2,15 +2,19 @@
 //!
 //! Provides endpoints for rotating API tokens and checking rotation status
 
-use axum::{extract::{Path, Query, State}, http::HeaderMap, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::HeaderMap,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{ApiToken, AuditEventType, Organization, User, record_audit_event},
+    middleware::{resolve_org_context, AuthUser},
+    models::{record_audit_event, ApiToken, AuditEventType, Organization, User},
     AppState,
 };
 
@@ -41,7 +45,8 @@ pub async fn rotate_token(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify token belongs to org
@@ -51,34 +56,40 @@ pub async fn rotate_token(
         .ok_or_else(|| ApiError::InvalidRequest("Token not found".to_string()))?;
 
     if old_token.org_id != org_ctx.org_id {
-        return Err(ApiError::InvalidRequest("Token does not belong to this organization".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Token does not belong to this organization".to_string(),
+        ));
     }
 
     // Rotate token
     let delete_old = request.delete_old.unwrap_or(false);
-    let (new_full_token, new_token, deleted_token) = ApiToken::rotate(
-        pool,
-        token_id,
-        request.new_name.as_deref(),
-        delete_old,
-    )
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let (new_full_token, new_token, deleted_token) =
+        ApiToken::rotate(pool, token_id, request.new_name.as_deref(), delete_old)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
         org_ctx.org_id,
         Some(user_id),
         AuditEventType::ApiTokenRotated,
-        format!("API token '{}' rotated{}", old_token.name, if delete_old { " (old token deleted)" } else { "" }),
+        format!(
+            "API token '{}' rotated{}",
+            old_token.name,
+            if delete_old {
+                " (old token deleted)"
+            } else {
+                ""
+            }
+        ),
         Some(serde_json::json!({
             "old_token_id": token_id,
             "new_token_id": new_token.id,
@@ -137,7 +148,8 @@ pub async fn get_tokens_needing_rotation(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     let threshold_days = query.threshold_days.unwrap_or(90);
@@ -151,14 +163,17 @@ pub async fn get_tokens_needing_rotation(
     let tokens_needing_rotation: Vec<TokenRotationStatus> = all_tokens
         .into_iter()
         .filter(|token| token.needs_rotation(threshold_days))
-        .map(|token| TokenRotationStatus {
-            token_id: token.id,
-            name: token.name,
-            token_prefix: token.token_prefix,
-            age_days: token.age_days(),
-            needs_rotation: true,
-            last_used_at: token.last_used_at,
-            created_at: token.created_at,
+        .map(|token| {
+            let age_days = token.age_days();
+            TokenRotationStatus {
+                token_id: token.id,
+                name: token.name,
+                token_prefix: token.token_prefix,
+                age_days,
+                needs_rotation: true,
+                last_used_at: token.last_used_at,
+                created_at: token.created_at,
+            }
         })
         .collect();
 
@@ -175,10 +190,9 @@ pub async fn send_rotation_reminders(
     threshold_days: i64,
 ) -> Result<usize, anyhow::Error> {
     // Find all tokens needing rotation
-    let tokens = ApiToken::find_tokens_needing_rotation(pool, None, threshold_days)
-        .await?;
+    let tokens = ApiToken::find_tokens_needing_rotation(pool, None, threshold_days).await?;
 
-    let email_service = EmailService::from_env();
+    let email_service = EmailService::from_env()?;
     let mut reminders_sent = 0;
 
     for token in tokens {
@@ -196,12 +210,13 @@ pub async fn send_rotation_reminders(
         // Build rotation URL
         let rotation_url = format!(
             "{}/settings/api-tokens/rotate/{}",
-            std::env::var("APP_BASE_URL").unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
+            std::env::var("APP_BASE_URL")
+                .unwrap_or_else(|_| "https://app.mockforge.dev".to_string()),
             token.id
         );
 
         // Send reminder email
-        let email_msg = email_service.generate_token_rotation_reminder(
+        let email_msg = EmailService::generate_token_rotation_reminder(
             &user.username,
             &user.email,
             &token.name,

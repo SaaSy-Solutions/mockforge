@@ -11,8 +11,8 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{
-        record_audit_event, AuditEventType, ApiToken, HostedMock, Organization, OrgMember,
-        OrgSetting, Project, Subscription, UsageCounter, User, UserSetting,
+        record_audit_event, ApiToken, AuditEventType, HostedMock, OrgMember, OrgSetting,
+        Organization, Project, Subscription, UsageCounter, User, UserSetting,
     },
     AppState,
 };
@@ -136,22 +136,19 @@ pub async fn export_data(
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get user settings
-    let user_settings = sqlx::query_as::<_, UserSetting>(
-        "SELECT * FROM user_settings WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let user_settings =
+        sqlx::query_as::<_, UserSetting>("SELECT * FROM user_settings WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // Get API tokens
-    let api_tokens = sqlx::query_as::<_, ApiToken>(
-        "SELECT * FROM api_tokens WHERE user_id = $1"
-    )
-    .bind(user_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let api_tokens = sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ApiError::Database(e))?;
 
     // Get organizations (owned and memberships)
     let orgs = Organization::find_by_user(pool, user_id)
@@ -163,7 +160,7 @@ pub async fn export_data(
     for org in orgs {
         // Get role
         let membership = sqlx::query_as::<_, OrgMember>(
-            "SELECT * FROM org_members WHERE org_id = $1 AND user_id = $2"
+            "SELECT * FROM org_members WHERE org_id = $1 AND user_id = $2",
         )
         .bind(org.id)
         .bind(user_id)
@@ -171,51 +168,47 @@ pub async fn export_data(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-        let role = membership
-            .as_ref()
-            .map(|m| m.role.clone())
-            .unwrap_or_else(|| if org.owner_id == user_id { "owner".to_string() } else { "member".to_string() });
+        let role = membership.as_ref().map(|m| m.role.clone()).unwrap_or_else(|| {
+            if org.owner_id == user_id {
+                "owner".to_string()
+            } else {
+                "member".to_string()
+            }
+        });
 
         // Get org settings
-        let org_settings = sqlx::query_as::<_, OrgSetting>(
-            "SELECT * FROM org_settings WHERE org_id = $1"
-        )
-        .bind(org.id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+        let org_settings =
+            sqlx::query_as::<_, OrgSetting>("SELECT * FROM org_settings WHERE org_id = $1")
+                .bind(org.id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
         // Get projects
-        let projects = sqlx::query_as::<_, Project>(
-            "SELECT * FROM projects WHERE org_id = $1"
-        )
-        .bind(org.id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+        let projects = sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE org_id = $1")
+            .bind(org.id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
         // Get subscriptions
-        let subscriptions = sqlx::query_as::<_, Subscription>(
-            "SELECT * FROM subscriptions WHERE org_id = $1"
-        )
-        .bind(org.id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+        let subscriptions =
+            sqlx::query_as::<_, Subscription>("SELECT * FROM subscriptions WHERE org_id = $1")
+                .bind(org.id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
         // Get usage
-        let usage = UsageCounter::get_or_create_current(pool, org.id)
-            .await
-            .ok();
+        let usage = UsageCounter::get_or_create_current(pool, org.id).await.ok();
 
         // Get hosted mocks
-        let hosted_mocks = sqlx::query_as::<_, HostedMock>(
-            "SELECT * FROM hosted_mocks WHERE org_id = $1"
-        )
-        .bind(org.id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+        let hosted_mocks =
+            sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
+                .bind(org.id)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
         org_data.push(OrganizationData {
             id: org.id.to_string(),
@@ -251,7 +244,7 @@ pub async fn export_data(
                     id: s.id.to_string(),
                     plan: s.plan().to_string(),
                     status: s.status().to_string(),
-                    current_period_end: s.current_period_end.map(|d| d.to_rfc3339()),
+                    current_period_end: Some(s.current_period_end.to_rfc3339()),
                     created_at: s.created_at.to_rfc3339(),
                 })
                 .collect(),
@@ -282,8 +275,8 @@ pub async fn export_data(
             email: user.email.clone(),
             is_verified: user.is_verified,
             is_admin: user.is_admin,
-            auth_provider: user.auth_provider.clone(),
-            avatar_url: user.avatar_url.clone(),
+            auth_provider: None,
+            avatar_url: None,
             created_at: user.created_at.to_rfc3339(),
             updated_at: user.updated_at.to_rfc3339(),
             settings: user_settings
@@ -337,30 +330,28 @@ pub async fn delete_data(
     let mut tx = pool.begin().await.map_err(|e| ApiError::Database(e))?;
 
     // Get user
-    let user = User::find_by_id(&*tx, user_id)
+    let user = User::find_by_id(pool, user_id)
         .await
         .map_err(|e| ApiError::Database(e))?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get organizations owned by user
-    let owned_orgs = sqlx::query_as::<_, Organization>(
-        "SELECT * FROM organizations WHERE owner_id = $1"
-    )
-    .bind(user_id)
-    .fetch_all(&*tx)
-    .await
-    .map_err(|e| ApiError::Database(e))?;
+    let owned_orgs =
+        sqlx::query_as::<_, Organization>("SELECT * FROM organizations WHERE owner_id = $1")
+            .bind(user_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ApiError::Database(e))?;
 
     // For each owned org, check if there are other members
     for org in &owned_orgs {
-        let member_count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM org_members WHERE org_id = $1 AND user_id != $2"
-        )
-        .bind(org.id)
-        .bind(user_id)
-        .fetch_one(&*tx)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+        let member_count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM org_members WHERE org_id = $1 AND user_id != $2")
+                .bind(org.id)
+                .bind(user_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(|e| ApiError::Database(e))?;
 
         if member_count.0 > 0 {
             // Transfer ownership to first admin or member
@@ -369,7 +360,7 @@ pub async fn delete_data(
             )
             .bind(org.id)
             .bind(user_id)
-            .fetch_optional(&*tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(|e| ApiError::Database(e))?;
 
@@ -378,14 +369,14 @@ pub async fn delete_data(
                 sqlx::query("UPDATE organizations SET owner_id = $1 WHERE id = $2")
                     .bind(new_owner_member.user_id)
                     .bind(org.id)
-                    .execute(&*tx)
+                    .execute(&mut *tx)
                     .await
                     .map_err(|e| ApiError::Database(e))?;
 
                 // Update member role to owner
                 sqlx::query("UPDATE org_members SET role = 'owner' WHERE id = $1")
                     .bind(new_owner_member.id)
-                    .execute(&*tx)
+                    .execute(&mut *tx)
                     .await
                     .map_err(|e| ApiError::Database(e))?;
             }
@@ -394,7 +385,7 @@ pub async fn delete_data(
             // Note: This will cascade delete related data via foreign keys
             sqlx::query("DELETE FROM organizations WHERE id = $1")
                 .bind(org.id)
-                .execute(&*tx)
+                .execute(&mut *tx)
                 .await
                 .map_err(|e| ApiError::Database(e))?;
         }
@@ -403,28 +394,28 @@ pub async fn delete_data(
     // Remove user from all organization memberships
     sqlx::query("DELETE FROM org_members WHERE user_id = $1")
         .bind(user_id)
-        .execute(&*tx)
+        .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Database(e))?;
 
     // Delete user settings
     sqlx::query("DELETE FROM user_settings WHERE user_id = $1")
         .bind(user_id)
-        .execute(&*tx)
+        .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Database(e))?;
 
     // Delete API tokens
     sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
         .bind(user_id)
-        .execute(&*tx)
+        .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Database(e))?;
 
     // Delete user account
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(user_id)
-        .execute(&*tx)
+        .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Database(e))?;
 

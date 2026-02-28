@@ -2,13 +2,17 @@
 //!
 //! Provides endpoints for detecting and managing suspicious activities
 
-use axum::{extract::{Path, Query, State}, http::HeaderMap, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::HeaderMap,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
+    middleware::{resolve_org_context, AuthUser},
     models::{SuspiciousActivity, SuspiciousActivityType, User},
     AppState,
 };
@@ -51,7 +55,8 @@ pub async fn get_suspicious_activities(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get activities for this org
@@ -67,7 +72,7 @@ pub async fn get_suspicious_activities(
 
     // Get total count
     let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE"
+        "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE",
     )
     .bind(org_ctx.org_id)
     .fetch_one(pool)

@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{Template, TemplateReview, TemplateVersion, User},
+    middleware::{resolve_org_context, AuthUser},
+    models::{Template, TemplateReview, User},
     AppState,
 };
 

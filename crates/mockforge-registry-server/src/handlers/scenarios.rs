@@ -12,8 +12,11 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, OptionalAuthUser, resolve_org_context},
-    models::{record_audit_event, AuditEventType, FeatureType, FeatureUsage, Scenario, ScenarioReview, ScenarioVersion, User, UsageCounter},
+    middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
+    models::{
+        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Scenario, ScenarioReview,
+        ScenarioVersion, UsageCounter, User,
+    },
     AppState,
 };
 
@@ -141,21 +144,22 @@ pub async fn search_scenarios(
         let review_responses: Vec<ScenarioReviewResponse> = reviews
             .into_iter()
             .map(|review| {
-                let reviewer = reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
-                    id: review.reviewer_id,
-                    username: "unknown".to_string(),
-                    email: "unknown@example.com".to_string(),
-                    password_hash: String::new(),
-                    api_token: None,
-                    is_verified: false,
-                    is_admin: false,
-                    two_factor_enabled: false,
-                    two_factor_secret: None,
-                    two_factor_backup_codes: None,
-                    two_factor_verified_at: None,
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                });
+                let reviewer =
+                    reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
+                        id: review.reviewer_id,
+                        username: "unknown".to_string(),
+                        email: "unknown@example.com".to_string(),
+                        password_hash: String::new(),
+                        api_token: None,
+                        is_verified: false,
+                        is_admin: false,
+                        two_factor_enabled: false,
+                        two_factor_secret: None,
+                        two_factor_backup_codes: None,
+                        two_factor_verified_at: None,
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
+                    });
 
                 ScenarioReviewResponse {
                     id: review.id.to_string(),
@@ -303,26 +307,6 @@ pub async fn get_scenario(
         })
         .collect();
 
-    Ok(Json(ScenarioRegistryEntry {
-        name: scenario.name,
-        description: scenario.description,
-        version: scenario.current_version,
-        versions: version_entries,
-        author: author.username,
-        author_email: Some(author.email),
-        tags: scenario.tags,
-        category: scenario.category,
-        downloads: scenario.downloads_total as u64,
-        rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
-        reviews_count: scenario.rating_count as u32,
-        reviews: review_responses,
-        repository: scenario.repository,
-        homepage: scenario.homepage,
-        license: scenario.license,
-        created_at: scenario.created_at.to_rfc3339(),
-        updated_at: scenario.updated_at.to_rfc3339(),
-    }));
-
     // Record metrics
     metrics.record_download_success();
 
@@ -386,15 +370,13 @@ pub async fn publish_scenario(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, author_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, author_id, &headers, None)
+        .await
         .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
     let limits = &org_ctx.org.limits_json;
-    let max_scenarios = limits
-        .get("max_scenarios_published")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let max_scenarios = limits.get("max_scenarios_published").and_then(|v| v.as_i64()).unwrap_or(1);
 
     if max_scenarios >= 0 {
         let existing = Scenario::find_by_org(pool, org_ctx.org_id)
@@ -410,10 +392,7 @@ pub async fn publish_scenario(
     }
 
     // Check storage limit
-    let storage_limit_gb = limits
-        .get("storage_gb")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let storage_limit_gb = limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1);
     let storage_limit_bytes = storage_limit_gb * 1_000_000_000;
 
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
@@ -439,17 +418,23 @@ pub async fn publish_scenario(
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid manifest JSON: {}", e)))?;
 
     // Extract scenario name and version from manifest for validation
-    let name = manifest.get("name")
+    let name = manifest
+        .get("name")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'name' field".to_string()))?;
+        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'name' field".to_string()))?
+        .to_string();
 
-    let version = manifest.get("version")
+    let version = manifest
+        .get("version")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::InvalidRequest("Manifest must contain 'version' field".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Manifest must contain 'version' field".to_string())
+        })?
+        .to_string();
 
     // Validate name and version
-    crate::validation::validate_name(name)?;
-    crate::validation::validate_version(version)?;
+    crate::validation::validate_name(&name)?;
+    crate::validation::validate_version(&version)?;
 
     // Decode package data
     let package_data = base64::decode(&request.package)
@@ -463,7 +448,7 @@ pub async fn publish_scenario(
     )?;
 
     // Verify checksum
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(&package_data);
     let calculated_checksum = hex::encode(hasher.finalize());
@@ -474,9 +459,16 @@ pub async fn publish_scenario(
 
     // Generate slug from name
     let slug = name
+        .as_str()
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>()
         .trim_matches('-')
         .replace("--", "-");
@@ -484,34 +476,30 @@ pub async fn publish_scenario(
     // Upload to storage
     let download_url = state
         .storage
-        .upload_scenario(name, version, package_data)
+        .upload_scenario(&name, &version, package_data)
         .await
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update scenario
-    let scenario = if let Some(existing) = Scenario::find_by_name(pool, name).await.map_err(|e| ApiError::Database(e))? {
+    let scenario = if let Some(existing) =
+        Scenario::find_by_name(pool, &name).await.map_err(|e| ApiError::Database(e))?
+    {
         // Update existing scenario
         existing
     } else {
         // Create new scenario
-        let category = manifest.get("category")
-            .and_then(|v| v.as_str())
-            .unwrap_or("other");
-        let description = manifest.get("description")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let license = manifest.get("license")
-            .and_then(|v| v.as_str())
-            .unwrap_or("MIT");
+        let category = manifest.get("category").and_then(|v| v.as_str()).unwrap_or("other");
+        let description = manifest.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        let license = manifest.get("license").and_then(|v| v.as_str()).unwrap_or("MIT");
 
         Scenario::create(
             pool,
             Some(org_ctx.org_id),
-            name,
+            &name,
             &slug,
             description,
             author_id,
-            version,
+            &version,
             category,
             license,
             manifest.clone(),
@@ -521,19 +509,21 @@ pub async fn publish_scenario(
     };
 
     // Create version entry
-    let min_mockforge_version = manifest.get("compatibility")
+    let min_mockforge_version = manifest
+        .get("compatibility")
         .and_then(|c| c.get("min_version"))
-        .and_then(|v| v.as_str());
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
     ScenarioVersion::create(
         pool,
         scenario.id,
-        version,
+        &version,
         manifest,
         &download_url,
         &request.checksum,
         request.size as i64,
-        min_mockforge_version,
+        min_mockforge_version.as_deref(),
     )
     .await
     .map_err(|e| ApiError::Database(e))?;
@@ -685,7 +675,7 @@ pub struct ScenarioReviewResponse {
 #[derive(Debug, Deserialize)]
 pub struct PublishScenarioRequest {
     pub manifest: String, // JSON string
-    pub package: String, // Base64 encoded
+    pub package: String,  // Base64 encoded
     pub checksum: String,
     pub size: u64,
 }

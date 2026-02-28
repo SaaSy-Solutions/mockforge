@@ -12,8 +12,11 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, OptionalAuthUser, resolve_org_context},
-    models::{record_audit_event, AuditEventType, FeatureType, FeatureUsage, Template, TemplateVersion, TemplateCategory, Organization, User, UsageCounter},
+    middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
+    models::{
+        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Organization, Template,
+        TemplateCategory, TemplateVersion, UsageCounter, User,
+    },
     AppState,
 };
 
@@ -98,6 +101,7 @@ pub async fn search_templates(
 
         let stats = template.stats_json.clone();
         let compatibility = template.compatibility_json.clone();
+        let category = template.category();
 
         entries.push(TemplateRegistryEntry {
             id: template.id.to_string(),
@@ -106,17 +110,19 @@ pub async fn search_templates(
             author: author.username,
             author_email: Some(author.email),
             version: template.version,
-            category: template.category(),
+            category,
             tags: template.tags,
             content: template.content_json,
             readme: template.readme,
             example_usage: template.example_usage,
             requirements: template.requirements,
-            compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| CompatibilityInfo {
-                min_version: "0.1.0".to_string(),
-                max_version: None,
-                required_features: vec![],
-                protocols: vec![],
+            compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| {
+                CompatibilityInfo {
+                    min_version: "0.1.0".to_string(),
+                    max_version: None,
+                    required_features: vec![],
+                    protocols: vec![],
+                }
             }),
             stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
                 downloads: 0,
@@ -176,37 +182,7 @@ pub async fn get_template(
 
     let stats = template.stats_json.clone();
     let compatibility = template.compatibility_json.clone();
-
-    Ok(Json(TemplateRegistryEntry {
-        id: template.id.to_string(),
-        name: template.name,
-        description: template.description,
-        author: author.username,
-        author_email: Some(author.email),
-        version: template.version,
-        category: template.category(),
-        tags: template.tags,
-        content: template.content_json,
-        readme: template.readme,
-        example_usage: template.example_usage,
-        requirements: template.requirements,
-        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| CompatibilityInfo {
-            min_version: "0.1.0".to_string(),
-            max_version: None,
-            required_features: vec![],
-            protocols: vec![],
-        }),
-        stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
-            downloads: 0,
-            stars: 0,
-            forks: 0,
-            rating: 0.0,
-            rating_count: 0,
-        }),
-        created_at: template.created_at.to_rfc3339(),
-        updated_at: template.updated_at.to_rfc3339(),
-        published: template.published,
-    }));
+    let category = template.category();
 
     // Record metrics
     metrics.record_download_success();
@@ -218,17 +194,19 @@ pub async fn get_template(
         author: author.username,
         author_email: Some(author.email),
         version: template.version,
-        category: template.category(),
+        category,
         tags: template.tags,
         content: template.content_json,
         readme: template.readme,
         example_usage: template.example_usage,
         requirements: template.requirements,
-        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| CompatibilityInfo {
-            min_version: "0.1.0".to_string(),
-            max_version: None,
-            required_features: vec![],
-            protocols: vec![],
+        compatibility: serde_json::from_value(compatibility).unwrap_or_else(|_| {
+            CompatibilityInfo {
+                min_version: "0.1.0".to_string(),
+                max_version: None,
+                required_features: vec![],
+                protocols: vec![],
+            }
         }),
         stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
             downloads: 0,
@@ -254,15 +232,13 @@ pub async fn publish_template(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, author_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, author_id, &headers, None)
+        .await
         .map_err(|_| ApiError::OrganizationNotFound)?;
 
     // Check publishing limits
     let limits = &org_ctx.org.limits_json;
-    let max_templates = limits
-        .get("max_templates_published")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(3);
+    let max_templates = limits.get("max_templates_published").and_then(|v| v.as_i64()).unwrap_or(3);
 
     if max_templates >= 0 {
         let existing = Template::find_by_org(pool, org_ctx.org_id)
@@ -278,10 +254,7 @@ pub async fn publish_template(
     }
 
     // Check storage limit
-    let storage_limit_gb = limits
-        .get("storage_gb")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let storage_limit_gb = limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1);
     let storage_limit_bytes = storage_limit_gb * 1_000_000_000;
 
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
@@ -317,7 +290,7 @@ pub async fn publish_template(
     )?;
 
     // Verify checksum
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(&package_data);
     let calculated_checksum = hex::encode(hasher.finalize());
@@ -334,7 +307,11 @@ pub async fn publish_template(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update template
-    let template = if let Some(existing) = Template::find_by_name_version(pool, &request.name, &request.version).await.map_err(|e| ApiError::Database(e))? {
+    let template = if let Some(existing) =
+        Template::find_by_name_version(pool, &request.name, &request.version)
+            .await
+            .map_err(|e| ApiError::Database(e))?
+    {
         existing
     } else {
         Template::create(
@@ -346,7 +323,7 @@ pub async fn publish_template(
             author_id,
             &request.version,
             request.category,
-            request.content_json,
+            request.content_json.clone(),
         )
         .await
         .map_err(|e| ApiError::Database(e))?

@@ -25,3 +25,14 @@ pub mod tokens;
 pub mod two_factor;
 pub mod usage;
 pub mod verification;
+
+// Marketplace, settings, security, GDPR, and audit handlers
+pub mod audit;
+pub mod gdpr;
+pub mod scenario_reviews;
+pub mod scenarios;
+pub mod security;
+pub mod settings;
+pub mod template_reviews;
+pub mod templates;
+pub mod token_rotation;

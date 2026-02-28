@@ -2,14 +2,17 @@
 //!
 //! Provides endpoints for organization admins to view audit logs
 
-use axum::{extract::{Path, Query, State}, Json};
+use axum::{
+    extract::{Path, Query, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{AuditEventType, AuditLog, Organization, OrgMember, OrgRole},
+    middleware::{resolve_org_context, AuthUser},
+    models::{AuditEventType, AuditLog, OrgMember, OrgRole, Organization},
     AppState,
 };
 
@@ -62,7 +65,7 @@ pub async fn get_audit_logs(
         let member = OrgMember::find(pool, org_id, user_id)
             .await
             .map_err(|e| ApiError::Database(e))?;
-        member.map(|m| m.role == OrgRole::Admin).unwrap_or(false)
+        member.map(|m| m.role() == OrgRole::Admin).unwrap_or(false)
     } else {
         true
     };
@@ -122,13 +125,11 @@ pub async fn get_audit_logs(
 
     // Get total count
     let total: (i64,) = if event_type.is_some() {
-        sqlx::query_as(
-            "SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2"
-        )
-        .bind(org_id)
-        .bind(event_type)
-        .fetch_one(pool)
-        .await
+        sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2")
+            .bind(org_id)
+            .bind(event_type)
+            .fetch_one(pool)
+            .await
     } else {
         sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1")
             .bind(org_id)

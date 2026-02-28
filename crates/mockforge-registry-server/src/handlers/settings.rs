@@ -2,19 +2,18 @@
 //!
 //! Provides endpoints for managing user and organization settings, including BYOK configuration
 
-use axum::{
-    extract::State,
-    http::HeaderMap,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    cache::{Cache, org_setting_cache_key, ttl},
+    cache::{org_setting_cache_key, ttl, Cache},
     error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{AuditEventType, OrgSetting, SuspiciousActivityType, UserSetting, BYOKConfig, record_audit_event, record_suspicious_activity},
+    middleware::{resolve_org_context, AuthUser},
+    models::{
+        record_audit_event, record_suspicious_activity, AuditEventType, BYOKConfig, OrgSetting,
+        SuspiciousActivityType,
+    },
     AppState,
 };
 
@@ -27,17 +26,16 @@ pub async fn get_byok_config(
     let pool = state.db.pool();
 
     // Resolve org context (BYOK is org-level)
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Try cache first
     let cache_key = org_setting_cache_key(&org_ctx.org_id, "byok");
     let config = if let Some(redis) = &state.redis {
         let cache = Cache::new(redis.clone());
-        cache.get_or_set(
-            &cache_key,
-            ttl::SETTINGS,
-            || async {
+        cache
+            .get_or_set(&cache_key, ttl::SETTINGS, || async {
                 let setting = OrgSetting::get(pool, org_ctx.org_id, "byok")
                     .await
                     .map_err(|e| anyhow::anyhow!("Database error: {}", e))?;
@@ -54,10 +52,9 @@ pub async fn get_byok_config(
                         enabled: false,
                     })
                 }
-            },
-        )
-        .await
-        .map_err(|e| ApiError::Internal(format!("Cache error: {}", e)))?
+            })
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Cache error: {}", e)))?
     } else {
         // No Redis - fallback to database
         let setting = OrgSetting::get(pool, org_ctx.org_id, "byok")
@@ -66,7 +63,7 @@ pub async fn get_byok_config(
 
         if let Some(setting) = setting {
             let config: BYOKConfig = serde_json::from_value(setting.setting_value)
-                .map_err(|_| ApiError::Internal("Invalid BYOK configuration".to_string()))?;
+                .map_err(|_| ApiError::Internal(anyhow::anyhow!("Invalid BYOK configuration")))?;
             config
         } else {
             BYOKConfig {
@@ -91,7 +88,8 @@ pub async fn update_byok_config(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Validate config
@@ -101,7 +99,9 @@ pub async fn update_byok_config(
         ));
     }
 
-    if config.provider == "custom" && config.base_url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
+    if config.provider == "custom"
+        && config.base_url.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true)
+    {
         return Err(ApiError::InvalidRequest(
             "Base URL is required for custom provider".to_string(),
         ));
@@ -110,7 +110,7 @@ pub async fn update_byok_config(
     // Encrypt API key before storing (in production, use proper encryption)
     // For now, we'll store it as-is, but in production you should encrypt it
     let config_value = serde_json::to_value(&config)
-        .map_err(|_| ApiError::Internal("Failed to serialize config".to_string()))?;
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("Failed to serialize config")))?;
 
     // Store setting
     OrgSetting::set(pool, org_ctx.org_id, "byok", config_value)
@@ -125,12 +125,12 @@ pub async fn update_byok_config(
     }
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
@@ -160,16 +160,17 @@ pub async fn delete_byok_config(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Record audit log before deletion
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
