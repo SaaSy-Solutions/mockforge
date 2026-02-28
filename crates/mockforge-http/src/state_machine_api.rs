@@ -170,19 +170,31 @@ pub async fn get_state_machine(
 
     // Convert types from mockforge-scenarios' dependency version to local version
     // by serializing and deserializing through JSON
-    let state_machine_json =
-        serde_json::to_value(&state_machine).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let state_machine: StateMachine = serde_json::from_value(state_machine_json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let state_machine_json = serde_json::to_value(&state_machine).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let state_machine: StateMachine = serde_json::from_value(state_machine_json).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let visual_layout: Option<VisualLayout> = visual_layout
         .map(|layout| {
-            let layout_json =
-                serde_json::to_value(&layout).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            serde_json::from_value(layout_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+            let layout_json = serde_json::to_value(&layout).map_err(|e| {
+                tracing::error!("JSON serialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            serde_json::from_value(layout_json).map_err(|e| {
+                tracing::error!("JSON deserialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
         })
         .transpose()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("JSON serialization error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(StateMachineResponse {
         state_machine,
@@ -201,8 +213,10 @@ pub async fn create_state_machine(
     // by serializing and deserializing through JSON
     // The ScenarioManifest uses types from mockforge-scenarios' mockforge-core dependency (0.2.9)
     // We need to convert our local StateMachine to that version
-    let state_machine_json = serde_json::to_value(&request.state_machine)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let state_machine_json = serde_json::to_value(&request.state_machine).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Create manifest with JSON values - serde will deserialize into the correct types
     // We need to provide all required fields for ScenarioManifest
@@ -224,13 +238,17 @@ pub async fn create_state_machine(
     });
 
     if let Some(layout) = &request.visual_layout {
-        let layout_json =
-            serde_json::to_value(layout).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let layout_json = serde_json::to_value(layout).map_err(|e| {
+            tracing::error!("JSON serialization error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
         manifest_json["state_machine_graphs"][&request.state_machine.resource_type] = layout_json;
     }
 
-    let manifest: ScenarioManifest =
-        serde_json::from_value(manifest_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let manifest: ScenarioManifest = serde_json::from_value(manifest_json).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Validate the first state machine from manifest
     if let Some(sm) = manifest.state_machines.first() {
@@ -265,19 +283,31 @@ pub async fn create_state_machine(
         manager.get_visual_layout(&request.state_machine.resource_type).await;
 
     // Convert back to local types
-    let state_machine_json = serde_json::to_value(&state_machine_from_manager)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let state_machine: StateMachine = serde_json::from_value(state_machine_json)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let state_machine_json = serde_json::to_value(&state_machine_from_manager).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let state_machine: StateMachine = serde_json::from_value(state_machine_json).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let visual_layout: Option<VisualLayout> = visual_layout_from_manager
         .map(|layout| {
-            let layout_json =
-                serde_json::to_value(&layout).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            serde_json::from_value(layout_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+            let layout_json = serde_json::to_value(&layout).map_err(|e| {
+                tracing::error!("JSON serialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            serde_json::from_value(layout_json).map_err(|e| {
+                tracing::error!("JSON deserialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
         })
         .transpose()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("JSON serialization error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(StateMachineResponse {
         state_machine,
@@ -439,8 +469,10 @@ pub async fn get_next_states(
 ) -> Result<Json<NextStatesResponse>, StatusCode> {
     let manager = state.state_machine_manager.read().await;
 
-    let next_states =
-        manager.get_next_states(&resource_id).await.map_err(|_| StatusCode::NOT_FOUND)?;
+    let next_states = manager.get_next_states(&resource_id).await.map_err(|e| {
+        tracing::warn!("Failed to get next states for {}: {}", resource_id, e);
+        StatusCode::NOT_FOUND
+    })?;
 
     Ok(Json(NextStatesResponse { next_states }))
 }
@@ -474,17 +506,28 @@ pub async fn export_state_machines(
     let state_machines: Vec<StateMachine> = state_machines_from_manager
         .into_iter()
         .map(|sm| {
-            let json = serde_json::to_value(&sm).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            serde_json::from_value(json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+            let json = serde_json::to_value(&sm).map_err(|e| {
+                tracing::error!("JSON serialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            serde_json::from_value(json).map_err(|e| {
+                tracing::error!("JSON deserialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })
         })
         .collect::<Result<Vec<_>, StatusCode>>()?;
 
     let visual_layouts: HashMap<String, VisualLayout> = visual_layouts_from_manager
         .into_iter()
         .map(|(k, v)| {
-            let json = serde_json::to_value(&v).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let layout: VisualLayout =
-                serde_json::from_value(json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let json = serde_json::to_value(&v).map_err(|e| {
+                tracing::error!("JSON serialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let layout: VisualLayout = serde_json::from_value(json).map_err(|e| {
+                tracing::error!("JSON serialization error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
             Ok((k, layout))
         })
         .collect::<Result<HashMap<_, _>, StatusCode>>()?;
@@ -521,8 +564,10 @@ pub async fn import_state_machines(
         "state_machine_graphs": request.visual_layouts
     });
 
-    let manifest: ScenarioManifest =
-        serde_json::from_value(manifest_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let manifest: ScenarioManifest = serde_json::from_value(manifest_json).map_err(|e| {
+        tracing::error!("JSON serialization error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     if let Err(e) = manager.load_from_manifest(&manifest).await {
         error!("Failed to import state machines: {}", e);

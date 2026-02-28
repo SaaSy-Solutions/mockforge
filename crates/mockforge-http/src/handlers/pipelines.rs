@@ -145,7 +145,10 @@ pub async fn get_pipeline(
     State(state): State<PipelineState>,
     Path(id): Path<String>,
 ) -> Result<Json<Pipeline>, StatusCode> {
-    let pipeline_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pipeline_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     let pipeline = state
         .storage
@@ -164,7 +167,10 @@ pub async fn update_pipeline(
     Path(id): Path<String>,
     Json(request): Json<UpdatePipelineRequest>,
 ) -> Result<Json<Pipeline>, StatusCode> {
-    let pipeline_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pipeline_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     let mut pipeline = state.storage.get_mut(&pipeline_id).ok_or(StatusCode::NOT_FOUND)?;
 
@@ -190,7 +196,10 @@ pub async fn delete_pipeline(
     State(state): State<PipelineState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, StatusCode> {
-    let pipeline_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pipeline_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     if state.storage.remove(&pipeline_id).is_some() {
         info!("Pipeline deleted: {}", pipeline_id);
@@ -208,7 +217,10 @@ pub async fn trigger_pipeline(
     Path(id): Path<String>,
     Json(event): Json<PipelineEvent>,
 ) -> Result<Json<PipelineExecution>, StatusCode> {
-    let pipeline_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pipeline_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     let pipeline = state
         .storage
@@ -273,7 +285,10 @@ pub async fn get_execution(
     State(state): State<PipelineState>,
     Path(id): Path<String>,
 ) -> Result<Json<PipelineExecution>, StatusCode> {
-    let execution_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let execution_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     let execution = state
         .executions
@@ -291,7 +306,10 @@ pub async fn get_pipeline_stats(
     State(state): State<PipelineState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let pipeline_id = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let pipeline_id = Uuid::parse_str(&id).map_err(|e| {
+        tracing::warn!("Invalid UUID '{}': {}", id, e);
+        StatusCode::BAD_REQUEST
+    })?;
 
     // Get all executions for this pipeline
     let executions: Vec<PipelineExecution> = state

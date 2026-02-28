@@ -161,7 +161,13 @@ impl FileKeyStorage {
         let key_id = key_id.clone();
 
         tokio::task::spawn_blocking(move || {
-            std::fs::read(&file_path).map_err(|_| EncryptionError::key_not_found(key_id))
+            std::fs::read(&file_path).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    EncryptionError::key_not_found(key_id)
+                } else {
+                    EncryptionError::generic(format!("Failed to read key {}: {}", key_id, e))
+                }
+            })
         })
         .await
         .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
@@ -194,7 +200,13 @@ impl KeyStorage for FileKeyStorage {
 
     fn retrieve_key(&self, key_id: &KeyId) -> EncryptionResult<Vec<u8>> {
         let file_path = self.key_file_path(key_id);
-        std::fs::read(&file_path).map_err(|_| EncryptionError::key_not_found(key_id.clone()))
+        std::fs::read(&file_path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                EncryptionError::key_not_found(key_id.clone())
+            } else {
+                EncryptionError::generic(format!("Failed to read key {}: {}", key_id, e))
+            }
+        })
     }
 
     fn delete_key(&mut self, key_id: &KeyId) -> EncryptionResult<()> {
