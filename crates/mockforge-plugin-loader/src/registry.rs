@@ -18,7 +18,9 @@ pub struct PluginRegistry {
     stats: RegistryStats,
 }
 
-// Implement Send + Sync for PluginRegistry
+// SAFETY: PluginRegistry is accessed only through Arc<RwLock<PluginRegistry>> in
+// PluginLoader, which serializes all access. The contained PluginInstance may hold
+// wasmtime types that are not auto-Send/Sync, but all access is gated by the RwLock.
 unsafe impl Send for PluginRegistry {}
 unsafe impl Sync for PluginRegistry {}
 

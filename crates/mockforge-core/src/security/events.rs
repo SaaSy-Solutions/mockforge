@@ -441,11 +441,6 @@ impl SecurityEvent {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
-
-    /// Convert to JSON value
-    pub fn to_json_value(&self) -> serde_json::Value {
-        serde_json::to_value(self).unwrap_or_default()
-    }
 }
 
 #[cfg(test)]

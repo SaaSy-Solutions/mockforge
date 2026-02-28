@@ -130,13 +130,9 @@ impl AccessReviewScheduler {
         let config = self.config.clone();
         let notification_service = self.notification_service.clone();
 
-        // Mark as running (spawn a task to do this)
-        let running_init = running.clone();
         tokio::spawn(async move {
-            *running_init.write().await = true;
-        });
-
-        tokio::spawn(async move {
+            // Mark as running before entering the loop
+            *running.write().await = true;
             // Check every hour for due reviews
             let mut interval = interval(TokioDuration::from_secs(3600));
 

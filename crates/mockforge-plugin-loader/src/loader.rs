@@ -32,7 +32,9 @@ pub struct PluginLoader {
     stats: RwLock<PluginLoadStats>,
 }
 
-// Implement Send + Sync for PluginLoader
+// SAFETY: All PluginLoader fields are individually Send + Sync (Arc, RwLock wrappers)
+// except for PluginRegistry which requires manual Send + Sync due to wasmtime types.
+// The registry is wrapped in Arc<RwLock<...>> ensuring synchronized access.
 unsafe impl Send for PluginLoader {}
 unsafe impl Sync for PluginLoader {}
 

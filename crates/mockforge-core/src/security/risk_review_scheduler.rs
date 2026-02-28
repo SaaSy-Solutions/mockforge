@@ -42,13 +42,9 @@ impl RiskReviewScheduler {
         let running = self.running.clone();
         let system_user_id = self.system_user_id;
 
-        // Mark as running
-        let running_init = running.clone();
         tokio::spawn(async move {
-            *running_init.write().await = true;
-        });
-
-        tokio::spawn(async move {
+            // Mark as running before entering the loop
+            *running.write().await = true;
             // Check every 6 hours for due reviews
             let mut interval = interval(TokioDuration::from_secs(6 * 3600));
 
