@@ -18,7 +18,7 @@ categories.workspace = true
 prometheus = { version = "0.14", features = ["process"] }
 
 # Async runtime
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 
 # HTTP server for metrics endpoint
 axum = "0.8"

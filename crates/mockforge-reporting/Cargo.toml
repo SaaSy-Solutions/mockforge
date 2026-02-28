@@ -41,7 +41,7 @@ image = "0.25"
 tera = "1.19"
 
 # Async
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 
 # MockForge dependencies
 mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
