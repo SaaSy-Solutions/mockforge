@@ -1,8 +1,10 @@
 //! Email verification handlers
 
-use axum::{extract::State, Json, Query};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     email::EmailService,
@@ -34,11 +36,15 @@ pub async fn verify_email(
     let verification_token = VerificationToken::find_by_token(pool, &params.token)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::InvalidRequest("Invalid or expired verification token".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Invalid or expired verification token".to_string())
+        })?;
 
     // Check if token is valid
     if !verification_token.is_valid() {
-        return Err(ApiError::InvalidRequest("Verification token has expired or already been used".to_string()));
+        return Err(ApiError::InvalidRequest(
+            "Verification token has expired or already been used".to_string(),
+        ));
     }
 
     // Get user
@@ -100,16 +106,22 @@ pub async fn resend_verification(
         .map_err(|e| ApiError::Database(e))?;
 
     // Send verification email (non-blocking)
-    let email_service = EmailService::from_env();
-    let verification_email = email_service.generate_verification_email(
+    let verification_email = EmailService::generate_verification_email(
         &user.username,
         &user.email,
         &verification_token.token,
     );
 
     tokio::spawn(async move {
-        if let Err(e) = email_service.send(verification_email).await {
-            tracing::warn!("Failed to send verification email: {}", e);
+        match EmailService::from_env() {
+            Ok(email_service) => {
+                if let Err(e) = email_service.send(verification_email).await {
+                    tracing::warn!("Failed to send verification email: {}", e);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to create email service: {}", e);
+            }
         }
     });
 

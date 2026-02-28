@@ -11,13 +11,17 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    error::{ApiError, ApiResult},
-    middleware::{AuthUser, resolve_org_context},
-    models::{AuditEventType, FeatureType, FeatureUsage, HostedMock, DeploymentLog, DeploymentMetrics, Organization, DeploymentStatus, HealthStatus, User, record_audit_event},
     deployment::flyio::FlyioClient,
+    error::{ApiError, ApiResult},
+    middleware::{resolve_org_context, AuthUser},
+    models::{
+        feature_usage::{FeatureType, FeatureUsage},
+        record_audit_event, AuditEventType, DeploymentLog, DeploymentMetrics, DeploymentStatus,
+        HostedMock, Organization, User,
+    },
     AppState,
 };
-use tracing::{error, warn};
+use tracing::warn;
 
 /// Create a new hosted mock deployment
 pub async fn create_deployment(
@@ -29,15 +33,13 @@ pub async fn create_deployment(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check plan limits
     let limits = &org_ctx.org.limits_json;
-    let max_hosted_mocks = limits
-        .get("max_hosted_mocks")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
+    let max_hosted_mocks = limits.get("max_hosted_mocks").and_then(|v| v.as_i64()).unwrap_or(0);
 
     if max_hosted_mocks >= 0 {
         // Count existing active deployments
@@ -45,8 +47,11 @@ pub async fn create_deployment(
             .await
             .map_err(|e| ApiError::Database(e))?;
 
-        let active_count = existing.iter()
-            .filter(|m| matches!(m.status(), DeploymentStatus::Active | DeploymentStatus::Deploying))
+        let active_count = existing
+            .iter()
+            .filter(|m| {
+                matches!(m.status(), DeploymentStatus::Active | DeploymentStatus::Deploying)
+            })
             .count();
 
         if active_count as i64 >= max_hosted_mocks {
@@ -58,16 +63,27 @@ pub async fn create_deployment(
     }
 
     // Validate slug format
-    let slug = request.slug.as_deref().unwrap_or_else(|| {
-        // Generate slug from name
-        request.name
-            .to_lowercase()
-            .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
-            .collect::<String>()
-            .trim_matches('-')
-            .replace("--", "-")
-    });
+    let generated_slug;
+    let slug = match request.slug.as_deref() {
+        Some(s) => s,
+        None => {
+            generated_slug = request
+                .name
+                .to_lowercase()
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' {
+                        c
+                    } else {
+                        '-'
+                    }
+                })
+                .collect::<String>()
+                .trim_matches('-')
+                .replace("--", "-");
+            &generated_slug
+        }
+    };
 
     if !slug.chars().all(|c| c.is_alphanumeric() || c == '-') {
         return Err(ApiError::InvalidRequest(
@@ -81,9 +97,10 @@ pub async fn create_deployment(
         .map_err(|e| ApiError::Database(e))?
         .is_some()
     {
-        return Err(ApiError::InvalidRequest(
-            format!("A deployment with slug '{}' already exists", slug),
-        ));
+        return Err(ApiError::InvalidRequest(format!(
+            "A deployment with slug '{}' already exists",
+            slug
+        )));
     }
 
     // Create deployment record
@@ -135,12 +152,12 @@ pub async fn create_deployment(
     .await;
 
     // Record audit log
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
@@ -163,7 +180,9 @@ pub async fn create_deployment(
     let deployment = HostedMock::find_by_id(pool, deployment.id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::Internal("Failed to retrieve created deployment".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::Internal(anyhow::anyhow!("Failed to retrieve created deployment"))
+        })?;
 
     Ok(Json(DeploymentResponse::from(deployment)))
 }
@@ -177,7 +196,8 @@ pub async fn list_deployments(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all deployments
@@ -185,10 +205,8 @@ pub async fn list_deployments(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    let responses: Vec<DeploymentResponse> = deployments
-        .into_iter()
-        .map(DeploymentResponse::from)
-        .collect();
+    let responses: Vec<DeploymentResponse> =
+        deployments.into_iter().map(DeploymentResponse::from).collect();
 
     Ok(Json(responses))
 }
@@ -203,7 +221,8 @@ pub async fn get_deployment(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
@@ -233,7 +252,8 @@ pub async fn update_deployment_status(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
@@ -273,14 +293,15 @@ pub async fn update_deployment_status(
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
         .map_err(|e| ApiError::Database(e))?
-        .ok_or_else(|| ApiError::Internal("Failed to retrieve updated deployment".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
+        })?;
 
     // Send deployment status notification email (non-blocking)
     if let Ok(org) = Organization::find_by_id(pool, deployment.org_id).await {
         if let Some(org) = org {
             if let Ok(owner) = User::find_by_id(pool, org.owner_id).await {
                 if let Some(owner) = owner {
-                    let email_service = crate::email::EmailService::from_env();
                     let status_str = format!("{:?}", deployment.status()).to_lowercase();
                     let email_msg = crate::email::EmailService::generate_deployment_status_email(
                         &owner.username,
@@ -292,8 +313,15 @@ pub async fn update_deployment_status(
                     );
 
                     tokio::spawn(async move {
-                        if let Err(e) = email_service.send(email_msg).await {
-                            tracing::warn!("Failed to send deployment status email: {}", e);
+                        match crate::email::EmailService::from_env() {
+                            Ok(email_service) => {
+                                if let Err(e) = email_service.send(email_msg).await {
+                                    tracing::warn!("Failed to send deployment status email: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to create email service: {}", e);
+                            }
                         }
                     });
                 }
@@ -314,7 +342,8 @@ pub async fn delete_deployment(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
@@ -331,12 +360,12 @@ pub async fn delete_deployment(
     }
 
     // Record audit log before deletion
-    let ip_address = headers.get("X-Forwarded-For")
+    let ip_address = headers
+        .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
-    let user_agent = headers.get("User-Agent")
-        .and_then(|h| h.to_str().ok());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
     record_audit_event(
         pool,
@@ -365,15 +394,20 @@ pub async fn delete_deployment(
         let flyio_client = FlyioClient::new(flyio_token);
 
         // Generate app name (same as in orchestrator)
-        let app_name = format!("mockforge-{}-{}",
-            deployment.org_id.to_string().replace("-", "").chars().take(8).collect::<String>(),
+        let app_name = format!(
+            "mockforge-{}-{}",
+            deployment
+                .org_id
+                .to_string()
+                .replace("-", "")
+                .chars()
+                .take(8)
+                .collect::<String>(),
             deployment.slug
         );
 
         // Try to get machine_id from metadata
-        let machine_id = deployment.metadata_json
-            .get("flyio_machine_id")
-            .and_then(|v| v.as_str());
+        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
 
         if let Some(machine_id) = machine_id {
             // Delete the specific machine
@@ -409,7 +443,10 @@ pub async fn delete_deployment(
             }
         } else {
             // Machine ID not found in metadata, try to list and delete all machines
-            warn!("Machine ID not found in metadata for deployment {}, attempting to list machines", deployment_id);
+            warn!(
+                "Machine ID not found in metadata for deployment {}, attempting to list machines",
+                deployment_id
+            );
             match flyio_client.list_machines(&app_name).await {
                 Ok(machines) => {
                     for machine in machines {
@@ -441,15 +478,9 @@ pub async fn delete_deployment(
         .await
         .map_err(|e| ApiError::Database(e))?;
 
-    DeploymentLog::create(
-        pool,
-        deployment_id,
-        "info",
-        "Deployment deleted successfully",
-        None,
-    )
-    .await
-    .ok(); // Log but don't fail on log error
+    DeploymentLog::create(pool, deployment_id, "info", "Deployment deleted successfully", None)
+        .await
+        .ok(); // Log but don't fail on log error
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -467,7 +498,8 @@ pub async fn get_deployment_logs(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
@@ -503,7 +535,8 @@ pub async fn get_deployment_metrics(
     let pool = state.db.pool();
 
     // Resolve org context
-    let org_ctx = resolve_org_context(&state, user_id, &headers, None).await
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
@@ -565,6 +598,8 @@ pub struct DeploymentResponse {
 
 impl From<HostedMock> for DeploymentResponse {
     fn from(mock: HostedMock) -> Self {
+        let status = mock.status().to_string();
+        let health_status = mock.health_status().to_string();
         Self {
             id: mock.id,
             org_id: mock.org_id,
@@ -572,9 +607,9 @@ impl From<HostedMock> for DeploymentResponse {
             name: mock.name,
             slug: mock.slug,
             description: mock.description,
-            status: mock.status().to_string(),
+            status,
             deployment_url: mock.deployment_url,
-            health_status: mock.health_status().to_string(),
+            health_status,
             error_message: mock.error_message,
             created_at: mock.created_at,
             updated_at: mock.updated_at,

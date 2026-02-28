@@ -31,6 +31,8 @@ pub fn create_router() -> Router<AppState> {
             post(handlers::auth::request_password_reset),
         )
         .route("/api/v1/auth/password/reset", post(handlers::auth::confirm_password_reset))
+        // Email verification (public, token-based auth)
+        .route("/api/v1/auth/verify-email", get(handlers::verification::verify_email))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
@@ -81,6 +83,16 @@ pub fn create_router() -> Router<AppState> {
         // Billing routes
         .route("/api/v1/billing/subscription", get(handlers::billing::get_subscription))
         .route("/api/v1/billing/checkout", post(handlers::billing::create_checkout))
+        // Email verification (resend requires auth)
+        .route("/api/v1/auth/verify-email/resend", post(handlers::verification::resend_verification))
+        // Hosted mocks deployment routes
+        .route("/api/v1/hosted-mocks", post(handlers::hosted_mocks::create_deployment))
+        .route("/api/v1/hosted-mocks", get(handlers::hosted_mocks::list_deployments))
+        .route("/api/v1/hosted-mocks/{deployment_id}", get(handlers::hosted_mocks::get_deployment))
+        .route("/api/v1/hosted-mocks/{deployment_id}/status", patch(handlers::hosted_mocks::update_deployment_status))
+        .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
+        .route("/api/v1/hosted-mocks/{deployment_id}/logs", get(handlers::hosted_mocks::get_deployment_logs))
+        .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         .route_layer(middleware::from_fn(auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
