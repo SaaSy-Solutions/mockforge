@@ -513,14 +513,77 @@ impl AmqpConnection {
         }
     }
 
-    async fn handle_connection_start_ok(&mut self, _arguments: &[u8]) -> io::Result<bool> {
-        // Parse client properties, mechanism, response, locale
-        // For now, just accept any authentication
+    async fn handle_connection_start_ok(&mut self, arguments: &[u8]) -> io::Result<bool> {
+        // Parse SASL PLAIN credentials from Connection.Start-Ok arguments
+        // Format: client-properties (field-table), mechanism (short-string),
+        //         response (long-string), locale (short-string)
+        // We skip client-properties and mechanism to extract the SASL response
+        self.parse_sasl_credentials(arguments);
 
+        // Accept any authentication (mock server)
         // Send Connection.Tune
         self.send_connection_tune().await?;
         self.state = ConnectionState::Tuning;
         Ok(true)
+    }
+
+    /// Parse SASL credentials from Connection.Start-Ok arguments
+    fn parse_sasl_credentials(&self, arguments: &[u8]) {
+        // Connection.Start-Ok format:
+        //   client-properties: field-table (length-prefixed)
+        //   mechanism: short-string
+        //   response: long-string (contains SASL PLAIN: \0username\0password)
+        //   locale: short-string
+        let mut offset = 0;
+
+        // Skip client-properties (field-table: u32 length + data)
+        if arguments.len() < offset + 4 {
+            return;
+        }
+        let table_len = u32::from_be_bytes([
+            arguments[offset],
+            arguments[offset + 1],
+            arguments[offset + 2],
+            arguments[offset + 3],
+        ]) as usize;
+        offset += 4 + table_len;
+
+        // Skip mechanism (short-string: u8 length + data)
+        if arguments.len() < offset + 1 {
+            return;
+        }
+        let mechanism_len = arguments[offset] as usize;
+        offset += 1;
+        let mechanism = if arguments.len() >= offset + mechanism_len {
+            String::from_utf8_lossy(&arguments[offset..offset + mechanism_len]).to_string()
+        } else {
+            return;
+        };
+        offset += mechanism_len;
+
+        // Parse response (long-string: u32 length + data, contains SASL PLAIN credentials)
+        if arguments.len() < offset + 4 {
+            return;
+        }
+        let response_len = u32::from_be_bytes([
+            arguments[offset],
+            arguments[offset + 1],
+            arguments[offset + 2],
+            arguments[offset + 3],
+        ]) as usize;
+        offset += 4;
+
+        if mechanism == "PLAIN" && arguments.len() >= offset + response_len && response_len > 0 {
+            // SASL PLAIN format: \0username\0password
+            let response_data = &arguments[offset..offset + response_len];
+            let parts: Vec<&[u8]> = response_data.split(|&b| b == 0).collect();
+            if parts.len() >= 3 {
+                let username = String::from_utf8_lossy(parts[1]);
+                tracing::debug!(mechanism = "PLAIN", username = %username, "SASL authentication received");
+            }
+        } else {
+            tracing::debug!(mechanism = %mechanism, "Authentication received");
+        }
     }
 
     async fn send_connection_tune(&mut self) -> io::Result<()> {
@@ -576,7 +639,49 @@ impl AmqpConnection {
         Ok(true)
     }
 
-    async fn handle_connection_close(&mut self, _arguments: &[u8]) -> io::Result<bool> {
+    async fn handle_connection_close(&mut self, arguments: &[u8]) -> io::Result<bool> {
+        // Parse Connection.Close arguments:
+        //   reply-code: u16
+        //   reply-text: short-string (u8 length + data)
+        //   class-id: u16
+        //   method-id: u16
+        if arguments.len() >= 2 {
+            let reply_code = u16::from_be_bytes([arguments[0], arguments[1]]);
+            let mut offset = 2;
+
+            let reply_text = if arguments.len() > offset {
+                let text_len = arguments[offset] as usize;
+                offset += 1;
+                if arguments.len() >= offset + text_len {
+                    let text =
+                        String::from_utf8_lossy(&arguments[offset..offset + text_len]).to_string();
+                    offset += text_len;
+                    text
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            let (class_id_val, method_id_val) = if arguments.len() >= offset + 4 {
+                (
+                    u16::from_be_bytes([arguments[offset], arguments[offset + 1]]),
+                    u16::from_be_bytes([arguments[offset + 2], arguments[offset + 3]]),
+                )
+            } else {
+                (0, 0)
+            };
+
+            tracing::info!(
+                reply_code = reply_code,
+                reply_text = %reply_text,
+                class_id = class_id_val,
+                method_id = method_id_val,
+                "Client requested connection close"
+            );
+        }
+
         // Send Connection.Close-Ok
         let mut payload = Vec::new();
         payload.extend_from_slice(&class_id::CONNECTION.to_be_bytes());
