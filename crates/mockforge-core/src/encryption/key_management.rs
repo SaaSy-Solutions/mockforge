@@ -9,7 +9,7 @@ use crate::encryption::errors::{EncryptionError, EncryptionResult};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::Arc;
 
 /// Key identifier for lookup and management
 pub type KeyId = String;
@@ -569,22 +569,6 @@ impl Default for KeyStore {
     }
 }
 
-/// Global key store instance
-#[allow(dead_code)]
-static GLOBAL_KEY_STORE: OnceLock<Arc<RwLock<KeyStore>>> = OnceLock::new();
-
-/// Initialize the global key store
-#[allow(dead_code)]
-pub fn init_key_store() -> &'static Arc<RwLock<KeyStore>> {
-    GLOBAL_KEY_STORE.get_or_init(|| Arc::new(RwLock::new(KeyStore::new())))
-}
-
-/// Get the global key store instance
-#[allow(dead_code)]
-pub fn get_key_store() -> Option<&'static Arc<RwLock<KeyStore>>> {
-    GLOBAL_KEY_STORE.get()
-}
-
 /// Key store statistics
 #[derive(Debug, Clone)]
 pub struct KeyStoreStatistics {
@@ -600,80 +584,6 @@ pub struct KeyStoreStatistics {
     pub oldest_key: Option<DateTime<Utc>>,
     /// Timestamp of the newest key
     pub newest_key: Option<DateTime<Utc>>,
-}
-
-/// Key management utilities
-pub mod utils {
-    use super::*;
-    use crate::encryption::errors::EncryptionResult;
-
-    /// Generate a unique key ID
-    #[allow(dead_code)]
-    pub fn generate_key_id() -> KeyId {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-
-        format!("key_{}", timestamp)
-    }
-
-    /// Validate key ID format
-    #[allow(dead_code)]
-    pub fn validate_key_id(key_id: &str) -> EncryptionResult<()> {
-        if key_id.is_empty() {
-            return Err(EncryptionError::invalid_key("Key ID cannot be empty"));
-        }
-
-        if key_id.len() > 255 {
-            return Err(EncryptionError::invalid_key("Key ID too long (max 255 characters)"));
-        }
-
-        if !key_id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
-            return Err(EncryptionError::invalid_key("Key ID contains invalid characters"));
-        }
-
-        Ok(())
-    }
-
-    /// Sanitize key ID for safe storage
-    #[allow(dead_code)]
-    pub fn sanitize_key_id(key_id: &str) -> String {
-        key_id
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '_' || c == '-' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>()
-            .trim_matches('_')
-            .to_string()
-    }
-
-    /// Check if a key is expired
-    #[allow(dead_code)]
-    pub fn is_key_expired(metadata: &KeyMetadata) -> bool {
-        if let Some(expires_at) = metadata.expires_at {
-            Utc::now() > expires_at
-        } else {
-            false
-        }
-    }
-
-    /// Get key age in days
-    #[allow(dead_code)]
-    pub fn get_key_age_days(metadata: &KeyMetadata) -> i64 {
-        let now = Utc::now();
-        (now - metadata.created_at).num_days()
-    }
-
-    /// Format key size for display
-    #[allow(dead_code)]
-    pub fn format_key_size(key: &EncryptionKey) -> String {
-        let bits = key.len() * 8;
-        format!("{} bits", bits)
-    }
 }
 
 #[cfg(test)]

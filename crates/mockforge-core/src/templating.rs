@@ -441,14 +441,6 @@ fn replace_randint_ranges(input: &str) -> String {
     s
 }
 
-/// Replace `{{ now+1d }}` style templates in input string
-///
-/// This is a convenience wrapper around `replace_now_offset_with_time` that uses the current time.
-#[allow(dead_code)]
-fn replace_now_offset(input: &str) -> String {
-    replace_now_offset_with_time(input, Utc::now())
-}
-
 fn replace_now_offset_with_time(input: &str, current_time: chrono::DateTime<Utc>) -> String {
     // {{ now+1d }}, {{now-2h}}, {{now+30m}}, {{now-10s}}
     NOW_OFFSET_RE

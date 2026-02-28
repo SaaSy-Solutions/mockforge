@@ -99,12 +99,15 @@ fn init_jaeger_tracer(
 ) -> Result<global::BoxedTracer, Box<dyn Error + Send + Sync>> {
     let endpoint = config.jaeger_endpoint.ok_or("Jaeger endpoint not configured")?;
 
-    // Install the tracer provider (this sets it as global)
+    // Install the tracer provider with sampling rate configuration
     // opentelemetry-jaeger 0.21 uses a different runtime API
     #[allow(deprecated)]
     let _tracer_provider = opentelemetry_jaeger::new_agent_pipeline()
         .with_service_name(&config.service_name)
         .with_endpoint(&endpoint)
+        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_sampler(
+            opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(config.sampling_rate),
+        ))
         .install_simple()?;
 
     // Get the tracer from the global provider

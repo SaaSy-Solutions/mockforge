@@ -24,6 +24,34 @@ pub fn init_crypto_provider() {
     });
 }
 
+/// Create a rustls ServerConfig builder with the appropriate TLS protocol versions.
+///
+/// When `tls13_only` is true, restricts to TLS 1.3 only. Otherwise uses safe defaults (TLS 1.2+).
+fn tls_config_builder(
+    tls13_only: bool,
+) -> rustls::ConfigBuilder<rustls::server::ServerConfig, rustls::WantsVerifier> {
+    if tls13_only {
+        rustls::server::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+    } else {
+        rustls::server::ServerConfig::builder()
+    }
+}
+
+/// Determine if TLS 1.3 only mode is requested from configuration.
+fn is_tls13_only(min_version: &str) -> bool {
+    match min_version {
+        "1.3" => {
+            info!("Enforcing TLS 1.3 only (min_version=1.3)");
+            true
+        }
+        "1.2" | "" => false,
+        other => {
+            tracing::warn!("Unsupported TLS min_version '{}', using defaults (TLS 1.2+)", other);
+            false
+        }
+    }
+}
+
 /// Load TLS acceptor from certificate and key files
 ///
 /// This function loads server certificates and private keys from PEM files
@@ -107,6 +135,9 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
         "off"
     };
 
+    // Determine TLS protocol versions based on min_version config
+    let tls13_only = is_tls13_only(&config.min_version);
+
     let server_config = match mtls_mode {
         "required" => {
             // Mutual TLS: require client certificates
@@ -152,7 +183,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 let key = keys.remove(0);
 
                 // Build with mTLS support (required)
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
@@ -215,7 +246,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 // WebPkiClientVerifier which accepts any client cert that validates,
                 // but connections without certs will also work (we can't enforce optional-only)
                 // For true optional mTLS, we'd need custom verifier logic
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
@@ -228,7 +259,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 // Optional mTLS without CA: just standard TLS
                 info!("mTLS optional mode specified but no CA file provided, using standard TLS");
                 let key = keys.remove(0);
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_no_client_auth()
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
@@ -239,30 +270,21 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
         _ => {
             // Standard TLS: no client certificate required
             let key = keys.remove(0);
-            rustls::server::ServerConfig::builder()
+            tls_config_builder(tls13_only)
                 .with_no_client_auth()
                 .with_single_cert(server_certs, key)
                 .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?
         }
     };
 
-    // Note: TLS version configuration is handled by with_safe_defaults()
-    // which supports TLS 1.2 and 1.3. The min_version config option is
-    // documented but rustls uses safe defaults that include both versions.
-    if config.min_version == "1.3" {
-        info!("TLS 1.3 requested (rustls safe defaults support both 1.2 and 1.3)");
-    } else if config.min_version != "1.2" && !config.min_version.is_empty() {
-        tracing::warn!(
-            "Unsupported TLS version: {}, using rustls safe defaults (1.2+)",
-            config.min_version
-        );
-    }
-
-    // Configure cipher suites if specified
+    // Log cipher suite configuration (cipher suites are controlled by rustls's
+    // safe defaults and not overridable without also selecting specific crypto providers)
     if !config.cipher_suites.is_empty() {
-        // Note: rustls uses safe defaults, so we don't override cipher suites
-        // unless there's a specific need. The config is accepted but may not be used.
-        info!("Custom cipher suites specified but rustls uses safe defaults");
+        info!(
+            "Custom cipher suites specified: {:?}. Note: rustls enforces safe cipher suites; \
+             for fine-grained control, configure the rustls CryptoProvider.",
+            config.cipher_suites
+        );
     }
 
     info!("TLS acceptor configured successfully");
@@ -319,6 +341,9 @@ pub fn load_tls_server_config(
         return Err(format!("No private keys found in {}", config.key_file).into());
     }
 
+    // Determine TLS protocol versions based on min_version config
+    let tls13_only = is_tls13_only(&config.min_version);
+
     // Determine mTLS mode
     let mtls_mode = if !config.mtls_mode.is_empty() && config.mtls_mode != "off" {
         config.mtls_mode.as_str()
@@ -354,7 +379,7 @@ pub fn load_tls_server_config(
 
                 let key = keys.remove(0);
 
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| format!("TLS config error (mTLS required): {}", e))?
@@ -387,13 +412,13 @@ pub fn load_tls_server_config(
 
                 let key = keys.remove(0);
 
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_client_cert_verifier(client_verifier.into())
                     .with_single_cert(server_certs, key)
                     .map_err(|e| format!("TLS config error (mTLS optional): {}", e))?
             } else {
                 let key = keys.remove(0);
-                rustls::server::ServerConfig::builder()
+                tls_config_builder(tls13_only)
                     .with_no_client_auth()
                     .with_single_cert(server_certs, key)
                     .map_err(|e| format!("TLS config error: {}", e))?
@@ -401,7 +426,7 @@ pub fn load_tls_server_config(
         }
         _ => {
             let key = keys.remove(0);
-            rustls::server::ServerConfig::builder()
+            tls_config_builder(tls13_only)
                 .with_no_client_auth()
                 .with_single_cert(server_certs, key)
                 .map_err(|e| format!("TLS config error: {}", e))?

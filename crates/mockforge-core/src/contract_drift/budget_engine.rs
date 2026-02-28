@@ -413,12 +413,6 @@ impl DriftBudgetEngine {
         self.config.default_budget.clone().unwrap_or_default()
     }
 
-    /// Get budget for a specific endpoint (backward compatibility)
-    #[allow(dead_code)]
-    fn get_budget_for_endpoint_legacy(&self, endpoint: &str, method: &str) -> DriftBudget {
-        self.get_budget_for_endpoint(endpoint, method, None, None, None)
-    }
-
     /// Get the drift budget configuration
     pub fn config(&self) -> &DriftBudgetConfig {
         &self.config

@@ -649,14 +649,6 @@ fn generate_handler_name(route: &RouteInfo) -> String {
     }
 }
 
-#[allow(dead_code)]
-fn convert_openapi_path_to_axum(path: &str) -> String {
-    // Convert OpenAPI path like /users/{id} to Axum path /users/:id
-    // Axum uses :param syntax for path parameters
-    // Note: Axum also supports wildcards *param, but :param is more common
-    path.replace('{', ":").replace('}', "")
-}
-
 // Helper to convert path for Axum router registration
 // Axum can handle both :param and :param_name syntax
 fn format_axum_path(path: &str, path_params: &[String]) -> String {
