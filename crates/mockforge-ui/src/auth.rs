@@ -432,6 +432,37 @@ impl UserStore {
 /// Global user store instance
 static GLOBAL_USER_STORE: std::sync::OnceLock<Arc<UserStore>> = std::sync::OnceLock::new();
 
+/// Global set of revoked JWT tokens (jti claim or raw token string)
+/// Tokens are stored with their expiry time so we can prune expired entries.
+static REVOKED_TOKENS: std::sync::OnceLock<Arc<RwLock<HashMap<String, i64>>>> =
+    std::sync::OnceLock::new();
+
+/// Get or initialize the revoked tokens store
+fn get_revoked_tokens() -> Arc<RwLock<HashMap<String, i64>>> {
+    REVOKED_TOKENS.get_or_init(|| Arc::new(RwLock::new(HashMap::new()))).clone()
+}
+
+/// Revoke a token so it can no longer be used
+pub async fn revoke_token(token: &str) {
+    // Decode without validation to get expiry (we want to revoke even expired tokens)
+    let exp = validate_token(token)
+        .map(|c| c.exp)
+        .unwrap_or_else(|_| Utc::now().timestamp() + 7 * 24 * 60 * 60);
+    let store = get_revoked_tokens();
+    let mut revoked = store.write().await;
+    revoked.insert(token.to_string(), exp);
+    // Prune expired entries to prevent unbounded growth
+    let now = Utc::now().timestamp();
+    revoked.retain(|_, &mut exp_time| exp_time > now);
+}
+
+/// Check if a token has been revoked
+pub async fn is_token_revoked(token: &str) -> bool {
+    let store = get_revoked_tokens();
+    let revoked = store.read().await;
+    revoked.contains_key(token)
+}
+
 /// Initialize the global user store
 pub fn init_global_user_store() -> Arc<UserStore> {
     if let Err(e) = validate_auth_config_on_startup() {
@@ -538,6 +569,12 @@ pub async fn refresh_token(
     State(_state): State<AdminState>,
     Json(request): Json<RefreshTokenRequest>,
 ) -> Result<Json<ApiResponse<LoginResponse>>, StatusCode> {
+    // Check if the refresh token has been revoked
+    if is_token_revoked(&request.refresh_token).await {
+        tracing::warn!("Attempt to use revoked refresh token");
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
     // Validate refresh token
     let claims = validate_token(&request.refresh_token).map_err(|_| {
         tracing::warn!("Invalid refresh token");
@@ -604,10 +641,18 @@ pub async fn get_current_user(
     })))
 }
 
-/// Logout endpoint (client-side token removal, but can invalidate refresh tokens)
-pub async fn logout(State(_state): State<AdminState>) -> Json<ApiResponse<String>> {
-    // In production, invalidate refresh token in database
-    // For now, just return success (client removes token)
+/// Logout endpoint — revokes the bearer token server-side
+pub async fn logout(
+    headers: axum::http::HeaderMap,
+    State(_state): State<AdminState>,
+) -> Json<ApiResponse<String>> {
+    // Extract and revoke the access token from the Authorization header
+    if let Some(auth_header) = headers.get("authorization").and_then(|h| h.to_str().ok()) {
+        if let Some(token) = auth_header.strip_prefix("Bearer ") {
+            revoke_token(token).await;
+            tracing::info!("Token revoked on logout");
+        }
+    }
     Json(ApiResponse::success("Logged out successfully".to_string()))
 }
 

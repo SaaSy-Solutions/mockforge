@@ -75,16 +75,14 @@ impl ResponseGenerator {
             return gen.generate(&expanded_prompt, ai_config).await;
         }
 
-        // Fallback: return a descriptive placeholder if no generator is provided
-        tracing::warn!("No AI generator provided, returning placeholder response");
-        Ok(serde_json::json!({
-            "ai_response": "AI generation placeholder",
-            "note": "This endpoint is configured for AI-assisted responses, but no AI generator was provided",
-            "expanded_prompt": expanded_prompt,
-            "mode": format!("{:?}", ai_config.mode),
-            "temperature": ai_config.temperature,
-            "implementation_note": "Pass an AiGenerator implementation to ResponseGenerator::generate_ai_response to enable actual AI generation"
-        }))
+        // No generator available — return an error so callers know AI is not configured
+        tracing::warn!(
+            "No AI generator provided; configure MOCKFORGE_AI_PROVIDER to enable AI responses"
+        );
+        Err(crate::Error::generic(
+            "AI response generation is not available: no AI generator configured. \
+             Set MOCKFORGE_AI_PROVIDER and MOCKFORGE_AI_API_KEY environment variables to enable AI-assisted responses.",
+        ))
     }
 
     /// Generate a mock response for an operation and status code

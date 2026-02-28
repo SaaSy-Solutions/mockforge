@@ -187,7 +187,7 @@ pub fn import_openapi_spec(
 
 /// Convert an OpenAPI operation to a MockForge route
 fn convert_operation_to_route(
-    _spec: &OpenApiSpec,
+    spec: &OpenApiSpec,
     method: &str,
     path: &str,
     operation: &openapiv3::Operation,
@@ -236,15 +236,13 @@ fn convert_operation_to_route(
                                 }
                             }
                         } else if let Some(schema_ref) = &content.schema {
-                            // Generate from schema
-                            response_body = match schema_ref {
-                                openapiv3::ReferenceOr::Item(schema_data) => {
-                                    generate_response_from_openapi_schema(schema_data)
-                                }
-                                openapiv3::ReferenceOr::Reference { .. } => {
-                                    // Can't resolve references easily, use basic mock
-                                    serde_json::json!({"message": "Mock response", "path": path, "method": method})
-                                }
+                            // Generate from schema, resolving $ref if needed
+                            response_body = if let Some(resolved) =
+                                resolve_schema_ref(schema_ref, &spec.spec)
+                            {
+                                generate_response_from_openapi_schema(&resolved)
+                            } else {
+                                serde_json::json!({"message": "Mock response", "path": path, "method": method})
                             };
                         } else {
                             // No schema or example, basic response
@@ -279,7 +277,7 @@ fn convert_operation_to_route(
 
     // Extract request body if present
     let request_body = if let Some(request_body_ref) = &operation.request_body {
-        extract_request_body_example(request_body_ref)
+        extract_request_body_example(request_body_ref, &spec.spec)
     } else {
         None
     };
@@ -296,30 +294,62 @@ fn convert_operation_to_route(
 /// Extract request body example from OpenAPI request body reference
 fn extract_request_body_example(
     request_body_ref: &openapiv3::ReferenceOr<openapiv3::RequestBody>,
+    spec: &openapiv3::OpenAPI,
 ) -> Option<String> {
-    match request_body_ref {
-        openapiv3::ReferenceOr::Item(request_body) => {
-            // Look for application/json content type
-            if let Some(media_type) = request_body.content.get("application/json") {
-                // Check if there's an example
-                if let Some(example) = &media_type.example {
-                    if let Ok(example_str) = serde_json::to_string(example) {
-                        return Some(example_str);
-                    }
-                }
-
-                // If no example, create a simple mock based on schema
-                if let Some(_schema_ref) = &media_type.schema {
-                    // For now, just return a simple mock object
-                    return Some(r#"{"mock": "data"}"#.to_string());
-                }
+    let request_body = match request_body_ref {
+        openapiv3::ReferenceOr::Item(rb) => rb.clone(),
+        openapiv3::ReferenceOr::Reference { reference } => {
+            // Resolve $ref like "#/components/requestBodies/MyBody"
+            let name = reference.strip_prefix("#/components/requestBodies/")?;
+            let components = spec.components.as_ref()?;
+            let rb_ref = components.request_bodies.get(name)?;
+            match rb_ref {
+                openapiv3::ReferenceOr::Item(rb) => rb.clone(),
+                openapiv3::ReferenceOr::Reference { .. } => return None,
             }
-            None
         }
-        openapiv3::ReferenceOr::Reference { .. } => {
-            // For referenced request bodies, we'd need to resolve the reference
-            // For now, just return a simple mock
-            Some(r#"{"mock": "data"}"#.to_string())
+    };
+
+    // Look for application/json content type
+    let media_type = request_body.content.get("application/json")?;
+
+    // Check if there's an explicit example
+    if let Some(example) = &media_type.example {
+        if let Ok(example_str) = serde_json::to_string(example) {
+            return Some(example_str);
+        }
+    }
+
+    // Generate mock data from schema
+    if let Some(schema_ref) = &media_type.schema {
+        let schema = resolve_schema_ref(schema_ref, spec);
+        if let Some(s) = schema {
+            let json_schema = openapi_schema_to_json_schema(&s);
+            let generated = generate_from_schema(&json_schema);
+            if let Ok(s) = serde_json::to_string(&generated) {
+                return Some(s);
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolve a schema reference to an owned Schema
+fn resolve_schema_ref(
+    schema_ref: &openapiv3::ReferenceOr<openapiv3::Schema>,
+    spec: &openapiv3::OpenAPI,
+) -> Option<openapiv3::Schema> {
+    match schema_ref {
+        openapiv3::ReferenceOr::Item(schema) => Some(schema.clone()),
+        openapiv3::ReferenceOr::Reference { reference } => {
+            let name = reference.strip_prefix("#/components/schemas/")?;
+            let components = spec.components.as_ref()?;
+            let resolved = components.schemas.get(name)?;
+            match resolved {
+                openapiv3::ReferenceOr::Item(schema) => Some(schema.clone()),
+                openapiv3::ReferenceOr::Reference { .. } => None,
+            }
         }
     }
 }
@@ -405,16 +435,55 @@ fn openapi_schema_to_json_schema(schema: &openapiv3::Schema) -> Value {
                 Value::Object(obj)
             }
         },
-        openapiv3::SchemaKind::OneOf { .. } => {
-            // For oneOf, just return a basic object
+        openapiv3::SchemaKind::OneOf { one_of } => {
+            // Use the first variant for mock data generation
+            if let Some(first) = one_of.first() {
+                if let Some(schema) = first.as_item() {
+                    return openapi_schema_to_json_schema(schema);
+                }
+            }
             json!({"type": "object"})
         }
-        openapiv3::SchemaKind::AllOf { .. } => {
-            // For allOf, just return a basic object
-            json!({"type": "object"})
+        openapiv3::SchemaKind::AllOf { all_of } => {
+            // Merge all schemas into a single object with combined properties
+            let mut properties = serde_json::Map::new();
+            let mut required = Vec::new();
+            for schema_ref in all_of {
+                if let Some(sub_schema) = schema_ref.as_item() {
+                    let converted = openapi_schema_to_json_schema(sub_schema);
+                    if let Some(obj) = converted.as_object() {
+                        if let Some(props) = obj.get("properties").and_then(|p| p.as_object()) {
+                            for (k, v) in props {
+                                properties.insert(k.clone(), v.clone());
+                            }
+                        }
+                        if let Some(req) = obj.get("required").and_then(|r| r.as_array()) {
+                            for r in req {
+                                if let Some(s) = r.as_str() {
+                                    required.push(json!(s));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let mut result = serde_json::Map::new();
+            result.insert("type".to_string(), json!("object"));
+            if !properties.is_empty() {
+                result.insert("properties".to_string(), Value::Object(properties));
+            }
+            if !required.is_empty() {
+                result.insert("required".to_string(), Value::Array(required));
+            }
+            Value::Object(result)
         }
-        openapiv3::SchemaKind::AnyOf { .. } => {
-            // For anyOf, just return a basic object
+        openapiv3::SchemaKind::AnyOf { any_of } => {
+            // Use the first variant for mock data generation
+            if let Some(first) = any_of.first() {
+                if let Some(schema) = first.as_item() {
+                    return openapi_schema_to_json_schema(schema);
+                }
+            }
             json!({"type": "object"})
         }
         openapiv3::SchemaKind::Not { .. } => {

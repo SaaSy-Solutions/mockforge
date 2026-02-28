@@ -129,6 +129,67 @@ impl Plugin {
         query_builder.fetch_all(pool).await
     }
 
+    /// Count total matching plugins for a search (used for pagination)
+    pub async fn count_search(
+        pool: &sqlx::PgPool,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+    ) -> sqlx::Result<i64> {
+        let mut sql = String::from(
+            r#"
+            SELECT COUNT(DISTINCT p.id)
+            FROM plugins p
+            "#,
+        );
+
+        let mut conditions = Vec::new();
+        let mut params_count = 0;
+
+        if !tags.is_empty() {
+            sql.push_str(
+                r#"
+                INNER JOIN plugin_tags pt ON p.id = pt.plugin_id
+                INNER JOIN tags t ON pt.tag_id = t.id
+                "#,
+            );
+            params_count += 1;
+            conditions.push(format!("t.name = ANY(${})", params_count));
+        }
+
+        sql.push_str(" WHERE 1=1 ");
+
+        if let Some(_q) = query {
+            params_count += 1;
+            conditions
+                .push(format!("p.search_vector @@ plainto_tsquery('english', ${})", params_count));
+        }
+
+        if let Some(_cat) = category {
+            params_count += 1;
+            conditions.push(format!("p.category = ${}", params_count));
+        }
+
+        if !conditions.is_empty() {
+            sql.push_str(" AND ");
+            sql.push_str(&conditions.join(" AND "));
+        }
+
+        let mut query_builder = sqlx::query_scalar::<_, i64>(&sql);
+
+        if !tags.is_empty() {
+            query_builder = query_builder.bind(tags);
+        }
+        if let Some(q) = query {
+            query_builder = query_builder.bind(q);
+        }
+        if let Some(cat) = category {
+            query_builder = query_builder.bind(cat);
+        }
+
+        query_builder.fetch_one(pool).await
+    }
+
     /// Find plugin by name
     pub async fn find_by_name(pool: &sqlx::PgPool, name: &str) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM plugins WHERE name = $1")

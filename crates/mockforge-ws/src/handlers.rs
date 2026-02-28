@@ -71,11 +71,12 @@
 
 use async_trait::async_trait;
 use axum::extract::ws::Message;
+use futures_util::{SinkExt, StreamExt};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 
 /// Result type for handler operations
 pub type HandlerResult<T> = Result<T, HandlerError>;
@@ -580,15 +581,25 @@ impl PassthroughConfig {
     }
 }
 
-/// Passthrough handler that forwards messages to an upstream server
+/// Passthrough handler that forwards messages to an upstream WebSocket server
 pub struct PassthroughHandler {
     config: PassthroughConfig,
+    /// Upstream WebSocket write half, established lazily on first message
+    upstream_tx: Mutex<Option<UpstreamSender>>,
 }
+
+type UpstreamSender = futures_util::stream::SplitSink<
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+    tokio_tungstenite::tungstenite::Message,
+>;
 
 impl PassthroughHandler {
     /// Create a new passthrough handler
     pub fn new(config: PassthroughConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            upstream_tx: Mutex::new(None),
+        }
     }
 
     /// Check if a message should be passed through
@@ -600,19 +611,102 @@ impl PassthroughHandler {
     pub fn upstream_url(&self) -> &str {
         &self.config.upstream_url
     }
+
+    /// Connect to the upstream WebSocket server and spawn a reader task that
+    /// relays messages back to the client.
+    async fn ensure_connected(
+        &self,
+        client_tx: &tokio::sync::mpsc::UnboundedSender<Message>,
+    ) -> HandlerResult<()> {
+        let mut guard = self.upstream_tx.lock().await;
+        if guard.is_some() {
+            return Ok(());
+        }
+
+        let url = &self.config.upstream_url;
+        tracing::info!(upstream = %url, "Connecting to upstream WebSocket server");
+
+        let (ws_stream, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .map_err(|e| HandlerError::ConnectionError(format!("Upstream connect failed: {e}")))?;
+
+        let (write, mut read) = ws_stream.split();
+        *guard = Some(write);
+
+        // Spawn a task that forwards upstream → client
+        let client_tx = client_tx.clone();
+        tokio::spawn(async move {
+            while let Some(Ok(msg)) = read.next().await {
+                let axum_msg = match msg {
+                    tokio_tungstenite::tungstenite::Message::Text(t) => {
+                        Message::Text(t.to_string().into())
+                    }
+                    tokio_tungstenite::tungstenite::Message::Binary(b) => {
+                        Message::Binary(b.to_vec().into())
+                    }
+                    tokio_tungstenite::tungstenite::Message::Ping(p) => {
+                        Message::Ping(p.to_vec().into())
+                    }
+                    tokio_tungstenite::tungstenite::Message::Pong(p) => {
+                        Message::Pong(p.to_vec().into())
+                    }
+                    tokio_tungstenite::tungstenite::Message::Close(_) => {
+                        break;
+                    }
+                    tokio_tungstenite::tungstenite::Message::Frame(_) => continue,
+                };
+                if client_tx.send(axum_msg).is_err() {
+                    break;
+                }
+            }
+            tracing::debug!("Upstream reader task finished");
+        });
+
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl WsHandler for PassthroughHandler {
+    async fn on_connect(&self, ctx: &mut WsContext) -> HandlerResult<()> {
+        self.ensure_connected(&ctx.message_tx).await
+    }
+
     async fn on_message(&self, ctx: &mut WsContext, msg: WsMessage) -> HandlerResult<()> {
-        if let WsMessage::Text(text) = &msg {
-            if self.should_passthrough(text) {
-                // In a real implementation, this would forward to upstream
-                // For now, we'll just log and echo back
-                ctx.send_text(&format!("PASSTHROUGH({}): {}", self.config.upstream_url, text))
-                    .await?;
-                return Ok(());
+        match &msg {
+            WsMessage::Text(text) if self.should_passthrough(text) => {
+                self.ensure_connected(&ctx.message_tx).await?;
+                let mut guard = self.upstream_tx.lock().await;
+                if let Some(ref mut writer) = *guard {
+                    writer
+                        .send(tokio_tungstenite::tungstenite::Message::Text(text.clone().into()))
+                        .await
+                        .map_err(|e| {
+                            HandlerError::SendError(format!("Upstream send failed: {e}"))
+                        })?;
+                }
             }
+            WsMessage::Binary(data) => {
+                self.ensure_connected(&ctx.message_tx).await?;
+                let mut guard = self.upstream_tx.lock().await;
+                if let Some(ref mut writer) = *guard {
+                    writer
+                        .send(tokio_tungstenite::tungstenite::Message::Binary(data.clone().into()))
+                        .await
+                        .map_err(|e| {
+                            HandlerError::SendError(format!("Upstream send failed: {e}"))
+                        })?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn on_disconnect(&self, _ctx: &mut WsContext) -> HandlerResult<()> {
+        let mut guard = self.upstream_tx.lock().await;
+        if let Some(mut writer) = guard.take() {
+            let _ = writer.send(tokio_tungstenite::tungstenite::Message::Close(None)).await;
         }
         Ok(())
     }

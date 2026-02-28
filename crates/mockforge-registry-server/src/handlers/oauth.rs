@@ -373,8 +373,9 @@ async fn create_oauth_user(
     user_info: &OAuthUserInfo,
     provider: OAuthProvider,
 ) -> Result<User, ApiError> {
-    // Generate a placeholder password hash (OAuth users don't need passwords)
-    let password_hash = bcrypt::hash("oauth_user_no_password", bcrypt::DEFAULT_COST)
+    // Generate a random password hash (OAuth users authenticate via provider, not password)
+    let random_password: String = uuid::Uuid::new_v4().to_string();
+    let password_hash = bcrypt::hash(&random_password, bcrypt::DEFAULT_COST)
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to hash password: {}", e)))?;
 
     // Ensure username is unique

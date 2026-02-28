@@ -18,6 +18,7 @@ missing_docs = "deny"
 axum = { workspace = true }
 tokio = { workspace = true }
 futures = "0.3"
+futures-util = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
@@ -28,6 +29,7 @@ chrono = { workspace = true }
 fastrand = "2.0"
 async-trait = { workspace = true }
 thiserror = "2.0"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }

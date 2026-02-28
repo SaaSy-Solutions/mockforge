@@ -146,8 +146,10 @@ pub async fn search_plugins(
         });
     }
 
-    // Count total (simplified - just return current count for MVP)
-    let total = entries.len();
+    // Count total matching results for pagination metadata
+    let total = Plugin::count_search(pool, query.query.as_deref(), category_str, &query.tags)
+        .await
+        .map_err(|e| ApiError::Database(e))? as usize;
 
     let results = SearchResults {
         plugins: entries,

@@ -254,12 +254,16 @@ pub async fn delete_plugin(
     }
 }
 
-/// Reload a plugin
+/// Reload a plugin by removing and re-adding it to the registry
+///
+/// This resets the plugin's internal state. Note that this performs an
+/// in-memory reload — the plugin binary is not re-read from disk. To
+/// reload from disk, use the CLI plugin reload command.
 pub async fn reload_plugin(
     State(state): State<AdminState>,
     Json(payload): Json<ReloadPluginRequest>,
 ) -> Json<ApiResponse<serde_json::Value>> {
-    let registry = state.plugin_registry.read().await;
+    let mut registry = state.plugin_registry.write().await;
     // Find plugin ID from registry - must exist to reload it
     let plugin_id_core = match registry
         .list_plugins()
@@ -272,15 +276,27 @@ pub async fn reload_plugin(
         }
     };
 
-    if registry.has_plugin(&plugin_id_core) {
-        // In a real implementation, this would unload and reload the plugin from disk
-        // For now, just return success since the plugin exists
-        Json(ApiResponse::success(json!({
-            "message": format!("Plugin '{}' reload initiated", payload.plugin_id),
-            "status": "reloading"
-        })))
-    } else {
-        Json(ApiResponse::error(format!("Plugin not found: {}", payload.plugin_id)))
+    // Remove the plugin from the registry and re-add it to reset its state
+    match registry.remove_plugin(&plugin_id_core) {
+        Ok(mut instance) => {
+            // Reset health status to default (healthy, unloaded)
+            instance.health = Default::default();
+            let plugin_name = instance.manifest.info.name.clone();
+            match registry.add_plugin(instance) {
+                Ok(()) => Json(ApiResponse::success(json!({
+                    "message": format!("Plugin '{}' reloaded successfully", plugin_name),
+                    "status": "loaded"
+                }))),
+                Err(e) => Json(ApiResponse::error(format!(
+                    "Failed to re-register plugin '{}': {}",
+                    payload.plugin_id, e
+                ))),
+            }
+        }
+        Err(e) => Json(ApiResponse::error(format!(
+            "Failed to unload plugin '{}': {}",
+            payload.plugin_id, e
+        ))),
     }
 }
 

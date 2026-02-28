@@ -251,27 +251,30 @@ impl HandlerRegistry {
             resp.json().await.map_err(|e| HandlerError::UpstreamError(e.to_string()))?;
 
         // Convert JSON response to GraphQL Response
-        // Extract data and errors from the GraphQL response
-        let has_errors = response_data.get("errors").is_some();
+        let errors: Vec<ServerError> = response_data
+            .get("errors")
+            .and_then(|e| e.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .map(|e| {
+                        let msg = e
+                            .get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("Upstream GraphQL error");
+                        ServerError::new(msg.to_string(), None)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
-        // For now, return a null response with error status if there are errors
-        // In a full implementation, you would properly convert the JSON response to GraphQL types
-        if has_errors {
-            let error_msg = response_data
-                .get("errors")
-                .and_then(|e| e.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|e| e.get("message"))
-                .and_then(|m| m.as_str())
-                .unwrap_or("Upstream GraphQL error");
+        let data = response_data
+            .get("data")
+            .map(|d| json_to_graphql_value(d))
+            .unwrap_or(Value::Null);
 
-            let server_error = ServerError::new(error_msg.to_string(), None);
-            Ok(Response::from_errors(vec![server_error]))
-        } else {
-            // Return successful response
-            // Note: Proper implementation would convert serde_json::Value to async_graphql::Value
-            Ok(Response::new(Value::Null))
-        }
+        let mut response = Response::new(data);
+        response.errors = errors;
+        Ok(response)
     }
 
     /// Get upstream URL
@@ -283,6 +286,31 @@ impl HandlerRegistry {
 impl Default for HandlerRegistry {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Convert a `serde_json::Value` to an `async_graphql::Value`
+fn json_to_graphql_value(json: &serde_json::Value) -> Value {
+    match json {
+        serde_json::Value::Null => Value::Null,
+        serde_json::Value::Bool(b) => Value::Boolean(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Value::Number(i.into())
+            } else if let Some(f) = n.as_f64() {
+                Value::Number(async_graphql::Number::from_f64(f).unwrap_or_else(|| 0i32.into()))
+            } else {
+                Value::Null
+            }
+        }
+        serde_json::Value::String(s) => Value::String(s.clone()),
+        serde_json::Value::Array(arr) => {
+            Value::List(arr.iter().map(json_to_graphql_value).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let map = obj.iter().map(|(k, v)| (Name::new(k), json_to_graphql_value(v))).collect();
+            Value::Object(map)
+        }
     }
 }
 
