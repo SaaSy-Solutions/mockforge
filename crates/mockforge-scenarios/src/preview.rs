@@ -345,7 +345,7 @@ impl ScenarioPreview {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{CompatibilityInfo, ScenarioCategory, ScenarioManifest};
+    use crate::manifest::ScenarioManifest;
     use tempfile::TempDir;
 
     #[test]

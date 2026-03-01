@@ -175,6 +175,11 @@ impl ScenarioStateMachineManager {
     /// - Sub-scenario references are valid
     /// - No circular dependencies in sub-scenarios
     pub fn validate_state_machine(&self, state_machine: &StateMachine) -> Result<()> {
+        Self::validate_state_machine_recursive(state_machine)
+    }
+
+    /// Recursive validation helper for state machines
+    fn validate_state_machine_recursive(state_machine: &StateMachine) -> Result<()> {
         // Check initial state exists
         if !state_machine.states.contains(&state_machine.initial_state) {
             return Err(ScenarioError::InvalidManifest(format!(
@@ -212,7 +217,7 @@ impl ScenarioStateMachineManager {
 
         // Validate sub-scenarios recursively
         for sub_scenario in &state_machine.sub_scenarios {
-            self.validate_state_machine(&sub_scenario.state_machine)?;
+            Self::validate_state_machine_recursive(&sub_scenario.state_machine)?;
         }
 
         Ok(())

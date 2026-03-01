@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn test_failure_designer_default() {
-        let designer = FailureDesigner::default();
+        let designer = FailureDesigner;
         let rule = create_basic_rule();
         assert!(designer.validate_rule(&rule).is_ok());
     }

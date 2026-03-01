@@ -60,6 +60,10 @@ pub struct Federation {
 
 impl Federation {
     /// Create a new federation from config
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any service has an invalid workspace ID or reality level.
     pub fn from_config(org_id: Uuid, config: FederationConfig) -> Result<Self, String> {
         let mut services = Vec::new();
 
@@ -401,7 +405,7 @@ mod tests {
             dependencies: Vec::new(),
         };
 
-        let debug = format!("{:?}", service);
+        let debug = format!("{service:?}");
         assert!(debug.contains("auth"));
     }
 

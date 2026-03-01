@@ -10,11 +10,10 @@
 use mockforge_core::intelligent_behavior::rules::StateMachine;
 use mockforge_scenarios::state_machine::{ScenarioStateMachineManager, StateInstance};
 use serde_json::json;
-use std::collections::HashMap;
 
 #[tokio::test]
 async fn test_state_machine_creation() {
-    let manager = ScenarioStateMachineManager::new();
+    let _manager = ScenarioStateMachineManager::new();
 
     // Create a simple state machine
     let state_machine = StateMachine::new(
@@ -91,7 +90,7 @@ async fn test_state_data_persistence() {
 
 #[tokio::test]
 async fn test_state_machine_with_no_transitions() {
-    let manager = ScenarioStateMachineManager::new();
+    let _manager = ScenarioStateMachineManager::new();
 
     // Create state machine with no transitions (single state)
     let state_machine = StateMachine::new(

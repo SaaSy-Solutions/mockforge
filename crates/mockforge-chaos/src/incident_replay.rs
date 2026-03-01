@@ -250,8 +250,8 @@ impl IncidentReplayGenerator {
         }
 
         // Clamp rates
-        let error_rate = error_rate.min(1.0).max(0.0);
-        let delay_rate = delay_rate.min(1.0).max(0.0);
+        let error_rate = error_rate.clamp(0.0, 1.0);
+        let delay_rate = delay_rate.clamp(0.0, 1.0);
 
         // Build latency config if needed
         let latency_config = if delay_rate > 0.0 && max_delay_ms > 0 {
@@ -513,7 +513,7 @@ impl IncidentFormatAdapter {
                                     events.push(IncidentEvent {
                                         timestamp,
                                         event_type: IncidentEventType::ErrorRateIncrease {
-                                            rate: value.min(1.0).max(0.0),
+                                            rate: value.clamp(0.0, 1.0),
                                             error_codes: None,
                                         },
                                         endpoint: None,
@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_incident_replay_generator_default() {
-        let generator = IncidentReplayGenerator::default();
+        let generator = IncidentReplayGenerator;
         let timeline = create_sample_timeline();
         let scenario = generator.generate_scenario(&timeline);
         assert!(!scenario.name.is_empty());

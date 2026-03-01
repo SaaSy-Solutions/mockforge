@@ -89,20 +89,15 @@ pub struct TemplateSearchFilters {
 }
 
 /// Sort options
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TemplateSortBy {
+    #[default]
     Popular,
     Newest,
     TopRated,
     MostDownloaded,
     RecentlyUpdated,
-}
-
-impl Default for TemplateSortBy {
-    fn default() -> Self {
-        Self::Popular
-    }
 }
 
 /// Template marketplace

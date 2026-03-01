@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_pack_manifest_serialization() {
-        let mut pack = DomainPackManifest::new(
+        let pack = DomainPackManifest::new(
             "test-pack".to_string(),
             "1.0.0".to_string(),
             "Test Pack".to_string(),

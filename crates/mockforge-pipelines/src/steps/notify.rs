@@ -42,11 +42,11 @@ impl NotifyStep {
         &self,
         webhook_url: &str,
         channel: &str,
-        _message: &str,
+        message: &str,
     ) -> Result<()> {
         let payload = serde_json::json!({
             "channel": channel,
-            "text": _message,
+            "text": message,
             "username": "MockForge Pipeline",
             "icon_emoji": ":robot_face:"
         });
@@ -82,7 +82,8 @@ impl NotifyStep {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'smtp.host' in config"))?;
 
-        let smtp_port = smtp_config.get("port").and_then(|v| v.as_u64()).unwrap_or(587) as u16;
+        #[allow(clippy::cast_possible_truncation)] // Port values are always <= 65535
+        let smtp_port = smtp_config.get("port").and_then(Value::as_u64).unwrap_or(587) as u16;
 
         let smtp_username = smtp_config.get("username").and_then(|v| v.as_str());
         let smtp_password = smtp_config.get("password").and_then(|v| v.as_str());
@@ -213,6 +214,7 @@ impl PipelineStepExecutor for NotifyStep {
         "notify"
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn execute(&self, context: StepContext) -> Result<StepResult> {
         info!(
             execution_id = %context.execution_id,
@@ -334,24 +336,23 @@ impl PipelineStepExecutor for NotifyStep {
                 }
             }
             "webhook" => {
-                let webhook_urls = context
-                    .config
-                    .get("webhook_urls")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(ToString::to_string))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_else(|| {
-                        // Fallback to single webhook_url
-                        context
-                            .config
-                            .get("webhook_url")
-                            .and_then(|v| v.as_str())
-                            .map(|s| vec![s.to_string()])
-                            .unwrap_or_default()
-                    });
+                let webhook_urls =
+                    context.config.get("webhook_urls").and_then(|v| v.as_array()).map_or_else(
+                        || {
+                            // Fallback to single webhook_url
+                            context
+                                .config
+                                .get("webhook_url")
+                                .and_then(|v| v.as_str())
+                                .map(|s| vec![s.to_string()])
+                                .unwrap_or_default()
+                        },
+                        |arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(ToString::to_string))
+                                .collect::<Vec<_>>()
+                        },
+                    );
 
                 if webhook_urls.is_empty() {
                     return Err(anyhow::anyhow!(

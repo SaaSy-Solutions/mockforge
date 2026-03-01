@@ -47,6 +47,7 @@ impl PipelineStepExecutor for AutoPromoteStep {
         "auto_promote"
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn execute(&self, context: StepContext) -> Result<StepResult> {
         info!(
             execution_id = %context.execution_id,

@@ -7,7 +7,7 @@
 //! - Audit logging
 
 use mockforge_tunnel::audit::AuditLogger;
-use mockforge_tunnel::rate_limit::{rate_limit_middleware, RateLimitConfig, TunnelRateLimiter};
+use mockforge_tunnel::rate_limit::{rate_limit_middleware, TunnelRateLimiter};
 use mockforge_tunnel::server::{
     create_tunnel_server_router, TunnelStore, TunnelStoreTrait, TunnelStoreWrapper,
 };
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

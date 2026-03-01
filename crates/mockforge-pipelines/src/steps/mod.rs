@@ -131,7 +131,7 @@ mod tests {
 
         let context = StepContext {
             execution_id,
-            event: event.clone(),
+            event,
             config,
             step_name: "test-step".to_string(),
             workspace_id: Some(workspace_id),
@@ -209,7 +209,7 @@ mod tests {
             pipeline_defaults: HashMap::new(),
         };
 
-        let debug = format!("{:?}", context);
+        let debug = format!("{context:?}");
         assert!(debug.contains("StepContext"));
         assert!(debug.contains("test"));
     }
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_step_result_debug() {
         let result = StepResult::success_with_message("test".to_string());
-        let debug = format!("{:?}", result);
+        let debug = format!("{result:?}");
         assert!(debug.contains("StepResult"));
     }
 }

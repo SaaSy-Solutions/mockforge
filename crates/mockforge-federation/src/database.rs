@@ -18,6 +18,11 @@ pub struct FederationDatabase {
 
 impl FederationDatabase {
     /// Create a new federation database instance
+    ///
+    /// # Errors
+    ///
+    /// This function does not currently return errors but is async for future migration support.
+    #[allow(clippy::unused_async)]
     pub async fn new(pool: SqlitePool) -> Result<Self> {
         // Run migrations
         // Note: In a real implementation, you'd use sqlx::migrate! macro
@@ -31,6 +36,10 @@ impl FederationDatabase {
     }
 
     /// Run migrations manually
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the migration SQL fails to execute.
     pub async fn run_migrations(&self) -> Result<()> {
         let migration_sql = include_str!("../migrations/001_federation.sql");
 
@@ -44,6 +53,10 @@ impl FederationDatabase {
     }
 
     /// Create a new federation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn create_federation(&self, federation: &Federation) -> Result<()> {
         let id_str = federation.id.to_string();
         let org_id_str = federation.org_id.to_string();
@@ -118,6 +131,10 @@ impl FederationDatabase {
     }
 
     /// Get a federation by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or data parsing fails.
     pub async fn get_federation(&self, federation_id: &Uuid) -> Result<Option<Federation>> {
         let id_str = federation_id.to_string();
 
@@ -209,6 +226,10 @@ impl FederationDatabase {
     }
 
     /// List all federations for an organization
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or data parsing fails.
     pub async fn list_federations(&self, org_id: &Uuid) -> Result<Vec<Federation>> {
         let org_id_str = org_id.to_string();
 
@@ -259,6 +280,10 @@ impl FederationDatabase {
     }
 
     /// Update a federation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database update fails.
     pub async fn update_federation(&self, federation: &Federation) -> Result<()> {
         let id_str = federation.id.to_string();
         let updated_at = Utc::now().timestamp();
@@ -299,6 +324,10 @@ impl FederationDatabase {
     }
 
     /// Delete a federation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete fails.
     pub async fn delete_federation(&self, federation_id: &Uuid) -> Result<()> {
         let id_str = federation_id.to_string();
 
@@ -512,7 +541,7 @@ mod tests {
         for i in 0..3 {
             let mut federation = create_test_federation();
             federation.org_id = org_id;
-            federation.name = format!("federation-{}", i);
+            federation.name = format!("federation-{i}");
             db.create_federation(&federation).await.unwrap();
         }
 
@@ -764,7 +793,7 @@ mod tests {
         let org_id = Uuid::new_v4();
 
         // Test all reality levels
-        let reality_levels = vec![
+        let reality_levels = [
             ServiceRealityLevel::Real,
             ServiceRealityLevel::MockV3,
             ServiceRealityLevel::Blended,
@@ -773,15 +802,15 @@ mod tests {
 
         for (i, level) in reality_levels.iter().enumerate() {
             let service = ServiceBoundary::new(
-                format!("service-{}", i),
+                format!("service-{i}"),
                 Uuid::new_v4(),
-                format!("/service{}", i),
+                format!("/service{i}"),
                 *level,
             );
 
             let federation = Federation {
                 id: Uuid::new_v4(),
-                name: format!("fed-{}", i),
+                name: format!("fed-{i}"),
                 description: String::new(),
                 org_id,
                 services: vec![service],
@@ -805,7 +834,7 @@ mod tests {
         for i in 0..5 {
             let mut federation = create_test_federation();
             federation.org_id = org_id;
-            federation.name = format!("federation-{}", i);
+            federation.name = format!("federation-{i}");
             db.create_federation(&federation).await.unwrap();
         }
 

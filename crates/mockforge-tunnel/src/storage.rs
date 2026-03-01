@@ -14,6 +14,9 @@ use crate::server::TunnelStoreTrait;
 #[cfg(feature = "server")]
 use async_trait::async_trait;
 
+/// Row type for tunnel queries
+type TunnelRow = (String, Option<String>, String, String, i32, i64, i64, String, Option<String>);
+
 /// Persistent tunnel storage using SQLite
 #[derive(Clone)]
 pub struct PersistentTunnelStore {
@@ -37,28 +40,23 @@ impl PersistentTunnelStore {
                 .await
                 .map_err(|e| {
                     error!("Failed to connect to tunnel database: {}", e);
-                    crate::TunnelError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Database connection failed: {}", e),
-                    ))
+                    crate::TunnelError::Io(std::io::Error::other(format!(
+                        "Database connection failed: {e}"
+                    )))
                 })?;
 
         // Enable WAL mode for better concurrency
         sqlx::query("PRAGMA journal_mode = WAL").execute(&pool).await.map_err(|e| {
             error!("Failed to enable WAL mode: {}", e);
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to enable WAL mode: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!("Failed to enable WAL mode: {e}")))
         })?;
 
         // Enable foreign keys
         sqlx::query("PRAGMA foreign_keys = ON").execute(&pool).await.map_err(|e| {
             error!("Failed to enable foreign keys: {}", e);
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to enable foreign keys: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!(
+                "Failed to enable foreign keys: {e}"
+            )))
         })?;
 
         let store = Self { pool };
@@ -76,10 +74,9 @@ impl PersistentTunnelStore {
             .await
             .map_err(|e| {
                 error!("Failed to connect to in-memory database: {}", e);
-                crate::TunnelError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database connection failed: {}", e),
-                ))
+                crate::TunnelError::Io(std::io::Error::other(format!(
+                    "Database connection failed: {e}"
+                )))
             })?;
 
         let store = Self { pool };
@@ -118,10 +115,9 @@ impl PersistentTunnelStore {
         .await
         .map_err(|e| {
             error!("Failed to create tunnels table: {}", e);
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Schema initialization failed: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!(
+                "Schema initialization failed: {e}"
+            )))
         })?;
 
         // Create indexes
@@ -172,10 +168,7 @@ impl PersistentTunnelStore {
             .await
             .map_err(|e| {
                 error!("Failed to check subdomain: {}", e);
-                crate::TunnelError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database query failed: {}", e),
-                ))
+                crate::TunnelError::Io(std::io::Error::other(format!("Database query failed: {e}")))
             })?;
 
             if existing.is_some() {
@@ -236,9 +229,8 @@ impl PersistentTunnelStore {
         .await
         .map_err(|e| {
             error!("Failed to insert tunnel: {}", e);
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database insert failed: {}", e),
+            crate::TunnelError::Io(std::io::Error::other(
+                format!("Database insert failed: {e}"),
             ))
         })?;
 
@@ -248,17 +240,7 @@ impl PersistentTunnelStore {
 
     /// Get tunnel by ID
     pub async fn get_tunnel(&self, tunnel_id: &str) -> crate::Result<TunnelStatus> {
-        let row: Option<(
-            String,
-            Option<String>,
-            String,
-            String,
-            i32,
-            i64,
-            i64,
-            String,
-            Option<String>,
-        )> = sqlx::query_as(
+        let row: Option<TunnelRow> = sqlx::query_as(
             r#"
                 SELECT tunnel_id, subdomain, public_url, local_url, active,
                        request_count, bytes_transferred, created_at, expires_at
@@ -271,10 +253,7 @@ impl PersistentTunnelStore {
         .await
         .map_err(|e| {
             error!("Failed to query tunnel: {}", e);
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Database query failed: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!("Database query failed: {e}")))
         })?;
 
         if let Some((
@@ -317,10 +296,9 @@ impl PersistentTunnelStore {
                 .await
                 .map_err(|e| {
                     error!("Failed to query tunnel by subdomain: {}", e);
-                    crate::TunnelError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Database query failed: {}", e),
-                    ))
+                    crate::TunnelError::Io(std::io::Error::other(format!(
+                        "Database query failed: {e}"
+                    )))
                 })?;
 
         if let Some(tunnel_id) = row {
@@ -338,10 +316,9 @@ impl PersistentTunnelStore {
             .await
             .map_err(|e| {
                 error!("Failed to delete tunnel: {}", e);
-                crate::TunnelError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Database delete failed: {}", e),
-                ))
+                crate::TunnelError::Io(std::io::Error::other(format!(
+                    "Database delete failed: {e}"
+                )))
             })?
             .rows_affected();
 
@@ -355,17 +332,7 @@ impl PersistentTunnelStore {
 
     /// List all active tunnels
     pub async fn list_tunnels(&self) -> Vec<TunnelStatus> {
-        let rows: Vec<(
-            String,
-            Option<String>,
-            String,
-            String,
-            i32,
-            i64,
-            i64,
-            String,
-            Option<String>,
-        )> = sqlx::query_as(
+        let rows: Vec<TunnelRow> = sqlx::query_as(
             r#"
                 SELECT tunnel_id, subdomain, public_url, local_url, active,
                        request_count, bytes_transferred, created_at, expires_at
@@ -447,10 +414,7 @@ impl PersistentTunnelStore {
                 .await
                 .map_err(|e| {
                     error!("Failed to cleanup expired tunnels: {}", e);
-                    crate::TunnelError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Cleanup failed: {}", e),
-                    ))
+                    crate::TunnelError::Io(std::io::Error::other(format!("Cleanup failed: {e}")))
                 })?
                 .rows_affected();
 
@@ -852,6 +816,6 @@ mod tests {
 
         // Flags should be persisted (verification through database)
         let tunnel = result.unwrap();
-        assert!(tunnel.tunnel_id.len() > 0);
+        assert!(!tunnel.tunnel_id.is_empty());
     }
 }

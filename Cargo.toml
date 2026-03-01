@@ -97,14 +97,13 @@ unsafe_code = "deny"
 missing_docs = "warn"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
-
-[workspace.lints.clippy]
 # Allow common development warnings
 dead_code = "allow"
 unused_variables = "allow"
 unused_imports = "allow"
 private_interfaces = "allow"
 
+[workspace.lints.clippy]
 # Enable pedantic lints for high code quality
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }

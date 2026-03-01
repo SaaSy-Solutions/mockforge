@@ -37,7 +37,7 @@ async fn test_full_tunnel_workflow() {
 
     // List tunnels
     let tunnels = manager.list_tunnels().await.unwrap();
-    assert!(tunnels.len() > 0);
+    assert!(!tunnels.is_empty());
     assert!(tunnels.iter().any(|t| t.tunnel_id == status.tunnel_id));
 
     // Stop tunnel

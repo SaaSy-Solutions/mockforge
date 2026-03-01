@@ -40,6 +40,7 @@ impl ServiceRealityLevel {
 
     /// Parse from string
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "real" => Some(Self::Real),
@@ -176,7 +177,7 @@ mod tests {
     #[test]
     fn test_service_reality_level_debug() {
         let level = ServiceRealityLevel::ChaosDriven;
-        let debug = format!("{:?}", level);
+        let debug = format!("{level:?}");
         assert!(debug.contains("ChaosDriven"));
     }
 
@@ -286,7 +287,7 @@ mod tests {
             ServiceRealityLevel::Real,
         );
 
-        let debug = format!("{:?}", service);
+        let debug = format!("{service:?}");
         assert!(debug.contains("test"));
         assert!(debug.contains("ServiceBoundary"));
     }
@@ -324,7 +325,7 @@ mod tests {
         let service = ServiceBoundary::new(
             "root".to_string(),
             Uuid::new_v4(),
-            "".to_string(),
+            String::new(),
             ServiceRealityLevel::Real,
         );
 

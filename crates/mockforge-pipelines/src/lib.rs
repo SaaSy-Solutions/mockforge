@@ -62,6 +62,7 @@ pub use pipeline::{Pipeline, PipelineDefinition, PipelineExecutor, PipelineStep}
 pub use steps::{PipelineStepExecutor, StepContext, StepResult};
 
 #[cfg(test)]
+#[allow(clippy::similar_names)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -175,7 +176,7 @@ mod tests {
 
         let context = StepContext {
             execution_id,
-            event: event.clone(),
+            event,
             config: HashMap::new(),
             step_name: "test-step".to_string(),
             workspace_id: Some(workspace_id),
@@ -358,7 +359,7 @@ mod tests {
 
         let context = StepContext {
             execution_id: Uuid::new_v4(),
-            event: event.clone(),
+            event,
             config: HashMap::new(),
             step_name: "test-step".to_string(),
             workspace_id: Some(workspace_id),
@@ -546,12 +547,8 @@ mod tests {
             step_defaults,
         };
 
-        let pipeline = Pipeline::new(
-            "complex-pipeline".to_string(),
-            definition.clone(),
-            Some(workspace_id),
-            None,
-        );
+        let pipeline =
+            Pipeline::new("complex-pipeline".to_string(), definition, Some(workspace_id), None);
 
         // Verify all the complex configuration is preserved
         assert_eq!(pipeline.definition.triggers.len(), 2);

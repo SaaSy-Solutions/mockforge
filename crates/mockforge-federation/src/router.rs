@@ -188,7 +188,7 @@ mod tests {
         let router = FederationRouter::new(federation);
 
         let result = router.route("/auth/login").unwrap();
-        let debug = format!("{:?}", result);
+        let debug = format!("{result:?}");
         assert!(debug.contains("RoutingResult"));
         assert!(debug.contains("service_path"));
     }

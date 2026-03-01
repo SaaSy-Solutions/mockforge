@@ -90,6 +90,12 @@ pub struct TunnelStore {
     subdomains: Arc<RwLock<HashMap<String, String>>>, // subdomain -> tunnel_id
 }
 
+impl Default for TunnelStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TunnelStore {
     pub fn new() -> Self {
         Self {
@@ -496,7 +502,7 @@ async fn forward_request(
     }
 
     // Set body if present
-    if !body_bytes.is_empty() && method != &Method::GET && method != &Method::HEAD {
+    if !body_bytes.is_empty() && *method != Method::GET && *method != Method::HEAD {
         forward_request = forward_request.body(body_bytes.clone());
     }
 
@@ -608,16 +614,12 @@ pub async fn start_test_server(port: u16) -> crate::Result<SocketAddr> {
     let addr = if port == 0 {
         // Bind to any available port
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.map_err(|e| {
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to bind: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!("Failed to bind: {e}")))
         })?;
         let actual_addr = listener.local_addr().map_err(|e| {
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to get local address: {}", e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!(
+                "Failed to get local address: {e}"
+            )))
         })?;
 
         tokio::spawn(async move {
@@ -633,10 +635,7 @@ pub async fn start_test_server(port: u16) -> crate::Result<SocketAddr> {
     } else {
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
         let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
-            crate::TunnelError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to bind to {}: {}", addr, e),
-            ))
+            crate::TunnelError::Io(std::io::Error::other(format!("Failed to bind to {addr}: {e}")))
         })?;
 
         tokio::spawn(async move {

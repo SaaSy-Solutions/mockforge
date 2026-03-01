@@ -27,6 +27,7 @@ use tracing::{info, warn};
 /// including scenarios, personas, chaos rules, contract diffs, and reality blends.
 pub struct StudioPackInstaller {
     /// Base directory for pack storage
+    #[allow(dead_code)]
     packs_dir: std::path::PathBuf,
     /// Optional scenario installer for installing scenarios
     scenario_installer: Option<Arc<tokio::sync::Mutex<ScenarioInstaller>>>,

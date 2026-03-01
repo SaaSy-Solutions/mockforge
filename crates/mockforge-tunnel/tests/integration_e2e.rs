@@ -22,7 +22,7 @@ async fn start_test_local_server(port: u16) -> tokio::task::JoinHandle<()> {
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port))
         .await
         .expect("Failed to bind local test server");
-    let addr = listener.local_addr().unwrap();
+    let _addr = listener.local_addr().unwrap();
 
     tokio::spawn(async move {
         axum::serve(listener, app).await.expect("Local test server failed");

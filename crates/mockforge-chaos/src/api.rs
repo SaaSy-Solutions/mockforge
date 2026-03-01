@@ -1842,7 +1842,6 @@ impl IntoResponse for ChaosApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::LatencyConfig;
 
     #[test]
     fn test_profile_manager_new() {
@@ -2090,11 +2089,11 @@ mod tests {
     fn test_enable_request_deserialize() {
         let json = r#"{"enabled":true}"#;
         let req: EnableRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.enabled, true);
+        assert!(req.enabled);
 
         let json = r#"{"enabled":false}"#;
         let req: EnableRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.enabled, false);
+        assert!(!req.enabled);
     }
 
     #[test]
@@ -2185,7 +2184,7 @@ mod tests {
         let deserialized: ScheduleSummary = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.id, "test_id");
         assert_eq!(deserialized.scenario_name, "test_scenario");
-        assert_eq!(deserialized.enabled, true);
+        assert!(deserialized.enabled);
     }
 
     #[test]
@@ -2247,7 +2246,7 @@ mod tests {
         assert_eq!(latency_tracker.get_samples().len(), 0);
 
         // Verify state exists and has correct components
-        assert!(state.config.read().await.enabled == false);
+        assert!(!state.config.read().await.enabled);
     }
 
     #[tokio::test]

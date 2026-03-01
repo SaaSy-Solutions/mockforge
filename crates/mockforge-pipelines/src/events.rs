@@ -48,6 +48,7 @@ impl PipelineEventType {
 
     /// Parse event type from string
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "schema.changed" => Some(Self::SchemaChanged),
@@ -123,6 +124,10 @@ impl PipelineEvent {
     }
 
     /// Create a scenario published event
+    ///
+    /// # Panics
+    ///
+    /// Panics if `scenario_id` cannot be serialized to JSON (should never happen for UUIDs).
     #[must_use]
     pub fn scenario_published(
         workspace_id: Uuid,
@@ -150,6 +155,10 @@ impl PipelineEvent {
     }
 
     /// Create a drift threshold exceeded event
+    ///
+    /// # Panics
+    ///
+    /// Panics if integer values cannot be serialized to JSON (should never happen).
     #[must_use]
     pub fn drift_threshold_exceeded(
         workspace_id: Uuid,
@@ -172,6 +181,10 @@ impl PipelineEvent {
     }
 
     /// Create a promotion completed event
+    ///
+    /// # Panics
+    ///
+    /// Panics if `promotion_id` cannot be serialized to JSON (should never happen for UUIDs).
     #[must_use]
     pub fn promotion_completed(
         workspace_id: Uuid,
@@ -214,6 +227,10 @@ impl PipelineEventBus {
     }
 
     /// Publish an event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if there are no subscribers to receive the event.
     pub fn publish(&self, event: PipelineEvent) -> Result<(), String> {
         let event_type = event.event_type.clone();
         match self.sender.send(event) {
@@ -251,11 +268,16 @@ pub fn get_global_event_bus() -> Arc<PipelineEventBus> {
 }
 
 /// Publish an event to the global event bus
+///
+/// # Errors
+///
+/// Returns an error string if there are no subscribers to receive the event.
 pub fn publish_event(event: PipelineEvent) -> Result<(), String> {
     get_global_event_bus().publish(event)
 }
 
 #[cfg(test)]
+#[allow(clippy::similar_names)]
 mod tests {
     use super::*;
 

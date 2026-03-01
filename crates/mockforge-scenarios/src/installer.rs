@@ -14,7 +14,7 @@ use reqwest::Client;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::fs as async_fs;
 use tracing::{info, warn};
@@ -538,7 +538,7 @@ impl ScenarioInstaller {
     }
 
     /// Verify scenario checksum (SHA-256 of scenario.yaml)
-    fn verify_checksum(&self, scenario_dir: &PathBuf, expected_checksum: &str) -> Result<()> {
+    fn verify_checksum(&self, scenario_dir: &Path, expected_checksum: &str) -> Result<()> {
         use ring::digest::{Context, SHA256};
 
         info!("Verifying scenario checksum...");
@@ -1080,8 +1080,6 @@ mod copy_dir {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-
     #[tokio::test]
     async fn test_installer_creation() {
         let installer = ScenarioInstaller::new().unwrap();

@@ -199,7 +199,6 @@ impl AutoGenerator {
     #[cfg(feature = "ai")]
     async fn generate_ai_response(&self, method: &str, path: &str) -> Result<serde_json::Value> {
         use mockforge_data::{IntelligentMockConfig, IntelligentMockGenerator, ResponseMode};
-        use std::collections::HashMap;
 
         // Infer entity type and build a prompt
         let entity_type = self.infer_entity_type(path);
@@ -410,7 +409,7 @@ impl AutoGenerator {
         let schema = self.build_schema_for_entity(&entity_type, method);
 
         // Generate TypeScript interface
-        let ts_type = self.generate_typescript_interface(&type_name, &schema, method)?;
+        let ts_type = Self::generate_typescript_interface(&type_name, &schema, method)?;
 
         // Write TypeScript type file
         let ts_file = types_dir.join(format!("{}.ts", type_name.to_lowercase()));
@@ -435,7 +434,6 @@ impl AutoGenerator {
 
     /// Generate TypeScript interface from schema
     fn generate_typescript_interface(
-        &self,
         type_name: &str,
         schema: &serde_json::Value,
         method: &str,
@@ -451,7 +449,7 @@ impl AutoGenerator {
             // Generate array type
             if let Some(items) = schema.get("items") {
                 let item_type_name = format!("{}Item", type_name);
-                code.push_str(&self.generate_typescript_interface(
+                code.push_str(&Self::generate_typescript_interface(
                     &item_type_name,
                     items,
                     method,
@@ -472,7 +470,7 @@ impl AutoGenerator {
                     .unwrap_or_default();
 
                 for (prop_name, prop_schema) in properties {
-                    let prop_type = self.schema_value_to_typescript_type(prop_schema)?;
+                    let prop_type = Self::schema_value_to_typescript_type(prop_schema)?;
                     let is_optional = !required.contains(&prop_name.as_str());
                     let optional_marker = if is_optional { "?" } else { "" };
 
@@ -487,7 +485,7 @@ impl AutoGenerator {
     }
 
     /// Convert a JSON schema value to TypeScript type string
-    fn schema_value_to_typescript_type(&self, schema: &serde_json::Value) -> Result<String> {
+    fn schema_value_to_typescript_type(schema: &serde_json::Value) -> Result<String> {
         let schema_type = schema.get("type").and_then(|v| v.as_str()).unwrap_or("any");
 
         match schema_type {
@@ -507,7 +505,7 @@ impl AutoGenerator {
             "boolean" => Ok("boolean".to_string()),
             "array" => {
                 if let Some(items) = schema.get("items") {
-                    let item_type = self.schema_value_to_typescript_type(items)?;
+                    let item_type = Self::schema_value_to_typescript_type(items)?;
                     Ok(format!("{}[]", item_type))
                 } else {
                     Ok("any[]".to_string())
@@ -758,8 +756,7 @@ export let baseUrl = 'http://localhost:3000';
             if matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH") {
                 "body: JSON.stringify(data || {}),\n    ".to_string()
             } else if method_upper == "GET" && !path_params.is_empty() {
-                format!("{}const queryString = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';\n  const urlWithQuery = url + queryString;\n  ",
-                    if !path_params.is_empty() { "" } else { "" })
+                "const queryString = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';\n  const urlWithQuery = url + queryString;\n  ".to_string()
             } else {
                 String::new()
             },
@@ -1328,80 +1325,62 @@ mod tests {
     // schema_value_to_typescript_type tests
     #[test]
     fn test_schema_value_to_typescript_type_string() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "string"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "string");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_integer() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "integer"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "number");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "number");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_number() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "number"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "number");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "number");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_boolean() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "boolean"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "boolean");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "boolean");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_array() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({
             "type": "array",
             "items": {"type": "string"}
         });
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string[]");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "string[]");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_array_no_items() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "array"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "any[]");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "any[]");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_object() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "object"});
         assert_eq!(
-            generator.schema_value_to_typescript_type(&schema).unwrap(),
+            AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(),
             "Record<string, any>"
         );
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_unknown() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "unknown_type"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "any");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "any");
     }
 
     #[test]
     fn test_schema_value_to_typescript_type_date_format() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({"type": "string", "format": "date-time"});
-        assert_eq!(generator.schema_value_to_typescript_type(&schema).unwrap(), "string");
+        assert_eq!(AutoGenerator::schema_value_to_typescript_type(&schema).unwrap(), "string");
     }
 
     // build_schema_for_entity tests
@@ -1523,8 +1502,6 @@ mod tests {
     // generate_typescript_interface tests
     #[test]
     fn test_generate_typescript_interface_object() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({
             "type": "object",
             "properties": {
@@ -1534,7 +1511,7 @@ mod tests {
             "required": ["id"]
         });
 
-        let ts_code = generator.generate_typescript_interface("User", &schema, "GET").unwrap();
+        let ts_code = AutoGenerator::generate_typescript_interface("User", &schema, "GET").unwrap();
         assert!(ts_code.contains("export interface User"));
         assert!(ts_code.contains("id: string"));
         assert!(ts_code.contains("name?: string")); // Optional since not in required
@@ -1542,8 +1519,6 @@ mod tests {
 
     #[test]
     fn test_generate_typescript_interface_array() {
-        let generator = create_test_generator();
-
         let schema = serde_json::json!({
             "type": "array",
             "items": {
@@ -1554,7 +1529,8 @@ mod tests {
             }
         });
 
-        let ts_code = generator.generate_typescript_interface("Users", &schema, "GET").unwrap();
+        let ts_code =
+            AutoGenerator::generate_typescript_interface("Users", &schema, "GET").unwrap();
         assert!(ts_code.contains("export type Users = UsersItem[]"));
     }
 

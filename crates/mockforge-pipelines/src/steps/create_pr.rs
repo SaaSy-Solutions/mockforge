@@ -41,6 +41,7 @@ impl PipelineStepExecutor for CreatePRStep {
         "create_pr"
     }
 
+    #[allow(clippy::too_many_lines, clippy::similar_names)]
     async fn execute(&self, context: StepContext) -> Result<StepResult> {
         info!(
             execution_id = %context.execution_id,
@@ -105,16 +106,16 @@ impl PipelineStepExecutor for CreatePRStep {
         // Create PR generator
         let pr_generator = match provider.as_str() {
             "github" => PRGenerator::new_github(
-                owner.to_string(),
-                repo.to_string(),
-                token.to_string(),
-                base_branch.to_string(),
+                owner.clone(),
+                repo.clone(),
+                token.clone(),
+                base_branch.clone(),
             ),
             "gitlab" => PRGenerator::new_gitlab(
-                owner.to_string(),
-                repo.to_string(),
-                token.to_string(),
-                base_branch.to_string(),
+                owner.clone(),
+                repo.clone(),
+                token.clone(),
+                base_branch.clone(),
             ),
             _ => return Err(anyhow::anyhow!("Unsupported PR provider: {provider}")),
         };

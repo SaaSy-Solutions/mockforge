@@ -201,7 +201,7 @@ mod tests {
 
         let result = RoutingResult {
             workspace_id,
-            service: service.clone(),
+            service,
             service_path: "/path".to_string(),
         };
 
@@ -243,10 +243,11 @@ mod tests {
     #[test]
     fn test_all_reality_levels_exposed() {
         // Ensure all reality levels are accessible through public API
-        let _real = ServiceRealityLevel::Real;
-        let _mock = ServiceRealityLevel::MockV3;
-        let _blended = ServiceRealityLevel::Blended;
-        let _chaos = ServiceRealityLevel::ChaosDriven;
+        // Verify all reality levels are constructible
+        assert_eq!(ServiceRealityLevel::Real.as_str(), "real");
+        assert_eq!(ServiceRealityLevel::MockV3.as_str(), "mock_v3");
+        assert_eq!(ServiceRealityLevel::Blended.as_str(), "blended");
+        assert_eq!(ServiceRealityLevel::ChaosDriven.as_str(), "chaos_driven");
 
         // Test conversion
         assert_eq!(ServiceRealityLevel::Real.as_str(), "real");

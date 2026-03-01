@@ -5,7 +5,7 @@
 
 use crate::error::{Result, ScenarioError};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::Path;
 
 /// VBR entity definition for scenarios
 ///
@@ -65,7 +65,7 @@ impl VbrEntityDefinition {
     }
 
     /// Load seed data from file
-    pub fn load_seed_data(&self, scenario_root: &PathBuf) -> Result<Vec<serde_json::Value>> {
+    pub fn load_seed_data(&self, scenario_root: &Path) -> Result<Vec<serde_json::Value>> {
         let seed_path = match &self.seed_data_path {
             Some(path) => scenario_root.join(path),
             None => return Ok(Vec::new()),
@@ -145,7 +145,7 @@ impl Default for VbrIntegrationConfig {
 pub async fn apply_vbr_entities(
     entities: &[VbrEntityDefinition],
     _engine: &mut (),
-    scenario_root: &PathBuf,
+    scenario_root: &Path,
     config: &VbrIntegrationConfig,
 ) -> Result<()> {
     if !config.create_entities && !config.seed_data {

@@ -464,7 +464,7 @@ impl OrgControlsAccessor for DbOrgControls {
         .bind(user_uuid)
         .bind(feature_name)
         .bind(tokens as i64)
-        .bind(cost_usd as f64)
+        .bind(cost_usd)
         .bind(metadata.unwrap_or_else(|| serde_json::json!({})))
         .execute(&self.pool)
         .await
@@ -507,6 +507,7 @@ impl OrgControlsAccessor for DbOrgControls {
 /// Database row for org_ai_budgets table
 #[cfg(feature = "database")]
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct BudgetRow {
     id: Uuid,
     org_id: Uuid,
@@ -522,6 +523,7 @@ struct BudgetRow {
 /// Database row for org_ai_rate_limits table
 #[cfg(feature = "database")]
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct RateLimitRow {
     id: Uuid,
     org_id: Uuid,
@@ -534,6 +536,7 @@ struct RateLimitRow {
 /// Database row for org_ai_feature_toggles table
 #[cfg(feature = "database")]
 #[derive(sqlx::FromRow)]
+#[allow(dead_code)]
 struct FeatureToggleRow {
     id: Uuid,
     org_id: Uuid,

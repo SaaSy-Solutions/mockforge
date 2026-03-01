@@ -49,11 +49,13 @@ impl Default for RateLimitConfig {
     }
 }
 
+/// Type alias for the per-IP rate limiter map
+type IpLimiterMap = HashMap<String, Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>;
+
 /// Rate limiter state
 pub struct TunnelRateLimiter {
     global_limiter: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
-    ip_limiters:
-        Arc<RwLock<HashMap<String, Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>>>>,
+    ip_limiters: Arc<RwLock<IpLimiterMap>>,
     config: RateLimitConfig,
 }
 

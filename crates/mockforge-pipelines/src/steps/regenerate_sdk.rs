@@ -41,6 +41,7 @@ impl PipelineStepExecutor for RegenerateSDKStep {
         "regenerate_sdk"
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn execute(&self, context: StepContext) -> Result<StepResult> {
         info!(
             execution_id = %context.execution_id,
@@ -116,7 +117,7 @@ impl PipelineStepExecutor for RegenerateSDKStep {
                     .config
                     .get("port")
                     .and_then(handlebars::JsonValue::as_u64)
-                    .map(|p| p as u16),
+                    .and_then(|p| u16::try_from(p).ok()),
                 enable_cors: context
                     .config
                     .get("enable_cors")

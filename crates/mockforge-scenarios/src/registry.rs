@@ -190,19 +190,28 @@ impl Default for ScenarioSearchQuery {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ScenarioSortOrder {
+    /// Sort by relevance to search query
     Relevance,
+    /// Sort by download count
     Downloads,
+    /// Sort by user rating
     Rating,
+    /// Sort by most recently updated
     Recent,
+    /// Sort alphabetically by name
     Name,
 }
 
 /// Search results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioSearchResults {
+    /// List of matching scenarios
     pub scenarios: Vec<ScenarioRegistryEntry>,
+    /// Total number of matching results
     pub total: usize,
+    /// Current page number
     pub page: usize,
+    /// Number of results per page
     pub per_page: usize,
 }
 

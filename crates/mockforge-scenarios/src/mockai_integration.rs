@@ -5,7 +5,7 @@
 
 use crate::error::{Result, ScenarioError};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::Path;
 
 /// MockAI configuration for scenarios
 ///
@@ -57,10 +57,7 @@ impl MockAIConfigDefinition {
     }
 
     /// Load behavior rules from file
-    pub fn load_behavior_rules(
-        &self,
-        scenario_root: &PathBuf,
-    ) -> Result<Option<serde_json::Value>> {
+    pub fn load_behavior_rules(&self, scenario_root: &Path) -> Result<Option<serde_json::Value>> {
         let rules_path = match &self.behavior_rules_path {
             Some(path) => scenario_root.join(path),
             None => return Ok(None),
@@ -93,7 +90,7 @@ impl MockAIConfigDefinition {
     /// Load example pairs from file
     pub fn load_example_pairs(
         &self,
-        scenario_root: &PathBuf,
+        scenario_root: &Path,
     ) -> Result<Option<Vec<serde_json::Value>>> {
         let pairs_path = match &self.example_pairs_path {
             Some(path) => scenario_root.join(path),
@@ -174,7 +171,7 @@ impl Default for MockAIIntegrationConfig {
 /// from scenario-relative files.
 pub async fn apply_mockai_config(
     config_def: &MockAIConfigDefinition,
-    scenario_root: &PathBuf,
+    scenario_root: &Path,
     integration_config: &MockAIIntegrationConfig,
 ) -> Result<serde_json::Value> {
     if !integration_config.apply_config {

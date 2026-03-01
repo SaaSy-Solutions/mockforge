@@ -145,6 +145,7 @@ impl Pipeline {
     }
 
     /// Check if event matches trigger filters
+    #[allow(clippy::unused_self)]
     fn matches_filters(
         &self,
         filters: &HashMap<String, serde_json::Value>,
@@ -274,6 +275,10 @@ impl PipelineExecutor {
     }
 
     /// Execute a pipeline
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any non-`continue_on_error` step fails during execution.
     pub async fn execute(
         &self,
         pipeline: &Pipeline,
@@ -455,10 +460,10 @@ impl PipelineExecutor {
             let rendered_value = match value {
                 serde_json::Value::String(s) => {
                     // Try to render as template
-                    match self.handlebars.render_template(s, &template_data) {
-                        Ok(rendered) => serde_json::Value::String(rendered),
-                        Err(_) => value.clone(), // If template rendering fails, use original
-                    }
+                    self.handlebars.render_template(s, &template_data).map_or_else(
+                        |_| value.clone(), // If template rendering fails, use original
+                        serde_json::Value::String,
+                    )
                 }
                 serde_json::Value::Object(obj) => {
                     // Recursively render nested objects
@@ -518,8 +523,6 @@ mod tests {
         let workspace_id = Uuid::new_v4();
         let pipeline = Pipeline::new("test".to_string(), definition, Some(workspace_id), None);
 
-        let mut payload = HashMap::new();
-        payload.insert("schema_type".to_string(), serde_json::Value::String("openapi".to_string()));
         let event =
             PipelineEvent::schema_changed(workspace_id, "openapi".to_string(), HashMap::new());
 

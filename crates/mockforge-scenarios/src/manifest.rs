@@ -148,6 +148,7 @@ impl ScenarioManifest {
     }
 
     /// Load manifest from string
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(content: &str) -> Result<Self> {
         let manifest: Self = serde_yaml::from_str(content).map_err(ScenarioError::Yaml)?;
         manifest.validate()?;

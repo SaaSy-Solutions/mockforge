@@ -3,11 +3,12 @@
 use serde::{Deserialize, Serialize};
 
 /// Tunnel provider type
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum TunnelProvider {
     /// Self-hosted tunneling service
     #[serde(rename = "self")]
+    #[default]
     SelfHosted,
     /// MockForge Cloud tunneling service (if available)
     Cloud,
@@ -17,12 +18,6 @@ pub enum TunnelProvider {
     Ngrok,
     /// Localtunnel-style service
     Localtunnel,
-}
-
-impl Default for TunnelProvider {
-    fn default() -> Self {
-        Self::SelfHosted
-    }
 }
 
 /// Tunnel configuration
