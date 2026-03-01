@@ -294,10 +294,7 @@ impl SyncDriftEvaluator {
 mod tests {
     use super::*;
     use crate::diff::{Difference, DifferenceType};
-    use mockforge_core::{
-        contract_drift::{types::DriftBudget, DriftBudgetEngine},
-        incidents::IncidentManager,
-    };
+    use mockforge_core::{contract_drift::DriftBudgetEngine, incidents::IncidentManager};
 
     async fn create_test_database() -> Arc<RecorderDatabase> {
         Arc::new(RecorderDatabase::new_in_memory().await.unwrap())

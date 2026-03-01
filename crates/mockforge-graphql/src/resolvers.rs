@@ -218,11 +218,11 @@ impl MockDataGenerator {
                 max_length,
             } => {
                 use rand::Rng;
-                let mut rng = rand::thread_rng();
-                let length = rng.gen_range(*min_length..*max_length);
+                let mut rng = rand::rng();
+                let length = rng.random_range(*min_length..*max_length);
                 let s: String = (0..length)
                     .map(|_| {
-                        let c = rng.gen_range(b'a'..=b'z');
+                        let c = rng.random_range(b'a'..=b'z');
                         c as char
                     })
                     .collect();
@@ -256,8 +256,8 @@ impl MockDataGenerator {
                 if values.is_empty() {
                     Value::Null
                 } else {
-                    let mut rng = rand::thread_rng();
-                    let index = rng.gen_range(0..values.len());
+                    let mut rng = rand::rng();
+                    let index = rng.random_range(0..values.len());
                     serde_json::from_value(values[index].clone()).unwrap_or(Value::Null)
                 }
             }
@@ -282,8 +282,8 @@ impl MockDataGenerator {
                 // sufficient for most mock scenarios. Users can implement custom
                 // handlers for arrays with complex items if needed.
                 use rand::Rng;
-                let mut rng = rand::thread_rng();
-                let count = rng.gen_range(*min_items..*max_items);
+                let mut rng = rand::rng();
+                let count = rng.random_range(*min_items..*max_items);
                 let items = vec![Value::Null; count];
                 Value::List(items)
             }

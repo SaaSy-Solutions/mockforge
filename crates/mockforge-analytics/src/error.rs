@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn test_analytics_error_debug() {
         let error = AnalyticsError::Query("test".to_string());
-        let debug = format!("{:?}", error);
+        let debug = format!("{error:?}");
         assert!(debug.contains("Query"));
     }
 
@@ -139,7 +139,10 @@ mod tests {
     fn test_result_type_ok() {
         let result: Result<i32> = Ok(42);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        let Ok(val) = result else {
+            unreachable!("result was verified as Ok above");
+        };
+        assert_eq!(val, 42);
     }
 
     #[test]

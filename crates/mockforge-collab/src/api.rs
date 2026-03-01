@@ -25,12 +25,19 @@ use uuid::Uuid;
 /// API state
 #[derive(Clone)]
 pub struct ApiState {
+    /// Authentication service
     pub auth: Arc<AuthService>,
+    /// User service
     pub user: Arc<UserService>,
+    /// Workspace service
     pub workspace: Arc<WorkspaceService>,
+    /// Version control history
     pub history: Arc<VersionControl>,
+    /// Merge service
     pub merge: Arc<MergeService>,
+    /// Backup service
     pub backup: Arc<BackupService>,
+    /// Sync engine
     pub sync: Arc<SyncEngine>,
 }
 
@@ -90,60 +97,89 @@ pub fn create_router(state: ApiState) -> Router {
 
 // ===== Request/Response Types =====
 
+/// User registration request
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
+    /// Username for the new account
     pub username: String,
+    /// Email address
     pub email: String,
+    /// Password
     pub password: String,
 }
 
+/// Authentication response with JWT token
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
+    /// JWT access token
     pub access_token: String,
+    /// Token type (Bearer)
     pub token_type: String,
+    /// Token expiration timestamp
     pub expires_at: String,
 }
 
+/// Request to create a new workspace
 #[derive(Debug, Deserialize)]
 pub struct CreateWorkspaceRequest {
+    /// Workspace name
     pub name: String,
+    /// Optional description
     pub description: Option<String>,
 }
 
+/// Request to update workspace settings
 #[derive(Debug, Deserialize)]
 pub struct UpdateWorkspaceRequest {
+    /// New workspace name
     pub name: Option<String>,
+    /// New description
     pub description: Option<String>,
 }
 
+/// Request to add a member to a workspace
 #[derive(Debug, Deserialize)]
 pub struct AddMemberRequest {
+    /// User ID to add
     pub user_id: Uuid,
+    /// Role to assign
     pub role: UserRole,
 }
 
+/// Request to change a member's role
 #[derive(Debug, Deserialize)]
 pub struct ChangeRoleRequest {
+    /// New role to assign
     pub role: UserRole,
 }
 
+/// Request to create a new commit
 #[derive(Debug, Deserialize)]
 pub struct CreateCommitRequest {
+    /// Commit message
     pub message: String,
+    /// Changes description as JSON
     pub changes: serde_json::Value,
 }
 
+/// Request to create a named snapshot
 #[derive(Debug, Deserialize)]
 pub struct CreateSnapshotRequest {
+    /// Snapshot name
     pub name: String,
+    /// Optional description
     pub description: Option<String>,
+    /// Commit ID to snapshot
     pub commit_id: Uuid,
 }
 
+/// Pagination query parameters
 #[derive(Debug, Deserialize)]
 pub struct PaginationQuery {
+    /// Number of items to return
     #[serde(default = "default_limit")]
     pub limit: i32,
+    /// Number of items to skip
     #[serde(default)]
     pub offset: i32,
 }
@@ -159,18 +195,20 @@ impl IntoResponse for CollabError {
         let (status, message) = match &self {
             Self::AuthenticationFailed(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             Self::AuthorizationFailed(msg) => (StatusCode::FORBIDDEN, msg.clone()),
-            Self::WorkspaceNotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            Self::UserNotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            Self::WorkspaceNotFound(msg) | Self::UserNotFound(msg) => {
+                (StatusCode::NOT_FOUND, msg.clone())
+            }
             Self::InvalidInput(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            Self::AlreadyExists(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::AlreadyExists(msg) | Self::ConflictDetected(msg) => {
+                (StatusCode::CONFLICT, msg.clone())
+            }
             Self::Timeout(msg) => (StatusCode::REQUEST_TIMEOUT, msg.clone()),
-            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::DatabaseError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::SerializationError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::SyncError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::WebSocketError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::ConnectionError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            Self::ConflictDetected(msg) => (StatusCode::CONFLICT, msg.clone()),
+            Self::Internal(msg)
+            | Self::DatabaseError(msg)
+            | Self::SerializationError(msg)
+            | Self::SyncError(msg)
+            | Self::WebSocketError(msg)
+            | Self::ConnectionError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
             Self::VersionMismatch { expected, actual } => (
                 StatusCode::CONFLICT,
                 format!("Version mismatch: expected {expected}, got {actual}"),
@@ -727,10 +765,13 @@ async fn get_snapshot(
 
 // ===== Fork and Merge Handlers =====
 
+/// Request to fork a workspace
 #[derive(Debug, Deserialize)]
 pub struct ForkWorkspaceRequest {
+    /// Name for the forked workspace
     #[serde(alias = "new_name")]
     pub name: Option<String>,
+    /// Commit ID to fork from
     pub fork_point_commit_id: Option<Uuid>,
 }
 
@@ -768,8 +809,10 @@ async fn list_forks(
     Ok(Json(serde_json::to_value(forks)?))
 }
 
+/// Request to merge workspaces
 #[derive(Debug, Deserialize)]
 pub struct MergeWorkspacesRequest {
+    /// Source workspace ID to merge from
     pub source_workspace_id: Uuid,
 }
 
@@ -818,10 +861,14 @@ async fn list_merges(
 
 // ===== Backup and Restore Handlers =====
 
+/// Request to create a workspace backup
 #[derive(Debug, Deserialize)]
 pub struct CreateBackupRequest {
+    /// Storage backend type
     pub storage_backend: Option<String>,
+    /// Backup format
     pub format: Option<String>,
+    /// Commit ID to backup
     pub commit_id: Option<Uuid>,
 }
 
@@ -898,9 +945,12 @@ async fn delete_backup(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Request to restore a workspace from a backup
 #[derive(Debug, Deserialize)]
 pub struct RestoreWorkspaceRequest {
+    /// Backup ID to restore from
     pub backup_id: Uuid,
+    /// Target workspace ID (creates new if None)
     pub target_workspace_id: Option<Uuid>,
 }
 
@@ -985,8 +1035,10 @@ async fn get_workspace_state(
     }
 }
 
+/// Request to update workspace state via sync
 #[derive(Debug, Deserialize)]
 pub struct UpdateWorkspaceStateRequest {
+    /// New workspace state as JSON
     pub state: serde_json::Value,
 }
 
@@ -1054,11 +1106,10 @@ async fn get_state_history(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[tokio::test]
     async fn test_router_creation() {
         // Just ensure router can be created
+        use super::*;
         use crate::core_bridge::CoreBridge;
         use crate::events::EventBus;
         use sqlx::SqlitePool;
@@ -1092,7 +1143,7 @@ mod tests {
         let backup = Arc::new(BackupService::new(
             db.clone(),
             Some(backup_dir.to_string_lossy().to_string()),
-            core_bridge.clone(),
+            core_bridge,
             workspace.clone(),
         ));
         let event_bus = Arc::new(EventBus::new(100));

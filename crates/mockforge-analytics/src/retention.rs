@@ -9,7 +9,9 @@ use tracing::{error, info};
 
 /// Data retention service
 pub struct RetentionService {
+    /// Database handle for cleanup operations
     db: AnalyticsDatabase,
+    /// Retention policy configuration
     config: RetentionConfig,
 }
 
@@ -31,7 +33,7 @@ impl RetentionService {
             interval.tick().await;
 
             if let Err(e) = self.run_cleanup().await {
-                error!("Error running data cleanup: {}", e);
+                error!("Error running data cleanup: {e}");
             }
         }
     }
@@ -42,15 +44,15 @@ impl RetentionService {
 
         // Cleanup minute aggregates
         let deleted = self.db.cleanup_minute_aggregates(self.config.minute_aggregates_days).await?;
-        info!("Deleted {} old minute aggregates", deleted);
+        info!("Deleted {deleted} old minute aggregates");
 
         // Cleanup hour aggregates
         let deleted = self.db.cleanup_hour_aggregates(self.config.hour_aggregates_days).await?;
-        info!("Deleted {} old hour aggregates", deleted);
+        info!("Deleted {deleted} old hour aggregates");
 
         // Cleanup error events
         let deleted = self.db.cleanup_error_events(self.config.error_events_days).await?;
-        info!("Deleted {} old error events", deleted);
+        info!("Deleted {deleted} old error events");
 
         // Run vacuum to reclaim space
         self.db.vacuum().await?;
@@ -60,6 +62,10 @@ impl RetentionService {
     }
 
     /// Manually trigger cleanup (useful for testing or admin commands)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database cleanup or vacuum operation fails.
     pub async fn trigger_cleanup(&self) -> Result<()> {
         self.run_cleanup().await
     }

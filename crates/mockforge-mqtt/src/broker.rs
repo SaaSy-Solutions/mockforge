@@ -763,7 +763,7 @@ mod tests {
 
         let info = broker.get_client_info("client-1").await;
         assert!(info.is_some());
-        assert_eq!(info.unwrap().clean_session, false);
+        assert!(!info.unwrap().clean_session);
     }
 
     #[tokio::test]

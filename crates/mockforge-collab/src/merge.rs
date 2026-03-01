@@ -28,6 +28,10 @@ impl MergeService {
     ///
     /// This uses a simple approach: find the fork point if one exists,
     /// otherwise find the earliest common commit in both histories.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database queries fail.
     pub async fn find_common_ancestor(
         &self,
         source_workspace_id: Uuid,
@@ -117,6 +121,11 @@ impl MergeService {
     ///
     /// Merges changes from `source_workspace` into `target_workspace`.
     /// Returns the merged state and any conflicts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if commits cannot be found, there is no common ancestor,
+    /// or the merge record cannot be saved.
     pub async fn merge_workspaces(
         &self,
         source_workspace_id: Uuid,
@@ -232,6 +241,7 @@ impl MergeService {
     }
 
     /// Recursively merge JSON values
+    #[allow(clippy::only_used_in_recursion, clippy::too_many_lines)]
     fn merge_value(
         &self,
         path: &str,
@@ -378,6 +388,10 @@ impl MergeService {
     }
 
     /// Complete a merge by creating a merge commit
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the merge is not in a completable state or the commit fails.
     pub async fn complete_merge(
         &self,
         merge_id: Uuid,
@@ -440,6 +454,10 @@ impl MergeService {
     }
 
     /// Get a merge by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the merge is not found or data parsing fails.
     pub async fn get_merge(&self, merge_id: Uuid) -> Result<WorkspaceMerge> {
         let merge_id_str = merge_id.to_string();
         let row = sqlx::query!(
@@ -500,6 +518,10 @@ impl MergeService {
     }
 
     /// List merges for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn list_merges(&self, workspace_id: Uuid) -> Result<Vec<WorkspaceMerge>> {
         let rows = sqlx::query!(
             r#"
@@ -615,7 +637,7 @@ mod tests {
 
         // Create workspace_forks table
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS workspace_forks (
                 id TEXT PRIMARY KEY,
                 source_workspace_id TEXT NOT NULL,
@@ -624,7 +646,7 @@ mod tests {
                 created_at TEXT NOT NULL,
                 created_by TEXT NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&pool)
         .await
@@ -632,7 +654,7 @@ mod tests {
 
         // Create workspace_merges table
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS workspace_merges (
                 id TEXT PRIMARY KEY,
                 source_workspace_id TEXT NOT NULL,
@@ -647,7 +669,7 @@ mod tests {
                 merged_at TEXT,
                 created_at TEXT NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&pool)
         .await
@@ -655,7 +677,7 @@ mod tests {
 
         // Create commits table
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE IF NOT EXISTS commits (
                 id TEXT PRIMARY KEY,
                 workspace_id TEXT NOT NULL,
@@ -667,7 +689,7 @@ mod tests {
                 metadata TEXT,
                 created_at TEXT NOT NULL
             )
-            "#,
+            ",
         )
         .execute(&pool)
         .await
@@ -832,7 +854,7 @@ mod tests {
         let result = service.three_way_merge(&base, &source, &target);
         assert!(result.is_ok());
 
-        let (merged, conflicts) = result.unwrap();
+        let (_merged, conflicts) = result.unwrap();
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].conflict_type, ConflictType::BothAdded);
     }

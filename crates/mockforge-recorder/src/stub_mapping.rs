@@ -284,6 +284,7 @@ impl StubMappingConverter {
     }
 
     /// Process JSON value to replace dynamic fields
+    #[allow(clippy::only_used_in_recursion)]
     fn process_json_value(&self, value: &Value) -> Option<Value> {
         match value {
             Value::Object(map) => {

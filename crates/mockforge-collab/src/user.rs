@@ -21,6 +21,10 @@ impl UserService {
     }
 
     /// Create a new user account
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if input is invalid, user already exists, or database fails.
     pub async fn create_user(
         &self,
         username: String,
@@ -76,6 +80,10 @@ impl UserService {
     }
 
     /// Authenticate a user and return user if valid
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if credentials are invalid.
     pub async fn authenticate(&self, username: &str, password: &str) -> Result<User> {
         // Fetch user by username or email
         let user = sqlx::query_as!(
@@ -104,6 +112,10 @@ impl UserService {
     }
 
     /// Get user by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the user is not found.
     pub async fn get_user(&self, user_id: Uuid) -> Result<User> {
         let user = sqlx::query_as!(
             User,
@@ -125,6 +137,10 @@ impl UserService {
     }
 
     /// Get user by username
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the user is not found.
     pub async fn get_user_by_username(&self, username: &str) -> Result<User> {
         let user = sqlx::query_as!(
             User,
@@ -146,6 +162,10 @@ impl UserService {
     }
 
     /// Update user profile
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the update fails.
     pub async fn update_user(
         &self,
         user_id: Uuid,
@@ -174,6 +194,10 @@ impl UserService {
     }
 
     /// Change user password
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the old password is invalid or the update fails.
     pub async fn change_password(
         &self,
         user_id: Uuid,
@@ -206,6 +230,10 @@ impl UserService {
     }
 
     /// Deactivate user account
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the deactivation fails.
     pub async fn deactivate_user(&self, user_id: Uuid) -> Result<()> {
         let now = chrono::Utc::now();
         sqlx::query!(
@@ -222,8 +250,6 @@ impl UserService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: These tests require a database setup
     // They serve as documentation of the API
 }

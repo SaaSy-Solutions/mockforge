@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_search_and_sort() {
-        let entries = vec![
+        let entries = [
             create_test_entry("plugin-a", 100, 4.0),
             create_test_entry("plugin-b", 200, 4.5),
             create_test_entry("plugin-c", 50, 5.0),

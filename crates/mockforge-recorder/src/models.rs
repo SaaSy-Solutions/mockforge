@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn test_protocol_clone() {
         let proto = Protocol::Http;
-        let cloned = proto.clone();
+        let cloned = proto;
         assert_eq!(proto, cloned);
     }
 

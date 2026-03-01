@@ -342,9 +342,8 @@ mod tests {
         // Test protocol method
         assert_eq!(registry.protocol(), mockforge_core::Protocol::Kafka);
 
-        // Test operations method
-        let ops = registry.operations();
-        assert!(ops.is_empty() || ops.len() > 0);
+        // Test operations method - verify it doesn't panic
+        let _ops = registry.operations();
     }
 
     // ==================== Metrics Integration Tests ====================

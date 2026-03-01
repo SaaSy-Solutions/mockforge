@@ -1,6 +1,7 @@
-// Build script for mockforge-collab
-// Automatically enables SQLx offline mode if .sqlx directory exists
-// This allows the crate to compile without a database connection when installed from crates.io
+//! Build script for mockforge-collab
+//!
+//! Automatically enables `SQLx` offline mode if `.sqlx` directory exists.
+//! This allows the crate to compile without a database connection when installed from crates.io.
 
 fn main() {
     // Check if SQLX_OFFLINE is already set by the user - don't override their choice

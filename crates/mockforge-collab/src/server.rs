@@ -21,7 +21,7 @@ use std::sync::Arc;
 /// Collaboration server
 pub struct CollabServer {
     /// Configuration
-    config: CollabConfig,
+    _config: CollabConfig,
     /// Database pool
     db: Pool<Sqlite>,
     /// Authentication service
@@ -44,6 +44,10 @@ pub struct CollabServer {
 
 impl CollabServer {
     /// Create a new collaboration server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection or migrations fail.
     pub async fn new(config: CollabConfig) -> Result<Self> {
         // Initialize database
         let db = sqlx::SqlitePool::connect(&config.database_url).await?;
@@ -83,7 +87,7 @@ impl CollabServer {
         ));
 
         Ok(Self {
-            config,
+            _config: config,
             db,
             auth,
             user,
@@ -100,6 +104,10 @@ impl CollabServer {
     ///
     /// This method can be called independently to ensure migrations are up to date.
     /// It's automatically called during server initialization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the migrations fail to run.
     pub async fn run_migrations(db: &sqlx::SqlitePool) -> Result<()> {
         tracing::info!("Running database migrations");
         sqlx::migrate!("./migrations").run(db).await.map_err(|e| {
@@ -111,6 +119,10 @@ impl CollabServer {
     }
 
     /// Start the collaboration server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server cannot bind to the address or encounters a runtime error.
     pub async fn run(self, addr: &str) -> Result<()> {
         tracing::info!("Starting MockForge Collaboration Server on {}", addr);
 

@@ -40,7 +40,7 @@ pub enum MqttStream {
     /// Plain TCP stream
     Plain(TcpStream),
     /// TLS-encrypted stream
-    Tls(TlsStream<TcpStream>),
+    Tls(Box<TlsStream<TcpStream>>),
 }
 
 impl AsyncRead for MqttStream {
@@ -409,10 +409,6 @@ async fn handle_tls_connection(
     let mut buffer = vec![0u8; READ_BUFFER_SIZE.min(max_packet_size)];
     let mut buf_len = 0usize;
 
-    // Client state
-    let mut _client_id: Option<String> = None;
-    let mut packet_rx: Option<mpsc::Receiver<Packet>> = None;
-
     // Read first packet - must be CONNECT
     let connect_timeout = Duration::from_secs(10);
     let first_read = tokio::time::timeout(connect_timeout, reader.read(&mut buffer[buf_len..]))
@@ -467,8 +463,7 @@ async fn handle_tls_connection(
     );
 
     // Create channel for sending packets to this client
-    let (tx, rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
-    packet_rx = Some(rx);
+    let (tx, mut rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
 
     // Register with session manager
     let connect_result = session_manager
@@ -489,8 +484,6 @@ async fn handle_tls_connection(
             return Err(format!("Connection rejected: {:?}", code).into());
         }
     };
-
-    _client_id = Some(cid.clone());
 
     info!("TLS client {} connected (session_present={})", cid, session_present);
 
@@ -519,7 +512,6 @@ async fn handle_tls_connection(
     }
 
     // Main connection loop
-    let mut rx = packet_rx.take().unwrap();
     let result = handle_tls_client_loop(
         &mut reader,
         &mut writer,
@@ -541,6 +533,7 @@ async fn handle_tls_connection(
 }
 
 /// Handle the main TLS client message loop
+#[allow(clippy::too_many_arguments)]
 async fn handle_tls_client_loop<R, W>(
     reader: &mut tokio::io::BufReader<R>,
     writer: &mut W,
@@ -548,7 +541,7 @@ async fn handle_tls_client_loop<R, W>(
     client_id: &str,
     session_manager: &Arc<SessionManager>,
     metrics: &Arc<MqttMetrics>,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     buf_len: &mut usize,
     max_packet_size: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
@@ -794,10 +787,6 @@ async fn handle_connection(
     let mut buffer = vec![0u8; READ_BUFFER_SIZE.min(max_packet_size)];
     let mut buf_len = 0usize;
 
-    // Client state
-    let mut _client_id: Option<String> = None;
-    let mut packet_rx: Option<mpsc::Receiver<Packet>> = None;
-
     // Read first packet - must be CONNECT
     let connect_timeout = Duration::from_secs(10);
     let first_read = tokio::time::timeout(connect_timeout, reader.read(&mut buffer[buf_len..]))
@@ -853,8 +842,7 @@ async fn handle_connection(
     );
 
     // Create channel for sending packets to this client
-    let (tx, rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
-    packet_rx = Some(rx);
+    let (tx, mut rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
 
     // Register with session manager
     let connect_result = session_manager
@@ -875,8 +863,6 @@ async fn handle_connection(
             return Err(format!("Connection rejected: {:?}", code).into());
         }
     };
-
-    _client_id = Some(cid.clone());
 
     info!("Client {} connected (session_present={})", cid, session_present);
 
@@ -907,7 +893,6 @@ async fn handle_connection(
     }
 
     // Main connection loop
-    let mut rx = packet_rx.take().unwrap();
     let result = handle_client_loop(
         &mut reader,
         &mut write_half,
@@ -929,6 +914,7 @@ async fn handle_connection(
 }
 
 /// Handle the main client message loop
+#[allow(clippy::too_many_arguments)]
 async fn handle_client_loop(
     reader: &mut tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
     writer: &mut tokio::net::tcp::OwnedWriteHalf,
@@ -936,7 +922,7 @@ async fn handle_client_loop(
     client_id: &str,
     session_manager: &Arc<SessionManager>,
     metrics: &Arc<MqttMetrics>,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
     buf_len: &mut usize,
     max_packet_size: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

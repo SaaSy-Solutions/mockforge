@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn test_retention_config_debug() {
         let config = RetentionConfig::default();
-        let debug = format!("{:?}", config);
+        let debug = format!("{config:?}");
         assert!(debug.contains("RetentionConfig"));
         assert!(debug.contains("minute_aggregates_days"));
     }
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_analytics_config_debug() {
         let config = AnalyticsConfig::default();
-        let debug = format!("{:?}", config);
+        let debug = format!("{config:?}");
         assert!(debug.contains("AnalyticsConfig"));
         assert!(debug.contains("enabled"));
         assert!(debug.contains("database_path"));

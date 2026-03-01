@@ -298,6 +298,7 @@ impl SyncService {
     }
 
     /// Perform a single sync operation
+    #[allow(clippy::too_many_arguments)]
     async fn sync_once(
         http_client: &Client,
         database: &RecorderDatabase,

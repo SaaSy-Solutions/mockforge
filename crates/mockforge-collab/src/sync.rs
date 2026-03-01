@@ -13,22 +13,39 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-/// Sync message types
+/// Sync message types for real-time collaboration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SyncMessage {
     /// Client subscribes to workspace
-    Subscribe { workspace_id: Uuid },
+    Subscribe {
+        /// Workspace to subscribe to
+        workspace_id: Uuid,
+    },
     /// Client unsubscribes from workspace
-    Unsubscribe { workspace_id: Uuid },
+    Unsubscribe {
+        /// Workspace to unsubscribe from
+        workspace_id: Uuid,
+    },
     /// Change event notification
-    Change { event: ChangeEvent },
+    Change {
+        /// The change event details
+        event: ChangeEvent,
+    },
     /// Sync state request
-    StateRequest { workspace_id: Uuid, version: i64 },
+    StateRequest {
+        /// Workspace to request state for
+        workspace_id: Uuid,
+        /// Version to request from
+        version: i64,
+    },
     /// Sync state response
     StateResponse {
+        /// Workspace identifier
         workspace_id: Uuid,
+        /// State version number
         version: i64,
+        /// Full state data
         state: serde_json::Value,
     },
     /// Heartbeat/ping
@@ -36,7 +53,10 @@ pub enum SyncMessage {
     /// Heartbeat/pong response
     Pong,
     /// Error message
-    Error { message: String },
+    Error {
+        /// Error description
+        message: String,
+    },
 }
 
 /// Sync state for a workspace
@@ -131,6 +151,10 @@ impl SyncEngine {
     }
 
     /// Subscribe a client to a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if subscription fails.
     pub fn subscribe(
         &self,
         workspace_id: Uuid,
@@ -144,6 +168,10 @@ impl SyncEngine {
     }
 
     /// Unsubscribe a client from a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if unsubscription fails.
     pub fn unsubscribe(&self, workspace_id: Uuid, client_id: Uuid) -> Result<()> {
         if let Some(mut connections) = self.connections.get_mut(&workspace_id) {
             connections.retain(|id| *id != client_id);
@@ -152,6 +180,10 @@ impl SyncEngine {
     }
 
     /// Publish a change event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if publishing fails.
     pub fn publish_change(&self, event: ChangeEvent) -> Result<()> {
         self.event_bus.publish(event)
     }
@@ -163,6 +195,10 @@ impl SyncEngine {
     }
 
     /// Update state for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the state update fails.
     pub fn update_state(&self, workspace_id: Uuid, new_state: serde_json::Value) -> Result<()> {
         let version = if let Some(state) = self.states.get(&workspace_id) {
             state.version + 1
@@ -182,7 +218,6 @@ impl SyncEngine {
         {
             let core_bridge = core_bridge.clone();
             let workspace_service = workspace_service.clone();
-            let workspace_id = workspace_id;
             let state_data = new_state.clone();
             tokio::spawn(async move {
                 if let Ok(mut team_workspace) = workspace_service.get_workspace(workspace_id).await
@@ -207,7 +242,6 @@ impl SyncEngine {
         if let Some(db) = &self.db {
             // Spawn async task to save snapshot
             let db = db.clone();
-            let workspace_id = workspace_id;
             let state_data = new_state;
             tokio::spawn(async move {
                 if let Err(e) =
@@ -224,6 +258,10 @@ impl SyncEngine {
     /// Get full workspace state for a workspace
     ///
     /// Uses `CoreBridge` to get the complete workspace state including all mocks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be retrieved.
     pub async fn get_full_workspace_state(
         &self,
         workspace_id: Uuid,
@@ -297,6 +335,10 @@ impl SyncEngine {
     }
 
     /// Load state snapshot from database
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database is not available or the query fails.
     pub async fn load_state_snapshot(
         &self,
         workspace_id: Uuid,
@@ -372,6 +414,10 @@ impl SyncEngine {
     }
 
     /// Record a state change for incremental sync
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database is not available or the insert fails.
     pub async fn record_state_change(
         &self,
         workspace_id: Uuid,
@@ -407,6 +453,10 @@ impl SyncEngine {
     }
 
     /// Get state changes since a specific version
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database is not available or the query fails.
     pub async fn get_state_changes_since(
         &self,
         workspace_id: Uuid,
@@ -526,13 +576,20 @@ pub mod crdt {
         pub client_id: Uuid,
     }
 
+    /// Operational transformation text operation
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(tag = "type", rename_all = "lowercase")]
     pub enum TextOp {
         /// Insert text
-        Insert { text: String },
+        Insert {
+            /// Text content to insert
+            text: String,
+        },
         /// Delete text
-        Delete { length: usize },
+        Delete {
+            /// Number of characters to delete
+            length: usize,
+        },
     }
 }
 

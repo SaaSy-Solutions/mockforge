@@ -341,7 +341,7 @@ mod tests {
         let message = create_test_message("user.created");
         let queues = exchange.route_message(&message, "user.created");
         // Both patterns should match
-        assert!(queues.len() >= 1);
+        assert!(!queues.is_empty());
     }
 
     #[test]
@@ -413,8 +413,10 @@ mod tests {
         headers.insert("type".to_string(), "user".to_string());
         headers.insert("action".to_string(), "created".to_string());
 
-        let mut props = MessageProperties::default();
-        props.headers = headers;
+        let props = MessageProperties {
+            headers,
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,
@@ -450,8 +452,10 @@ mod tests {
         let mut headers = HashMap::new();
         headers.insert("type".to_string(), "user".to_string());
 
-        let mut props = MessageProperties::default();
-        props.headers = headers;
+        let props = MessageProperties {
+            headers,
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,

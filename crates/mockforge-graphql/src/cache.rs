@@ -122,11 +122,9 @@ impl CachedResponse {
         }
 
         // Restore extensions
-        if let Some(ext) = &self.extensions {
-            if let serde_json::Value::Object(map) = ext {
-                for (key, value) in map {
-                    response.extensions.insert(key.clone(), json_to_graphql_value(value));
-                }
+        if let Some(serde_json::Value::Object(map)) = &self.extensions {
+            for (key, value) in map {
+                response.extensions.insert(key.clone(), json_to_graphql_value(value));
             }
         }
 
@@ -337,11 +335,6 @@ impl ResponseCache {
         }
     }
 
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(CacheConfig::default())
-    }
-
     /// Get a cached response
     pub fn get(&self, key: &CacheKey) -> Option<Response> {
         let mut cache = self.cache.write();
@@ -451,6 +444,12 @@ impl ResponseCache {
     }
 }
 
+impl Default for ResponseCache {
+    fn default() -> Self {
+        Self::new(CacheConfig::default())
+    }
+}
+
 /// Cache middleware for automatic caching
 pub struct CacheMiddleware {
     cache: Arc<ResponseCache>,
@@ -532,9 +531,11 @@ mod tests {
 
     #[test]
     fn test_cache_stats_hit_rate() {
-        let mut stats = CacheStats::default();
-        stats.hits = 80;
-        stats.misses = 20;
+        let stats = CacheStats {
+            hits: 80,
+            misses: 20,
+            ..Default::default()
+        };
 
         assert_eq!(stats.hit_rate(), 80.0);
     }

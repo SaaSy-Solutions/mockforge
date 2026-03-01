@@ -228,9 +228,15 @@ mod tests {
 
     #[test]
     fn test_response_transform_config_with_headers() {
-        let mut config = ResponseTransformConfig::default();
-        config.enabled = true;
-        config.custom_headers.insert("X-Custom-Header".to_string(), "value".to_string());
+        let config = ResponseTransformConfig {
+            enabled: true,
+            custom_headers: {
+                let mut headers = HashMap::new();
+                headers.insert("X-Custom-Header".to_string(), "value".to_string());
+                headers
+            },
+            ..Default::default()
+        };
 
         assert!(config.enabled);
         assert_eq!(config.custom_headers.get("X-Custom-Header"), Some(&"value".to_string()));
@@ -238,8 +244,10 @@ mod tests {
 
     #[test]
     fn test_response_transform_config_with_validation() {
-        let mut config = ResponseTransformConfig::default();
-        config.validate_responses = true;
+        let config = ResponseTransformConfig {
+            validate_responses: true,
+            ..Default::default()
+        };
 
         assert!(config.validate_responses);
     }
@@ -295,9 +303,15 @@ mod tests {
 
     #[test]
     fn test_response_transform_config_serialization() {
-        let mut config = ResponseTransformConfig::default();
-        config.enabled = true;
-        config.custom_headers.insert("X-Test".to_string(), "test".to_string());
+        let config = ResponseTransformConfig {
+            enabled: true,
+            custom_headers: {
+                let mut headers = HashMap::new();
+                headers.insert("X-Test".to_string(), "test".to_string());
+                headers
+            },
+            ..Default::default()
+        };
 
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: ResponseTransformConfig = serde_json::from_str(&json).unwrap();
@@ -322,8 +336,10 @@ mod tests {
 
     #[test]
     fn test_response_transform_config_clone() {
-        let mut config = ResponseTransformConfig::default();
-        config.enabled = true;
+        let config = ResponseTransformConfig {
+            enabled: true,
+            ..Default::default()
+        };
 
         let cloned = config.clone();
 
@@ -334,8 +350,10 @@ mod tests {
 
     #[test]
     fn test_empty_allowlist_with_explicit_allow() {
-        let mut config = ProxyConfig::default();
-        config.require_explicit_allow = true;
+        let config = ProxyConfig {
+            require_explicit_allow: true,
+            ..Default::default()
+        };
         // Empty allowlist
 
         // When allowlist is empty and require_explicit_allow is true,

@@ -187,7 +187,6 @@ impl SpecRegistry for MqttSpecRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::TempDir;
 
     fn create_test_fixture() -> crate::fixtures::MqttFixture {

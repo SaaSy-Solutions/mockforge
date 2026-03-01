@@ -797,7 +797,7 @@ mod tests {
         let fixtures = producer.fixtures.read().await;
         let fixture = fixtures.get("stop-test");
         assert!(fixture.is_some());
-        assert_eq!(fixture.unwrap().auto_produce.as_ref().unwrap().enabled, false);
+        assert!(!fixture.unwrap().auto_produce.as_ref().unwrap().enabled);
     }
 
     #[tokio::test]

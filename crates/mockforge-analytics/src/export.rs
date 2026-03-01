@@ -7,6 +7,10 @@ use std::io::Write;
 
 impl AnalyticsDatabase {
     /// Export metrics to CSV format
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query or CSV writing fails.
     pub async fn export_to_csv<W: Write>(
         &self,
         writer: &mut W,
@@ -21,6 +25,7 @@ impl AnalyticsDatabase {
         let aggregates = self.get_minute_aggregates(filter).await?;
 
         for agg in &aggregates {
+            #[allow(clippy::cast_precision_loss)]
             let avg_latency = if agg.request_count > 0 {
                 agg.latency_sum / agg.request_count as f64
             } else {
@@ -48,6 +53,10 @@ impl AnalyticsDatabase {
     }
 
     /// Export metrics to JSON format
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query or JSON serialization fails.
     pub async fn export_to_json(&self, filter: &AnalyticsFilter) -> Result<String> {
         let aggregates = self.get_minute_aggregates(filter).await?;
         let json = serde_json::to_string_pretty(&aggregates)?;
@@ -55,6 +64,10 @@ impl AnalyticsDatabase {
     }
 
     /// Export endpoint stats to CSV
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query or CSV writing fails.
     pub async fn export_endpoints_to_csv<W: Write>(
         &self,
         writer: &mut W,
@@ -69,6 +82,7 @@ impl AnalyticsDatabase {
         let endpoints = self.get_top_endpoints(limit, workspace_id).await?;
 
         for ep in &endpoints {
+            #[allow(clippy::cast_precision_loss)]
             let error_rate = if ep.total_requests > 0 {
                 (ep.total_errors as f64 / ep.total_requests as f64) * 100.0
             } else {
@@ -95,6 +109,10 @@ impl AnalyticsDatabase {
     }
 
     /// Export error events to CSV
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query or CSV writing fails.
     pub async fn export_errors_to_csv<W: Write>(
         &self,
         writer: &mut W,

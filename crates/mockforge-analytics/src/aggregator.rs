@@ -15,9 +15,13 @@ use chrono::{Timelike, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use tracing::{debug, error, info, warn};
+
+/// Key type for grouping metrics by protocol, method, endpoint, and status code
+type MetricsGroupKey = (String, Option<String>, Option<String>, Option<i32>);
 
 /// Prometheus query client
 #[derive(Clone)]
@@ -36,12 +40,16 @@ impl PrometheusClient {
     }
 
     /// Execute a Prometheus instant query
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request or JSON deserialization fails.
     pub async fn query(&self, query: &str, time: Option<i64>) -> Result<PrometheusResponse> {
         let mut url = format!("{}/api/v1/query", self.base_url);
-        url.push_str(&format!("?query={}", urlencoding::encode(query)));
+        let _ = write!(url, "?query={}", urlencoding::encode(query));
 
         if let Some(t) = time {
-            url.push_str(&format!("&time={t}"));
+            let _ = write!(url, "&time={t}");
         }
 
         let response = self.client.get(&url).send().await?.json::<PrometheusResponse>().await?;
@@ -50,6 +58,10 @@ impl PrometheusClient {
     }
 
     /// Execute a Prometheus range query
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request or JSON deserialization fails.
     pub async fn query_range(
         &self,
         query: &str,
@@ -75,7 +87,9 @@ impl PrometheusClient {
 /// Prometheus API response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrometheusResponse {
+    /// Response status ("success" or "error")
     pub status: String,
+    /// Response data payload
     pub data: PrometheusData,
 }
 
@@ -83,15 +97,20 @@ pub struct PrometheusResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrometheusData {
+    /// Result type (e.g., "vector", "matrix")
     pub result_type: String,
+    /// Query results
     pub result: Vec<PrometheusResult>,
 }
 
 /// Prometheus query result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrometheusResult {
+    /// Metric labels
     pub metric: HashMap<String, String>,
+    /// Instant query value
     pub value: Option<PrometheusValue>,
+    /// Range query values
     pub values: Option<Vec<PrometheusValue>>,
 }
 
@@ -120,6 +139,7 @@ impl MetricsAggregator {
     }
 
     /// Start the aggregation service
+    #[allow(clippy::unused_async)]
     pub async fn start(self: Arc<Self>) {
         info!("Starting metrics aggregation service");
 
@@ -156,6 +176,7 @@ impl MetricsAggregator {
     }
 
     /// Aggregate metrics for the last minute
+    #[allow(clippy::too_many_lines)]
     async fn aggregate_minute_metrics(&self) -> Result<()> {
         let now = Utc::now();
         let minute_start = now
@@ -187,6 +208,7 @@ impl MetricsAggregator {
             let endpoint = result.metric.get("path").cloned();
             let status_code = result.metric.get("status").and_then(|s| s.parse::<i32>().ok());
 
+            #[allow(clippy::cast_possible_truncation)]
             let request_count = if let Some((_, value)) = result.value {
                 value.parse::<f64>().unwrap_or(0.0) as i64
             } else {
@@ -226,15 +248,7 @@ impl MetricsAggregator {
                 workspace_id: None,
                 environment: None,
                 request_count,
-                error_count: if let Some(sc) = status_code {
-                    if sc >= 400 {
-                        request_count
-                    } else {
-                        0
-                    }
-                } else {
-                    0
-                },
+                error_count: status_code.map_or(0, |sc| if sc >= 400 { request_count } else { 0 }),
                 latency_sum: 0.0,
                 latency_min: None,
                 latency_max: None,
@@ -328,10 +342,7 @@ impl MetricsAggregator {
         }
 
         // Group by protocol, method, endpoint, status_code
-        let mut groups: HashMap<
-            (String, Option<String>, Option<String>, Option<i32>),
-            Vec<&MetricsAggregate>,
-        > = HashMap::new();
+        let mut groups: HashMap<MetricsGroupKey, Vec<&MetricsAggregate>> = HashMap::new();
 
         for agg in &minute_data {
             let key =
@@ -401,6 +412,7 @@ impl MetricsAggregator {
     }
 
     /// Roll up hour data to day-level aggregates
+    #[allow(clippy::too_many_lines)]
     async fn rollup_to_day(&self) -> Result<()> {
         let now = Utc::now();
         let day_start = now
@@ -431,10 +443,7 @@ impl MetricsAggregator {
         }
 
         // Group by protocol, method, endpoint, status_code
-        let mut groups: HashMap<
-            (String, Option<String>, Option<String>, Option<i32>),
-            Vec<&HourMetricsAggregate>,
-        > = HashMap::new();
+        let mut groups: HashMap<MetricsGroupKey, Vec<&HourMetricsAggregate>> = HashMap::new();
 
         for agg in &hour_data {
             let key =
@@ -450,7 +459,10 @@ impl MetricsAggregator {
                 max_requests = agg.request_count;
                 // Extract hour from timestamp
                 if let Some(dt) = chrono::DateTime::from_timestamp(agg.timestamp, 0) {
-                    peak_hour = Some(dt.hour() as i32);
+                    #[allow(clippy::cast_possible_wrap)]
+                    {
+                        peak_hour = Some(dt.hour() as i32);
+                    }
                 }
             }
         }
@@ -465,39 +477,43 @@ impl MetricsAggregator {
                 group.iter().filter_map(|a| a.latency_max).fold(f64::NEG_INFINITY, f64::max);
 
             // Calculate percentiles from hour aggregates (average of hour percentiles)
+            #[allow(clippy::cast_precision_loss)]
             let latency_p50_avg: Option<f64> = {
                 let p50_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p50).collect();
-                if !p50_values.is_empty() {
-                    Some(p50_values.iter().sum::<f64>() / p50_values.len() as f64)
-                } else {
+                if p50_values.is_empty() {
                     None
+                } else {
+                    Some(p50_values.iter().sum::<f64>() / p50_values.len() as f64)
                 }
             };
+            #[allow(clippy::cast_precision_loss)]
             let latency_p95_avg: Option<f64> = {
                 let p95_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p95).collect();
-                if !p95_values.is_empty() {
-                    Some(p95_values.iter().sum::<f64>() / p95_values.len() as f64)
-                } else {
+                if p95_values.is_empty() {
                     None
+                } else {
+                    Some(p95_values.iter().sum::<f64>() / p95_values.len() as f64)
                 }
             };
+            #[allow(clippy::cast_precision_loss)]
             let latency_p99_avg: Option<f64> = {
                 let p99_values: Vec<f64> = group.iter().filter_map(|a| a.latency_p99).collect();
-                if !p99_values.is_empty() {
-                    Some(p99_values.iter().sum::<f64>() / p99_values.len() as f64)
-                } else {
+                if p99_values.is_empty() {
                     None
+                } else {
+                    Some(p99_values.iter().sum::<f64>() / p99_values.len() as f64)
                 }
             };
 
             // Average active connections
+            #[allow(clippy::cast_precision_loss)]
             let active_connections_avg: Option<f64> = {
                 let avg_values: Vec<f64> =
                     group.iter().filter_map(|a| a.active_connections_avg).collect();
-                if !avg_values.is_empty() {
-                    Some(avg_values.iter().sum::<f64>() / avg_values.len() as f64)
-                } else {
+                if avg_values.is_empty() {
                     None
+                } else {
+                    Some(avg_values.iter().sum::<f64>() / avg_values.len() as f64)
                 }
             };
 

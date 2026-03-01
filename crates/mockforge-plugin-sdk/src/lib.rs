@@ -135,7 +135,8 @@ mod tests {
     // SDK constants tests
     #[test]
     fn test_sdk_version() {
-        assert!(!SDK_VERSION.is_empty());
+        let version: &str = SDK_VERSION;
+        assert!(!version.is_empty(), "SDK_VERSION should not be empty");
     }
 
     #[test]
@@ -215,7 +216,10 @@ mod tests {
     fn test_sdk_result_ok() {
         let result: SdkResult<i32> = Ok(42);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        match result {
+            Ok(val) => assert_eq!(val, 42),
+            Err(_) => panic!("Expected Ok"),
+        }
     }
 
     #[test]

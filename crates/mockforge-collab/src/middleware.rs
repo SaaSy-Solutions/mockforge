@@ -14,11 +14,17 @@ use uuid::Uuid;
 /// Extension for authenticated user
 #[derive(Clone, Debug)]
 pub struct AuthUser {
+    /// User's unique identifier
     pub user_id: Uuid,
+    /// User's username
     pub username: String,
 }
 
 /// JWT authentication middleware
+///
+/// # Errors
+///
+/// Returns an error tuple if authentication fails.
 pub async fn auth_middleware(
     State(auth): State<Arc<AuthService>>,
     mut request: Request,
@@ -55,6 +61,10 @@ pub async fn auth_middleware(
 }
 
 /// Extract authenticated user from request
+///
+/// # Errors
+///
+/// Returns an error if the user is not authenticated.
 pub fn extract_auth_user(request: &Request) -> Result<&AuthUser, CollabError> {
     request
         .extensions()

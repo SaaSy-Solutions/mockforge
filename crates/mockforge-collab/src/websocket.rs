@@ -21,13 +21,18 @@ use uuid::Uuid;
 /// WebSocket state
 #[derive(Clone)]
 pub struct WsState {
+    /// Authentication service
     pub auth: Arc<AuthService>,
+    /// Sync engine
     pub sync: Arc<SyncEngine>,
+    /// Event bus
     pub event_bus: Arc<EventBus>,
+    /// Workspace service
     pub workspace: Arc<workspace::WorkspaceService>,
 }
 
 /// Handle WebSocket upgrade
+#[allow(clippy::implicit_hasher)]
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Query(params): Query<HashMap<String, String>>,
@@ -150,14 +155,10 @@ async fn handle_client_message(
                 // Check if user is a member of the workspace
                 if let Err(e) = state.workspace.get_member(workspace_id, uid).await {
                     tracing::warn!(
-                        "User {} attempted to access workspace {} without permission: {}",
-                        uid,
-                        workspace_id,
-                        e
+                        "User {uid} attempted to access workspace {workspace_id} without permission: {e}"
                     );
                     return Err(CollabError::AuthorizationFailed(format!(
-                        "Access denied to workspace {}",
-                        workspace_id
+                        "Access denied to workspace {workspace_id}"
                     )));
                 }
             } else {

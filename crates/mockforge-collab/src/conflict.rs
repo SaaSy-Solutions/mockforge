@@ -56,6 +56,10 @@ impl ConflictResolver {
     }
 
     /// Resolve conflicts between two versions
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if auto-merge encounters unresolvable conflicts.
     pub fn resolve(
         &self,
         base: Option<&serde_json::Value>,
@@ -99,6 +103,7 @@ impl ConflictResolver {
     }
 
     /// Attempt automatic merge
+    #[allow(clippy::unnecessary_wraps, clippy::unused_self)]
     fn auto_merge(
         &self,
         base: Option<&serde_json::Value>,
@@ -192,6 +197,7 @@ impl ConflictResolver {
     }
 
     /// Detect all conflicts recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn detect_conflicts(
         &self,
         path: &str,
@@ -249,10 +255,15 @@ impl ConflictResolver {
 
     /// Merge text with three-way merge algorithm
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the text has conflicting changes on the same lines.
+    ///
     /// Uses line-based diffing against a common base to detect whether both
     /// sides modified the same lines. When only one side changes a line, that
     /// change is applied. When both sides change the same line differently, a
     /// conflict is raised.
+    #[allow(clippy::similar_names)]
     pub fn merge_text(&self, base: &str, ours: &str, theirs: &str) -> Result<String> {
         if ours == theirs {
             return Ok(ours.to_string());

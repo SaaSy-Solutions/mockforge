@@ -14,12 +14,13 @@ use std::path::{Path, PathBuf};
 ///
 /// Scans the workspace for behavior-related files (rules, policies, scenarios)
 /// and represents them as nodes in the world state graph.
+#[derive(Default)]
 pub struct BehaviorAggregator {}
 
 impl BehaviorAggregator {
     /// Create a new behavior aggregator
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 }
 

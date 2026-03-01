@@ -293,8 +293,10 @@ mod tests {
         let mut queue = Queue::new("test-queue".to_string(), true, false, false);
 
         // Create a message that expires immediately
-        let mut props = MessageProperties::default();
-        props.expiration = Some("0".to_string());
+        let props = MessageProperties {
+            expiration: Some("0".to_string()),
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,
@@ -491,8 +493,10 @@ mod tests {
         let mut queue = Queue::new("test-queue".to_string(), true, false, false);
 
         // Enqueue an expired message
-        let mut props1 = MessageProperties::default();
-        props1.expiration = Some("0".to_string());
+        let props1 = MessageProperties {
+            expiration: Some("0".to_string()),
+            ..Default::default()
+        };
         let message1 = Message {
             properties: props1,
             body: b"expired".to_vec(),

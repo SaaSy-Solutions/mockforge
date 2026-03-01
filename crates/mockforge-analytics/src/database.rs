@@ -22,6 +22,11 @@ impl AnalyticsDatabase {
     ///
     /// # Arguments
     /// * `database_path` - Path to the `SQLite` database file (or ":memory:" for in-memory)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection cannot be established or
+    /// `SQLite` pragmas fail to execute.
     pub async fn new(database_path: &Path) -> Result<Self> {
         let db_url = if database_path.to_str() == Some(":memory:") {
             "sqlite::memory:".to_string()
@@ -51,6 +56,10 @@ impl AnalyticsDatabase {
     }
 
     /// Run database migrations
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any migration SQL fails to execute.
     pub async fn run_migrations(&self) -> Result<()> {
         info!("Running analytics database migrations");
 
@@ -59,30 +68,47 @@ impl AnalyticsDatabase {
         let mut conn = self.pool.acquire().await?;
         let mut stream = conn.execute_many(migration_sql);
 
-        while let Some(_) = stream.try_next().await.map_err(|e| {
-            error!("Migration error: {}", e);
-            AnalyticsError::Migration(format!("Failed to execute migration: {e}"))
-        })? {}
+        while stream
+            .try_next()
+            .await
+            .map_err(|e| {
+                error!("Migration error: {}", e);
+                AnalyticsError::Migration(format!("Failed to execute migration: {e}"))
+            })?
+            .is_some()
+        {}
 
         // Run coverage metrics migration
         let coverage_migration_sql = include_str!("../migrations/003_coverage_metrics.sql");
         let mut conn = self.pool.acquire().await?;
         let mut stream = conn.execute_many(coverage_migration_sql);
 
-        while let Some(_) = stream.try_next().await.map_err(|e| {
-            error!("Coverage metrics migration error: {}", e);
-            AnalyticsError::Migration(format!("Failed to execute coverage metrics migration: {e}"))
-        })? {}
+        while stream
+            .try_next()
+            .await
+            .map_err(|e| {
+                error!("Coverage metrics migration error: {}", e);
+                AnalyticsError::Migration(format!(
+                    "Failed to execute coverage metrics migration: {e}"
+                ))
+            })?
+            .is_some()
+        {}
 
         // Run pillar usage migration
         let pillar_usage_migration_sql = include_str!("../migrations/002_pillar_usage.sql");
         let mut conn = self.pool.acquire().await?;
         let mut stream = conn.execute_many(pillar_usage_migration_sql);
 
-        while let Some(_) = stream.try_next().await.map_err(|e| {
-            error!("Pillar usage migration error: {}", e);
-            AnalyticsError::Migration(format!("Failed to execute pillar usage migration: {e}"))
-        })? {}
+        while stream
+            .try_next()
+            .await
+            .map_err(|e| {
+                error!("Pillar usage migration error: {}", e);
+                AnalyticsError::Migration(format!("Failed to execute pillar usage migration: {e}"))
+            })?
+            .is_some()
+        {}
 
         info!("Analytics database migrations completed successfully");
         Ok(())
@@ -99,6 +125,10 @@ impl AnalyticsDatabase {
     // ========================================================================
 
     /// Insert a minute-level metrics aggregate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn insert_minute_aggregate(&self, agg: &MetricsAggregate) -> Result<i64> {
         let result = sqlx::query(
             "INSERT INTO metrics_aggregates_minute (
@@ -132,6 +162,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert multiple minute-level aggregates in a batch
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database insert fails; the transaction is rolled back.
     pub async fn insert_minute_aggregates_batch(
         &self,
         aggregates: &[MetricsAggregate],
@@ -180,6 +214,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert an hour-level metrics aggregate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn insert_hour_aggregate(&self, agg: &HourMetricsAggregate) -> Result<i64> {
         let result = sqlx::query(
             r"
@@ -217,6 +255,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert a day-level metrics aggregate
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn insert_day_aggregate(&self, agg: &DayMetricsAggregate) -> Result<i64> {
         let result = sqlx::query(
             r"
@@ -257,6 +299,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert or update endpoint statistics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database upsert fails.
     pub async fn upsert_endpoint_stats(&self, stats: &EndpointStats) -> Result<()> {
         sqlx::query(
             r"
@@ -304,6 +350,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert an error event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn insert_error_event(&self, error: &ErrorEvent) -> Result<i64> {
         let result = sqlx::query(
             r"
@@ -338,6 +388,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert a traffic pattern
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database upsert fails.
     pub async fn insert_traffic_pattern(&self, pattern: &TrafficPattern) -> Result<()> {
         sqlx::query(
             r"
@@ -370,6 +424,10 @@ impl AnalyticsDatabase {
     }
 
     /// Insert an analytics snapshot
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn insert_snapshot(&self, snapshot: &AnalyticsSnapshot) -> Result<i64> {
         let result = sqlx::query(
             r"
@@ -406,6 +464,10 @@ impl AnalyticsDatabase {
     // ========================================================================
 
     /// Get minute aggregates for a time range
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_minute_aggregates(
         &self,
         filter: &AnalyticsFilter,
@@ -480,6 +542,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get hour-level aggregates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_hour_aggregates(
         &self,
         filter: &AnalyticsFilter,
@@ -554,6 +620,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get top endpoints by request count
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_top_endpoints(
         &self,
         limit: i64,
@@ -581,6 +651,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get recent error events
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_recent_errors(
         &self,
         limit: i64,
@@ -626,6 +700,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get traffic patterns for heatmap
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_traffic_patterns(
         &self,
         days: i64,
@@ -636,7 +714,7 @@ impl AnalyticsDatabase {
 
         let mut query = String::from("SELECT * FROM traffic_patterns WHERE date >= ?");
 
-        if let Some(_workspace) = workspace_id {
+        if workspace_id.is_some() {
             query.push_str(" AND workspace_id = ?");
         }
 
@@ -658,6 +736,10 @@ impl AnalyticsDatabase {
     // ========================================================================
 
     /// Delete old minute aggregates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete fails.
     pub async fn cleanup_minute_aggregates(&self, days: u32) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
@@ -675,6 +757,10 @@ impl AnalyticsDatabase {
     }
 
     /// Delete old hour aggregates
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete fails.
     pub async fn cleanup_hour_aggregates(&self, days: u32) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
@@ -688,6 +774,10 @@ impl AnalyticsDatabase {
     }
 
     /// Delete old error events
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database delete fails.
     pub async fn cleanup_error_events(&self, days: u32) -> Result<u64> {
         let cutoff = chrono::Utc::now().timestamp() - (i64::from(days) * 86400);
 
@@ -701,54 +791,15 @@ impl AnalyticsDatabase {
     }
 
     /// Vacuum the database to reclaim space
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VACUUM command fails.
     pub async fn vacuum(&self) -> Result<()> {
         info!("Running VACUUM on analytics database");
         sqlx::query("VACUUM").execute(&self.pool).await?;
         info!("VACUUM completed");
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_database_creation() {
-        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
-        db.run_migrations().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_insert_minute_aggregate() {
-        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
-        db.run_migrations().await.unwrap();
-
-        let agg = MetricsAggregate {
-            id: None,
-            timestamp: chrono::Utc::now().timestamp(),
-            protocol: "HTTP".to_string(),
-            method: Some("GET".to_string()),
-            endpoint: Some("/api/test".to_string()),
-            status_code: Some(200),
-            workspace_id: None,
-            environment: None,
-            request_count: 100,
-            error_count: 5,
-            latency_sum: 500.0,
-            latency_min: Some(10.0),
-            latency_max: Some(100.0),
-            latency_p50: Some(45.0),
-            latency_p95: Some(95.0),
-            latency_p99: Some(99.0),
-            bytes_sent: 10000,
-            bytes_received: 5000,
-            active_connections: Some(10),
-            created_at: None,
-        };
-
-        let id = db.insert_minute_aggregate(&agg).await.unwrap();
-        assert!(id > 0);
     }
 }
 
@@ -758,6 +809,10 @@ mod tests {
 
 impl AnalyticsDatabase {
     /// Record scenario usage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
     pub async fn record_scenario_usage(
         &self,
         scenario_id: &str,
@@ -806,6 +861,10 @@ impl AnalyticsDatabase {
     }
 
     /// Record persona CI hit
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn record_persona_ci_hit(
         &self,
         persona_id: &str,
@@ -831,6 +890,11 @@ impl AnalyticsDatabase {
     }
 
     /// Record endpoint test coverage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_endpoint_coverage(
         &self,
         endpoint: &str,
@@ -890,6 +954,11 @@ impl AnalyticsDatabase {
     }
 
     /// Record reality level staleness
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
+    #[allow(clippy::too_many_arguments)]
     pub async fn record_reality_level_staleness(
         &self,
         workspace_id: &str,
@@ -901,11 +970,7 @@ impl AnalyticsDatabase {
         staleness_days: Option<i32>,
     ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
-        let last_updated = if let Some(days) = staleness_days {
-            Some(now - (i64::from(days) * 86400))
-        } else {
-            Some(now)
-        };
+        let last_updated = Some(staleness_days.map_or(now, |days| now - (i64::from(days) * 86400)));
 
         sqlx::query(
             "INSERT INTO reality_level_staleness (workspace_id, org_id, endpoint, method, protocol, current_reality_level, last_updated_at, staleness_days, created_at, updated_at)
@@ -929,6 +994,10 @@ impl AnalyticsDatabase {
     }
 
     /// Record drift percentage metrics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
     pub async fn record_drift_percentage(
         &self,
         workspace_id: &str,
@@ -937,6 +1006,7 @@ impl AnalyticsDatabase {
         drifting_mocks: i64,
     ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
+        #[allow(clippy::cast_precision_loss)]
         let drift_percentage = if total_mocks > 0 {
             (drifting_mocks as f64 / total_mocks as f64) * 100.0
         } else {
@@ -960,6 +1030,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get scenario usage metrics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_scenario_usage(
         &self,
         workspace_id: Option<&str>,
@@ -995,6 +1069,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get persona CI hits
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_persona_ci_hits(
         &self,
         workspace_id: Option<&str>,
@@ -1030,6 +1108,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get endpoint coverage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_endpoint_coverage(
         &self,
         workspace_id: Option<&str>,
@@ -1069,6 +1151,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get reality level staleness
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_reality_level_staleness(
         &self,
         workspace_id: Option<&str>,
@@ -1108,6 +1194,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get drift percentage metrics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_drift_percentage(
         &self,
         workspace_id: Option<&str>,
@@ -1140,5 +1230,48 @@ impl AnalyticsDatabase {
 
         let results = q.fetch_all(&self.pool).await?;
         Ok(results)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_database_creation() {
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
+        db.run_migrations().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_minute_aggregate() {
+        let db = AnalyticsDatabase::new(Path::new(":memory:")).await.unwrap();
+        db.run_migrations().await.unwrap();
+
+        let agg = MetricsAggregate {
+            id: None,
+            timestamp: chrono::Utc::now().timestamp(),
+            protocol: "HTTP".to_string(),
+            method: Some("GET".to_string()),
+            endpoint: Some("/api/test".to_string()),
+            status_code: Some(200),
+            workspace_id: None,
+            environment: None,
+            request_count: 100,
+            error_count: 5,
+            latency_sum: 500.0,
+            latency_min: Some(10.0),
+            latency_max: Some(100.0),
+            latency_p50: Some(45.0),
+            latency_p95: Some(95.0),
+            latency_p99: Some(99.0),
+            bytes_sent: 10_000,
+            bytes_received: 5_000,
+            active_connections: Some(10),
+            created_at: None,
+        };
+
+        let id = db.insert_minute_aggregate(&agg).await.unwrap();
+        assert!(id > 0);
     }
 }

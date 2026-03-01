@@ -51,6 +51,10 @@ impl WorkspaceService {
     }
 
     /// Create a new workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn create_workspace(
         &self,
         name: String,
@@ -58,7 +62,7 @@ impl WorkspaceService {
         owner_id: Uuid,
     ) -> Result<TeamWorkspace> {
         let mut workspace = TeamWorkspace::new(name.clone(), owner_id);
-        workspace.description = description.clone();
+        workspace.description.clone_from(&description);
 
         // If we have CoreBridge, create a proper core workspace and embed it
         if let Some(core_bridge) = &self.core_bridge {
@@ -117,6 +121,10 @@ impl WorkspaceService {
     }
 
     /// Get a workspace by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn get_workspace(&self, workspace_id: Uuid) -> Result<TeamWorkspace> {
         // Check cache first
         if let Some(workspace) = self.cache.read().get(&workspace_id) {
@@ -153,6 +161,10 @@ impl WorkspaceService {
     }
 
     /// Update a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn update_workspace(
         &self,
         workspace_id: Uuid,
@@ -204,6 +216,10 @@ impl WorkspaceService {
     }
 
     /// Delete (archive) a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn delete_workspace(&self, workspace_id: Uuid, user_id: Uuid) -> Result<()> {
         // Check permissions
         let member = self.get_member(workspace_id, user_id).await?;
@@ -229,6 +245,10 @@ impl WorkspaceService {
     }
 
     /// Add a member to a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn add_member(
         &self,
         workspace_id: Uuid,
@@ -262,6 +282,10 @@ impl WorkspaceService {
     }
 
     /// Remove a member from a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn remove_member(
         &self,
         workspace_id: Uuid,
@@ -293,6 +317,10 @@ impl WorkspaceService {
     }
 
     /// Change a member's role
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn change_role(
         &self,
         workspace_id: Uuid,
@@ -329,6 +357,10 @@ impl WorkspaceService {
     }
 
     /// Get a workspace member
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn get_member(&self, workspace_id: Uuid, user_id: Uuid) -> Result<WorkspaceMember> {
         sqlx::query_as!(
             WorkspaceMember,
@@ -352,6 +384,10 @@ impl WorkspaceService {
     }
 
     /// List all members of a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn list_members(&self, workspace_id: Uuid) -> Result<Vec<WorkspaceMember>> {
         let members = sqlx::query_as!(
             WorkspaceMember,
@@ -376,6 +412,10 @@ impl WorkspaceService {
     }
 
     /// List all workspaces for a user
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn list_user_workspaces(&self, user_id: Uuid) -> Result<Vec<TeamWorkspace>> {
         let workspaces = sqlx::query_as!(
             TeamWorkspace,
@@ -407,6 +447,10 @@ impl WorkspaceService {
     ///
     /// Creates a new workspace that is a copy of the source workspace.
     /// The forked workspace has its own ID and can be modified independently.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn fork_workspace(
         &self,
         source_workspace_id: Uuid,
@@ -425,7 +469,7 @@ impl WorkspaceService {
             new_name.unwrap_or_else(|| format!("{} (Fork)", source_workspace.name)),
             new_owner_id,
         );
-        forked_workspace.description = source_workspace.description.clone();
+        forked_workspace.description.clone_from(&source_workspace.description);
 
         // Deep copy the config (workspace data) to ensure independence
         // If we have CoreBridge, we can properly clone the core workspace
@@ -434,8 +478,8 @@ impl WorkspaceService {
             if let Ok(mut core_workspace) = core_bridge.team_to_core(&source_workspace) {
                 // Generate new IDs for all entities in the forked workspace
                 core_workspace.id = forked_workspace.id.to_string();
-                core_workspace.name = forked_workspace.name.clone();
-                core_workspace.description = forked_workspace.description.clone();
+                core_workspace.name.clone_from(&forked_workspace.name);
+                core_workspace.description.clone_from(&forked_workspace.description);
                 core_workspace.created_at = forked_workspace.created_at;
                 core_workspace.updated_at = forked_workspace.updated_at;
 
@@ -447,11 +491,11 @@ impl WorkspaceService {
                     forked_workspace.config = team_ws.config;
                 } else {
                     // Fallback to shallow copy
-                    forked_workspace.config = source_workspace.config.clone();
+                    forked_workspace.config.clone_from(&source_workspace.config);
                 }
             } else {
                 // Fallback to shallow copy
-                forked_workspace.config = source_workspace.config.clone();
+                forked_workspace.config.clone_from(&source_workspace.config);
             }
         } else {
             // Fallback to shallow copy
@@ -523,6 +567,10 @@ impl WorkspaceService {
     }
 
     /// List all forks of a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn list_forks(&self, workspace_id: Uuid) -> Result<Vec<WorkspaceFork>> {
         let forks = sqlx::query_as!(
             WorkspaceFork,
@@ -547,6 +595,10 @@ impl WorkspaceService {
     }
 
     /// Get the source workspace for a fork
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn get_fork_source(
         &self,
         forked_workspace_id: Uuid,
@@ -573,6 +625,7 @@ impl WorkspaceService {
     }
 
     /// Regenerate entity IDs in a core workspace to ensure fork independence
+    #[allow(clippy::items_after_statements)]
     fn regenerate_entity_ids(core_workspace: &mut mockforge_core::workspace::Workspace) {
         use mockforge_core::workspace::Folder;
         use uuid::Uuid;
@@ -616,6 +669,10 @@ impl WorkspaceManager {
     }
 
     /// Create and setup a new workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn create_workspace(
         &self,
         name: String,
@@ -626,6 +683,10 @@ impl WorkspaceManager {
     }
 
     /// Get workspace with member check
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
     pub async fn get_workspace(&self, workspace_id: Uuid, user_id: Uuid) -> Result<TeamWorkspace> {
         // Verify user is a member
         self.service.get_member(workspace_id, user_id).await?;
@@ -635,8 +696,6 @@ impl WorkspaceManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: These tests would require a database setup
     // For now, they serve as documentation of the API
 }

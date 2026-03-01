@@ -14,12 +14,13 @@ use std::path::{Path, PathBuf};
 ///
 /// Scans the workspace for recorded data files (fixtures, recordings, captures)
 /// and represents them as nodes in the world state graph.
+#[derive(Default)]
 pub struct RecordedAggregator {}
 
 impl RecordedAggregator {
     /// Create a new recorded aggregator
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 }
 

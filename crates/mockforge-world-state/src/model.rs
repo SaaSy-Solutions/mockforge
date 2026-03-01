@@ -574,7 +574,7 @@ mod tests {
     #[test]
     fn test_state_layer_ordering() {
         // Test that layers can be ordered (for sorting)
-        let mut layers = vec![
+        let mut layers = [
             StateLayer::System,
             StateLayer::Personas,
             StateLayer::Lifecycle,

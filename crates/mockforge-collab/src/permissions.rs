@@ -7,32 +7,45 @@ use serde::{Deserialize, Serialize};
 /// Permission types in the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum Permission {
-    // Workspace permissions
+    /// Create workspaces
     WorkspaceCreate,
+    /// Read workspace data
     WorkspaceRead,
+    /// Update workspace settings
     WorkspaceUpdate,
+    /// Delete workspaces
     WorkspaceDelete,
+    /// Archive workspaces
     WorkspaceArchive,
+    /// Manage workspace members
     WorkspaceManageMembers,
 
-    // Mock/Route permissions
+    /// Create mock routes
     MockCreate,
+    /// Read mock routes
     MockRead,
+    /// Update mock routes
     MockUpdate,
+    /// Delete mock routes
     MockDelete,
 
-    // Collaboration permissions
+    /// Invite members to workspace
     InviteMembers,
+    /// Remove members from workspace
     RemoveMembers,
+    /// Change member roles
     ChangeRoles,
 
-    // History permissions
+    /// View workspace history
     ViewHistory,
+    /// Create named snapshots
     CreateSnapshot,
+    /// Restore from snapshots
     RestoreSnapshot,
 
-    // Settings permissions
+    /// Manage workspace settings
     ManageSettings,
+    /// Manage integrations
     ManageIntegrations,
 
     // Scenario-specific permissions
@@ -146,6 +159,10 @@ pub struct PermissionChecker;
 
 impl PermissionChecker {
     /// Check if a user has permission to perform an action
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the role lacks the required permission.
     pub fn check(user_role: UserRole, required_permission: Permission) -> Result<()> {
         if RolePermissions::has_permission(user_role, required_permission) {
             Ok(())
@@ -157,6 +174,10 @@ impl PermissionChecker {
     }
 
     /// Check multiple permissions (must have all)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the role lacks any required permission.
     pub fn check_all(user_role: UserRole, required_permissions: &[Permission]) -> Result<()> {
         for permission in required_permissions {
             Self::check(user_role, *permission)?;
@@ -165,6 +186,10 @@ impl PermissionChecker {
     }
 
     /// Check multiple permissions (must have at least one)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the role lacks all required permissions.
     pub fn check_any(user_role: UserRole, required_permissions: &[Permission]) -> Result<()> {
         for permission in required_permissions {
             if RolePermissions::has_permission(user_role, *permission) {

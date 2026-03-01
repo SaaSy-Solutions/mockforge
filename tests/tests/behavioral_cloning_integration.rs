@@ -30,15 +30,15 @@ async fn test_flow_recording_config() {
 async fn test_flow_grouping_strategies() {
     // Test trace_id grouping
     let trace_id = FlowGroupingStrategy::TraceId;
-    assert_eq!(trace_id, FlowGroupingStrategy::from_str("trace_id"));
+    assert_eq!(trace_id, "trace_id".parse::<FlowGroupingStrategy>().unwrap());
 
     // Test session_id grouping
     let session_id = FlowGroupingStrategy::SessionId;
-    assert_eq!(session_id, FlowGroupingStrategy::from_str("session_id"));
+    assert_eq!(session_id, "session_id".parse::<FlowGroupingStrategy>().unwrap());
 
     // Test IP+time window grouping
     let ip_time = FlowGroupingStrategy::IpTimeWindow;
-    assert_eq!(ip_time, FlowGroupingStrategy::from_str("ip_time_window"));
+    assert_eq!(ip_time, "ip_time_window".parse::<FlowGroupingStrategy>().unwrap());
 }
 
 /// Test flow creation

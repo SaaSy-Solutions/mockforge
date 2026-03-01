@@ -14,12 +14,13 @@ use std::path::{Path, PathBuf};
 ///
 /// Scans the workspace for schema files (OpenAPI, Swagger, protobuf)
 /// and represents them as nodes in the world state graph.
+#[derive(Default)]
 pub struct SchemaAggregator {}
 
 impl SchemaAggregator {
     /// Create a new schema aggregator
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 }
 

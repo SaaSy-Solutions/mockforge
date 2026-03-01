@@ -165,8 +165,12 @@ fn generate_response_data(response: &crate::fixtures::TcpResponse) -> Result<Vec
     match response.encoding.as_str() {
         "hex" => hex::decode(&response.data)
             .map_err(|e| mockforge_core::Error::generic(format!("Invalid hex data: {}", e))),
-        "base64" => base64::decode(&response.data)
-            .map_err(|e| mockforge_core::Error::generic(format!("Invalid base64 data: {}", e))),
+        "base64" => {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(&response.data)
+                .map_err(|e| mockforge_core::Error::generic(format!("Invalid base64 data: {e}")))
+        }
         "text" => Ok(response.data.as_bytes().to_vec()),
         "file" => {
             let file_path = response.file_path.as_ref().ok_or_else(|| {

@@ -3,9 +3,8 @@
 //! These tests verify that protocols work together correctly,
 //! including HTTP↔gRPC bridges and protocol state consistency.
 
-use mockforge_grpc::dynamic::http_bridge::{HttpBridge, HttpBridgeConfig};
+use mockforge_grpc::dynamic::http_bridge::HttpBridgeConfig;
 use serde_json::json;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_http_bridge_configuration() {
@@ -42,11 +41,8 @@ async fn test_http_bridge_default_config() {
 #[tokio::test]
 async fn test_bridge_query_parsing() {
     use mockforge_grpc::dynamic::http_bridge::BridgeQuery;
-    use std::collections::HashMap;
 
-    // Test query parameter parsing
-    let query_string = "stream=server&key1=value1&key2=value2";
-    // Test query parameter structure (without actual parsing)
+    // Test query parameter structure
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("key1".to_string(), "value1".to_string());
     metadata.insert("key2".to_string(), "value2".to_string());

@@ -40,7 +40,7 @@ impl Pillar {
 
     /// Parse from string
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "reality" => Some(Self::Reality),
             "contracts" => Some(Self::Contracts),
@@ -171,6 +171,10 @@ pub struct AiPillarMetrics {
 
 impl AnalyticsDatabase {
     /// Record a pillar usage event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert or JSON serialization fails.
     pub async fn record_pillar_usage(&self, event: &PillarUsageEvent) -> Result<()> {
         let timestamp = event.timestamp.timestamp();
         let metric_value_json = serde_json::to_string(&event.metric_value)?;
@@ -196,6 +200,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get pillar usage metrics for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database query fails.
     pub async fn get_workspace_pillar_metrics(
         &self,
         workspace_id: &str,
@@ -242,6 +250,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get pillar usage metrics for an organization
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database query fails.
     pub async fn get_org_pillar_metrics(
         &self,
         org_id: &str,
@@ -282,6 +294,11 @@ impl AnalyticsDatabase {
     }
 
     /// Get reality pillar metrics
+    #[allow(
+        clippy::too_many_lines,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss
+    )]
     async fn get_reality_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -503,6 +520,11 @@ impl AnalyticsDatabase {
     }
 
     /// Get contracts pillar metrics
+    #[allow(
+        clippy::too_many_lines,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss
+    )]
     async fn get_contracts_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -769,6 +791,7 @@ impl AnalyticsDatabase {
     }
 
     /// Get `DevX` pillar metrics
+    #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     async fn get_devx_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -941,6 +964,7 @@ impl AnalyticsDatabase {
     }
 
     /// Get Cloud pillar metrics
+    #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     async fn get_cloud_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -1115,6 +1139,7 @@ impl AnalyticsDatabase {
     }
 
     /// Get AI pillar metrics
+    #[allow(clippy::too_many_lines, clippy::cast_sign_loss)]
     async fn get_ai_pillar_metrics(
         &self,
         workspace_id: Option<&str>,
@@ -1309,20 +1334,20 @@ mod tests {
 
     #[test]
     fn test_pillar_from_str() {
-        assert_eq!(Pillar::from_str("reality"), Some(Pillar::Reality));
-        assert_eq!(Pillar::from_str("contracts"), Some(Pillar::Contracts));
-        assert_eq!(Pillar::from_str("devx"), Some(Pillar::DevX));
-        assert_eq!(Pillar::from_str("cloud"), Some(Pillar::Cloud));
-        assert_eq!(Pillar::from_str("ai"), Some(Pillar::Ai));
-        assert_eq!(Pillar::from_str("unknown"), None);
+        assert_eq!(Pillar::parse("reality"), Some(Pillar::Reality));
+        assert_eq!(Pillar::parse("contracts"), Some(Pillar::Contracts));
+        assert_eq!(Pillar::parse("devx"), Some(Pillar::DevX));
+        assert_eq!(Pillar::parse("cloud"), Some(Pillar::Cloud));
+        assert_eq!(Pillar::parse("ai"), Some(Pillar::Ai));
+        assert_eq!(Pillar::parse("unknown"), None);
     }
 
     #[test]
     fn test_pillar_from_str_case_insensitive() {
-        assert_eq!(Pillar::from_str("REALITY"), Some(Pillar::Reality));
-        assert_eq!(Pillar::from_str("Reality"), Some(Pillar::Reality));
-        assert_eq!(Pillar::from_str("DEVX"), Some(Pillar::DevX));
-        assert_eq!(Pillar::from_str("AI"), Some(Pillar::Ai));
+        assert_eq!(Pillar::parse("REALITY"), Some(Pillar::Reality));
+        assert_eq!(Pillar::parse("Reality"), Some(Pillar::Reality));
+        assert_eq!(Pillar::parse("DEVX"), Some(Pillar::DevX));
+        assert_eq!(Pillar::parse("AI"), Some(Pillar::Ai));
     }
 
     #[test]
@@ -1544,7 +1569,7 @@ mod tests {
     #[test]
     fn test_pillar_debug() {
         let pillar = Pillar::Reality;
-        let debug = format!("{:?}", pillar);
+        let debug = format!("{pillar:?}");
         assert!(debug.contains("Reality"));
     }
 
@@ -1559,7 +1584,9 @@ mod tests {
             total_scenarios: 10,
         };
         let cloned = metrics.clone();
-        assert_eq!(metrics.blended_reality_percent, cloned.blended_reality_percent);
+        assert!(
+            (metrics.blended_reality_percent - cloned.blended_reality_percent).abs() < f64::EPSILON
+        );
         assert_eq!(metrics.total_scenarios, cloned.total_scenarios);
     }
 

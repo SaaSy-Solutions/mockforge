@@ -843,10 +843,8 @@ impl MockReflectionProxy {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_module_compiles() {
-        // Importing super::* ensures this module's types and imports are valid
+        // Verify this module's types and imports are valid
     }
 }

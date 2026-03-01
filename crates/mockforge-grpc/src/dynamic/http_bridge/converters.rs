@@ -61,15 +61,15 @@ impl ConversionError {
 pub struct ProtobufJsonConverter {
     /// Descriptor pool containing protobuf definitions
     ///
-    /// Used for resolving message descriptors and schema information
-    /// during JSON/protobuf conversion operations.
-    pool: DescriptorPool,
+    /// Reserved for future use in resolving message descriptors and schema
+    /// information during JSON/protobuf conversion operations.
+    _pool: DescriptorPool,
 }
 
 impl ProtobufJsonConverter {
     /// Create a new converter with the given descriptor pool
     pub fn new(pool: DescriptorPool) -> Self {
-        Self { pool }
+        Self { _pool: pool }
     }
 
     /// Convert JSON to a protobuf DynamicMessage
@@ -601,7 +601,7 @@ mod tests {
         // For now, we'll create a simple test that validates the converter creation
         let pool = DescriptorPool::new();
         let converter = ProtobufJsonConverter::new(pool);
-        assert!(converter.pool.services().count() == 0);
+        assert!(converter._pool.services().count() == 0);
     }
 
     #[test]
@@ -611,7 +611,7 @@ mod tests {
 
         // Test that we can get default values for different field types
         // Note: This is more of an integration test that would need actual descriptors
-        assert!(converter.pool.services().count() == 0);
+        assert!(converter._pool.services().count() == 0);
     }
 
     #[test]
@@ -667,11 +667,11 @@ mod tests {
         let pool = DescriptorPool::new();
         let converter = ProtobufJsonConverter::new(pool.clone());
 
-        assert_eq!(converter.pool.services().count(), 0);
+        assert_eq!(converter._pool.services().count(), 0);
 
         // Test that we can create multiple converters
         let converter2 = ProtobufJsonConverter::new(pool);
-        assert_eq!(converter2.pool.services().count(), 0);
+        assert_eq!(converter2._pool.services().count(), 0);
     }
 
     #[test]

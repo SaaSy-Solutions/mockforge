@@ -71,7 +71,7 @@ pub struct CollabClient {
     /// Configuration
     config: ClientConfig,
     /// Client ID
-    client_id: Uuid,
+    _client_id: Uuid,
     /// Connection state
     state: Arc<RwLock<ConnectionState>>,
     /// Message queue for when disconnected
@@ -92,6 +92,10 @@ pub struct CollabClient {
 
 impl CollabClient {
     /// Create a new client and connect to server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the server URL is empty or connection fails.
     pub async fn connect(config: ClientConfig) -> Result<Self> {
         if config.server_url.is_empty() {
             return Err(CollabError::InvalidInput("server_url cannot be empty".to_string()));
@@ -99,7 +103,7 @@ impl CollabClient {
 
         let client = Self {
             config: config.clone(),
-            client_id: Uuid::new_v4(),
+            _client_id: Uuid::new_v4(),
             state: Arc::new(RwLock::new(ConnectionState::Connecting)),
             message_queue: Arc::new(RwLock::new(Vec::new())),
             ws_sender: Arc::new(RwLock::new(None)),
@@ -393,6 +397,7 @@ impl CollabClient {
         }
 
         queue.push(message);
+        drop(queue);
         Ok(())
     }
 
@@ -421,6 +426,10 @@ impl CollabClient {
     }
 
     /// Subscribe to a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace ID is invalid or sending fails.
     pub async fn subscribe_to_workspace(&self, workspace_id: &str) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
             .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
@@ -432,6 +441,10 @@ impl CollabClient {
     }
 
     /// Unsubscribe from a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace ID is invalid or sending fails.
     pub async fn unsubscribe_from_workspace(&self, workspace_id: &str) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
             .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
@@ -443,6 +456,10 @@ impl CollabClient {
     }
 
     /// Request state for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace ID is invalid or sending fails.
     pub async fn request_state(&self, workspace_id: &str, version: i64) -> Result<()> {
         let workspace_id = Uuid::parse_str(workspace_id)
             .map_err(|e| CollabError::InvalidInput(format!("Invalid workspace ID: {e}")))?;
@@ -457,6 +474,10 @@ impl CollabClient {
     }
 
     /// Send ping (heartbeat)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if sending fails.
     pub async fn ping(&self) -> Result<()> {
         let message = SyncMessage::Ping;
         self.send_message(message).await?;
@@ -479,6 +500,10 @@ impl CollabClient {
     }
 
     /// Disconnect from server
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if disconnection fails.
     pub async fn disconnect(&self) -> Result<()> {
         // Signal stop
         *self.stop_signal.write().await = true;
@@ -488,7 +513,8 @@ impl CollabClient {
         Self::notify_state_change(&self.state_callbacks, ConnectionState::Disconnected).await;
 
         // Wait for connection task to finish
-        if let Some(task) = self.connection_task.write().await.take() {
+        let task = self.connection_task.write().await.take();
+        if let Some(task) = task {
             task.abort();
         }
 
@@ -518,7 +544,7 @@ mod tests {
     fn test_client_config_default() {
         let config = ClientConfig::default();
 
-        assert_eq!(config.server_url, "");
+        assert_eq!(config.server_url, String::new());
         assert_eq!(config.auth_token, "");
         assert_eq!(config.max_reconnect_attempts, None);
         assert_eq!(config.max_queue_size, 1000);
@@ -586,7 +612,7 @@ mod tests {
     #[test]
     fn test_connection_state_debug() {
         let state = ConnectionState::Connected;
-        let debug_str = format!("{:?}", state);
+        let debug_str = format!("{state:?}");
 
         assert!(debug_str.contains("Connected"));
     }
@@ -594,7 +620,7 @@ mod tests {
     #[tokio::test]
     async fn test_connect_with_empty_url() {
         let config = ClientConfig {
-            server_url: "".to_string(),
+            server_url: String::new(),
             auth_token: "token".to_string(),
             ..Default::default()
         };

@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_otlp_protocol_clone() {
         let proto = OtlpProtocol::Grpc;
-        let cloned = proto.clone();
+        let cloned = Clone::clone(&proto);
         assert_eq!(proto, cloned);
     }
 
@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn test_otlp_compression_clone() {
         let comp = OtlpCompression::Gzip;
-        let cloned = comp.clone();
+        let cloned = Clone::clone(&comp);
         assert_eq!(comp, cloned);
     }
 

@@ -11,6 +11,11 @@ use sqlx::Row;
 
 impl AnalyticsDatabase {
     /// Get overview metrics for the dashboard
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any database query fails.
+    #[allow(clippy::too_many_lines)]
     pub async fn get_overview_metrics(&self, duration_seconds: i64) -> Result<OverviewMetrics> {
         let end_time = Utc::now().timestamp();
         let start_time = end_time - duration_seconds;
@@ -25,6 +30,7 @@ impl AnalyticsDatabase {
 
         let total_requests: i64 = aggregates.iter().map(|a| a.request_count).sum();
         let total_errors: i64 = aggregates.iter().map(|a| a.error_count).sum();
+        #[allow(clippy::cast_precision_loss)]
         let error_rate = if total_requests > 0 {
             (total_errors as f64 / total_requests as f64) * 100.0
         } else {
@@ -32,7 +38,9 @@ impl AnalyticsDatabase {
         };
 
         let total_latency: f64 = aggregates.iter().map(|a| a.latency_sum).sum();
-        let latency_count: i64 = aggregates.iter().filter(|a| a.latency_sum > 0.0).count() as i64;
+        #[allow(clippy::cast_precision_loss, clippy::cast_possible_wrap)]
+        let latency_count = aggregates.iter().filter(|a| a.latency_sum > 0.0).count() as i64;
+        #[allow(clippy::cast_precision_loss)]
         let avg_latency_ms = if latency_count > 0 {
             total_latency / latency_count as f64
         } else {
@@ -40,6 +48,7 @@ impl AnalyticsDatabase {
         };
 
         let p95_latencies: Vec<f64> = aggregates.iter().filter_map(|a| a.latency_p95).collect();
+        #[allow(clippy::cast_precision_loss)]
         let p95_latency_ms = if p95_latencies.is_empty() {
             0.0
         } else {
@@ -47,6 +56,7 @@ impl AnalyticsDatabase {
         };
 
         let p99_latencies: Vec<f64> = aggregates.iter().filter_map(|a| a.latency_p99).collect();
+        #[allow(clippy::cast_precision_loss)]
         let p99_latency_ms = if p99_latencies.is_empty() {
             0.0
         } else {
@@ -59,6 +69,7 @@ impl AnalyticsDatabase {
         let active_connections =
             aggregates.iter().filter_map(|a| a.active_connections).max().unwrap_or(0);
 
+        #[allow(clippy::cast_precision_loss)]
         let requests_per_second = total_requests as f64 / duration_seconds as f64;
 
         // Get top protocols
@@ -69,6 +80,7 @@ impl AnalyticsDatabase {
         let top_endpoints: Vec<EndpointStat> = top_endpoints_data
             .iter()
             .map(|e| {
+                #[allow(clippy::cast_precision_loss)]
                 let error_rate = if e.total_requests > 0 {
                     (e.total_errors as f64 / e.total_requests as f64) * 100.0
                 } else {
@@ -104,6 +116,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get top protocols by request count
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_top_protocols(
         &self,
         limit: i64,
@@ -157,6 +173,11 @@ impl AnalyticsDatabase {
     }
 
     /// Get request count time series
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::cast_precision_loss)]
     pub async fn get_request_time_series(
         &self,
         filter: &AnalyticsFilter,
@@ -191,7 +212,7 @@ impl AnalyticsDatabase {
                 points.sort_by_key(|p| p.timestamp);
 
                 // Aggregate points in the same bucket
-                let mut aggregated = Vec::new();
+                let mut bucketed = Vec::new();
                 let mut current_bucket = None;
                 let mut current_sum = 0.0;
 
@@ -202,7 +223,7 @@ impl AnalyticsDatabase {
                         }
                         _ => {
                             if let Some(bucket) = current_bucket {
-                                aggregated.push(TimeSeriesPoint {
+                                bucketed.push(TimeSeriesPoint {
                                     timestamp: bucket,
                                     value: current_sum,
                                 });
@@ -214,7 +235,7 @@ impl AnalyticsDatabase {
                 }
 
                 if let Some(bucket) = current_bucket {
-                    aggregated.push(TimeSeriesPoint {
+                    bucketed.push(TimeSeriesPoint {
                         timestamp: bucket,
                         value: current_sum,
                     });
@@ -222,7 +243,7 @@ impl AnalyticsDatabase {
 
                 TimeSeries {
                     label: protocol,
-                    data: aggregated,
+                    data: bucketed,
                 }
             })
             .collect();
@@ -232,6 +253,11 @@ impl AnalyticsDatabase {
     }
 
     /// Get latency trends
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    #[allow(clippy::cast_precision_loss)]
     pub async fn get_latency_trends(&self, filter: &AnalyticsFilter) -> Result<Vec<LatencyTrend>> {
         let aggregates = self.get_minute_aggregates(filter).await?;
 
@@ -280,6 +306,10 @@ impl AnalyticsDatabase {
     }
 
     /// Get error summary
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_error_summary(
         &self,
         filter: &AnalyticsFilter,
@@ -299,11 +329,9 @@ impl AnalyticsDatabase {
                 error.error_category.clone().unwrap_or_else(|| "other".to_string());
             let endpoint = error.endpoint.clone().unwrap_or_default();
 
-            let entry = error_map.entry(format!("{error_category}:{error_type}")).or_insert((
-                0,
-                std::collections::HashSet::new(),
-                0,
-            ));
+            let entry = error_map
+                .entry(format!("{error_category}:{error_type}"))
+                .or_insert_with(|| (0, std::collections::HashSet::new(), 0));
 
             entry.0 += 1;
             entry.1.insert(endpoint);
@@ -325,6 +353,7 @@ impl AnalyticsDatabase {
             .collect();
 
         summaries.sort_by(|a, b| b.count.cmp(&a.count));
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         summaries.truncate(limit as usize);
 
         Ok(summaries)
@@ -332,6 +361,7 @@ impl AnalyticsDatabase {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::database::AnalyticsDatabase;
@@ -523,7 +553,7 @@ mod tests {
         let db = setup_test_db().await;
 
         // Insert data at different minute timestamps
-        let base_time = 1700000000i64; // Fixed timestamp for reproducibility
+        let base_time = 1_700_000_000i64; // Fixed timestamp for reproducibility
         db.insert_minute_aggregate(&create_test_aggregate(base_time, "http", 100, 0, 1000.0))
             .await
             .unwrap();
@@ -550,7 +580,7 @@ mod tests {
         let db = setup_test_db().await;
 
         // Insert data in the same hour
-        let base_time = 1700000000i64;
+        let base_time = 1_700_000_000i64;
         db.insert_minute_aggregate(&create_test_aggregate(base_time, "http", 100, 0, 1000.0))
             .await
             .unwrap();
@@ -590,7 +620,7 @@ mod tests {
     async fn test_get_latency_trends_with_data() {
         let db = setup_test_db().await;
 
-        let base_time = 1700000000i64;
+        let base_time = 1_700_000_000i64;
         let mut agg = create_test_aggregate(base_time, "http", 100, 0, 5000.0);
         agg.latency_p50 = Some(50.0);
         agg.latency_p95 = Some(95.0);
@@ -622,7 +652,7 @@ mod tests {
     async fn test_get_latency_trends_sorted_by_timestamp() {
         let db = setup_test_db().await;
 
-        let base_time = 1700000000i64;
+        let base_time = 1_700_000_000i64;
         db.insert_minute_aggregate(&create_test_aggregate(base_time + 120, "http", 100, 0, 1000.0))
             .await
             .unwrap();
@@ -758,7 +788,7 @@ mod tests {
         for i in 0..5 {
             db.insert_error_event(&create_test_error(
                 base_time + i,
-                &format!("Error{}", i),
+                &format!("Error{i}"),
                 "server_error",
                 "/api/test",
             ))
@@ -781,7 +811,7 @@ mod tests {
     async fn test_get_error_summary_tracks_last_occurrence() {
         let db = setup_test_db().await;
 
-        let base_time = 1700000000i64;
+        let base_time = 1_700_000_000i64;
         db.insert_error_event(&create_test_error(
             base_time,
             "TestError",

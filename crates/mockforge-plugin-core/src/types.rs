@@ -1484,8 +1484,10 @@ mod tests {
 
     #[test]
     fn test_plugin_metrics_clone() {
-        let mut metrics = PluginMetrics::default();
-        metrics.total_executions = 100;
+        let metrics = PluginMetrics {
+            total_executions: 100,
+            ..Default::default()
+        };
         let cloned = metrics.clone();
         assert_eq!(metrics.total_executions, cloned.total_executions);
     }

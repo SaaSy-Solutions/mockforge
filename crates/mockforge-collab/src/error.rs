@@ -60,7 +60,12 @@ pub enum CollabError {
 
     /// Version mismatch
     #[error("Version mismatch: expected {expected}, got {actual}")]
-    VersionMismatch { expected: u64, actual: u64 },
+    VersionMismatch {
+        /// Expected version
+        expected: u64,
+        /// Actual version
+        actual: u64,
+    },
 
     /// Internal error
     #[error("Internal error: {0}")]
@@ -208,7 +213,7 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("Version mismatch"));
         assert!(msg.contains("10"));
-        assert!(msg.contains("8"));
+        assert!(msg.contains('8'));
     }
 
     #[test]
@@ -229,7 +234,7 @@ mod tests {
     #[test]
     fn test_error_debug() {
         let err = CollabError::AuthenticationFailed("test".to_string());
-        let debug = format!("{:?}", err);
+        let debug = format!("{err:?}");
         assert!(debug.contains("AuthenticationFailed"));
     }
 }

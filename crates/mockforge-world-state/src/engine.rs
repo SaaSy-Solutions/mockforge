@@ -286,7 +286,7 @@ mod tests {
         assert_eq!(snapshot.nodes[0].id, "test-node");
         assert_eq!(snapshot.edges.len(), 0);
         assert!(snapshot.layers.contains_key(&StateLayer::Personas));
-        assert_eq!(snapshot.layers[&StateLayer::Personas], true);
+        assert!(snapshot.layers[&StateLayer::Personas]);
     }
 
     #[tokio::test]
@@ -384,8 +384,8 @@ mod tests {
 
         // Should have successful nodes but mark failed layer
         assert_eq!(snapshot.nodes.len(), 1);
-        assert_eq!(snapshot.layers[&StateLayer::Personas], true);
-        assert_eq!(snapshot.layers[&StateLayer::Lifecycle], false);
+        assert!(snapshot.layers[&StateLayer::Personas]);
+        assert!(!snapshot.layers[&StateLayer::Lifecycle]);
     }
 
     #[tokio::test]

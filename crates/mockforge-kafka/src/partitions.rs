@@ -144,7 +144,7 @@ mod tests {
 
         // Limit to 10 bytes - should get first message at least
         let messages = partition.fetch(0, 10);
-        assert!(messages.len() >= 1);
+        assert!(!messages.is_empty());
     }
 
     #[test]

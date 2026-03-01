@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(partition1, partition2);
 
         // Partition should be in valid range
-        assert!(partition1 >= 0 && partition1 < 5);
+        assert!((0..5).contains(&partition1));
     }
 
     #[test]
@@ -174,10 +174,10 @@ mod tests {
         let p4 = topic.assign_partition(None);
 
         // All should be in valid range
-        assert!(p1 >= 0 && p1 < 3);
-        assert!(p2 >= 0 && p2 < 3);
-        assert!(p3 >= 0 && p3 < 3);
-        assert!(p4 >= 0 && p4 < 3);
+        assert!((0..3).contains(&p1));
+        assert!((0..3).contains(&p2));
+        assert!((0..3).contains(&p3));
+        assert!((0..3).contains(&p4));
 
         // Should cycle through partitions
         assert_eq!(p1, 0);

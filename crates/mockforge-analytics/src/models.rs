@@ -8,122 +8,214 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Granularity {
+    /// Minute-level granularity (60 seconds)
     Minute,
+    /// Hour-level granularity (3600 seconds)
     Hour,
+    /// Day-level granularity (86400 seconds)
     Day,
 }
 
 /// Aggregated metrics for a specific time window
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[allow(clippy::missing_docs_in_private_items)]
 pub struct MetricsAggregate {
+    /// Row ID
     pub id: Option<i64>,
+    /// Unix timestamp for the aggregation window
     pub timestamp: i64,
+    /// Protocol name (e.g., "http", "grpc")
     pub protocol: String,
+    /// HTTP method (e.g., "GET", "POST")
     pub method: Option<String>,
+    /// Endpoint path
     pub endpoint: Option<String>,
+    /// HTTP status code
     pub status_code: Option<i32>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total request count in this window
     pub request_count: i64,
+    /// Total error count in this window
     pub error_count: i64,
+    /// Sum of all latencies in milliseconds
     pub latency_sum: f64,
+    /// Minimum latency in milliseconds
     pub latency_min: Option<f64>,
+    /// Maximum latency in milliseconds
     pub latency_max: Option<f64>,
+    /// 50th percentile latency
     pub latency_p50: Option<f64>,
+    /// 95th percentile latency
     pub latency_p95: Option<f64>,
+    /// 99th percentile latency
     pub latency_p99: Option<f64>,
+    /// Total bytes sent
     pub bytes_sent: i64,
+    /// Total bytes received
     pub bytes_received: i64,
+    /// Number of active connections
     pub active_connections: Option<i64>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Hour-level aggregated metrics
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct HourMetricsAggregate {
+    /// Row ID
     pub id: Option<i64>,
+    /// Unix timestamp for the hour window
     pub timestamp: i64,
+    /// Protocol name
     pub protocol: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Endpoint path
     pub endpoint: Option<String>,
+    /// HTTP status code
     pub status_code: Option<i32>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Sum of all latencies
     pub latency_sum: f64,
+    /// Minimum latency
     pub latency_min: Option<f64>,
+    /// Maximum latency
     pub latency_max: Option<f64>,
+    /// 50th percentile latency
     pub latency_p50: Option<f64>,
+    /// 95th percentile latency
     pub latency_p95: Option<f64>,
+    /// 99th percentile latency
     pub latency_p99: Option<f64>,
+    /// Total bytes sent
     pub bytes_sent: i64,
+    /// Total bytes received
     pub bytes_received: i64,
+    /// Average active connections during the hour
     pub active_connections_avg: Option<f64>,
+    /// Maximum active connections during the hour
     pub active_connections_max: Option<i64>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Day-level aggregated metrics
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct DayMetricsAggregate {
+    /// Row ID
     pub id: Option<i64>,
+    /// Date string (YYYY-MM-DD)
     pub date: String,
+    /// Unix timestamp for the day
     pub timestamp: i64,
+    /// Protocol name
     pub protocol: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Endpoint path
     pub endpoint: Option<String>,
+    /// HTTP status code
     pub status_code: Option<i32>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Sum of all latencies
     pub latency_sum: f64,
+    /// Minimum latency
     pub latency_min: Option<f64>,
+    /// Maximum latency
     pub latency_max: Option<f64>,
+    /// 50th percentile latency
     pub latency_p50: Option<f64>,
+    /// 95th percentile latency
     pub latency_p95: Option<f64>,
+    /// 99th percentile latency
     pub latency_p99: Option<f64>,
+    /// Total bytes sent
     pub bytes_sent: i64,
+    /// Total bytes received
     pub bytes_received: i64,
+    /// Average active connections
     pub active_connections_avg: Option<f64>,
+    /// Maximum active connections
     pub active_connections_max: Option<i64>,
+    /// Number of unique clients
     pub unique_clients: Option<i64>,
+    /// Hour with the most requests (0-23)
     pub peak_hour: Option<i32>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Statistics for a specific endpoint
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct EndpointStats {
+    /// Row ID
     pub id: Option<i64>,
+    /// Endpoint path
     pub endpoint: String,
+    /// Protocol name
     pub protocol: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total number of requests
     pub total_requests: i64,
+    /// Total number of errors
     pub total_errors: i64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: Option<f64>,
+    /// Minimum latency in milliseconds
     pub min_latency_ms: Option<f64>,
+    /// Maximum latency in milliseconds
     pub max_latency_ms: Option<f64>,
+    /// 95th percentile latency in milliseconds
     pub p95_latency_ms: Option<f64>,
-    pub status_codes: Option<String>, // JSON
+    /// JSON-encoded status code breakdown
+    pub status_codes: Option<String>,
+    /// Total bytes sent
     pub total_bytes_sent: i64,
+    /// Total bytes received
     pub total_bytes_received: i64,
+    /// Unix timestamp of first request
     pub first_seen: i64,
+    /// Unix timestamp of most recent request
     pub last_seen: i64,
+    /// Last update timestamp
     pub updated_at: Option<i64>,
 }
 
 /// Parsed status code breakdown from endpoint stats
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusCodeBreakdown {
+    /// Map of HTTP status codes to their occurrence counts
     pub status_codes: HashMap<u16, i64>,
 }
 
 impl EndpointStats {
     /// Parse the status codes JSON field
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON status codes field cannot be deserialized.
     pub fn get_status_code_breakdown(&self) -> Result<StatusCodeBreakdown, serde_json::Error> {
         if let Some(ref json) = self.status_codes {
             let map: HashMap<String, i64> = serde_json::from_str(json)?;
@@ -140,6 +232,10 @@ impl EndpointStats {
     }
 
     /// Set the status codes from a breakdown
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the status codes cannot be serialized to JSON.
     pub fn set_status_code_breakdown(
         &mut self,
         breakdown: &StatusCodeBreakdown,
@@ -154,23 +250,41 @@ impl EndpointStats {
 /// Individual error event
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ErrorEvent {
+    /// Row ID
     pub id: Option<i64>,
+    /// Unix timestamp of the error
     pub timestamp: i64,
+    /// Protocol name
     pub protocol: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Endpoint path
     pub endpoint: Option<String>,
+    /// HTTP status code
     pub status_code: Option<i32>,
+    /// Error type classification
     pub error_type: Option<String>,
+    /// Human-readable error message
     pub error_message: Option<String>,
+    /// Error category (`client_error`, `server_error`, etc.)
     pub error_category: Option<String>,
+    /// Unique request identifier
     pub request_id: Option<String>,
+    /// Distributed trace identifier
     pub trace_id: Option<String>,
+    /// Distributed span identifier
     pub span_id: Option<String>,
+    /// Client IP address
     pub client_ip: Option<String>,
+    /// Client user agent string
     pub user_agent: Option<String>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
-    pub metadata: Option<String>, // JSON
+    /// JSON-encoded additional metadata
+    pub metadata: Option<String>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
@@ -178,10 +292,15 @@ pub struct ErrorEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCategory {
-    ClientError, // 4xx
-    ServerError, // 5xx
+    /// HTTP 4xx client errors
+    ClientError,
+    /// HTTP 5xx server errors
+    ServerError,
+    /// Network-level errors
     NetworkError,
+    /// Timeout errors
     TimeoutError,
+    /// Uncategorized errors
     Other,
 }
 
@@ -212,148 +331,241 @@ impl ErrorCategory {
 /// Client analytics data
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ClientAnalytics {
+    /// Row ID
     pub id: Option<i64>,
+    /// Unix timestamp
     pub timestamp: i64,
+    /// Client IP address
     pub client_ip: String,
+    /// Full user agent string
     pub user_agent: Option<String>,
+    /// Parsed user agent family
     pub user_agent_family: Option<String>,
+    /// Parsed user agent version
     pub user_agent_version: Option<String>,
+    /// Protocol name
     pub protocol: String,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: Option<f64>,
+    /// Total bytes sent
     pub bytes_sent: i64,
+    /// Total bytes received
     pub bytes_received: i64,
-    pub top_endpoints: Option<String>, // JSON array
+    /// JSON array of most-accessed endpoints
+    pub top_endpoints: Option<String>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Traffic pattern data for heatmap visualization
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TrafficPattern {
+    /// Row ID
     pub id: Option<i64>,
+    /// Date string (YYYY-MM-DD)
     pub date: String,
+    /// Hour of day (0-23)
     pub hour: i32,
+    /// Day of week (0-6, Monday=0)
     pub day_of_week: i32,
+    /// Protocol name
     pub protocol: String,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: Option<f64>,
+    /// Number of unique clients
     pub unique_clients: Option<i64>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Analytics snapshot for comparison and trending
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct AnalyticsSnapshot {
+    /// Row ID
     pub id: Option<i64>,
+    /// Unix timestamp of the snapshot
     pub timestamp: i64,
+    /// Snapshot type identifier
     pub snapshot_type: String,
+    /// Total requests at snapshot time
     pub total_requests: i64,
+    /// Total errors at snapshot time
     pub total_errors: i64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: Option<f64>,
+    /// Number of active connections
     pub active_connections: Option<i64>,
-    pub protocol_stats: Option<String>, // JSON
-    pub top_endpoints: Option<String>,  // JSON array
+    /// JSON-encoded protocol statistics
+    pub protocol_stats: Option<String>,
+    /// JSON array of top endpoints
+    pub top_endpoints: Option<String>,
+    /// Memory usage in bytes
     pub memory_usage_bytes: Option<i64>,
+    /// CPU usage percentage
     pub cpu_usage_percent: Option<f64>,
+    /// Number of active threads
     pub thread_count: Option<i32>,
+    /// Server uptime in seconds
     pub uptime_seconds: Option<i64>,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Deployment environment
     pub environment: Option<String>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Query filter for analytics queries
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AnalyticsFilter {
+    /// Start of time range (unix timestamp)
     pub start_time: Option<i64>,
+    /// End of time range (unix timestamp)
     pub end_time: Option<i64>,
+    /// Filter by protocol
     pub protocol: Option<String>,
+    /// Filter by endpoint path
     pub endpoint: Option<String>,
+    /// Filter by HTTP method
     pub method: Option<String>,
+    /// Filter by HTTP status code
     pub status_code: Option<i32>,
+    /// Filter by workspace
     pub workspace_id: Option<String>,
+    /// Filter by environment
     pub environment: Option<String>,
+    /// Maximum number of results
     pub limit: Option<i64>,
 }
 
 /// Overview metrics for the dashboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverviewMetrics {
+    /// Total number of requests
     pub total_requests: i64,
+    /// Total number of errors
     pub total_errors: i64,
+    /// Error rate as a percentage
     pub error_rate: f64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: f64,
+    /// 95th percentile latency in milliseconds
     pub p95_latency_ms: f64,
+    /// 99th percentile latency in milliseconds
     pub p99_latency_ms: f64,
+    /// Number of active connections
     pub active_connections: i64,
+    /// Total bytes sent
     pub total_bytes_sent: i64,
+    /// Total bytes received
     pub total_bytes_received: i64,
+    /// Requests per second
     pub requests_per_second: f64,
+    /// Top protocols by request count
     pub top_protocols: Vec<ProtocolStat>,
+    /// Top endpoints by request count
     pub top_endpoints: Vec<EndpointStat>,
 }
 
 /// Protocol statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtocolStat {
+    /// Protocol name
     pub protocol: String,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: f64,
 }
 
 /// Endpoint statistics summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointStat {
+    /// Endpoint path
     pub endpoint: String,
+    /// Protocol name
     pub protocol: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Total request count
     pub request_count: i64,
+    /// Total error count
     pub error_count: i64,
+    /// Error rate as a percentage
     pub error_rate: f64,
+    /// Average latency in milliseconds
     pub avg_latency_ms: f64,
+    /// 95th percentile latency in milliseconds
     pub p95_latency_ms: f64,
 }
 
 /// Time series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSeriesPoint {
+    /// Unix timestamp
     pub timestamp: i64,
+    /// Metric value at this point
     pub value: f64,
 }
 
 /// Time series with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSeries {
+    /// Label identifying this series
     pub label: String,
+    /// Ordered data points
     pub data: Vec<TimeSeriesPoint>,
 }
 
 /// Latency percentiles over time
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LatencyTrend {
+    /// Unix timestamp
     pub timestamp: i64,
+    /// 50th percentile latency
     pub p50: f64,
+    /// 95th percentile latency
     pub p95: f64,
+    /// 99th percentile latency
     pub p99: f64,
+    /// Average latency
     pub avg: f64,
+    /// Minimum latency
     pub min: f64,
+    /// Maximum latency
     pub max: f64,
 }
 
 /// Error summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorSummary {
+    /// Error type classification
     pub error_type: String,
+    /// Error category
     pub error_category: String,
+    /// Number of occurrences
     pub count: i64,
+    /// Endpoints affected
     pub endpoints: Vec<String>,
+    /// Timestamp of most recent occurrence
     pub last_occurrence: DateTime<Utc>,
 }
 
@@ -361,7 +573,9 @@ pub struct ErrorSummary {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ExportFormat {
+    /// Comma-separated values format
     Csv,
+    /// JSON format
     Json,
 }
 
@@ -372,72 +586,119 @@ pub enum ExportFormat {
 /// Scenario usage metrics
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ScenarioUsageMetrics {
+    /// Row ID
     pub id: Option<i64>,
+    /// Scenario identifier
     pub scenario_id: String,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Organization identifier
     pub org_id: Option<String>,
+    /// Number of times this scenario has been used
     pub usage_count: i64,
+    /// Unix timestamp of last usage
     pub last_used_at: Option<i64>,
-    pub usage_pattern: Option<String>, // JSON string
+    /// JSON-encoded usage pattern data
+    pub usage_pattern: Option<String>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
+    /// Last update timestamp
     pub updated_at: Option<i64>,
 }
 
 /// Persona CI hit record
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PersonaCIHit {
+    /// Row ID
     pub id: Option<i64>,
+    /// Persona identifier
     pub persona_id: String,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Organization identifier
     pub org_id: Option<String>,
+    /// CI run identifier
     pub ci_run_id: Option<String>,
+    /// Number of hits in this CI run
     pub hit_count: i64,
+    /// Unix timestamp of the hit
     pub hit_at: i64,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
 /// Endpoint coverage metrics
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct EndpointCoverage {
+    /// Row ID
     pub id: Option<i64>,
+    /// Endpoint path
     pub endpoint: String,
+    /// HTTP method
     pub method: Option<String>,
+    /// Protocol name
     pub protocol: String,
+    /// Workspace identifier
     pub workspace_id: Option<String>,
+    /// Organization identifier
     pub org_id: Option<String>,
+    /// Number of tests covering this endpoint
     pub test_count: i64,
+    /// Unix timestamp of last test run
     pub last_tested_at: Option<i64>,
+    /// Coverage percentage (0-100)
     pub coverage_percentage: Option<f64>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
+    /// Last update timestamp
     pub updated_at: Option<i64>,
 }
 
 /// Reality level staleness record
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct RealityLevelStaleness {
+    /// Row ID
     pub id: Option<i64>,
+    /// Workspace identifier
     pub workspace_id: String,
+    /// Organization identifier
     pub org_id: Option<String>,
+    /// Endpoint path
     pub endpoint: Option<String>,
+    /// HTTP method
     pub method: Option<String>,
+    /// Protocol name
     pub protocol: Option<String>,
+    /// Current reality level setting
     pub current_reality_level: Option<String>,
+    /// Unix timestamp of last reality level update
     pub last_updated_at: Option<i64>,
+    /// Number of days since last update
     pub staleness_days: Option<i32>,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
+    /// Last update timestamp
     pub updated_at: Option<i64>,
 }
 
 /// Drift percentage metrics
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct DriftPercentageMetrics {
+    /// Row ID
     pub id: Option<i64>,
+    /// Workspace identifier
     pub workspace_id: String,
+    /// Organization identifier
     pub org_id: Option<String>,
+    /// Total number of mock endpoints
     pub total_mocks: i64,
+    /// Number of mocks that have drifted from spec
     pub drifting_mocks: i64,
+    /// Drift percentage (0-100)
     pub drift_percentage: f64,
+    /// Unix timestamp of measurement
     pub measured_at: i64,
+    /// Row creation timestamp
     pub created_at: Option<i64>,
 }
 
@@ -470,10 +731,10 @@ mod tests {
     }
 
     #[test]
-    fn test_granularity_clone() {
+    fn test_granularity_copy() {
         let g = Granularity::Hour;
-        let cloned = g.clone();
-        assert_eq!(g, cloned);
+        let copied = g;
+        assert_eq!(g, copied);
     }
 
     // ==================== ErrorCategory Tests ====================
@@ -553,8 +814,8 @@ mod tests {
             max_latency_ms: Some(200.0),
             p95_latency_ms: Some(150.0),
             status_codes: Some(r#"{"200": 90, "404": 5, "500": 5}"#.to_string()),
-            total_bytes_sent: 10000,
-            total_bytes_received: 5000,
+            total_bytes_sent: 10_000,
+            total_bytes_received: 5_000,
             first_seen: 1000,
             last_seen: 2000,
             updated_at: None,
@@ -686,8 +947,8 @@ mod tests {
             p95_latency_ms: 250.0,
             p99_latency_ms: 500.0,
             active_connections: 10,
-            total_bytes_sent: 100000,
-            total_bytes_received: 50000,
+            total_bytes_sent: 100_000,
+            total_bytes_received: 50_000,
             requests_per_second: 10.5,
             top_protocols: vec![],
             top_endpoints: vec![],
@@ -739,7 +1000,7 @@ mod tests {
     #[test]
     fn test_time_series_point_serialize() {
         let point = TimeSeriesPoint {
-            timestamp: 1234567890,
+            timestamp: 1_234_567_890,
             value: 42.5,
         };
 

@@ -488,6 +488,7 @@ impl Scrubber {
     }
 
     /// Recursively scrub JSON value
+    #[allow(clippy::only_used_in_recursion)]
     fn scrub_json_value(
         &self,
         value: &mut serde_json::Value,

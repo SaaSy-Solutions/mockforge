@@ -98,6 +98,10 @@ impl EventBus {
     }
 
     /// Publish an event
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if publishing fails.
     pub fn publish(&self, event: ChangeEvent) -> Result<()> {
         // Ignore error if no receivers (it's ok)
         let _ = self.sender.send(event);
@@ -136,6 +140,10 @@ impl WorkspaceEventBus {
     }
 
     /// Publish an event for this workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if publishing fails.
     pub fn publish(
         &self,
         change_type: ChangeType,

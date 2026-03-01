@@ -199,8 +199,10 @@ mod tests {
 
     #[test]
     fn test_queued_message_with_long_expiration() {
-        let mut props = MessageProperties::default();
-        props.expiration = Some("3600000".to_string()); // 1 hour
+        let props = MessageProperties {
+            expiration: Some("3600000".to_string()), // 1 hour
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,
@@ -215,8 +217,10 @@ mod tests {
 
     #[test]
     fn test_queued_message_with_zero_expiration() {
-        let mut props = MessageProperties::default();
-        props.expiration = Some("0".to_string()); // Immediate expiration
+        let props = MessageProperties {
+            expiration: Some("0".to_string()), // Immediate expiration
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,
@@ -233,8 +237,10 @@ mod tests {
 
     #[test]
     fn test_queued_message_with_invalid_expiration() {
-        let mut props = MessageProperties::default();
-        props.expiration = Some("not-a-number".to_string());
+        let props = MessageProperties {
+            expiration: Some("not-a-number".to_string()),
+            ..Default::default()
+        };
 
         let message = Message {
             properties: props,

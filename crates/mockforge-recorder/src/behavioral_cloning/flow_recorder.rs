@@ -34,10 +34,11 @@ pub enum FlowGroupingStrategy {
     IpTimeWindow,
 }
 
-impl FlowGroupingStrategy {
-    /// Parse from string
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
+impl std::str::FromStr for FlowGroupingStrategy {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
             "trace_id" => Self::TraceId,
             "session_id" => Self::SessionId,
             "ip_time_window" => Self::IpTimeWindow,
@@ -45,7 +46,7 @@ impl FlowGroupingStrategy {
                 warn!("Unknown grouping strategy: {}, defaulting to trace_id", s);
                 Self::TraceId
             }
-        }
+        })
     }
 }
 
@@ -194,11 +195,11 @@ impl FlowRecorder {
                         // Simple extraction - look for session_id cookie
                         for part in cookie.split(';') {
                             let part = part.trim();
-                            if part.starts_with("session_id=") {
-                                return Ok(part[11..].to_string());
+                            if let Some(val) = part.strip_prefix("session_id=") {
+                                return Ok(val.to_string());
                             }
-                            if part.starts_with("session=") {
-                                return Ok(part[8..].to_string());
+                            if let Some(val) = part.strip_prefix("session=") {
+                                return Ok(val.to_string());
                             }
                         }
                     }

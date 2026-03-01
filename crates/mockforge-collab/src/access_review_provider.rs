@@ -17,7 +17,7 @@ use uuid::Uuid;
 pub struct CollabUserDataProvider {
     db: Pool<Sqlite>,
     user_service: Arc<crate::user::UserService>,
-    workspace_service: Arc<crate::workspace::WorkspaceService>,
+    _workspace_service: Arc<crate::workspace::WorkspaceService>,
     token_storage: Option<Arc<dyn ApiTokenStorage>>,
     mfa_storage: Option<Arc<dyn MfaStorage>>,
     justification_storage: Option<Arc<dyn JustificationStorage>>,
@@ -34,7 +34,7 @@ impl CollabUserDataProvider {
         Self {
             db,
             user_service,
-            workspace_service,
+            _workspace_service: workspace_service,
             token_storage: None,
             mfa_storage: None,
             justification_storage: None,
@@ -54,7 +54,7 @@ impl CollabUserDataProvider {
         Self {
             db,
             user_service,
-            workspace_service,
+            _workspace_service: workspace_service,
             token_storage,
             mfa_storage,
             justification_storage,
@@ -126,7 +126,7 @@ impl UserDataProvider for CollabUserDataProvider {
             // Calculate days inactive
             let days_inactive = last_activity.map(|activity| {
                 let duration = Utc::now() - activity;
-                duration.num_days() as u64
+                u64::try_from(duration.num_days()).unwrap_or(0)
             });
 
             // Access granted date is the earliest membership join date
@@ -244,9 +244,8 @@ impl UserDataProvider for CollabUserDataProvider {
     }
 
     async fn get_user(&self, user_id: Uuid) -> Result<Option<UserAccessInfo>, Error> {
-        let user = match self.user_service.get_user(user_id).await {
-            Ok(u) => u,
-            Err(_) => return Ok(None),
+        let Ok(user) = self.user_service.get_user(user_id).await else {
+            return Ok(None);
         };
 
         // Get memberships
@@ -299,7 +298,7 @@ impl UserDataProvider for CollabUserDataProvider {
 
         let days_inactive = last_activity.map(|activity| {
             let duration = Utc::now() - activity;
-            duration.num_days() as u64
+            u64::try_from(duration.num_days()).unwrap_or(0)
         });
 
         let access_granted =
@@ -408,11 +407,11 @@ impl UserDataProvider for CollabUserDataProvider {
             // For access review, we'll directly update the database
             // In production, this should go through proper permission checks
             sqlx::query(
-                r#"
+                r"
                 UPDATE workspace_members
                 SET role = ?
                 WHERE workspace_id = ? AND user_id = ?
-                "#,
+                ",
             )
             .bind(target_role)
             .bind(membership.workspace_id)

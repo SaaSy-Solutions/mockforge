@@ -27,8 +27,12 @@ impl CoreBridge {
 
     /// Convert a `TeamWorkspace` to a Core Workspace
     ///
-    /// Extracts the full workspace data from the TeamWorkspace.config field
+    /// Extracts the full workspace data from the `TeamWorkspace.config` field
     /// and reconstructs a Core Workspace object.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace config cannot be deserialized.
     pub fn team_to_core(&self, team_workspace: &TeamWorkspace) -> Result<CoreWorkspace> {
         // The full workspace data is stored in the config field as JSON
         let workspace_json = &team_workspace.config;
@@ -44,8 +48,8 @@ impl CoreBridge {
         workspace.id = team_workspace.id.to_string();
 
         // Update metadata
-        workspace.name = team_workspace.name.clone();
-        workspace.description = team_workspace.description.clone();
+        workspace.name.clone_from(&team_workspace.name);
+        workspace.description.clone_from(&team_workspace.description);
         workspace.updated_at = team_workspace.updated_at;
 
         // Initialize default mock environments if they don't exist (for backward compatibility)
@@ -56,8 +60,12 @@ impl CoreBridge {
 
     /// Convert a Core Workspace to a `TeamWorkspace`
     ///
-    /// Serializes the full workspace data into the TeamWorkspace.config field
+    /// Serializes the full workspace data into the `TeamWorkspace.config` field
     /// and creates a `TeamWorkspace` with collaboration metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be serialized or the ID is invalid.
     pub fn core_to_team(
         &self,
         core_workspace: &CoreWorkspace,
@@ -79,7 +87,7 @@ impl CoreBridge {
             ))
         })?;
 
-        team_workspace.description = core_workspace.description.clone();
+        team_workspace.description.clone_from(&core_workspace.description);
         team_workspace.config = workspace_json;
         team_workspace.created_at = core_workspace.created_at;
         team_workspace.updated_at = core_workspace.updated_at;
@@ -90,13 +98,21 @@ impl CoreBridge {
     /// Get the full workspace state from a `TeamWorkspace`
     ///
     /// Returns the complete Core Workspace including all mocks, folders, and configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace config cannot be deserialized.
     pub fn get_workspace_state(&self, team_workspace: &TeamWorkspace) -> Result<CoreWorkspace> {
         self.team_to_core(team_workspace)
     }
 
     /// Update the workspace state in a `TeamWorkspace`
     ///
-    /// Serializes the Core Workspace and stores it in the TeamWorkspace.config field.
+    /// Serializes the Core Workspace and stores it in the `TeamWorkspace.config` field.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be serialized.
     pub fn update_workspace_state(
         &self,
         team_workspace: &mut TeamWorkspace,
@@ -116,6 +132,10 @@ impl CoreBridge {
     /// Load workspace from disk using `WorkspacePersistence`
     ///
     /// This loads a workspace from the filesystem and converts it to a `TeamWorkspace`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be loaded from disk or converted.
     pub async fn load_workspace_from_disk(
         &self,
         workspace_id: &str,
@@ -135,6 +155,10 @@ impl CoreBridge {
     /// Save workspace to disk using `WorkspacePersistence`
     ///
     /// This saves a `TeamWorkspace` to the filesystem as a Core Workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be converted or saved to disk.
     pub async fn save_workspace_to_disk(&self, team_workspace: &TeamWorkspace) -> Result<()> {
         // Convert to Core Workspace
         let core_workspace = self.team_to_core(team_workspace)?;
@@ -151,6 +175,11 @@ impl CoreBridge {
     /// Export workspace for backup
     ///
     /// Uses `WorkspacePersistence` to create a backup-compatible export.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be converted or serialized.
+    #[allow(clippy::unused_async)]
     pub async fn export_workspace_for_backup(
         &self,
         team_workspace: &TeamWorkspace,
@@ -166,6 +195,11 @@ impl CoreBridge {
     /// Import workspace from backup
     ///
     /// Restores a workspace from a backup JSON value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup data cannot be deserialized or converted.
+    #[allow(clippy::unused_async)]
     pub async fn import_workspace_from_backup(
         &self,
         backup_data: &Value,
@@ -193,6 +227,10 @@ impl CoreBridge {
     /// Get workspace state as JSON for sync
     ///
     /// Returns the full workspace state as a JSON value for real-time synchronization.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be converted or serialized.
     pub fn get_workspace_state_json(&self, team_workspace: &TeamWorkspace) -> Result<Value> {
         let core_workspace = self.team_to_core(team_workspace)?;
         serde_json::to_value(&core_workspace)
@@ -202,6 +240,10 @@ impl CoreBridge {
     /// Update workspace state from JSON
     ///
     /// Updates the `TeamWorkspace` with state from a JSON value (from sync).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON cannot be deserialized.
     pub fn update_workspace_state_from_json(
         &self,
         team_workspace: &mut TeamWorkspace,
@@ -213,8 +255,8 @@ impl CoreBridge {
 
         // Preserve TeamWorkspace metadata
         core_workspace.id = team_workspace.id.to_string();
-        core_workspace.name = team_workspace.name.clone();
-        core_workspace.description = team_workspace.description.clone();
+        core_workspace.name.clone_from(&team_workspace.name);
+        core_workspace.description.clone_from(&team_workspace.description);
 
         // Update the TeamWorkspace
         self.update_workspace_state(team_workspace, &core_workspace)
@@ -223,6 +265,10 @@ impl CoreBridge {
     /// Create a new empty workspace
     ///
     /// Creates a new Core Workspace and converts it to a `TeamWorkspace`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be created.
     pub fn create_empty_workspace(&self, name: String, owner_id: Uuid) -> Result<TeamWorkspace> {
         let core_workspace = CoreWorkspace::new(name);
         self.core_to_team(&core_workspace, owner_id)
@@ -287,11 +333,10 @@ mod tests {
 
         // Verify the error message mentions the invalid ID
         if let Err(e) = result {
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not-a-valid-uuid"),
-                "Error message should contain the invalid UUID: {}",
-                error_msg
+                "Error message should contain the invalid UUID: {error_msg}",
             );
         }
     }

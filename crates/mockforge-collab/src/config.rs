@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_from_env_defaults() {
         // Lock mutex to prevent parallel test interference
-        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Clear environment variables
         std::env::remove_var("MOCKFORGE_JWT_SECRET");
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_from_env_with_values() {
         // Lock mutex to prevent parallel test interference
-        let _guard = ENV_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = ENV_MUTEX.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Set environment variables
         std::env::set_var("MOCKFORGE_JWT_SECRET", "test-secret");
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     fn test_config_debug() {
         let config = CollabConfig::default();
-        let debug_str = format!("{:?}", config);
+        let debug_str = format!("{config:?}");
 
         assert!(debug_str.contains("CollabConfig"));
         assert!(debug_str.contains("jwt_secret"));

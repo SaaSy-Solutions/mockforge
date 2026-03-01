@@ -128,7 +128,7 @@ impl TrafficAnalyzer {
             let recency_score = if let Some(last_used) = stats.last_used_at {
                 let age_seconds = (now - last_used).num_seconds().max(0) as f64;
                 let lookback_seconds = lookback_duration.num_seconds() as f64;
-                (1.0 - (age_seconds / lookback_seconds)).max(0.0).min(1.0)
+                (1.0 - (age_seconds / lookback_seconds)).clamp(0.0, 1.0)
             } else {
                 0.0
             };

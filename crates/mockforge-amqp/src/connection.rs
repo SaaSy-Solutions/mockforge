@@ -136,7 +136,7 @@ pub enum AmqpStream {
     /// Plain TCP stream
     Plain(TcpStream),
     /// TLS-encrypted stream
-    Tls(TlsStream<TcpStream>),
+    Tls(Box<TlsStream<TcpStream>>),
 }
 
 impl AsyncRead for AmqpStream {
@@ -147,7 +147,7 @@ impl AsyncRead for AmqpStream {
     ) -> Poll<io::Result<()>> {
         match self.get_mut() {
             AmqpStream::Plain(stream) => Pin::new(stream).poll_read(cx, buf),
-            AmqpStream::Tls(stream) => Pin::new(stream).poll_read(cx, buf),
+            AmqpStream::Tls(stream) => Pin::new(stream.as_mut()).poll_read(cx, buf),
         }
     }
 }
@@ -160,21 +160,21 @@ impl AsyncWrite for AmqpStream {
     ) -> Poll<io::Result<usize>> {
         match self.get_mut() {
             AmqpStream::Plain(stream) => Pin::new(stream).poll_write(cx, buf),
-            AmqpStream::Tls(stream) => Pin::new(stream).poll_write(cx, buf),
+            AmqpStream::Tls(stream) => Pin::new(stream.as_mut()).poll_write(cx, buf),
         }
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             AmqpStream::Plain(stream) => Pin::new(stream).poll_flush(cx),
-            AmqpStream::Tls(stream) => Pin::new(stream).poll_flush(cx),
+            AmqpStream::Tls(stream) => Pin::new(stream.as_mut()).poll_flush(cx),
         }
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             AmqpStream::Plain(stream) => Pin::new(stream).poll_shutdown(cx),
-            AmqpStream::Tls(stream) => Pin::new(stream).poll_shutdown(cx),
+            AmqpStream::Tls(stream) => Pin::new(stream.as_mut()).poll_shutdown(cx),
         }
     }
 }
@@ -219,7 +219,7 @@ impl AmqpConnection {
         queues: Arc<RwLock<QueueManager>>,
         metrics: Arc<AmqpMetrics>,
     ) -> Self {
-        Self::new_with_stream(AmqpStream::Tls(stream), exchanges, queues, metrics).await
+        Self::new_with_stream(AmqpStream::Tls(Box::new(stream)), exchanges, queues, metrics).await
     }
 
     /// Create a new AMQP connection handler with any stream type
@@ -1785,39 +1785,33 @@ impl AmqpConnection {
         }
 
         // Headers (bit 13) - field table
-        if flags & 0x2000 != 0 {
-            if offset + 4 <= payload.len() {
-                let table_len = u32::from_be_bytes([
-                    payload[offset],
-                    payload[offset + 1],
-                    payload[offset + 2],
-                    payload[offset + 3],
-                ]) as usize;
-                offset += 4;
-                // Parse headers (simplified - just skip for now)
-                offset += table_len;
-            }
+        if flags & 0x2000 != 0 && offset + 4 <= payload.len() {
+            let table_len = u32::from_be_bytes([
+                payload[offset],
+                payload[offset + 1],
+                payload[offset + 2],
+                payload[offset + 3],
+            ]) as usize;
+            offset += 4;
+            // Parse headers (simplified - just skip for now)
+            offset += table_len;
         }
 
         // Delivery-mode (bit 12)
-        if flags & 0x1000 != 0 {
-            if offset < payload.len() {
-                let mode = payload[offset];
-                props.delivery_mode = if mode == 2 {
-                    crate::messages::DeliveryMode::Persistent
-                } else {
-                    crate::messages::DeliveryMode::NonPersistent
-                };
-                offset += 1;
-            }
+        if flags & 0x1000 != 0 && offset < payload.len() {
+            let mode = payload[offset];
+            props.delivery_mode = if mode == 2 {
+                crate::messages::DeliveryMode::Persistent
+            } else {
+                crate::messages::DeliveryMode::NonPersistent
+            };
+            offset += 1;
         }
 
         // Priority (bit 11)
-        if flags & 0x0800 != 0 {
-            if offset < payload.len() {
-                props.priority = payload[offset];
-                offset += 1;
-            }
+        if flags & 0x0800 != 0 && offset < payload.len() {
+            props.priority = payload[offset];
+            offset += 1;
         }
 
         // Correlation-id (bit 10)
@@ -1853,20 +1847,18 @@ impl AmqpConnection {
         }
 
         // Timestamp (bit 6)
-        if flags & 0x0040 != 0 {
-            if offset + 8 <= payload.len() {
-                props.timestamp = Some(i64::from_be_bytes([
-                    payload[offset],
-                    payload[offset + 1],
-                    payload[offset + 2],
-                    payload[offset + 3],
-                    payload[offset + 4],
-                    payload[offset + 5],
-                    payload[offset + 6],
-                    payload[offset + 7],
-                ]));
-                offset += 8;
-            }
+        if flags & 0x0040 != 0 && offset + 8 <= payload.len() {
+            props.timestamp = Some(i64::from_be_bytes([
+                payload[offset],
+                payload[offset + 1],
+                payload[offset + 2],
+                payload[offset + 3],
+                payload[offset + 4],
+                payload[offset + 5],
+                payload[offset + 6],
+                payload[offset + 7],
+            ]));
+            offset += 8;
         }
 
         // Type (bit 5)

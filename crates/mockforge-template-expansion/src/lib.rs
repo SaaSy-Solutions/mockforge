@@ -870,7 +870,7 @@ mod tests {
     #[test]
     fn test_request_context_debug() {
         let ctx = RequestContext::new("GET".to_string(), "/test".to_string());
-        let debug_str = format!("{:?}", ctx);
+        let debug_str = format!("{ctx:?}");
         assert!(debug_str.contains("RequestContext"));
         assert!(debug_str.contains("GET"));
         assert!(debug_str.contains("/test"));
@@ -1002,8 +1002,8 @@ mod tests {
     #[test]
     fn test_large_number_values() {
         let mut query_params = HashMap::new();
-        query_params.insert("big".to_string(), json!(9999999999i64));
-        query_params.insert("float".to_string(), json!(1.23456789));
+        query_params.insert("big".to_string(), json!(9_999_999_999_i64));
+        query_params.insert("float".to_string(), json!(1.234_567_89));
 
         let context = RequestContext::new("GET".to_string(), "/api".to_string())
             .with_query_params(query_params);

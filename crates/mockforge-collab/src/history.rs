@@ -109,6 +109,11 @@ impl VersionControl {
     }
 
     /// Create a commit
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database insert fails.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_commit(
         &self,
         workspace_id: Uuid,
@@ -144,6 +149,10 @@ impl VersionControl {
     }
 
     /// Get a commit by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the commit is not found or the database query fails.
     pub async fn get_commit(&self, commit_id: Uuid) -> Result<Commit> {
         sqlx::query_as!(
             Commit,
@@ -169,6 +178,10 @@ impl VersionControl {
     }
 
     /// Get commit history for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_history(&self, workspace_id: Uuid, limit: Option<i32>) -> Result<Vec<Commit>> {
         let limit = limit.unwrap_or(100);
 
@@ -200,6 +213,10 @@ impl VersionControl {
     }
 
     /// Get the latest commit for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_latest_commit(&self, workspace_id: Uuid) -> Result<Option<Commit>> {
         let commit = sqlx::query_as!(
             Commit,
@@ -228,6 +245,10 @@ impl VersionControl {
     }
 
     /// Create a named snapshot
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the commit does not exist or the database insert fails.
     pub async fn create_snapshot(
         &self,
         workspace_id: Uuid,
@@ -261,6 +282,10 @@ impl VersionControl {
     }
 
     /// Get a snapshot by name
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is not found or the database query fails.
     pub async fn get_snapshot(&self, workspace_id: Uuid, name: &str) -> Result<Snapshot> {
         sqlx::query_as!(
             Snapshot,
@@ -285,6 +310,10 @@ impl VersionControl {
     }
 
     /// List all snapshots for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn list_snapshots(&self, workspace_id: Uuid) -> Result<Vec<Snapshot>> {
         let snapshots = sqlx::query_as!(
             Snapshot,
@@ -310,6 +339,10 @@ impl VersionControl {
     }
 
     /// Restore workspace to a specific commit
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the commit is not found or does not belong to the workspace.
     pub async fn restore_to_commit(
         &self,
         workspace_id: Uuid,
@@ -327,6 +360,10 @@ impl VersionControl {
     }
 
     /// Compare two commits
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either commit is not found.
     pub async fn diff(&self, from_commit: Uuid, to_commit: Uuid) -> Result<serde_json::Value> {
         let from = self.get_commit(from_commit).await?;
         let to = self.get_commit(to_commit).await?;
@@ -364,6 +401,10 @@ impl History {
     }
 
     /// Track a change (auto-commit if enabled)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the commit cannot be created.
     pub async fn track_change(
         &self,
         workspace_id: Uuid,
@@ -389,11 +430,19 @@ impl History {
     }
 
     /// Get history
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn get_history(&self, workspace_id: Uuid, limit: Option<i32>) -> Result<Vec<Commit>> {
         self.version_control.get_history(workspace_id, limit).await
     }
 
     /// Create a snapshot
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there are no commits or the snapshot cannot be created.
     pub async fn create_snapshot(
         &self,
         workspace_id: Uuid,
@@ -414,6 +463,10 @@ impl History {
     }
 
     /// Restore from snapshot
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is not found or restoration fails.
     pub async fn restore_snapshot(
         &self,
         workspace_id: Uuid,

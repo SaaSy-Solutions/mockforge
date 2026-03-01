@@ -49,6 +49,7 @@ pub struct SyncSnapshot {
 
 impl SyncSnapshot {
     /// Create a new sync snapshot
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         endpoint: String,
         method: String,

@@ -118,6 +118,10 @@ impl BackupService {
     /// Exports the workspace to the specified storage backend.
     /// Supports local filesystem, Azure Blob Storage, and Google Cloud Storage.
     /// For cloud storage, use `backup_workspace_with_config` to provide credentials.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be read or the storage backend fails.
     pub async fn backup_workspace(
         &self,
         workspace_id: Uuid,
@@ -140,15 +144,20 @@ impl BackupService {
     /// Create a backup of a workspace with storage configuration
     ///
     /// Exports the workspace to the specified storage backend.
-    /// For Azure, storage_config should include:
+    /// For Azure, `storage_config` should include:
     /// - `account_name`: Azure storage account name (required)
     /// - `container_name`: Container name (defaults to "mockforge-backups")
-    /// - `account_key` or `sas_token`: Credentials (optional, uses DefaultAzureCredential if not provided)
+    /// - `account_key` or `sas_token`: Credentials (optional, uses `DefaultAzureCredential` if not provided)
     ///
-    /// For GCS, storage_config should include:
+    /// For GCS, `storage_config` should include:
     /// - `bucket_name`: GCS bucket name (defaults to "mockforge-backups")
     ///
-    /// For local storage, storage_config is ignored.
+    /// For local storage, `storage_config` is ignored.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the workspace cannot be read, serialization fails,
+    /// or the storage backend upload fails.
     pub async fn backup_workspace_with_config(
         &self,
         workspace_id: Uuid,
@@ -188,7 +197,7 @@ impl BackupService {
             }
         };
 
-        let size_bytes = serialized.len() as i64;
+        let size_bytes = i64::try_from(serialized.len()).unwrap_or(i64::MAX);
 
         // Save to storage backend
         let backup_url = match storage_backend {
@@ -238,7 +247,7 @@ impl BackupService {
             StorageBackend::Gcs => "gcs",
             StorageBackend::Custom => "custom",
         };
-        let storage_config_str = backup.storage_config.as_ref().map(|v| v.to_string());
+        let storage_config_str = backup.storage_config.as_ref().map(ToString::to_string);
         let created_at_str = backup.created_at.to_rfc3339();
         let expires_at_str = backup.expires_at.map(|dt| dt.to_rfc3339());
 
@@ -271,6 +280,11 @@ impl BackupService {
     }
 
     /// Restore a workspace from a backup
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup is not found, data deserialization fails,
+    /// or the workspace cannot be restored.
     pub async fn restore_workspace(
         &self,
         backup_id: Uuid,
@@ -349,6 +363,10 @@ impl BackupService {
     }
 
     /// List all backups for a workspace
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
     pub async fn list_backups(
         &self,
         workspace_id: Uuid,
@@ -434,6 +452,10 @@ impl BackupService {
     }
 
     /// Get a backup by ID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup is not found or the database query fails.
     pub async fn get_backup(&self, backup_id: Uuid) -> Result<WorkspaceBackup> {
         let row = sqlx::query!(
             r#"
@@ -497,6 +519,10 @@ impl BackupService {
     }
 
     /// Delete a backup
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup is not found or deletion from storage fails.
     pub async fn delete_backup(&self, backup_id: Uuid) -> Result<()> {
         // Get backup record to get the URL
         let backup = self.get_backup(backup_id).await?;
@@ -541,7 +567,7 @@ impl BackupService {
     }
 
     /// Save backup to local filesystem
-    async fn save_to_local(&self, workspace_id: Uuid, data: &str, format: &str) -> Result<String> {
+    async fn save_to_local(&self, workspace_id: Uuid, data: &str, ext: &str) -> Result<String> {
         let backup_dir = self.local_backup_dir.as_ref().ok_or_else(|| {
             CollabError::Internal("Local backup directory not configured".to_string())
         })?;
@@ -553,7 +579,7 @@ impl BackupService {
 
         // Create backup filename with timestamp
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("workspace_{workspace_id}_{timestamp}.{format}");
+        let filename = format!("workspace_{workspace_id}_{timestamp}.{ext}");
         let backup_path = Path::new(backup_dir).join(&filename);
 
         // Write backup file
@@ -594,12 +620,15 @@ impl BackupService {
         })?;
 
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let filename = format!("workspace_{workspace_id}_{timestamp}.{format}");
-        let resolved_upload_url = upload_url.replace("{filename}", &filename);
+        let ext = format;
+        let filename = format!("workspace_{workspace_id}_{timestamp}.{ext}");
+        #[allow(clippy::literal_string_with_formatting_args)]
+        let placeholder = "{filename}";
+        let resolved_upload_url = upload_url.replace(placeholder, &filename);
 
         let mut request = self.client.put(&resolved_upload_url).body(data.to_string()).header(
             "content-type",
-            match format {
+            match ext {
                 "yaml" => "application/x-yaml",
                 "json" => "application/json",
                 _ => "application/octet-stream",
@@ -681,8 +710,8 @@ impl BackupService {
             .map_err(|e| CollabError::Internal(format!("Failed to read custom backup body: {e}")))
     }
 
-    /// Save backup to Azure Blob Storage
-    #[allow(unused_variables)]
+    /// Save backup to S3
+    #[allow(unused_variables, clippy::unused_async)]
     async fn save_to_s3(
         &self,
         workspace_id: Uuid,
@@ -759,7 +788,7 @@ impl BackupService {
     }
 
     /// Save backup to Azure Blob Storage
-    #[allow(unused_variables)]
+    #[allow(unused_variables, clippy::unused_async)]
     async fn save_to_azure(
         &self,
         workspace_id: Uuid,
@@ -854,7 +883,7 @@ impl BackupService {
     }
 
     /// Save backup to Google Cloud Storage
-    #[allow(unused_variables)]
+    #[allow(unused_variables, clippy::unused_async)]
     async fn save_to_gcs(
         &self,
         workspace_id: Uuid,
@@ -909,6 +938,7 @@ impl BackupService {
     }
 
     /// Delete backup from S3
+    #[allow(clippy::unused_async)]
     async fn delete_from_s3(
         &self,
         backup_url: &str,
@@ -1013,6 +1043,7 @@ impl BackupService {
     }
 
     /// Delete backup from Azure Blob Storage
+    #[allow(clippy::unused_async)]
     async fn delete_from_azure(
         &self,
         backup_url: &str,
@@ -1115,6 +1146,7 @@ impl BackupService {
     }
 
     /// Delete backup from Google Cloud Storage
+    #[allow(clippy::unused_async)]
     async fn delete_from_gcs(
         &self,
         backup_url: &str,
@@ -1213,6 +1245,7 @@ impl BackupService {
     /// Get workspace data for backup
     ///
     /// Gets the full workspace state from the `TeamWorkspace` and converts it to JSON.
+    #[allow(dead_code)]
     async fn get_workspace_data(&self, workspace_id: Uuid) -> Result<serde_json::Value> {
         // Get the TeamWorkspace
         let team_workspace = self.workspace_service.get_workspace(workspace_id).await?;
@@ -1411,7 +1444,7 @@ mod tests {
     #[test]
     fn test_storage_backend_debug() {
         let backend = StorageBackend::S3;
-        let debug_str = format!("{:?}", backend);
+        let debug_str = format!("{backend:?}");
         assert!(debug_str.contains("S3"));
     }
 
@@ -1425,7 +1458,7 @@ mod tests {
             Uuid::new_v4(),
         );
 
-        let debug_str = format!("{:?}", backup);
+        let debug_str = format!("{backup:?}");
         assert!(debug_str.contains("WorkspaceBackup"));
     }
 }

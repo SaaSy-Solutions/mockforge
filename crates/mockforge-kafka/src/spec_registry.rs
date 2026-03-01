@@ -475,7 +475,7 @@ mod tests {
 
         // Fetch messages
         let messages = registry.fetch("test-topic", 0, 0).await.unwrap();
-        assert!(messages.len() >= 1);
+        assert!(!messages.is_empty());
     }
 
     #[tokio::test]
@@ -742,7 +742,7 @@ mod tests {
         };
 
         let response = registry.generate_mock_response(&request).unwrap();
-        assert!(response.body.len() > 0);
+        assert!(!response.body.is_empty());
     }
 
     // ==================== Template Engine Integration Tests ====================

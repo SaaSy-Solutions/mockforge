@@ -568,9 +568,11 @@ mod tests {
 
     #[test]
     fn test_search_query_clone() {
-        let mut query = SearchQuery::default();
-        query.query = Some("auth".to_string());
-        query.page = 5;
+        let query = SearchQuery {
+            query: Some("auth".to_string()),
+            page: 5,
+            ..Default::default()
+        };
 
         let cloned = query.clone();
         assert_eq!(query.query, cloned.query);
@@ -670,8 +672,10 @@ mod tests {
 
     #[test]
     fn test_registry_config_clone() {
-        let mut config = RegistryConfig::default();
-        config.token = Some("secret-token".to_string());
+        let config = RegistryConfig {
+            token: Some("secret-token".to_string()),
+            ..Default::default()
+        };
 
         let cloned = config.clone();
         assert_eq!(config.url, cloned.url);
@@ -713,11 +717,13 @@ mod tests {
 
     #[test]
     fn test_registry_config_with_alternatives() {
-        let mut config = RegistryConfig::default();
-        config.alternative_registries = vec![
-            "https://mirror1.registry.com".to_string(),
-            "https://mirror2.registry.com".to_string(),
-        ];
+        let config = RegistryConfig {
+            alternative_registries: vec![
+                "https://mirror1.registry.com".to_string(),
+                "https://mirror2.registry.com".to_string(),
+            ],
+            ..Default::default()
+        };
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("mirror1"));

@@ -447,9 +447,12 @@ pub trait WsHandler: Send + Sync {
     }
 }
 
+/// Handler function type for message routing
+type MessageHandler = Box<dyn Fn(String) -> Option<String> + Send + Sync>;
+
 /// Pattern-based message router
 pub struct MessageRouter {
-    routes: Vec<(MessagePattern, Box<dyn Fn(String) -> Option<String> + Send + Sync>)>,
+    routes: Vec<(MessagePattern, MessageHandler)>,
 }
 
 impl MessageRouter {

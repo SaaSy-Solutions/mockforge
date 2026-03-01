@@ -73,6 +73,10 @@ pub use models::{
 };
 
 /// Initialize the analytics system with the given configuration
+///
+/// # Errors
+///
+/// Returns an error if the database cannot be opened or migrations fail.
 pub async fn init(config: AnalyticsConfig) -> Result<AnalyticsDatabase> {
     let db = AnalyticsDatabase::new(&config.database_path).await?;
     db.run_migrations().await?;

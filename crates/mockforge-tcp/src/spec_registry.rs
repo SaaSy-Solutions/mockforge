@@ -152,7 +152,10 @@ impl TcpFixture {
 
         // Match by exact bytes
         if let Some(ref exact_bytes_b64) = criteria.exact_bytes {
-            if let Ok(expected) = base64::decode(exact_bytes_b64) {
+            if let Ok(expected) = {
+                use base64::Engine;
+                base64::engine::general_purpose::STANDARD.decode(exact_bytes_b64)
+            } {
                 return data == expected.as_slice();
             }
         }

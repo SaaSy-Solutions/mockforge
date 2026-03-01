@@ -772,6 +772,7 @@ async fn convert_batch(
 #[derive(Debug, Deserialize)]
 struct SnapshotListParams {
     limit: Option<i32>,
+    #[allow(dead_code)]
     offset: Option<i32>,
 }
 
@@ -880,10 +881,8 @@ async fn get_snapshots_by_cycle(
 mod tests {
     use super::*;
     use crate::database::RecorderDatabase;
-    use crate::models::{Protocol, RecordedRequest, RecordedResponse};
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode as HttpStatusCode};
-    use tower::ServiceExt;
+    use crate::models::{Protocol, RecordedRequest};
+    use axum::http::StatusCode as HttpStatusCode;
 
     async fn create_test_db() -> RecorderDatabase {
         RecorderDatabase::new_in_memory().await.unwrap()

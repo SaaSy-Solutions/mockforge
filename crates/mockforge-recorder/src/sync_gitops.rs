@@ -19,6 +19,7 @@ use tracing::{debug, info, warn};
 pub struct GitOpsSyncHandler {
     config: GitOpsConfig,
     pr_generator: Option<PRGenerator>,
+    #[allow(dead_code)]
     fixtures_dir: PathBuf,
 }
 

@@ -182,7 +182,7 @@ impl HandlerRegistry {
     pub fn register<H: GraphQLHandler + 'static>(&mut self, handler: H) {
         self.handlers.push(Arc::new(handler));
         // Sort by priority (highest first)
-        self.handlers.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        self.handlers.sort_by_key(|b| std::cmp::Reverse(b.priority()));
     }
 
     /// Get handlers for a specific operation
@@ -267,10 +267,7 @@ impl HandlerRegistry {
             })
             .unwrap_or_default();
 
-        let data = response_data
-            .get("data")
-            .map(|d| json_to_graphql_value(d))
-            .unwrap_or(Value::Null);
+        let data = response_data.get("data").map(json_to_graphql_value).unwrap_or(Value::Null);
 
         let mut response = Response::new(data);
         response.errors = errors;

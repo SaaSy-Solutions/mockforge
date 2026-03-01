@@ -101,6 +101,10 @@ impl AuthService {
     }
 
     /// Hash a password using Argon2
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if password hashing fails.
     pub fn hash_password(&self, password: &str) -> Result<String> {
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
@@ -114,6 +118,10 @@ impl AuthService {
     }
 
     /// Verify a password against a hash
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hash is invalid.
     pub fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
         let parsed_hash = PasswordHash::new(hash)
             .map_err(|e| CollabError::Internal(format!("Invalid password hash: {e}")))?;
@@ -124,6 +132,10 @@ impl AuthService {
     }
 
     /// Generate a JWT token for a user
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if token generation fails.
     pub fn generate_token(&self, user: &User) -> Result<Token> {
         let claims = Claims::new(user.id, user.username.clone(), self.token_expiration);
         let expires_at = Utc::now() + self.token_expiration;
@@ -143,6 +155,10 @@ impl AuthService {
     }
 
     /// Verify and decode a JWT token
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the token is invalid or expired.
     pub fn verify_token(&self, token: &str) -> Result<Claims> {
         let token_data = decode::<Claims>(
             token,
@@ -159,6 +175,10 @@ impl AuthService {
     }
 
     /// Create a session from a token
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the token is invalid.
     pub fn create_session(&self, token: &str) -> Result<Session> {
         let claims = self.verify_token(token)?;
 

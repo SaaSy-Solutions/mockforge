@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn test_protocol_handler_new() {
         let handler = KafkaProtocolHandler::new();
-        assert!(handler.api_versions.len() > 0);
+        assert!(!handler.api_versions.is_empty());
         assert!(handler.api_versions.contains_key(&0)); // Produce
         assert!(handler.api_versions.contains_key(&1)); // Fetch
         assert!(handler.api_versions.contains_key(&18)); // ApiVersions
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_protocol_handler_default() {
         let handler = KafkaProtocolHandler::default();
-        assert!(handler.api_versions.len() > 0);
+        assert!(!handler.api_versions.is_empty());
     }
 
     #[test]
@@ -602,7 +602,7 @@ mod tests {
         assert!(result.is_ok());
 
         let data = result.unwrap();
-        assert!(data.len() > 0);
+        assert!(!data.is_empty());
 
         // Check correlation ID (first 4 bytes)
         let corr_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
@@ -623,7 +623,7 @@ mod tests {
         assert!(result.is_ok());
 
         let data = result.unwrap();
-        assert!(data.len() > 0);
+        assert!(!data.is_empty());
 
         // Check correlation ID
         let corr_id = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
