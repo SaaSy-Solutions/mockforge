@@ -527,9 +527,8 @@ mod data_race_prevention {
             let context_clone = Arc::clone(&context);
             let handle = thread::spawn(move || {
                 // All threads should get the same result
-                let result = evaluate_condition("$.value == 42", &context_clone);
                 // Result should be consistent (all true or all false, not mixed)
-                result
+                evaluate_condition("$.value == 42", &context_clone)
             });
             handles.push(handle);
         }

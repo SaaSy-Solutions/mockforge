@@ -901,8 +901,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_user_access_review() {
-        let mut config = AccessReviewConfig::default();
-        config.enabled = true;
+        let mut config = AccessReviewConfig {
+            enabled: true,
+            ..Default::default()
+        };
         config.user_review.enabled = true;
 
         let mut engine = AccessReviewEngine::new(config);
@@ -941,8 +943,10 @@ mod tests {
 
     #[test]
     fn test_approve_user_access() {
-        let mut config = AccessReviewConfig::default();
-        config.enabled = true;
+        let mut config = AccessReviewConfig {
+            enabled: true,
+            ..Default::default()
+        };
         config.user_review.enabled = true;
 
         let mut engine = AccessReviewEngine::new(config);
@@ -976,8 +980,10 @@ mod tests {
 
     #[test]
     fn test_revoke_user_access() {
-        let mut config = AccessReviewConfig::default();
-        config.enabled = true;
+        let mut config = AccessReviewConfig {
+            enabled: true,
+            ..Default::default()
+        };
         config.user_review.enabled = true;
 
         let mut engine = AccessReviewEngine::new(config);
@@ -1017,8 +1023,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_resource_access_review() {
-        let mut config = AccessReviewConfig::default();
-        config.enabled = true;
+        let mut config = AccessReviewConfig {
+            enabled: true,
+            ..Default::default()
+        };
         config.resource_review.enabled = true;
 
         let mut engine = AccessReviewEngine::new(config);

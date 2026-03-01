@@ -502,7 +502,7 @@ mod template_security_tests {
             ])
         ) {
             // Should handle malicious-looking template syntax without panicking
-            let _ = expand_str(&malicious_input);
+            let _ = expand_str(malicious_input);
         }
 
         #[test]

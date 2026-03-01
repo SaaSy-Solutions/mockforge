@@ -48,11 +48,13 @@ async fn test_mockai_update_config() {
 
     // Verify initial config
     let initial_config = mockai.get_config();
-    assert_eq!(initial_config.enabled, false);
+    assert!(!initial_config.enabled);
 
     // Create new config with enabled
-    let mut new_config = IntelligentBehaviorConfig::default();
-    new_config.enabled = true;
+    let mut new_config = IntelligentBehaviorConfig {
+        enabled: true,
+        ..Default::default()
+    };
     new_config.behavior_model.llm_provider = "test".to_string();
     new_config.behavior_model.model = "test-model".to_string();
 
@@ -61,7 +63,7 @@ async fn test_mockai_update_config() {
 
     // Verify config was updated
     let updated_config = mockai.get_config();
-    assert_eq!(updated_config.enabled, true);
+    assert!(updated_config.enabled);
     assert_eq!(updated_config.behavior_model.llm_provider, "test");
     assert_eq!(updated_config.behavior_model.model, "test-model");
 }
@@ -72,8 +74,10 @@ async fn test_mockai_update_config_async() {
     let mockai = Arc::new(RwLock::new(MockAI::new(IntelligentBehaviorConfig::default())));
 
     // Create new config
-    let mut new_config = IntelligentBehaviorConfig::default();
-    new_config.enabled = true;
+    let mut new_config = IntelligentBehaviorConfig {
+        enabled: true,
+        ..Default::default()
+    };
     new_config.behavior_model.llm_provider = "test".to_string();
 
     // Update config using async method
@@ -82,7 +86,7 @@ async fn test_mockai_update_config_async() {
     // Verify config was updated
     let mockai_guard = mockai.read().await;
     let updated_config = mockai_guard.get_config();
-    assert_eq!(updated_config.enabled, true);
+    assert!(updated_config.enabled);
     assert_eq!(updated_config.behavior_model.llm_provider, "test");
 }
 
@@ -95,8 +99,10 @@ async fn test_mockai_preserves_rules_on_config_update() {
     let initial_rules = mockai.rules().clone();
 
     // Update config
-    let mut new_config = IntelligentBehaviorConfig::default();
-    new_config.enabled = true;
+    let new_config = IntelligentBehaviorConfig {
+        enabled: true,
+        ..Default::default()
+    };
     mockai.update_config(new_config);
 
     // Verify rules are preserved

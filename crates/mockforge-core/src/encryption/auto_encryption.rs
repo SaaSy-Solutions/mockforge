@@ -1002,8 +1002,10 @@ mod tests {
 
     #[test]
     fn test_auto_encryption_processor_is_enabled() {
-        let mut config = AutoEncryptionConfig::default();
-        config.enabled = true;
+        let config = AutoEncryptionConfig {
+            enabled: true,
+            ..Default::default()
+        };
         let mut processor = AutoEncryptionProcessor::new(config);
 
         // Should be false without key

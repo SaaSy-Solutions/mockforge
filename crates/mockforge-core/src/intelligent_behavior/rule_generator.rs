@@ -1040,7 +1040,7 @@ mod tests {
         let config = BehaviorModelConfig::default();
         let generator = RuleGenerator::new(config);
 
-        let errors = vec![ErrorExample {
+        let errors = [ErrorExample {
             method: "POST".to_string(),
             path: "/api/users".to_string(),
             request: Some(json!({"name": ""})),
@@ -1294,8 +1294,10 @@ mod tests {
 
     #[test]
     fn test_rule_generator_new_with_disabled_llm() {
-        let mut config = BehaviorModelConfig::default();
-        config.llm_provider = "disabled".to_string();
+        let config = BehaviorModelConfig {
+            llm_provider: "disabled".to_string(),
+            ..Default::default()
+        };
         let generator = RuleGenerator::new(config);
         // Just verify it can be created
         let _ = generator;
@@ -1691,7 +1693,7 @@ mod tests {
     #[test]
     fn test_rule_type_clone() {
         let rule_type1 = RuleType::Validation;
-        let rule_type2 = rule_type1.clone();
+        let rule_type2 = rule_type1;
         assert_eq!(rule_type1, rule_type2);
     }
 

@@ -266,7 +266,7 @@ fn bench_data_generation(c: &mut Criterion) {
 /// Benchmark encryption/decryption
 fn bench_encryption(c: &mut Criterion) {
     use mockforge_core::encryption::{EncryptionAlgorithm, EncryptionKey};
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
 
     let mut group = c.benchmark_group("encryption");
 
@@ -276,7 +276,7 @@ fn bench_encryption(c: &mut Criterion) {
             || {
                 // Setup: Generate a random 32-byte key for AES-256-GCM
                 let mut key_bytes = [0u8; 32];
-                thread_rng().fill(&mut key_bytes);
+                rng().fill(&mut key_bytes);
                 EncryptionKey::new(EncryptionAlgorithm::Aes256Gcm, key_bytes.to_vec()).unwrap()
             },
             |key| {
@@ -295,7 +295,7 @@ fn bench_encryption(c: &mut Criterion) {
             || {
                 // Setup: Generate a random 32-byte key for ChaCha20-Poly1305
                 let mut key_bytes = [0u8; 32];
-                thread_rng().fill(&mut key_bytes);
+                rng().fill(&mut key_bytes);
                 EncryptionKey::new(EncryptionAlgorithm::ChaCha20Poly1305, key_bytes.to_vec())
                     .unwrap()
             },

@@ -27,128 +27,6 @@ pub struct OpenApiRouteRegistry {
     options: ValidationOptions,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn registry_from_yaml(yaml: &str) -> OpenApiRouteRegistry {
-        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("parse spec");
-        OpenApiRouteRegistry::new_with_env(spec)
-    }
-
-    #[test]
-    fn generates_routes_from_components_path_items() {
-        let yaml = r#"
-openapi: 3.1.0
-info:
-  title: Test API
-  version: "1.0.0"
-paths:
-  /users:
-    $ref: '#/components/pathItems/UserCollection'
-components:
-  pathItems:
-    UserCollection:
-      get:
-        operationId: listUsers
-        responses:
-          '200':
-            description: ok
-            content:
-              application/json:
-                schema:
-                  type: array
-                  items:
-                    type: string
-        "#;
-
-        let registry = registry_from_yaml(yaml);
-        let routes = registry.routes();
-        assert_eq!(routes.len(), 1);
-        assert_eq!(routes[0].method, "GET");
-        assert_eq!(routes[0].path, "/users");
-    }
-
-    #[test]
-    fn generates_routes_from_paths_references() {
-        let yaml = r#"
-openapi: 3.0.3
-info:
-  title: PathRef API
-  version: "1.0.0"
-paths:
-  /users:
-    get:
-      operationId: getUsers
-      responses:
-        '200':
-          description: ok
-  /all-users:
-    $ref: '#/paths/~1users'
-        "#;
-
-        let registry = registry_from_yaml(yaml);
-        let routes = registry.routes();
-        assert_eq!(routes.len(), 2);
-
-        let mut paths: Vec<(&str, &str)> = routes
-            .iter()
-            .map(|route| (route.method.as_str(), route.path.as_str()))
-            .collect();
-        paths.sort();
-
-        assert_eq!(paths, vec![("GET", "/all-users"), ("GET", "/users")]);
-    }
-
-    #[test]
-    fn generates_routes_with_server_base_path() {
-        let yaml = r#"
-openapi: 3.0.3
-info:
-  title: Base Path API
-  version: "1.0.0"
-servers:
-  - url: https://api.example.com/api/v1
-paths:
-  /users:
-    get:
-      operationId: getUsers
-      responses:
-        '200':
-          description: ok
-        "#;
-
-        let registry = registry_from_yaml(yaml);
-        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
-        assert!(paths.contains(&"/api/v1/users".to_string()));
-        assert!(!paths.contains(&"/users".to_string()));
-    }
-
-    #[test]
-    fn generates_routes_with_relative_server_base_path() {
-        let yaml = r#"
-openapi: 3.0.3
-info:
-  title: Relative Base Path API
-  version: "1.0.0"
-servers:
-  - url: /api/v2
-paths:
-  /orders:
-    post:
-      operationId: createOrder
-      responses:
-        '201':
-          description: created
-        "#;
-
-        let registry = registry_from_yaml(yaml);
-        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
-        assert!(paths.contains(&"/api/v2/orders".to_string()));
-        assert!(!paths.contains(&"/orders".to_string()));
-    }
-}
-
 impl OpenApiRouteRegistry {
     /// Create a new registry from an OpenAPI spec with default options
     pub fn new(spec: OpenApiSpec) -> Self {
@@ -913,5 +791,127 @@ impl OpenApiRouteRegistry {
         }
 
         router
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn registry_from_yaml(yaml: &str) -> OpenApiRouteRegistry {
+        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("parse spec");
+        OpenApiRouteRegistry::new_with_env(spec)
+    }
+
+    #[test]
+    fn generates_routes_from_components_path_items() {
+        let yaml = r#"
+openapi: 3.1.0
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /users:
+    $ref: '#/components/pathItems/UserCollection'
+components:
+  pathItems:
+    UserCollection:
+      get:
+        operationId: listUsers
+        responses:
+          '200':
+            description: ok
+            content:
+              application/json:
+                schema:
+                  type: array
+                  items:
+                    type: string
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let routes = registry.routes();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].method, "GET");
+        assert_eq!(routes[0].path, "/users");
+    }
+
+    #[test]
+    fn generates_routes_from_paths_references() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: PathRef API
+  version: "1.0.0"
+paths:
+  /users:
+    get:
+      operationId: getUsers
+      responses:
+        '200':
+          description: ok
+  /all-users:
+    $ref: '#/paths/~1users'
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let routes = registry.routes();
+        assert_eq!(routes.len(), 2);
+
+        let mut paths: Vec<(&str, &str)> = routes
+            .iter()
+            .map(|route| (route.method.as_str(), route.path.as_str()))
+            .collect();
+        paths.sort();
+
+        assert_eq!(paths, vec![("GET", "/all-users"), ("GET", "/users")]);
+    }
+
+    #[test]
+    fn generates_routes_with_server_base_path() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Base Path API
+  version: "1.0.0"
+servers:
+  - url: https://api.example.com/api/v1
+paths:
+  /users:
+    get:
+      operationId: getUsers
+      responses:
+        '200':
+          description: ok
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
+        assert!(paths.contains(&"/api/v1/users".to_string()));
+        assert!(!paths.contains(&"/users".to_string()));
+    }
+
+    #[test]
+    fn generates_routes_with_relative_server_base_path() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Relative Base Path API
+  version: "1.0.0"
+servers:
+  - url: /api/v2
+paths:
+  /orders:
+    post:
+      operationId: createOrder
+      responses:
+        '201':
+          description: created
+        "#;
+
+        let registry = registry_from_yaml(yaml);
+        let paths: Vec<String> = registry.routes().iter().map(|route| route.path.clone()).collect();
+        assert!(paths.contains(&"/api/v2/orders".to_string()));
+        assert!(!paths.contains(&"/orders".to_string()));
     }
 }

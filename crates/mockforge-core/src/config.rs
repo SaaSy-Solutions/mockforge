@@ -3139,15 +3139,17 @@ mod tests {
         let base = ServerConfig::default();
         assert_eq!(base.http.port, 3000);
 
-        let mut profile = ProfileConfig::default();
-        profile.http = Some(HttpConfig {
-            port: 8080,
+        let profile = ProfileConfig {
+            http: Some(HttpConfig {
+                port: 8080,
+                ..Default::default()
+            }),
+            logging: Some(LoggingConfig {
+                level: "debug".to_string(),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
-        profile.logging = Some(LoggingConfig {
-            level: "debug".to_string(),
-            ..Default::default()
-        });
+        };
 
         let merged = apply_profile(base, profile);
         assert_eq!(merged.http.port, 8080);

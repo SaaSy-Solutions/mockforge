@@ -5,7 +5,7 @@
 //! fault types and various latency distributions.
 //!
 //! This crate is isolated from mockforge-core to avoid Send issues. It only uses
-//! `thread_rng()` (which is Send-safe) and does not import `rng()` from rand.
+//! `rng()` (which is Send-safe) from rand.
 
 use async_trait::async_trait;
 use axum::http::{Method, Uri};
@@ -16,7 +16,7 @@ use mockforge_core::priority_handler::{
     RouteChaosInjectorTrait, RouteFaultResponse as CoreRouteFaultResponse,
 };
 use mockforge_core::{Error, Result};
-use rand::thread_rng;
+use rand::rng;
 use rand::Rng;
 use regex::Regex;
 use std::time::Duration;
@@ -43,6 +43,9 @@ struct CompiledRoute {
 
 impl RouteMatcher {
     /// Create a new route matcher from route configurations
+    ///
+    /// # Errors
+    /// Returns an error if any route has an invalid HTTP method or path pattern.
     pub fn new(routes: Vec<RouteConfig>) -> Result<Self> {
         let mut compiled_routes = Vec::new();
 
@@ -89,7 +92,7 @@ impl RouteMatcher {
     fn compile_path_pattern(pattern: &str) -> Result<Regex> {
         // Escape special regex characters except {}
         let mut regex_pattern = String::new();
-        let mut chars = pattern.chars().peekable();
+        let mut chars = pattern.chars();
 
         while let Some(ch) = chars.next() {
             match ch {
@@ -161,6 +164,9 @@ impl RouteChaosInjectorTrait for RouteChaosInjector {
 
 impl RouteChaosInjector {
     /// Create a new route chaos injector
+    ///
+    /// # Errors
+    /// Returns an error if any route has an invalid HTTP method or path pattern.
     pub fn new(routes: Vec<RouteConfig>) -> Result<Self> {
         let matcher = RouteMatcher::new(routes)?;
         Ok(Self { matcher })
@@ -179,8 +185,8 @@ impl RouteChaosInjector {
             return None;
         }
 
-        // Check probability - using thread_rng() which is Send-safe
-        let mut rng = thread_rng();
+        // Check probability - using rng() which is Send-safe
+        let mut rng = rng();
         if rng.random::<f64>() > fault_config.probability {
             return None;
         }
@@ -200,14 +206,12 @@ impl RouteChaosInjector {
 
     /// Inject latency for this request (internal implementation)
     async fn inject_latency_impl(&self, method: &Method, uri: &Uri) -> Result<()> {
-        let route = match self.matcher.match_route(method, uri) {
-            Some(r) => r,
-            None => return Ok(()), // No route match, no latency injection
+        let Some(route) = self.matcher.match_route(method, uri) else {
+            return Ok(()); // No route match, no latency injection
         };
 
-        let latency_config = match &route.latency {
-            Some(cfg) => cfg,
-            None => return Ok(()), // No latency config
+        let Some(latency_config) = &route.latency else {
+            return Ok(()); // No latency config
         };
 
         if !latency_config.enabled {
@@ -217,14 +221,14 @@ impl RouteChaosInjector {
         // Calculate delay before any await point to ensure Send safety
         // All RNG operations must complete before the await
         let delay_ms = {
-            // Check probability - using thread_rng() which is Send-safe
-            let mut rng = thread_rng();
+            // Check probability - using rng() which is Send-safe
+            let mut rng = rng();
             if rng.random::<f64>() > latency_config.probability {
                 return Ok(());
             }
 
             // Calculate delay (all RNG operations happen here, before await)
-            self.calculate_delay(latency_config)?
+            Self::calculate_delay(latency_config)
         };
 
         // Now we can await safely - all RNG operations are complete
@@ -237,9 +241,14 @@ impl RouteChaosInjector {
     }
 
     /// Calculate delay based on latency configuration
-    fn calculate_delay(&self, config: &RouteLatencyConfig) -> Result<u64> {
-        // Using thread_rng() which is Send-safe
-        let mut rng = thread_rng();
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
+    fn calculate_delay(config: &RouteLatencyConfig) -> u64 {
+        // Using rng() which is Send-safe
+        let mut rng = rng();
 
         let base_delay = match &config.distribution {
             LatencyDistribution::Fixed => config.fixed_delay_ms.unwrap_or(0),
@@ -252,12 +261,14 @@ impl RouteChaosInjector {
                 let u2: f64 = rng.random();
                 let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
                 let value = mean_ms + std_dev_ms * z0;
+                // Clamp to non-negative before casting
                 value.max(0.0) as u64
             }
             LatencyDistribution::Exponential { lambda } => {
                 // Inverse transform sampling for exponential distribution
                 let u: f64 = rng.random();
                 let value = -lambda.ln() * (1.0 - u);
+                // Clamp to non-negative before casting
                 value.max(0.0) as u64
             }
             LatencyDistribution::Uniform => {
@@ -270,7 +281,7 @@ impl RouteChaosInjector {
         };
 
         // Apply jitter
-        let delay = if config.jitter_percent > 0.0 {
+        if config.jitter_percent > 0.0 {
             let jitter = (base_delay as f64 * config.jitter_percent / 100.0) as u64;
             let jitter_offset = rng.random_range(0..=jitter);
             if rng.random_bool(0.5) {
@@ -280,9 +291,7 @@ impl RouteChaosInjector {
             }
         } else {
             base_delay
-        };
-
-        Ok(delay)
+        }
     }
 
     /// Get fault injection response for a request (internal implementation)
@@ -449,7 +458,7 @@ mod tests {
     fn test_route_matcher_debug() {
         let routes = vec![create_test_route("/test", "GET")];
         let matcher = RouteMatcher::new(routes).unwrap();
-        let debug = format!("{:?}", matcher);
+        let debug = format!("{matcher:?}");
         assert!(debug.contains("RouteMatcher"));
     }
 
@@ -458,6 +467,8 @@ mod tests {
         let routes = vec![create_test_route("/test", "GET")];
         let matcher = RouteMatcher::new(routes).unwrap();
         let cloned = matcher.clone();
+        // Use both original and clone to verify Clone trait works correctly
+        assert!(matcher.match_route(&Method::GET, &Uri::from_static("/test")).is_some());
         assert!(cloned.match_route(&Method::GET, &Uri::from_static("/test")).is_some());
     }
 
@@ -481,7 +492,7 @@ mod tests {
     fn test_route_chaos_injector_debug() {
         let routes = vec![create_test_route("/test", "GET")];
         let injector = RouteChaosInjector::new(routes).unwrap();
-        let debug = format!("{:?}", injector);
+        let debug = format!("{injector:?}");
         assert!(debug.contains("RouteChaosInjector"));
     }
 
@@ -489,7 +500,7 @@ mod tests {
     fn test_route_chaos_injector_clone() {
         let routes = vec![create_test_route("/test", "GET")];
         let injector = RouteChaosInjector::new(routes).unwrap();
-        let _cloned = injector.clone();
+        let _cloned = Clone::clone(&injector);
     }
 
     #[tokio::test]
@@ -898,7 +909,7 @@ mod tests {
             error_message: "Error".to_string(),
             fault_type: "http_error".to_string(),
         };
-        let debug = format!("{:?}", response);
+        let debug = format!("{response:?}");
         assert!(debug.contains("RouteFaultResponse"));
         assert!(debug.contains("500"));
     }
@@ -927,7 +938,7 @@ mod tests {
                 message: None,
             },
         };
-        let debug = format!("{:?}", result);
+        let debug = format!("{result:?}");
         assert!(debug.contains("RouteFaultInjectionResult"));
     }
 
@@ -941,7 +952,7 @@ mod tests {
                 message: None,
             },
         };
-        let _cloned = result.clone();
+        let _cloned = Clone::clone(&result);
     }
 
     // RouteChaosInjectorTrait implementation tests
@@ -1037,7 +1048,7 @@ mod tests {
     fn test_path_pattern_nested_braces() {
         let pattern = RouteMatcher::compile_path_pattern("/users/{{id}}").unwrap();
         // Nested braces create unusual patterns
-        let debug = format!("{:?}", pattern);
+        let debug = format!("{pattern:?}");
         assert!(!debug.is_empty());
     }
 
@@ -1126,8 +1137,7 @@ mod tests {
             distribution: LatencyDistribution::Fixed,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         assert_eq!(delay, 100);
     }
 
@@ -1144,10 +1154,9 @@ mod tests {
             distribution: LatencyDistribution::Fixed,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         // With 20% jitter on 100ms, delay should be between 80 and 120
-        assert!(delay >= 80 && delay <= 120);
+        assert!((80..=120).contains(&delay));
     }
 
     #[test]
@@ -1163,9 +1172,8 @@ mod tests {
             distribution: LatencyDistribution::Uniform,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
-        assert!(delay >= 50 && delay <= 150);
+        let delay = RouteChaosInjector::calculate_delay(&config);
+        assert!((50..=150).contains(&delay));
     }
 
     #[test]
@@ -1181,8 +1189,7 @@ mod tests {
             distribution: LatencyDistribution::Uniform,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         // Falls back to fixed_delay_ms when no range is provided
         assert_eq!(delay, 75);
     }
@@ -1200,8 +1207,7 @@ mod tests {
             distribution: LatencyDistribution::Uniform,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         assert_eq!(delay, 0);
     }
 
@@ -1221,10 +1227,9 @@ mod tests {
             },
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
         // Normal distribution should produce values, typically around the mean
         // We can't test exact value due to randomness, but delay is u64 so always >= 0
-        let _ = injector.calculate_delay(&config).unwrap();
+        let _ = RouteChaosInjector::calculate_delay(&config);
     }
 
     #[test]
@@ -1240,9 +1245,8 @@ mod tests {
             distribution: LatencyDistribution::Exponential { lambda: 0.01 },
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
         // Exponential distribution should produce non-negative values (delay is u64, always >= 0)
-        let _ = injector.calculate_delay(&config).unwrap();
+        let _ = RouteChaosInjector::calculate_delay(&config);
     }
 
     #[test]
@@ -1261,9 +1265,8 @@ mod tests {
             },
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
         // Should produce non-negative values with jitter applied (delay is u64, always >= 0)
-        let _ = injector.calculate_delay(&config).unwrap();
+        let _ = RouteChaosInjector::calculate_delay(&config);
     }
 
     #[test]
@@ -1279,8 +1282,7 @@ mod tests {
             distribution: LatencyDistribution::Fixed,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         assert_eq!(delay, 0);
     }
 
@@ -1297,8 +1299,7 @@ mod tests {
             distribution: LatencyDistribution::Fixed,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         // With 100% jitter, delay should be between 0 and 200
         assert!(delay <= 200);
     }
@@ -1316,8 +1317,7 @@ mod tests {
             distribution: LatencyDistribution::Fixed,
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-        let delay = injector.calculate_delay(&config).unwrap();
+        let delay = RouteChaosInjector::calculate_delay(&config);
         // Should never be negative due to saturating_sub
         assert!(delay < u64::MAX);
     }
@@ -1504,11 +1504,11 @@ mod tests {
         let mut route2 = create_test_route("/api/users", "GET");
         route2.response.status = 201;
 
-        let matcher = RouteMatcher::new(vec![route1.clone(), route2.clone()]).unwrap();
+        let matcher = RouteMatcher::new(vec![route1, route2]).unwrap();
 
         // First route with wildcard should match
-        let matched = matcher.match_route(&Method::GET, &Uri::from_static("/api/users")).unwrap();
-        assert_eq!(matched.response.status, 200);
+        let result = matcher.match_route(&Method::GET, &Uri::from_static("/api/users")).unwrap();
+        assert_eq!(result.response.status, 200);
     }
 
     #[test]
@@ -1534,7 +1534,7 @@ mod tests {
             method,
         };
 
-        let debug = format!("{:?}", compiled);
+        let debug = format!("{compiled:?}");
         assert!(debug.contains("CompiledRoute"));
     }
 
@@ -1550,7 +1550,7 @@ mod tests {
             method,
         };
 
-        let _cloned = compiled.clone();
+        let _cloned = Clone::clone(&compiled);
     }
 
     // Integration-style tests
@@ -1730,11 +1730,9 @@ mod tests {
             },
         };
 
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
-
         // Run multiple times to potentially hit negative values that should be clamped
         for _ in 0..20 {
-            let delay = injector.calculate_delay(&config).unwrap();
+            let delay = RouteChaosInjector::calculate_delay(&config);
             // Should never be negative due to max(0.0) clamp
             assert!(delay < u64::MAX);
         }
@@ -1744,8 +1742,6 @@ mod tests {
     #[test]
     fn test_calculate_delay_exponential_various_lambdas() {
         use mockforge_core::config::RouteLatencyConfig;
-
-        let injector = RouteChaosInjector::new(vec![create_test_route("/test", "GET")]).unwrap();
 
         // Test with very small lambda
         let config = RouteLatencyConfig {
@@ -1757,7 +1753,7 @@ mod tests {
             distribution: LatencyDistribution::Exponential { lambda: 0.001 },
         };
         // delay is u64, always >= 0
-        let _ = injector.calculate_delay(&config).unwrap();
+        let _ = RouteChaosInjector::calculate_delay(&config);
 
         // Test with large lambda
         let config = RouteLatencyConfig {
@@ -1769,7 +1765,7 @@ mod tests {
             distribution: LatencyDistribution::Exponential { lambda: 10.0 },
         };
         // delay is u64, always >= 0
-        let _ = injector.calculate_delay(&config).unwrap();
+        let _ = RouteChaosInjector::calculate_delay(&config);
     }
 
     #[test]

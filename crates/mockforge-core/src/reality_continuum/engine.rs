@@ -282,8 +282,10 @@ mod tests {
         let end = start + chrono::Duration::days(30);
         let schedule = TimeSchedule::new(start, end, 0.0, 1.0);
 
-        let mut config = ContinuumConfig::default();
-        config.transition_mode = TransitionMode::TimeBased;
+        let mut config = ContinuumConfig {
+            transition_mode: TransitionMode::TimeBased,
+            ..Default::default()
+        };
         config.time_schedule = Some(schedule);
         let engine = RealityContinuumEngine::new(config);
 

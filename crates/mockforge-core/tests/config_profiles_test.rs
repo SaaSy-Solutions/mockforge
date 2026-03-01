@@ -87,15 +87,17 @@ async fn test_apply_profile_merging() {
     base.websocket.port = 3001;
     base.logging.level = "info".to_string();
 
-    let mut profile = ProfileConfig::default();
-    profile.http = Some(HttpConfig {
-        port: 8080,
+    let profile = ProfileConfig {
+        http: Some(HttpConfig {
+            port: 8080,
+            ..Default::default()
+        }),
+        logging: Some(LoggingConfig {
+            level: "debug".to_string(),
+            ..Default::default()
+        }),
         ..Default::default()
-    });
-    profile.logging = Some(LoggingConfig {
-        level: "debug".to_string(),
-        ..Default::default()
-    });
+    };
 
     let merged = apply_profile(base, profile);
 

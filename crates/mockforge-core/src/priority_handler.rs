@@ -1248,7 +1248,7 @@ paths:
 
         assert_eq!(response.status_code, 201);
         assert_eq!(response.source.source_type, "custom_fixture");
-        assert!(response.body.len() > 0);
+        assert!(!response.body.is_empty());
         let body_str = String::from_utf8_lossy(&response.body);
         assert!(body_str.contains("id"));
     }
@@ -1356,9 +1356,11 @@ paths:
         let record_replay = RecordReplayHandler::new(fixtures_dir.clone(), true, true, false);
 
         // Create a failure injector that injects failures
-        let mut failure_config = crate::failure_injection::FailureConfig::default();
-        failure_config.global_error_rate = 1.0; // 100% error rate
-        failure_config.default_status_codes = vec![500]; // Use 500 status code
+        let failure_config = crate::failure_injection::FailureConfig {
+            global_error_rate: 1.0,          // 100% error rate
+            default_status_codes: vec![500], // Use 500 status code
+            ..Default::default()
+        };
 
         let failure_injector = FailureInjector::new(Some(failure_config), true);
 

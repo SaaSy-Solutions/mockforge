@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_voice_spec_generator_default() {
-        let generator = VoiceSpecGenerator::default();
+        let generator = VoiceSpecGenerator;
         // Just verify it can be created
         let _ = generator;
     }

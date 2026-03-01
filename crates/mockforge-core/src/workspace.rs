@@ -1552,9 +1552,11 @@ mod tests {
 
     #[test]
     fn test_mock_response_serialization() {
-        let mut response = MockResponse::default();
-        response.status_code = 404;
-        response.body = Some("Not Found".to_string());
+        let mut response = MockResponse {
+            status_code: 404,
+            body: Some("Not Found".to_string()),
+            ..Default::default()
+        };
         response
             .headers
             .insert("Content-Type".to_string(), "application/json".to_string());
@@ -1791,8 +1793,10 @@ mod tests {
 
     #[test]
     fn test_workspace_config_clone() {
-        let mut config1 = WorkspaceConfig::default();
-        config1.base_url = Some("https://api.example.com".to_string());
+        let config1 = WorkspaceConfig {
+            base_url: Some("https://api.example.com".to_string()),
+            ..Default::default()
+        };
         let config2 = config1.clone();
         assert_eq!(config1.base_url, config2.base_url);
     }

@@ -189,7 +189,7 @@ components:
 
         // The response should have pagination metadata
         assert!(
-            response.get("total").is_some() || items_array.len() > 0,
+            response.get("total").is_some() || !items_array.is_empty(),
             "Response should have total or items"
         );
     }

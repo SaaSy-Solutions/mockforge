@@ -605,7 +605,7 @@ mod tests {
         let result = GraphQLValidator::validate(schema);
         // The parser might still accept this as valid syntax even if incomplete
         // So we check if it at least parsed
-        assert!(!result.has_errors() || result.errors.len() > 0);
+        assert!(!result.has_errors() || !result.errors.is_empty());
     }
 
     #[test]

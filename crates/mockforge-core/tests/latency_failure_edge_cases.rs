@@ -368,7 +368,7 @@ fn test_failure_injector_get_response_variations() {
     let response = injector.get_failure_response(&[]);
     assert!(response.is_some());
     let (status, _) = response.unwrap();
-    assert!(vec![500, 502, 503].contains(&status));
+    assert!([500, 502, 503].contains(&status));
 
     // Test with custom error message
     let config = FailureConfig {

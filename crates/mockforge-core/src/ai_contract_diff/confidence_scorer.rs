@@ -235,7 +235,7 @@ mod tests {
         let context = ScoringContext::new(1, 0.8);
         let score = ConfidenceScorer::score_mismatch(&mismatch, &context);
 
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
         assert!(score > 0.7); // Critical missing field should have high confidence
     }
 
@@ -267,7 +267,7 @@ mod tests {
         ];
 
         let overall = ConfidenceScorer::calculate_overall_confidence(&mismatches);
-        assert!(overall >= 0.0 && overall <= 1.0);
+        assert!((0.0..=1.0).contains(&overall));
         assert!(overall > 0.6); // Should be weighted average
     }
 

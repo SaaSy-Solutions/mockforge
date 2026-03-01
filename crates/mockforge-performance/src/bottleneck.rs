@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn test_bottleneck_type_clone() {
         let bt = BottleneckType::Cpu;
-        let cloned = bt.clone();
+        let cloned = bt;
         assert_eq!(bt, cloned);
     }
 

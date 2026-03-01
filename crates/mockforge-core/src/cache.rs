@@ -802,9 +802,11 @@ mod tests {
 
     #[test]
     fn test_cache_stats_clone() {
-        let mut stats = CacheStats::default();
-        stats.hits = 10;
-        stats.misses = 5;
+        let stats = CacheStats {
+            hits: 10,
+            misses: 5,
+            ..Default::default()
+        };
 
         let cloned = stats.clone();
         assert_eq!(cloned.hits, 10);

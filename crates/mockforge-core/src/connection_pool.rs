@@ -424,9 +424,11 @@ mod tests {
 
     #[test]
     fn test_pool_metrics_clone() {
-        let mut metrics = PoolMetrics::default();
-        metrics.total_acquired = 10;
-        metrics.active_connections = 5;
+        let metrics = PoolMetrics {
+            total_acquired: 10,
+            active_connections: 5,
+            ..Default::default()
+        };
         let cloned = metrics.clone();
         assert_eq!(cloned.total_acquired, 10);
         assert_eq!(cloned.active_connections, 5);

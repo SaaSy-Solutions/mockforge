@@ -533,11 +533,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_bandwidth_tag_override_with_global_unlimited() {
-        let mut bandwidth = BandwidthConfig::default();
-        bandwidth.enabled = true;
-        bandwidth.max_bytes_per_sec = 0;
-        bandwidth.burst_capacity_bytes = 100;
-        bandwidth = bandwidth.with_tag_override("limited".to_string(), 100);
+        let bandwidth = BandwidthConfig {
+            enabled: true,
+            max_bytes_per_sec: 0,
+            burst_capacity_bytes: 100,
+            ..Default::default()
+        }
+        .with_tag_override("limited".to_string(), 100);
 
         let shaper = TrafficShaper::new(TrafficShapingConfig {
             bandwidth,

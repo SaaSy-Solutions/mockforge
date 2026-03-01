@@ -45,7 +45,7 @@ mod condition_evaluation_tests {
             // Empty condition should always evaluate to true
             let result = evaluate_condition("", &context);
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), true);
+            assert!(result.unwrap());
         }
 
         #[test]
@@ -138,7 +138,7 @@ mod jsonpath_tests {
                 .with_request_body(body);
 
             // JSONPath evaluation should not panic
-            let _ = evaluate_condition(&jsonpath, &context);
+            let _ = evaluate_condition(jsonpath, &context);
         }
 
         #[test]

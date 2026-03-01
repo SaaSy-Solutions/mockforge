@@ -406,7 +406,7 @@ mod tests {
         let manager = CaptureManager::new(5);
 
         for i in 0..10 {
-            let request = CapturedRequest::new("GET", &format!("/api/test{}", i), "proxy");
+            let request = CapturedRequest::new("GET", format!("/api/test{}", i), "proxy");
             manager.capture(request).await.unwrap();
         }
 

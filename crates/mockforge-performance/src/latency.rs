@@ -174,7 +174,7 @@ impl LatencyAnalyzer {
 
         let min = latencies[0];
         let max = latencies[count - 1];
-        let median = if count % 2 == 0 {
+        let median = if count.is_multiple_of(2) {
             (latencies[count / 2 - 1] + latencies[count / 2]) as f64 / 2.0
         } else {
             latencies[count / 2] as f64

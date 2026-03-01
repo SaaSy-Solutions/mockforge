@@ -235,6 +235,6 @@ async fn test_min_confidence_filtering() {
             .unwrap_or(0.0);
 
         // Users path should have reasonable confidence
-        assert!(user_confidence >= 0.0 && user_confidence <= 1.0);
+        assert!((0.0..=1.0).contains(&user_confidence));
     }
 }

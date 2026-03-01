@@ -263,7 +263,7 @@ mod tests {
 
         simulator.process_request("/api/users", "GET").await.unwrap();
 
-        let snapshot = simulator.get_snapshot().await;
+        let _snapshot = simulator.get_snapshot().await;
         // total_requests is u64, so >= 0 is always true - removed redundant assertion
 
         simulator.stop().await;
