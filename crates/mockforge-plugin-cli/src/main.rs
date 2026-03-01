@@ -222,7 +222,7 @@ mod tests {
     // Commands::New tests
     #[test]
     fn test_new_command_required_args() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "new", "my-plugin", "-p", "auth"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "new", "my-plugin", "-p", "auth"]);
         assert!(result.is_ok());
 
         if let Commands::New {
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_new_command_with_output() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "mockforge-plugin",
             "new",
             "test-plugin",
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_new_command_with_author() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "mockforge-plugin",
             "new",
             "plugin",
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_new_command_no_git_flag() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "mockforge-plugin",
             "new",
             "plugin",
@@ -308,14 +308,14 @@ mod tests {
 
     #[test]
     fn test_new_command_missing_plugin_type() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "new", "plugin"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "new", "plugin"]);
         assert!(result.is_err());
     }
 
     // Commands::Build tests
     #[test]
     fn test_build_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "build"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "build"]);
         assert!(result.is_ok());
 
         if let Commands::Build { release, path } = result.unwrap().command {
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn test_build_command_release() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "build", "--release"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "build", "--release"]);
         assert!(result.is_ok());
 
         if let Commands::Build { release, .. } = result.unwrap().command {
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_build_command_with_path() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "build", "--path", "/custom/path"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "build", "--path", "/custom/path"]);
         assert!(result.is_ok());
 
         if let Commands::Build { path, .. } = result.unwrap().command {
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_build_command_short_flags() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "build", "-r", "-p", "/path"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "build", "-r", "-p", "/path"]);
         assert!(result.is_ok());
 
         if let Commands::Build { release, path } = result.unwrap().command {
@@ -366,7 +366,7 @@ mod tests {
     // Commands::Test tests
     #[test]
     fn test_test_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "test"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "test"]);
         assert!(result.is_ok());
 
         if let Commands::Test { path, test } = result.unwrap().command {
@@ -379,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_test_command_with_pattern() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "test", "--test", "integration"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "test", "--test", "integration"]);
         assert!(result.is_ok());
 
         if let Commands::Test { test, .. } = result.unwrap().command {
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_test_command_with_path() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "test", "--path", "/project"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "test", "--path", "/project"]);
         assert!(result.is_ok());
 
         if let Commands::Test { path, .. } = result.unwrap().command {
@@ -404,7 +404,7 @@ mod tests {
     // Commands::Package tests
     #[test]
     fn test_package_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "package"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "package"]);
         assert!(result.is_ok());
 
         if let Commands::Package { path, output } = result.unwrap().command {
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_package_command_with_output() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "package", "-o", "plugin.zip"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "package", "-o", "plugin.zip"]);
         assert!(result.is_ok());
 
         if let Commands::Package { output, .. } = result.unwrap().command {
@@ -429,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_package_command_with_path_and_output() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "mockforge-plugin",
             "package",
             "--path",
@@ -450,7 +450,7 @@ mod tests {
     // Commands::Validate tests
     #[test]
     fn test_validate_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "validate"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "validate"]);
         assert!(result.is_ok());
 
         if let Commands::Validate { path } = result.unwrap().command {
@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     fn test_validate_command_with_path() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "validate", "-p", "/plugin"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "validate", "-p", "/plugin"]);
         assert!(result.is_ok());
 
         if let Commands::Validate { path } = result.unwrap().command {
@@ -475,7 +475,7 @@ mod tests {
     // Commands::Init tests
     #[test]
     fn test_init_command_required_args() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "init", "--plugin-type", "auth"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "init", "--plugin-type", "auth"]);
         assert!(result.is_ok());
 
         if let Commands::Init {
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_init_command_with_output() {
-        let result = Cli::try_parse_from(&[
+        let result = Cli::try_parse_from([
             "mockforge-plugin",
             "init",
             "-p",
@@ -516,14 +516,14 @@ mod tests {
 
     #[test]
     fn test_init_command_missing_plugin_type() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "init"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "init"]);
         assert!(result.is_err());
     }
 
     // Commands::Info tests
     #[test]
     fn test_info_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "info"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "info"]);
         assert!(result.is_ok());
 
         if let Commands::Info { path } = result.unwrap().command {
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn test_info_command_with_path() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "info", "--path", "/project"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "info", "--path", "/project"]);
         assert!(result.is_ok());
 
         if let Commands::Info { path } = result.unwrap().command {
@@ -548,7 +548,7 @@ mod tests {
     // Commands::Clean tests
     #[test]
     fn test_clean_command_default() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "clean"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "clean"]);
         assert!(result.is_ok());
 
         if let Commands::Clean { path } = result.unwrap().command {
@@ -560,7 +560,7 @@ mod tests {
 
     #[test]
     fn test_clean_command_with_path() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "clean", "-p", "/plugin"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "clean", "-p", "/plugin"]);
         assert!(result.is_ok());
 
         if let Commands::Clean { path } = result.unwrap().command {
@@ -573,25 +573,25 @@ mod tests {
     // Edge case tests
     #[test]
     fn test_invalid_command() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "invalid"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "invalid"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_help_flag() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "--help"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "--help"]);
         assert!(result.is_err()); // Help causes early exit
     }
 
     #[test]
     fn test_version_flag() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "--version"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "--version"]);
         assert!(result.is_err()); // Version causes early exit
     }
 
     #[test]
     fn test_subcommand_help() {
-        let result = Cli::try_parse_from(&["mockforge-plugin", "new", "--help"]);
+        let result = Cli::try_parse_from(["mockforge-plugin", "new", "--help"]);
         assert!(result.is_err()); // Help causes early exit
     }
 

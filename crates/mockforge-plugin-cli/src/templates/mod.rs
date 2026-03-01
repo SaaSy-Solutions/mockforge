@@ -305,7 +305,7 @@ mod tests {
     #[test]
     fn test_plugin_type_clone() {
         let pt = PluginType::Auth;
-        let cloned = pt.clone();
+        let cloned = pt;
         assert!(matches!(cloned, PluginType::Auth));
     }
 
