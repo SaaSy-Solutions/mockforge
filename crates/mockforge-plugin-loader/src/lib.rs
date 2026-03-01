@@ -711,7 +711,10 @@ mod tests {
     fn test_loader_result_type() {
         let success: LoaderResult<i32> = Ok(42);
         assert!(success.is_ok());
-        assert_eq!(success.unwrap(), 42);
+        match success {
+            Ok(val) => assert_eq!(val, 42),
+            Err(_) => panic!("expected Ok"),
+        }
 
         let error: LoaderResult<i32> = Err(PluginLoaderError::load("test"));
         assert!(error.is_err());
