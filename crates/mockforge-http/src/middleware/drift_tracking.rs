@@ -12,8 +12,12 @@ use mockforge_core::{
     openapi::OpenApiSpec,
 };
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, warn};
+
+/// Maximum request body size to buffer for drift tracking (1 MB).
+const MAX_DRIFT_BODY_SIZE: usize = 1024 * 1024;
 
 /// State for drift tracking middleware
 #[derive(Clone)]
@@ -59,8 +63,32 @@ pub async fn drift_tracking_middleware_with_extensions(
     let method = req.method().to_string();
     let path = req.uri().path().to_string();
 
-    // Extract consumer identifier from request
+    // Extract consumer identifier and headers from request
     let consumer_id = extract_consumer_id(&req);
+
+    // Extract headers for capture
+    let captured_headers = extract_headers_for_capture(&req);
+
+    // Buffer the request body so we can capture it and still forward it
+    let (parts, body) = req.into_parts();
+    let body_bytes = match axum::body::to_bytes(body, MAX_DRIFT_BODY_SIZE).await {
+        Ok(b) => b,
+        Err(_) => {
+            // Body too large or read error — forward without capturing body
+            let rebuilt = Request::from_parts(parts, Body::empty());
+            return next.run(rebuilt).await;
+        }
+    };
+
+    // Try to parse body as JSON for structured capture
+    let captured_body = if !body_bytes.is_empty() {
+        serde_json::from_slice::<serde_json::Value>(&body_bytes).ok()
+    } else {
+        None
+    };
+
+    // Reconstruct the request with the buffered body
+    let req = Request::from_parts(parts, Body::from(body_bytes));
 
     // Process request and get response
     let response = next.run(req).await;
@@ -77,15 +105,18 @@ pub async fn drift_tracking_middleware_with_extensions(
 
     // Perform contract diff analysis if analyzer and spec are available
     if let (Some(ref analyzer), Some(ref spec)) = (&state.diff_analyzer, &state.spec) {
-        // Create captured request from the actual request
-        // Note: In a full implementation, we'd need to capture the request body
-        // For now, we'll analyze based on path and method
-        let captured = mockforge_core::ai_contract_diff::CapturedRequest::new(
+        // Create captured request with body and headers
+        let mut captured = mockforge_core::ai_contract_diff::CapturedRequest::new(
             &method,
             &path,
             "drift_tracking",
         )
+        .with_headers(captured_headers)
         .with_response(response.status().as_u16(), response_body.clone());
+
+        if let Some(body_value) = captured_body {
+            captured = captured.with_body(body_value);
+        }
 
         // Analyze request against contract
         match analyzer.analyze(&captured, spec).await {
@@ -223,6 +254,24 @@ fn extract_consumer_id(req: &Request<Body>) -> Option<String> {
     }
 
     None
+}
+
+/// Extract safe headers for drift capture
+fn extract_headers_for_capture(req: &Request<Body>) -> HashMap<String, String> {
+    let safe_headers = [
+        "accept",
+        "accept-encoding",
+        "content-type",
+        "content-length",
+        "user-agent",
+    ];
+    let mut captured = HashMap::new();
+    for name in safe_headers {
+        if let Some(value) = req.headers().get(name).and_then(|v| v.to_str().ok()) {
+            captured.insert(name.to_string(), value.to_string());
+        }
+    }
+    captured
 }
 
 /// Extract response body as JSON value

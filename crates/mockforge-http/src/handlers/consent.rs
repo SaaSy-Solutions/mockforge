@@ -5,7 +5,7 @@
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{Html, Json},
 };
 use serde::Deserialize;
@@ -26,6 +26,8 @@ pub struct ConsentRequest {
     pub state: Option<String>,
     /// Authorization code (if consent already given)
     pub code: Option<String>,
+    /// Redirect URI for the OAuth2 flow
+    pub redirect_uri: Option<String>,
 }
 
 /// Consent decision request
@@ -39,6 +41,8 @@ pub struct ConsentDecisionRequest {
     pub approved: bool,
     /// Approved scopes
     pub scopes: Vec<String>,
+    /// Redirect URI for the OAuth2 flow
+    pub redirect_uri: Option<String>,
 }
 
 /// Consent screen state
@@ -53,12 +57,44 @@ pub struct ConsentState {
 /// Get consent screen
 pub async fn get_consent_screen(
     State(state): State<ConsentState>,
+    headers: HeaderMap,
     Query(params): Query<ConsentRequest>,
 ) -> Result<Html<String>, StatusCode> {
-    // Check risk assessment
-    // For mock server, use empty risk factors (can be overridden via risk simulation API)
-    // In production, extract risk factors from request context (IP, device fingerprint, etc.)
-    let risk_factors = HashMap::new();
+    // Extract risk factors from request context
+    let mut risk_factors: HashMap<String, f64> = HashMap::new();
+
+    // IP-based risk: unknown IPs get a baseline factor
+    if let Some(ip) = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|h| h.to_str().ok())
+    {
+        // Loopback/private IPs are lower risk
+        let ip_trimmed = ip.split(',').next().unwrap_or(ip).trim();
+        let ip_risk = if ip_trimmed.starts_with("127.")
+            || ip_trimmed == "::1"
+            || ip_trimmed.starts_with("10.")
+            || ip_trimmed.starts_with("192.168.")
+        {
+            0.1
+        } else {
+            0.3
+        };
+        risk_factors.insert("ip_risk".to_string(), ip_risk);
+    }
+
+    // User-agent risk: missing or unusual user agents are higher risk
+    if let Some(ua) = headers.get("user-agent").and_then(|h| h.to_str().ok()) {
+        let ua_risk = if ua.contains("bot") || ua.contains("curl") || ua.contains("wget") {
+            0.5
+        } else {
+            0.1
+        };
+        risk_factors.insert("user_agent_risk".to_string(), ua_risk);
+    } else {
+        risk_factors.insert("user_agent_risk".to_string(), 0.6);
+    }
+
     let risk_assessment = state.risk_engine.assess_risk("user-default", &risk_factors).await;
 
     // If risk is too high, block or require additional verification
@@ -74,7 +110,12 @@ pub async fn get_consent_screen(
         .unwrap_or_else(Vec::new);
 
     // Generate consent screen HTML
-    let html = generate_consent_screen_html(&params.client_id, &scopes, params.state.as_deref());
+    let html = generate_consent_screen_html(
+        &params.client_id,
+        &scopes,
+        params.state.as_deref(),
+        params.redirect_uri.as_deref(),
+    );
     Ok(Html(html))
 }
 
@@ -96,7 +137,7 @@ pub async fn submit_consent(
 
     let code_info = crate::handlers::oauth2_server::AuthorizationCodeInfo {
         client_id: request.client_id.clone(),
-        redirect_uri: String::new(), // Will be filled when used at token endpoint
+        redirect_uri: request.redirect_uri.clone().unwrap_or_default(),
         scopes: request.scopes.clone(),
         user_id: "consent-user".to_string(),
         state: request.state.clone(),
@@ -119,7 +160,12 @@ pub async fn submit_consent(
 }
 
 /// Generate consent screen HTML
-fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Option<&str>) -> String {
+fn generate_consent_screen_html(
+    client_id: &str,
+    scopes: &[String],
+    state: Option<&str>,
+    redirect_uri: Option<&str>,
+) -> String {
     let scope_items = scopes
         .iter()
         .map(|scope| {
@@ -141,6 +187,10 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
 
     let state_param = state
         .map(|s| format!(r#"<input type="hidden" name="state" value="{}">"#, s))
+        .unwrap_or_default();
+
+    let redirect_uri_param = redirect_uri
+        .map(|u| format!(r#"<input type="hidden" name="redirect_uri" value="{}">"#, u))
         .unwrap_or_default();
 
     format!(
@@ -306,6 +356,7 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
         <form id="consent-form" method="POST" action="/consent/decision">
             <input type="hidden" name="client_id" value="{}">
             {}
+            {}
             <div class="scopes">
                 {}
             </div>
@@ -334,7 +385,7 @@ fn generate_consent_screen_html(client_id: &str, scopes: &[String], state: Optio
 </body>
 </html>
         "#,
-        client_id, client_id, state_param, scope_items
+        client_id, client_id, state_param, redirect_uri_param, scope_items
     )
 }
 

@@ -81,6 +81,8 @@ pub struct AuthorizationRequest {
     pub state: Option<String>,
     /// Nonce (for OpenID Connect)
     pub nonce: Option<String>,
+    /// Prompt parameter (OpenID Connect). When set to "consent", shows the consent screen.
+    pub prompt: Option<String>,
 }
 
 /// OAuth2 token request
@@ -134,8 +136,27 @@ pub async fn authorize(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    // Check if consent is required (simplified - in production, check user consent)
-    // For now, auto-approve and generate authorization code
+    // If prompt=consent, redirect to the consent screen instead of auto-approving
+    if params.prompt.as_deref() == Some("consent") {
+        let mut consent_url = url::Url::parse("http://localhost/consent")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        consent_url
+            .query_pairs_mut()
+            .append_pair("client_id", &params.client_id)
+            .append_pair("redirect_uri", &params.redirect_uri);
+        if let Some(ref scope) = params.scope {
+            consent_url.query_pairs_mut().append_pair("scope", scope);
+        }
+        if let Some(ref state) = params.state {
+            consent_url.query_pairs_mut().append_pair("state", state);
+        }
+        // Use only the path and query, ignoring the dummy host
+        let redirect_target =
+            format!("/consent{}", consent_url.query().map(|q| format!("?{q}")).unwrap_or_default());
+        return Ok(Redirect::to(&redirect_target));
+    }
+
+    // Auto-approve flow: generate authorization code directly (default for mock server)
 
     // Generate authorization code before any await points (ThreadRng is not Send)
     let auth_code = {

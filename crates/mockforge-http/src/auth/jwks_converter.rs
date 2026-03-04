@@ -49,7 +49,7 @@ fn read_der_tl(data: &[u8]) -> Result<(u8, usize, &[u8]), Error> {
 }
 
 /// Expect a specific tag and return (content, rest_after).
-fn expect_tag<'a>(data: &'a [u8], expected: u8) -> Result<(&'a [u8], &'a [u8]), Error> {
+fn expect_tag(data: &[u8], expected: u8) -> Result<(&[u8], &[u8]), Error> {
     let (tag, len, rest) = read_der_tl(data)?;
     if tag != expected {
         return Err(Error::generic(format!("DER: expected tag 0x{expected:02x}, got 0x{tag:02x}")));

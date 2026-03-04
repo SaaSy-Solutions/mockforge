@@ -5,6 +5,7 @@
 
 use crate::{database::RecorderDatabase, sync::DetectedChange, Result};
 use mockforge_core::{
+    ai_contract_diff::{Mismatch, MismatchSeverity, MismatchType},
     contract_drift::{DriftBudgetEngine, DriftResult},
     incidents::{IncidentManager, IncidentSeverity, IncidentType},
 };
@@ -95,28 +96,39 @@ impl SyncDriftEvaluator {
         service_name: Option<&str>,
         tags: Option<&[String]>,
     ) -> DriftResult {
-        // For sync changes, we evaluate based on the comparison result
-        // The comparison result contains information about differences
         let differences_count = change.comparison.differences.len() as u32;
 
-        // Classify differences as breaking/non-breaking using keyword heuristics on
-        // ComparisonResult descriptions. A more precise approach would convert to
-        // ContractDiffResult, but this heuristic is sufficient for drift budget evaluation.
+        // Classify each difference into breaking, potentially-breaking, or non-breaking
+        // and build corresponding Mismatch objects.
+        let mut breaking_mismatches = Vec::new();
+        let mut potentially_breaking_mismatches = Vec::new();
+        let mut non_breaking_mismatches = Vec::new();
 
-        // Check if this looks like a breaking change based on difference types
-        let breaking_changes = change
-            .comparison
-            .differences
-            .iter()
-            .filter(|diff| {
-                // Heuristic: structural changes, missing fields, type changes are breaking
-                diff.description.to_lowercase().contains("missing")
-                    || diff.description.to_lowercase().contains("type")
-                    || diff.description.to_lowercase().contains("removed")
-            })
-            .count() as u32;
+        for diff in &change.comparison.differences {
+            let desc_lower = diff.description.to_lowercase();
+            let mismatch = Self::difference_to_mismatch(diff, &change.path, &change.method);
 
-        let non_breaking_changes = differences_count.saturating_sub(breaking_changes);
+            if desc_lower.contains("removed") || desc_lower.contains("missing") {
+                // Removed or missing fields are breaking changes
+                breaking_mismatches.push(mismatch);
+            } else if desc_lower.contains("type") {
+                // Type changes are potentially breaking (may be compatible widening)
+                potentially_breaking_mismatches.push(mismatch);
+            } else if desc_lower.contains("added") {
+                // Added fields are generally non-breaking
+                non_breaking_mismatches.push(mismatch);
+            } else if desc_lower.contains("changed") || desc_lower.contains("different") {
+                // Value changes are potentially breaking
+                potentially_breaking_mismatches.push(mismatch);
+            } else {
+                // Default: non-breaking
+                non_breaking_mismatches.push(mismatch);
+            }
+        }
+
+        let breaking_changes = breaking_mismatches.len() as u32;
+        let potentially_breaking_changes = potentially_breaking_mismatches.len() as u32;
+        let non_breaking_changes = non_breaking_mismatches.len() as u32;
 
         // Get budget for this endpoint
         let budget = self.drift_engine.get_budget_for_endpoint(
@@ -129,11 +141,7 @@ impl SyncDriftEvaluator {
 
         // Check if budget is exceeded
         let budget_exceeded = if let Some(max_churn_percent) = budget.max_field_churn_percent {
-            // Use total fields from comparison as baseline. If unavailable, fall back
-            // to total differences + 1 to avoid division by zero (conservative estimate).
-            let baseline =
-                (differences_count as f64 + breaking_changes as f64 + non_breaking_changes as f64)
-                    .max(1.0);
+            let baseline = (differences_count as f64).max(1.0);
             let churn_percent = (differences_count as f64 / baseline) * 100.0;
             churn_percent > max_churn_percent || breaking_changes > budget.max_breaking_changes
         } else {
@@ -141,17 +149,14 @@ impl SyncDriftEvaluator {
                 || non_breaking_changes > budget.max_non_breaking_changes
         };
 
-        // Create a simplified DriftResult
-        // Note: In a full implementation, we'd convert ComparisonResult to ContractDiffResult
-        // and use the proper evaluation method
         DriftResult {
             budget_exceeded,
             breaking_changes,
-            potentially_breaking_changes: 0,
+            potentially_breaking_changes,
             non_breaking_changes,
-            breaking_mismatches: vec![],
-            potentially_breaking_mismatches: vec![],
-            non_breaking_mismatches: vec![],
+            breaking_mismatches,
+            potentially_breaking_mismatches,
+            non_breaking_mismatches,
             metrics: mockforge_core::contract_drift::types::DriftMetrics {
                 endpoint: change.path.clone(),
                 method: change.method.clone(),
@@ -164,6 +169,57 @@ impl SyncDriftEvaluator {
             should_create_incident: budget_exceeded || breaking_changes > 0,
             fitness_test_results: vec![],
             consumer_impact: None,
+        }
+    }
+
+    /// Convert a sync Difference into a contract Mismatch
+    fn difference_to_mismatch(
+        diff: &crate::diff::Difference,
+        path: &str,
+        method: &str,
+    ) -> Mismatch {
+        use crate::diff::DifferenceType;
+
+        let (mismatch_type, severity, expected, actual) = match &diff.difference_type {
+            DifferenceType::Removed { value, .. } => (
+                MismatchType::MissingRequiredField,
+                MismatchSeverity::High,
+                Some(value.clone()),
+                None,
+            ),
+            DifferenceType::TypeChanged {
+                original_type,
+                current_type,
+                ..
+            } => (
+                MismatchType::TypeMismatch,
+                MismatchSeverity::Medium,
+                Some(original_type.clone()),
+                Some(current_type.clone()),
+            ),
+            DifferenceType::Added { value, .. } => {
+                (MismatchType::UnexpectedField, MismatchSeverity::Low, None, Some(value.clone()))
+            }
+            DifferenceType::Changed {
+                original, current, ..
+            } => (
+                MismatchType::SchemaMismatch,
+                MismatchSeverity::Medium,
+                Some(original.clone()),
+                Some(current.clone()),
+            ),
+        };
+
+        Mismatch {
+            mismatch_type,
+            path: format!("{} {}", path, diff.path),
+            method: Some(method.to_string()),
+            expected,
+            actual,
+            description: diff.description.clone(),
+            severity,
+            confidence: 0.8,
+            context: std::collections::HashMap::new(),
         }
     }
 
