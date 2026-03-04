@@ -536,10 +536,10 @@ impl HttpBridge {
     /// Handle unary request (no streaming)
     async fn handle_unary_request(
         proxy: &MockReflectionProxy,
-        _converter: &ProtobufJsonConverter,
+        converter: &ProtobufJsonConverter,
         service_name: &str,
         method_name: &str,
-        json_request: Value,
+        _json_request: Value,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
         // Get method descriptor from the service registry
         let registry = proxy.service_registry();
@@ -564,61 +564,96 @@ impl HttpBridge {
             }
         };
 
-        // Use method for future implementation
-        let _method = method;
+        // Use the method info to look up the method descriptor via the cache
+        let method_descriptor = proxy.cache().get_method(service_name, method_name).await.map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Failed to get method descriptor: {}", e).into()
+            },
+        )?;
 
-        // For now, create a generic response since we don't have full descriptor integration
-        // In a complete implementation, this would:
-        // 1. Get input/output descriptor from proto parser
-        // 2. Convert JSON to protobuf message
-        // 3. Call the actual gRPC method via proxy
-        // 4. Convert protobuf response back to JSON
+        let output_descriptor = method_descriptor.output();
 
-        // Create a mock response for demonstration
-        let json_response = serde_json::json!({
-            "message": format!("Hello! This is a mock response from {}.{} bridge", service_name, method_name),
-            "request_data": json_request,
-            "timestamp": chrono::Utc::now().to_rfc3339()
-        });
+        // Generate a mock response using the smart generator
+        let mock_response = {
+            match proxy.smart_generator().lock() {
+                Ok(mut gen) => gen.generate_message(&output_descriptor),
+                Err(e) => {
+                    return Err(format!("Failed to acquire smart generator lock: {}", e).into());
+                }
+            }
+        };
+
+        // Convert the protobuf response to JSON
+        let json_response = converter
+            .protobuf_to_json(&output_descriptor, &mock_response)
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Failed to convert response to JSON: {}", e).into()
+            })?;
+
+        let mut metadata = HashMap::new();
+        metadata.insert("x-mockforge-bridge-mode".to_string(), "unary".to_string());
+        metadata.insert("x-mockforge-input-type".to_string(), method.input_type.clone());
+        metadata.insert("x-mockforge-output-type".to_string(), method.output_type.clone());
 
         Ok(BridgeResponse {
             success: true,
             data: Some(json_response),
             error: None,
-            metadata: HashMap::new(),
+            metadata,
         })
     }
 
-    /// Handle streaming request (returns SSE stream)
+    /// Handle streaming request (returns JSON-envelope of generated events)
     async fn handle_streaming_request(
         proxy: &MockReflectionProxy,
-        _converter: &ProtobufJsonConverter,
+        converter: &ProtobufJsonConverter,
         service_name: &str,
         method_name: &str,
-        json_request: Value,
+        _json_request: Value,
     ) -> Result<BridgeResponse<Value>, Box<dyn std::error::Error + Send + Sync>> {
-        // SSE/websocket streaming is not wired yet, but provide a deterministic
-        // JSON stream payload so HTTP clients can exercise streaming contracts.
+        // Get the method descriptor to generate schema-aware stream events
+        let method_descriptor = proxy.cache().get_method(service_name, method_name).await.map_err(
+            |e| -> Box<dyn std::error::Error + Send + Sync> {
+                format!("Failed to get method descriptor: {}", e).into()
+            },
+        )?;
+
+        let output_descriptor = method_descriptor.output();
+        let stream_count = 3;
         let mut events = Vec::new();
-        for seq in 0..3 {
+
+        for seq in 0..stream_count {
+            // Generate a unique mock response per event using the smart generator
+            let mock_msg = {
+                match proxy.smart_generator().lock() {
+                    Ok(mut gen) => gen.generate_message(&output_descriptor),
+                    Err(e) => {
+                        return Err(format!("Failed to acquire smart generator lock: {}", e).into());
+                    }
+                }
+            };
+
+            let json_data = converter.protobuf_to_json(&output_descriptor, &mock_msg).map_err(
+                |e| -> Box<dyn std::error::Error + Send + Sync> {
+                    format!("Failed to convert stream event to JSON: {}", e).into()
+                },
+            )?;
+
             events.push(serde_json::json!({
                 "sequence": seq + 1,
                 "service": service_name,
                 "method": method_name,
                 "timestamp": chrono::Utc::now().to_rfc3339(),
-                "data": {
-                    "message": format!("mock stream event {} from {}.{}", seq + 1, service_name, method_name),
-                    "request_echo": json_request.clone()
-                }
+                "data": json_data
             }));
         }
 
         let mut metadata = HashMap::new();
         metadata.insert("x-mockforge-streaming-mode".to_string(), "json-envelope".to_string());
-        metadata.insert("x-mockforge-stream-count".to_string(), "3".to_string());
+        metadata.insert("x-mockforge-stream-count".to_string(), stream_count.to_string());
         metadata.insert(
-            "x-mockforge-service-count".to_string(),
-            proxy.service_names().len().to_string(),
+            "x-mockforge-output-type".to_string(),
+            method_descriptor.output().full_name().to_string(),
         );
 
         Ok(BridgeResponse {
