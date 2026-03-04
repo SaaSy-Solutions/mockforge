@@ -83,7 +83,7 @@ async fn test_xss_attempts() {
 
     for payload in xss_payloads {
         let response = client
-            .post(&format!("{}/api/test", base_url))
+            .post(format!("{}/api/test", base_url))
             .json(&json!({"data": payload}))
             .send()
             .await;
@@ -165,7 +165,7 @@ async fn test_command_injection_attempts() {
 
     for injection in command_injections {
         let response = client
-            .post(&format!("{}/api/test", base_url))
+            .post(format!("{}/api/test", base_url))
             .json(&json!({"command": format!("test{}", injection)}))
             .send()
             .await;
@@ -206,7 +206,7 @@ async fn test_authentication_bypass_attempts() {
 
     for (header_name, header_value) in bypass_attempts {
         let response = client
-            .get(&format!("{}/api/test", base_url))
+            .get(format!("{}/api/test", base_url))
             .header(header_name, header_value)
             .send()
             .await;
@@ -248,7 +248,7 @@ async fn test_template_injection_attempts() {
 
     for injection in template_injections {
         let response = client
-            .post(&format!("{}/api/test", base_url))
+            .post(format!("{}/api/test", base_url))
             .json(&json!({"template": injection}))
             .send()
             .await;
@@ -280,7 +280,7 @@ async fn test_oversized_payload_attacks() {
     let oversized_data = "a".repeat(10_000_000); // 10MB
 
     let response = client
-        .post(&format!("{}/api/test", base_url))
+        .post(format!("{}/api/test", base_url))
         .json(&json!({"data": oversized_data}))
         .timeout(Duration::from_secs(30))
         .send()
@@ -318,7 +318,7 @@ async fn test_header_injection_attempts() {
     for (header_name, header_value) in header_injections {
         // Note: reqwest may sanitize headers, but we test what we can
         let response = client
-            .get(&format!("{}/api/test", base_url))
+            .get(format!("{}/api/test", base_url))
             .header(header_name, header_value)
             .send()
             .await;
@@ -386,7 +386,7 @@ async fn test_null_byte_injection() {
 
     for payload in null_byte_payloads {
         let response = client
-            .post(&format!("{}/api/test", base_url))
+            .post(format!("{}/api/test", base_url))
             .json(&json!({"filename": payload}))
             .send()
             .await;

@@ -63,13 +63,8 @@ pub async fn resolve_org_context(
     // Check if org_id was set by API token auth (for faster lookup)
     let api_token_org_id = request_extensions.and_then(|ext| {
         // Try to get org_id from extensions
-        ext.get::<String>().and_then(|s| {
-            if s.starts_with("org_id:") {
-                Uuid::parse_str(&s[7..]).ok()
-            } else {
-                None
-            }
-        })
+        ext.get::<String>()
+            .and_then(|s| s.strip_prefix("org_id:").and_then(|rest| Uuid::parse_str(rest).ok()))
     });
 
     // Try to get org from API token first, then header, then default

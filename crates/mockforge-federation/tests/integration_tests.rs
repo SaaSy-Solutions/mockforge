@@ -1,4 +1,4 @@
-//! Integration tests for MockOps Federation
+//! Integration tests for `MockOps` Federation
 //!
 //! Tests that verify federation routing, service boundaries, and
 //! multi-workspace composition work correctly end-to-end.
@@ -39,7 +39,7 @@ async fn test_federation_creation() {
 /// Test service path matching
 #[tokio::test]
 async fn test_service_path_matching() {
-    let mut federation = Federation {
+    let federation = Federation {
         id: Uuid::new_v4(),
         name: "test".to_string(),
         description: String::new(),
@@ -213,7 +213,7 @@ async fn test_federation_multiple_services() {
 /// Test longest path matching (most specific service wins)
 #[tokio::test]
 async fn test_longest_path_matching() {
-    let mut federation = Federation {
+    let federation = Federation {
         id: Uuid::new_v4(),
         name: "test".to_string(),
         description: String::new(),

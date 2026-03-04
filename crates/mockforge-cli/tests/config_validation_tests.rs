@@ -1,4 +1,5 @@
 //! Tests for `mockforge config validate` command with failure scenarios
+#![allow(deprecated)]
 //!
 //! This test suite ensures that config validation fails gracefully
 //! and provides helpful error messages for common configuration mistakes.

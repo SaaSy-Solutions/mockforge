@@ -31,6 +31,12 @@ pub struct PerformanceState {
     pub simulator: Arc<RwLock<Option<Arc<PerformanceSimulator>>>>,
 }
 
+impl Default for PerformanceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceState {
     /// Create new performance state
     pub fn new() -> Self {

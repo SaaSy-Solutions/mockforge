@@ -1,10 +1,6 @@
 //! Prometheus metrics for the Kubernetes operator
 
-use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec,
-    IntGauge, IntGaugeVec, Opts, Registry,
-};
-use std::sync::Arc;
+use prometheus::{GaugeVec, HistogramVec, IntCounterVec, IntGaugeVec, Opts, Registry};
 
 /// Metrics collector for the operator
 #[derive(Clone)]
@@ -197,7 +193,7 @@ mod tests {
         let metric_families = registry.gather();
         let reconciliations = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_reconciliations_total");
+            .find(|mf| mf.name() == "mockforge_operator_reconciliations_total");
 
         assert!(reconciliations.is_some());
     }
@@ -214,7 +210,7 @@ mod tests {
         let metric_families = registry.gather();
         let reconciliations = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_reconciliations_total");
+            .find(|mf| mf.name() == "mockforge_operator_reconciliations_total");
 
         assert!(reconciliations.is_some());
     }
@@ -242,7 +238,7 @@ mod tests {
         let metric_families = registry.gather();
         let errors = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_reconciliation_errors_total");
+            .find(|mf| mf.name() == "mockforge_operator_reconciliation_errors_total");
 
         assert!(errors.is_some());
     }
@@ -259,7 +255,7 @@ mod tests {
         let metric_families = registry.gather();
         let errors = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_reconciliation_errors_total");
+            .find(|mf| mf.name() == "mockforge_operator_reconciliation_errors_total");
 
         assert!(errors.is_some());
     }
@@ -274,7 +270,7 @@ mod tests {
         let metric_families = registry.gather();
         let events = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_crd_events_total");
+            .find(|mf| mf.name() == "mockforge_operator_crd_events_total");
 
         assert!(events.is_some());
     }
@@ -303,7 +299,7 @@ mod tests {
         let metric_families = registry.gather();
         let progress = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_progress");
+            .find(|mf| mf.name() == "mockforge_orchestration_progress");
 
         assert!(progress.is_some());
     }
@@ -322,7 +318,7 @@ mod tests {
         let metric_families = registry.gather();
         let progress = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_progress");
+            .find(|mf| mf.name() == "mockforge_orchestration_progress");
 
         assert!(progress.is_some());
     }
@@ -335,9 +331,7 @@ mod tests {
         metrics.update_orchestration_step("default", "test-orchestration", 3);
 
         let metric_families = registry.gather();
-        let step = metric_families
-            .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_step");
+        let step = metric_families.iter().find(|mf| mf.name() == "mockforge_orchestration_step");
 
         assert!(step.is_some());
     }
@@ -365,7 +359,7 @@ mod tests {
         let metric_families = registry.gather();
         let failed_steps = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_failed_steps_total");
+            .find(|mf| mf.name() == "mockforge_orchestration_failed_steps_total");
 
         assert!(failed_steps.is_some());
     }
@@ -382,7 +376,7 @@ mod tests {
         let metric_families = registry.gather();
         let failed_steps = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_failed_steps_total");
+            .find(|mf| mf.name() == "mockforge_orchestration_failed_steps_total");
 
         assert!(failed_steps.is_some());
     }
@@ -444,7 +438,7 @@ mod tests {
         ];
 
         for expected in expected_metrics {
-            let found = metric_families.iter().any(|mf| mf.get_name() == expected);
+            let found = metric_families.iter().any(|mf| mf.name() == expected);
             assert!(found, "Metric {} should be registered", expected);
         }
     }
@@ -463,7 +457,7 @@ mod tests {
         let metric_families = registry.gather();
         let duration = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_reconciliation_duration_seconds");
+            .find(|mf| mf.name() == "mockforge_operator_reconciliation_duration_seconds");
 
         assert!(duration.is_some());
     }
@@ -482,7 +476,7 @@ mod tests {
         let metric_families = registry.gather();
         let duration = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_orchestration_duration_seconds");
+            .find(|mf| mf.name() == "mockforge_orchestration_duration_seconds");
 
         assert!(duration.is_some());
     }
@@ -498,7 +492,7 @@ mod tests {
         let metric_families = registry.gather();
         let active = metric_families
             .iter()
-            .find(|mf| mf.get_name() == "mockforge_operator_active_orchestrations");
+            .find(|mf| mf.name() == "mockforge_operator_active_orchestrations");
 
         assert!(active.is_some());
     }
@@ -607,7 +601,7 @@ mod tests {
 
         // Verify metrics have help text
         for mf in metric_families {
-            assert!(!mf.get_help().is_empty(), "Metric {} should have help text", mf.get_name());
+            assert!(!mf.help().is_empty(), "Metric {} should have help text", mf.name());
         }
     }
 

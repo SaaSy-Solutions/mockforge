@@ -84,7 +84,7 @@ impl<'a> PermissionChecker<'a> {
     async fn resolve_role(&self, user_id: Uuid, org_id: Uuid) -> Result<Option<OrgRole>, ApiError> {
         let member = OrgMember::find(self.state.db.pool(), org_id, user_id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         Ok(member.map(|m| m.role()))
     }

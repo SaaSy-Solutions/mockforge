@@ -55,7 +55,7 @@ async fn test_core_protocol_routing() {
     // Register routes through Core
     for route in routes {
         let response = client
-            .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+            .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
             .json(&route)
             .send()
             .await
@@ -69,7 +69,7 @@ async fn test_core_protocol_routing() {
 
     // Verify routes are accessible through Protocol layer
     let users_response = client
-        .get(&format!("http://localhost:{}/api/users", http_port))
+        .get(format!("http://localhost:{}/api/users", http_port))
         .send()
         .await
         .expect("Failed to call users endpoint");
@@ -77,7 +77,7 @@ async fn test_core_protocol_routing() {
     assert!(users_response.status().is_success() || users_response.status().as_u16() == 404);
 
     let posts_response = client
-        .get(&format!("http://localhost:{}/api/posts", http_port))
+        .get(format!("http://localhost:{}/api/posts", http_port))
         .send()
         .await
         .expect("Failed to call posts endpoint");
@@ -112,7 +112,7 @@ async fn test_data_protocol_generation() {
 
     // Create route with data generation tokens
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/generated",
             "method": "GET",
@@ -134,7 +134,7 @@ async fn test_data_protocol_generation() {
 
     // Make request and verify Data layer generates values
     let response = client
-        .get(&format!("http://localhost:{}/api/generated", http_port))
+        .get(format!("http://localhost:{}/api/generated", http_port))
         .send()
         .await
         .expect("Failed to make request");
@@ -170,13 +170,13 @@ async fn test_data_protocol_fixtures() {
         }
     };
 
-    let http_port = server.http_port();
+    let _http_port = server.http_port();
     let admin_port = 9080;
     let client = Client::new();
 
     // Create route that uses fixture
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/fixture-test",
             "method": "GET",
@@ -226,7 +226,7 @@ async fn test_plugin_protocol_handlers() {
 
     // Test plugin API endpoints (Plugin → Protocol integration)
     let plugins_response = client
-        .get(&format!("http://localhost:{}/__mockforge/plugins", admin_port))
+        .get(format!("http://localhost:{}/__mockforge/plugins", admin_port))
         .send()
         .await;
 
@@ -260,13 +260,13 @@ async fn test_plugin_protocol_transformations() {
         }
     };
 
-    let http_port = server.http_port();
+    let _http_port = server.http_port();
     let admin_port = 9080;
     let client = Client::new();
 
     // Create route that might use plugin transformation
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/transform",
             "method": "POST",
@@ -318,7 +318,7 @@ async fn test_core_data_protocol_integration() {
 
     // Create route that uses Core routing, Data generation, and Protocol handling
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/integrated",
             "method": "GET",
@@ -342,7 +342,7 @@ async fn test_core_data_protocol_integration() {
 
     // Verify full stack integration
     let response = client
-        .get(&format!("http://localhost:{}/api/integrated", http_port))
+        .get(format!("http://localhost:{}/api/integrated", http_port))
         .send()
         .await
         .expect("Failed to make request");

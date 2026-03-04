@@ -8015,6 +8015,7 @@ dependencies = [
  "mockforge-chaos",
  "mockforge-core",
  "mockforge-data",
+ "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
  "mockforge-performance",

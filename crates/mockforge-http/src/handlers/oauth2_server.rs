@@ -139,8 +139,8 @@ pub async fn authorize(
 
     // Generate authorization code before any await points (ThreadRng is not Send)
     let auth_code = {
-        let mut rng = rand::thread_rng();
-        let code_bytes: [u8; 32] = rng.gen();
+        let mut rng = rand::rng();
+        let code_bytes: [u8; 32] = rng.random();
         hex::encode(code_bytes)
     };
 

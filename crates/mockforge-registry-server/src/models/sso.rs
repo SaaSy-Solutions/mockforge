@@ -15,14 +15,16 @@ pub enum SSOProvider {
     Oidc,
 }
 
-impl SSOProvider {
-    pub fn to_string(&self) -> &'static str {
+impl std::fmt::Display for SSOProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SSOProvider::Saml => "saml",
-            SSOProvider::Oidc => "oidc",
+            SSOProvider::Saml => write!(f, "saml"),
+            SSOProvider::Oidc => write!(f, "oidc"),
         }
     }
+}
 
+impl SSOProvider {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "saml" => Some(SSOProvider::Saml),
@@ -91,6 +93,7 @@ impl SSOConfiguration {
     }
 
     /// Create or update SSO configuration
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert(
         pool: &sqlx::PgPool,
         org_id: Uuid,

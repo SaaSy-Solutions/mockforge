@@ -150,9 +150,8 @@ pub async fn list_forecasts(
         bind_index += 1;
     }
 
-    if let Some(window) = params.window_days {
+    if let Some(_window) = params.window_days {
         query.push_str(&format!(" AND forecast_window_days = ${}", bind_index));
-        bind_index += 1;
     }
 
     query.push_str(" ORDER BY predicted_at DESC LIMIT 100");
@@ -385,7 +384,7 @@ pub async fn refresh_forecasts(
          FROM drift_incidents WHERE 1=1",
     );
 
-    if let Some(ws_id) = &request.workspace_id {
+    if let Some(_ws_id) = &request.workspace_id {
         incident_query.push_str(" AND workspace_id = $1");
     }
 
@@ -496,7 +495,7 @@ pub async fn refresh_forecasts(
     for incident in incidents {
         endpoint_groups
             .entry((incident.endpoint.clone(), incident.method.clone()))
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(incident);
     }
 

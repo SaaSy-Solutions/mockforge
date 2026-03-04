@@ -165,24 +165,23 @@ pub async fn list_semantic_incidents(
 
         let mut bind_index = 1;
 
-        if let Some(ws_id) = &params.workspace_id {
+        if let Some(_ws_id) = &params.workspace_id {
             query.push_str(&format!(" AND workspace_id = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(ep) = &params.endpoint {
+        if let Some(_ep) = &params.endpoint {
             query.push_str(&format!(" AND endpoint = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(m) = &params.method {
+        if let Some(_m) = &params.method {
             query.push_str(&format!(" AND method = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(status_str) = &params.status {
+        if let Some(_status_str) = &params.status {
             query.push_str(&format!(" AND status = ${}", bind_index));
-            bind_index += 1;
         }
 
         let limit = params.limit.unwrap_or(100);

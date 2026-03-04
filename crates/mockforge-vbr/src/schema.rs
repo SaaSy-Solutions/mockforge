@@ -90,7 +90,7 @@ impl ManyToManyDefinition {
     /// Create a new many-to-many relationship definition
     pub fn new(entity_a: String, entity_b: String) -> Self {
         // Auto-generate junction table name (alphabetically sorted)
-        let (field_a, field_b) = if entity_a.to_lowercase() < entity_b.to_lowercase() {
+        let (_field_a, _field_b) = if entity_a.to_lowercase() < entity_b.to_lowercase() {
             (
                 format!("{}_id", entity_a.to_lowercase()),
                 format!("{}_id", entity_b.to_lowercase()),
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn test_cascade_action_clone() {
         let action = CascadeAction::Cascade;
-        let cloned = action.clone();
+        let cloned = action;
         assert_eq!(action, cloned);
     }
 

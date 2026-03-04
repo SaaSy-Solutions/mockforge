@@ -28,7 +28,7 @@ impl DeploymentOrchestrator {
         flyio_token: Option<String>,
         flyio_org_slug: Option<String>,
     ) -> Self {
-        let flyio_client = flyio_token.map(|token| FlyioClient::new(token));
+        let flyio_client = flyio_token.map(FlyioClient::new);
 
         Self {
             db,

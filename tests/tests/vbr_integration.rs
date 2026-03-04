@@ -259,7 +259,7 @@ async fn test_user_crud_operations() {
     });
 
     let response = client
-        .post(&format!("{}/api/User", base_url))
+        .post(format!("{}/api/User", base_url))
         .json(&user_data)
         .send()
         .await
@@ -272,7 +272,7 @@ async fn test_user_crud_operations() {
 
     // Test GET by ID
     let response = client
-        .get(&format!("{}/api/User/user1", base_url))
+        .get(format!("{}/api/User/user1", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -284,7 +284,7 @@ async fn test_user_crud_operations() {
 
     // Test LIST (GET all)
     let response = client
-        .get(&format!("{}/api/User", base_url))
+        .get(format!("{}/api/User", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -302,7 +302,7 @@ async fn test_user_crud_operations() {
     });
 
     let response = client
-        .put(&format!("{}/api/User/user1", base_url))
+        .put(format!("{}/api/User/user1", base_url))
         .json(&updated_data)
         .send()
         .await
@@ -314,7 +314,7 @@ async fn test_user_crud_operations() {
 
     // Verify update persisted
     let response = client
-        .get(&format!("{}/api/User/user1", base_url))
+        .get(format!("{}/api/User/user1", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -328,7 +328,7 @@ async fn test_user_crud_operations() {
     });
 
     let response = client
-        .patch(&format!("{}/api/User/user1", base_url))
+        .patch(format!("{}/api/User/user1", base_url))
         .json(&patch_data)
         .send()
         .await
@@ -340,7 +340,7 @@ async fn test_user_crud_operations() {
 
     // Test DELETE
     let response = client
-        .delete(&format!("{}/api/User/user1", base_url))
+        .delete(format!("{}/api/User/user1", base_url))
         .send()
         .await
         .expect("Failed to send DELETE request");
@@ -349,7 +349,7 @@ async fn test_user_crud_operations() {
 
     // Verify deletion
     let response = client
-        .get(&format!("{}/api/User/user1", base_url))
+        .get(format!("{}/api/User/user1", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -396,7 +396,7 @@ async fn test_relationship_endpoints() {
     });
 
     let response = client
-        .post(&format!("{}/api/User", base_url))
+        .post(format!("{}/api/User", base_url))
         .json(&user_data)
         .send()
         .await
@@ -420,7 +420,7 @@ async fn test_relationship_endpoints() {
     });
 
     let response = client
-        .post(&format!("{}/api/Order", base_url))
+        .post(format!("{}/api/Order", base_url))
         .json(&order1_data)
         .send()
         .await
@@ -429,7 +429,7 @@ async fn test_relationship_endpoints() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     let response = client
-        .post(&format!("{}/api/Order", base_url))
+        .post(format!("{}/api/Order", base_url))
         .json(&order2_data)
         .send()
         .await
@@ -440,7 +440,7 @@ async fn test_relationship_endpoints() {
     // Test forward relationship: GET /api/User/user1/Order
     // This should return all orders for user1
     let response = client
-        .get(&format!("{}/api/User/user1/Order", base_url))
+        .get(format!("{}/api/User/user1/Order", base_url))
         .send()
         .await
         .expect("Failed to get user orders");
@@ -455,7 +455,7 @@ async fn test_relationship_endpoints() {
     // Test reverse relationship: GET /api/Order/order1/User
     // This should return the user for order1
     let response = client
-        .get(&format!("{}/api/Order/order1/User", base_url))
+        .get(format!("{}/api/Order/order1/User", base_url))
         .send()
         .await
         .expect("Failed to get order user");
@@ -505,18 +505,18 @@ async fn test_pagination_and_filtering() {
         });
 
         let response = client
-            .post(&format!("{}/api/User", base_url))
+            .post(format!("{}/api/User", base_url))
             .json(&user_data)
             .send()
             .await
-            .expect(&format!("Failed to create user{}", i));
+            .unwrap_or_else(|_| panic!("Failed to create user{}", i));
 
         assert_eq!(response.status(), StatusCode::CREATED);
     }
 
     // Test pagination: limit=2
     let response = client
-        .get(&format!("{}/api/User?limit=2", base_url))
+        .get(format!("{}/api/User?limit=2", base_url))
         .send()
         .await
         .expect("Failed to get paginated users");
@@ -528,7 +528,7 @@ async fn test_pagination_and_filtering() {
 
     // Test pagination with offset
     let response = client
-        .get(&format!("{}/api/User?limit=2&offset=2", base_url))
+        .get(format!("{}/api/User?limit=2&offset=2", base_url))
         .send()
         .await
         .expect("Failed to get paginated users with offset");
@@ -570,7 +570,7 @@ async fn test_error_handling() {
 
     // Test GET non-existent entity
     let response = client
-        .get(&format!("{}/api/User/nonexistent", base_url))
+        .get(format!("{}/api/User/nonexistent", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -579,7 +579,7 @@ async fn test_error_handling() {
 
     // Test GET non-existent entity type
     let response = client
-        .get(&format!("{}/api/NonExistentEntity", base_url))
+        .get(format!("{}/api/NonExistentEntity", base_url))
         .send()
         .await
         .expect("Failed to send GET request");
@@ -588,7 +588,7 @@ async fn test_error_handling() {
 
     // Test DELETE non-existent entity
     let response = client
-        .delete(&format!("{}/api/User/nonexistent", base_url))
+        .delete(format!("{}/api/User/nonexistent", base_url))
         .send()
         .await
         .expect("Failed to send DELETE request");

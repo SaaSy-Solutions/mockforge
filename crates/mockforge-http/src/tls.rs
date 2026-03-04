@@ -112,10 +112,8 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     config.key_file, e
                 ))
             })?;
-    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys
-        .into_iter()
-        .map(|k| rustls::pki_types::PrivateKeyDer::Pkcs8(k))
-        .collect();
+    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> =
+        pkcs8_keys.into_iter().map(rustls::pki_types::PrivateKeyDer::Pkcs8).collect();
 
     if keys.is_empty() {
         return Err(mockforge_core::Error::generic(format!(
@@ -184,7 +182,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
 
                 // Build with mTLS support (required)
                 tls_config_builder(tls13_only)
-                    .with_client_cert_verifier(client_verifier.into())
+                    .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
                         mockforge_core::Error::generic(format!(
@@ -247,7 +245,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 // but connections without certs will also work (we can't enforce optional-only)
                 // For true optional mTLS, we'd need custom verifier logic
                 tls_config_builder(tls13_only)
-                    .with_client_cert_verifier(client_verifier.into())
+                    .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
                         mockforge_core::Error::generic(format!(
@@ -332,10 +330,8 @@ pub fn load_tls_server_config(
         pkcs8_private_keys(&mut key_reader)
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to parse private key file {}: {}", config.key_file, e))?;
-    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> = pkcs8_keys
-        .into_iter()
-        .map(|k| rustls::pki_types::PrivateKeyDer::Pkcs8(k))
-        .collect();
+    let mut keys: Vec<rustls::pki_types::PrivateKeyDer<'static>> =
+        pkcs8_keys.into_iter().map(rustls::pki_types::PrivateKeyDer::Pkcs8).collect();
 
     if keys.is_empty() {
         return Err(format!("No private keys found in {}", config.key_file).into());
@@ -380,7 +376,7 @@ pub fn load_tls_server_config(
                 let key = keys.remove(0);
 
                 tls_config_builder(tls13_only)
-                    .with_client_cert_verifier(client_verifier.into())
+                    .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| format!("TLS config error (mTLS required): {}", e))?
             } else {
@@ -413,7 +409,7 @@ pub fn load_tls_server_config(
                 let key = keys.remove(0);
 
                 tls_config_builder(tls13_only)
-                    .with_client_cert_verifier(client_verifier.into())
+                    .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| format!("TLS config error (mTLS optional): {}", e))?
             } else {

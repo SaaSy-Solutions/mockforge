@@ -227,8 +227,8 @@ mod tests {
         let port3 = find_available_port(33000).expect("Failed to find port 3");
 
         // Ports should be in their respective ranges
-        assert!(port1 >= 31000 && port1 < 31100);
-        assert!(port2 >= 32000 && port2 < 32100);
-        assert!(port3 >= 33000 && port3 < 33100);
+        assert!((31000..31100).contains(&port1));
+        assert!((32000..32100).contains(&port2));
+        assert!((33000..33100).contains(&port3));
     }
 }

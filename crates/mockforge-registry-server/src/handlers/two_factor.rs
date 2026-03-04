@@ -57,7 +57,7 @@ pub async fn setup_2fa(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -129,7 +129,7 @@ pub async fn verify_2fa_setup(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -189,7 +189,7 @@ pub async fn verify_2fa_setup(
     // Enable 2FA in database
     User::enable_2fa(pool, user_id, &secret, &hashed_backup_codes)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Clean up Redis keys
     let _ = redis.delete(&secret_key).await;
@@ -231,7 +231,7 @@ pub async fn verify_2fa_setup_with_secret(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -262,7 +262,7 @@ pub async fn verify_2fa_setup_with_secret(
     // Enable 2FA
     User::enable_2fa(pool, user_id, &request.secret, &hashed_backup_codes)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit log
     // Use a sentinel UUID for user-level actions (no org)
@@ -306,13 +306,13 @@ pub async fn disable_2fa(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Verify password
     use crate::auth::verify_password;
-    let valid = verify_password(&request.password, &user.password_hash)
-        .map_err(|e| ApiError::Internal(e))?;
+    let valid =
+        verify_password(&request.password, &user.password_hash).map_err(ApiError::Internal)?;
 
     if !valid {
         return Err(ApiError::InvalidRequest("Invalid password".to_string()));
@@ -324,7 +324,7 @@ pub async fn disable_2fa(
     }
 
     // Disable 2FA
-    User::disable_2fa(pool, user_id).await.map_err(|e| ApiError::Database(e))?;
+    User::disable_2fa(pool, user_id).await.map_err(ApiError::Database)?;
 
     // Record audit log
     // Use a sentinel UUID for user-level actions (no org)
@@ -357,7 +357,7 @@ pub async fn get_2fa_status(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     Ok(Json(serde_json::json!({

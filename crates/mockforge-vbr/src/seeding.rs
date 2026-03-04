@@ -185,7 +185,7 @@ fn validate_foreign_keys(
                 ))
             })?;
 
-            let target_table = target_entity.table_name();
+            let _target_table = target_entity.table_name();
 
             // For now, we'll validate during insertion (database will enforce)
             // This is a placeholder for more sophisticated validation

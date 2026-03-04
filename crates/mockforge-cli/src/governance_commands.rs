@@ -77,7 +77,6 @@ async fn query_drift_incidents(
 
     if let Some(_m) = method {
         query.push_str(&format!(" AND method = ${}", bind_index));
-        bind_index += 1;
     }
 
     query.push_str(" ORDER BY detected_at DESC");
@@ -471,11 +470,10 @@ async fn query_semantic_incidents(
          WHERE detected_at >= $1",
     );
 
-    let mut bind_index = 2;
+    let bind_index = 2;
 
-    if let Some(ws_id) = workspace_id {
+    if let Some(_ws_id) = workspace_id {
         query.push_str(&format!(" AND workspace_id = ${}", bind_index));
-        bind_index += 1;
     }
 
     query.push_str(" ORDER BY detected_at DESC LIMIT 100");
@@ -627,7 +625,6 @@ async fn query_threat_assessments(
 
     if let Some(svc_id) = service_id {
         query.push_str(&format!(" AND service_id = ${}", bind_index));
-        bind_index += 1;
         string_params.push(Some(svc_id.to_string()));
     }
 
@@ -900,7 +897,9 @@ mod tests {
     fn test_connect_database_returns_none_without_env() {
         // Without DATABASE_URL set, connect_database should return None
         // We verify the function exists and compiles with the expected return type
-        let _: fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<PgPool>> + Send>> =
-            || Box::pin(connect_database());
+        #[allow(clippy::type_complexity)]
+        let _: fn() -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Option<PgPool>> + Send>,
+        > = || Box::pin(connect_database());
     }
 }

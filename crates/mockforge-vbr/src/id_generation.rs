@@ -116,10 +116,10 @@ fn generate_realistic_id(prefix: &str, length: usize) -> Result<String> {
 /// Uses lowercase letters and numbers (base36-like, but with lowercase)
 fn generate_random_string(length: usize) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     (0..length)
         .map(|_| {
-            let idx = rng.gen_range(0..CHARS.len());
+            let idx = rng.random_range(0..CHARS.len());
             CHARS[idx] as char
         })
         .collect()

@@ -143,12 +143,10 @@ impl Reconciler {
             if let Some(orch_status) = orch.get_status() {
                 let phase = if orch_status.is_running {
                     OrchestrationPhase::Running
+                } else if orch_status.failed_steps.is_empty() {
+                    OrchestrationPhase::Completed
                 } else {
-                    if orch_status.failed_steps.is_empty() {
-                        OrchestrationPhase::Completed
-                    } else {
-                        OrchestrationPhase::Failed
-                    }
+                    OrchestrationPhase::Failed
                 };
 
                 let status = ChaosOrchestrationStatus {
@@ -422,8 +420,10 @@ mod tests {
 
     #[test]
     fn test_orchestration_with_elapsed_scheduled_time() {
-        let mut status = ChaosOrchestrationStatus::default();
-        status.last_scheduled_time = Some(chrono::Utc::now() - chrono::Duration::hours(2));
+        let status = ChaosOrchestrationStatus {
+            last_scheduled_time: Some(chrono::Utc::now() - chrono::Duration::hours(2)),
+            ..Default::default()
+        };
 
         let orchestration = ChaosOrchestration {
             metadata: kube::core::ObjectMeta {
@@ -559,11 +559,13 @@ mod tests {
 
     #[test]
     fn test_orchestration_status_update() {
-        let mut status = ChaosOrchestrationStatus::default();
-        status.phase = Some(OrchestrationPhase::Running);
-        status.current_step = 2;
-        status.total_steps = 5;
-        status.progress = 0.4;
+        let status = ChaosOrchestrationStatus {
+            phase: Some(OrchestrationPhase::Running),
+            current_step: 2,
+            total_steps: 5,
+            progress: 0.4,
+            ..Default::default()
+        };
 
         assert_eq!(status.phase, Some(OrchestrationPhase::Running));
         assert_eq!(status.current_step, 2);
@@ -584,9 +586,11 @@ mod tests {
 
     #[test]
     fn test_orchestration_status_with_failed_steps() {
-        let mut status = ChaosOrchestrationStatus::default();
-        status.phase = Some(OrchestrationPhase::Failed);
-        status.failed_steps = vec!["step1".to_string(), "step3".to_string()];
+        let status = ChaosOrchestrationStatus {
+            phase: Some(OrchestrationPhase::Failed),
+            failed_steps: vec!["step1".to_string(), "step3".to_string()],
+            ..Default::default()
+        };
 
         assert_eq!(status.phase, Some(OrchestrationPhase::Failed));
         assert_eq!(status.failed_steps.len(), 2);
@@ -595,12 +599,14 @@ mod tests {
 
     #[test]
     fn test_orchestration_status_completed() {
-        let mut status = ChaosOrchestrationStatus::default();
-        status.phase = Some(OrchestrationPhase::Completed);
-        status.progress = 1.0;
-        status.current_step = 5;
-        status.total_steps = 5;
-        status.end_time = Some(chrono::Utc::now());
+        let status = ChaosOrchestrationStatus {
+            phase: Some(OrchestrationPhase::Completed),
+            progress: 1.0,
+            current_step: 5,
+            total_steps: 5,
+            end_time: Some(chrono::Utc::now()),
+            ..Default::default()
+        };
 
         assert_eq!(status.phase, Some(OrchestrationPhase::Completed));
         assert_eq!(status.progress, 1.0);
@@ -650,8 +656,10 @@ mod tests {
 
     #[test]
     fn test_chaos_orchestration_with_status() {
-        let mut status = ChaosOrchestrationStatus::default();
-        status.phase = Some(OrchestrationPhase::Running);
+        let status = ChaosOrchestrationStatus {
+            phase: Some(OrchestrationPhase::Running),
+            ..Default::default()
+        };
 
         let orchestration = ChaosOrchestration {
             metadata: kube::core::ObjectMeta {
@@ -693,7 +701,7 @@ mod tests {
     #[test]
     fn test_parameter_extraction_missing() {
         let params: HashMap<String, serde_json::Value> = HashMap::new();
-        assert!(params.get("latency_ms").is_none());
+        assert!(!params.contains_key("latency_ms"));
     }
 
     #[test]
@@ -733,7 +741,7 @@ mod tests {
     #[test]
     fn test_orchestration_phase_transitions() {
         // Test valid phase transitions
-        let phases = vec![
+        let phases = [
             OrchestrationPhase::Pending,
             OrchestrationPhase::Running,
             OrchestrationPhase::Completed,
@@ -748,7 +756,7 @@ mod tests {
     #[test]
     fn test_orchestration_phase_failed_transition() {
         // Test failure path
-        let phases = vec![
+        let phases = [
             OrchestrationPhase::Pending,
             OrchestrationPhase::Running,
             OrchestrationPhase::Failed,

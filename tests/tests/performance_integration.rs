@@ -272,13 +272,10 @@ async fn test_memory_usage_under_load() {
         // Wait for batch to complete
         let mut batch_success = 0;
         for handle in handles {
-            match handle.await {
-                Ok(Ok(resp)) => {
-                    if resp.status().is_success() {
-                        batch_success += 1;
-                    }
+            if let Ok(Ok(resp)) = handle.await {
+                if resp.status().is_success() {
+                    batch_success += 1;
                 }
-                _ => {}
             }
         }
 
@@ -412,7 +409,7 @@ async fn test_concurrent_mixed_endpoints() {
     let client = Client::new();
 
     // Mix of different endpoints
-    let endpoints = vec![
+    let endpoints = [
         "/health",
         "/__mockforge/health", // Admin health if available
     ];

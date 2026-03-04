@@ -21,40 +21,56 @@ mod amqp_commands;
 mod backend_generator;
 mod blueprint_commands;
 mod client_generator;
+#[allow(dead_code)]
 mod cloud_commands;
+#[allow(dead_code)]
 mod config_commands;
+#[allow(dead_code)]
 mod contract_diff_commands;
+#[allow(dead_code)]
 mod contract_sync_commands;
 mod deploy_commands;
+#[allow(dead_code, unexpected_cfgs)]
 mod dev_setup_commands;
+#[allow(dead_code)]
 mod error_helpers;
 mod fixture_validation;
 mod flow_commands;
 #[cfg(feature = "ftp")]
 mod ftp_commands;
 mod git_watch_commands;
+#[allow(dead_code)]
 mod governance_commands;
 mod import_commands;
+#[allow(dead_code)]
 mod import_utils;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
+#[allow(dead_code)]
 mod logs_commands;
 mod mockai_commands;
 mod mod_commands;
 #[cfg(feature = "mqtt")]
 mod mqtt_commands;
 mod plugin_commands;
+#[allow(dead_code)]
 mod progress;
+#[allow(dead_code)]
 mod recorder_commands;
 mod scenario_commands;
 #[cfg(feature = "smtp")]
+#[allow(dead_code)]
 mod smtp_commands;
 mod snapshot_commands;
+#[allow(dead_code)]
 mod template_commands;
+#[allow(dead_code)]
 mod time_commands;
 mod tunnel_commands;
 mod vbr_commands;
+#[allow(dead_code)]
 mod voice_commands;
+#[allow(dead_code)]
 mod wizard;
 mod workspace_commands;
 
@@ -3346,6 +3362,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 /// Arguments for building server configuration
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ServeArgs {
     config_path: Option<PathBuf>,
     profile: Option<String>,
@@ -4822,112 +4839,100 @@ pub async fn handle_serve(
                 Some(temp_path.to_string_lossy().to_string())
             } else if merged_specs.is_empty() {
                 config.http.openapi_spec.clone()
-            } else {
-                if serve_args.api_versioning == "path-prefix" {
-                    let mut prefixed_specs: Vec<(
-                        PathBuf,
-                        mockforge_core::openapi::spec::OpenApiSpec,
-                    )> = Vec::new();
+            } else if serve_args.api_versioning == "path-prefix" {
+                let mut prefixed_specs: Vec<(PathBuf, mockforge_core::openapi::spec::OpenApiSpec)> =
+                    Vec::new();
 
-                    for (api_version, spec) in merged_specs {
-                        let version_suffix = api_version.trim().trim_start_matches('v');
-                        let prefix = format!("/v{}", version_suffix);
-                        let mut spec_json = spec.raw_document.clone().ok_or_else(|| {
-                            format!("Merged spec for version '{}' has no raw document", api_version)
+                for (api_version, spec) in merged_specs {
+                    let version_suffix = api_version.trim().trim_start_matches('v');
+                    let prefix = format!("/v{}", version_suffix);
+                    let mut spec_json = spec.raw_document.clone().ok_or_else(|| {
+                        format!("Merged spec for version '{}' has no raw document", api_version)
+                    })?;
+
+                    if let Some(paths_obj) =
+                        spec_json.get_mut("paths").and_then(|p| p.as_object_mut())
+                    {
+                        let old_paths = std::mem::take(paths_obj);
+                        let mut new_paths = serde_json::Map::new();
+                        for (path, value) in old_paths {
+                            let normalized_path = if path.starts_with('/') {
+                                path
+                            } else {
+                                format!("/{}", path)
+                            };
+                            new_paths.insert(format!("{}{}", prefix, normalized_path), value);
+                        }
+                        *paths_obj = new_paths;
+                    }
+
+                    let prefixed_spec = mockforge_core::openapi::spec::OpenApiSpec::from_json(
+                        spec_json,
+                    )
+                    .map_err(|e| {
+                        format!(
+                            "Failed to build prefixed spec for API version '{}': {}",
+                            api_version, e
+                        )
+                    })?;
+
+                    prefixed_specs
+                        .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
+                }
+
+                match merge_specs(prefixed_specs, conflict_strategy) {
+                    Ok(final_merged) => {
+                        let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
+                            "Final merged prefixed spec has no raw document".to_string()
+                        })?;
+                        let merged_json = serde_json::to_string_pretty(raw_doc).map_err(|e| {
+                            format!("Failed to serialize prefixed merged spec: {}", e)
                         })?;
 
-                        if let Some(paths_obj) =
-                            spec_json.get_mut("paths").and_then(|p| p.as_object_mut())
-                        {
-                            let old_paths = std::mem::take(paths_obj);
-                            let mut new_paths = serde_json::Map::new();
-                            for (path, value) in old_paths {
-                                let normalized_path = if path.starts_with('/') {
-                                    path
-                                } else {
-                                    format!("/{}", path)
-                                };
-                                new_paths.insert(format!("{}{}", prefix, normalized_path), value);
-                            }
-                            *paths_obj = new_paths;
-                        }
+                        let temp_dir = std::env::temp_dir();
+                        let temp_path = temp_dir.join(format!(
+                            "mockforge_merged_prefixed_spec_{}.json",
+                            uuid::Uuid::new_v4()
+                        ));
+                        std::fs::write(&temp_path, merged_json.as_bytes())
+                            .map_err(|e| format!("Failed to write prefixed merged spec: {}", e))?;
 
-                        let prefixed_spec =
-                            mockforge_core::openapi::spec::OpenApiSpec::from_json(spec_json)
-                                .map_err(|e| {
-                                    format!(
-                                        "Failed to build prefixed spec for API version '{}': {}",
-                                        api_version, e
-                                    )
-                                })?;
-
-                        prefixed_specs
-                            .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
+                        Some(temp_path.to_string_lossy().to_string())
                     }
-
-                    match merge_specs(prefixed_specs, conflict_strategy) {
-                        Ok(final_merged) => {
-                            let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
-                                "Final merged prefixed spec has no raw document".to_string()
-                            })?;
-                            let merged_json =
-                                serde_json::to_string_pretty(raw_doc).map_err(|e| {
-                                    format!("Failed to serialize prefixed merged spec: {}", e)
-                                })?;
-
-                            let temp_dir = std::env::temp_dir();
-                            let temp_path = temp_dir.join(format!(
-                                "mockforge_merged_prefixed_spec_{}.json",
-                                uuid::Uuid::new_v4()
-                            ));
-                            std::fs::write(&temp_path, merged_json.as_bytes()).map_err(|e| {
-                                format!("Failed to write prefixed merged spec: {}", e)
-                            })?;
-
-                            Some(temp_path.to_string_lossy().to_string())
-                        }
-                        Err(e) => {
-                            return Err(format!(
-                                "Failed to merge path-prefixed API version specs: {}",
-                                e
-                            )
-                            .into());
-                        }
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to merge path-prefixed API version specs: {}",
+                            e
+                        )
+                        .into());
                     }
-                } else {
-                    // Multiple merged specs - for now, merge them all
-                    let all_specs: Vec<_> = merged_specs
-                        .into_iter()
-                        .map(|(_, s)| (PathBuf::from("merged"), s))
-                        .collect();
-                    match merge_specs(all_specs, conflict_strategy) {
-                        Ok(final_merged) => {
-                            let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
-                                "Final merged spec has no raw document".to_string()
-                            })?;
-                            let merged_json =
-                                serde_json::to_string_pretty(raw_doc).map_err(|e| {
-                                    format!("Failed to serialize final merged spec: {}", e)
-                                })?;
+                }
+            } else {
+                // Multiple merged specs - for now, merge them all
+                let all_specs: Vec<_> =
+                    merged_specs.into_iter().map(|(_, s)| (PathBuf::from("merged"), s)).collect();
+                match merge_specs(all_specs, conflict_strategy) {
+                    Ok(final_merged) => {
+                        let raw_doc = final_merged
+                            .raw_document
+                            .as_ref()
+                            .ok_or_else(|| "Final merged spec has no raw document".to_string())?;
+                        let merged_json = serde_json::to_string_pretty(raw_doc)
+                            .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
 
-                            // Use persistent temp file (won't be deleted automatically)
-                            let temp_dir = std::env::temp_dir();
-                            let temp_path = temp_dir.join(format!(
-                                "mockforge_merged_spec_{}.json",
-                                uuid::Uuid::new_v4()
-                            ));
-                            std::fs::write(&temp_path, merged_json.as_bytes())
-                                .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+                        // Use persistent temp file (won't be deleted automatically)
+                        let temp_dir = std::env::temp_dir();
+                        let temp_path = temp_dir
+                            .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                        std::fs::write(&temp_path, merged_json.as_bytes())
+                            .map_err(|e| format!("Failed to write merged spec: {}", e))?;
 
-                            Some(temp_path.to_string_lossy().to_string())
-                        }
-                        Err(e) => {
-                            return Err(format!(
-                                "Failed to merge multiple API version specs: {}",
-                                e
-                            )
-                            .into());
-                        }
+                        Some(temp_path.to_string_lossy().to_string())
+                    }
+                    Err(e) => {
+                        return Err(
+                            format!("Failed to merge multiple API version specs: {}", e).into()
+                        );
                     }
                 }
             }
@@ -6371,6 +6376,7 @@ async fn handle_admin(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_quick(
     file: PathBuf,
     port: u16,
@@ -6858,6 +6864,7 @@ async fn output_mock_data_result(
 }
 
 /// Start mock server from OpenAPI specification
+#[allow(clippy::too_many_arguments)]
 async fn start_mock_server_from_spec(
     spec_path: &PathBuf,
     port: u16,
@@ -7372,6 +7379,7 @@ async fn handle_schema(
 }
 
 /// Handle mock generation from configuration
+#[allow(clippy::too_many_arguments)]
 async fn handle_generate(
     config_path: Option<PathBuf>,
     spec_path: Option<PathBuf>,
@@ -7398,16 +7406,14 @@ async fn handle_generate(
             // Try to discover config file
             match discover_config_file() {
                 Ok(path) => vec![path],
-                Err(_) => {
-                    return Err(CliError::new(
-                        "No configuration file found for watch mode".to_string(),
-                        ExitCode::ConfigurationError,
-                    )
-                    .with_suggestion(
-                        "Provide --config or --spec flag, or create mockforge.toml".to_string(),
-                    )
-                    .display_and_exit());
-                }
+                Err(_) => CliError::new(
+                    "No configuration file found for watch mode".to_string(),
+                    ExitCode::ConfigurationError,
+                )
+                .with_suggestion(
+                    "Provide --config or --spec flag, or create mockforge.toml".to_string(),
+                )
+                .display_and_exit(),
             }
         };
 
@@ -7527,12 +7533,12 @@ async fn execute_generation(
                 if spec_path.is_none() {
                     progress_mgr
                         .log(LogLevel::Warning, "ℹ️  No configuration file found, using defaults");
-                    return Err(CliError::new(
+                    CliError::new(
                         "No configuration file found and no spec provided. Please create mockforge.toml, mockforge.yaml, or mockforge.json, or provide --spec flag.".to_string(),
                         ExitCode::ConfigurationError,
                     ).with_suggestion(
                         "Create a configuration file or use --spec to specify an OpenAPI specification".to_string()
-                    ).display_and_exit());
+                    ).display_and_exit();
                 }
                 // If spec_path is provided, we can continue without a config file
                 progress_mgr
@@ -7557,12 +7563,12 @@ async fn execute_generation(
     let spec = progress::require_registry(&config.input.spec, "spec")?;
 
     if !spec.exists() {
-        return Err(CliError::new(
+        CliError::new(
             format!("Specification file not found: {}", spec.display()),
             ExitCode::FileNotFound,
         )
         .with_suggestion("Check the file path and ensure the specification file exists".to_string())
-        .display_and_exit());
+        .display_and_exit();
     }
 
     // Enhanced validation with detailed error messages
@@ -7582,17 +7588,14 @@ async fn execute_generation(
     // Detect format and validate
     let format = match mockforge_core::spec_parser::SpecFormat::detect(&spec_content, Some(spec)) {
         Ok(fmt) => fmt,
-        Err(e) => {
-            return Err(CliError::new(
-                format!("Failed to detect specification format: {}", e),
-                ExitCode::ConfigurationError,
-            )
-            .with_suggestion(
-                "Ensure your file is a valid OpenAPI, GraphQL, or protobuf specification"
-                    .to_string(),
-            )
-            .display_and_exit());
-        }
+        Err(e) => CliError::new(
+            format!("Failed to detect specification format: {}", e),
+            ExitCode::ConfigurationError,
+        )
+        .with_suggestion(
+            "Ensure your file is a valid OpenAPI, GraphQL, or protobuf specification".to_string(),
+        )
+        .display_and_exit(),
     };
 
     if verbose {
@@ -7641,12 +7644,12 @@ async fn execute_generation(
                     .collect();
 
                 let error_msg = error_details.join("\n  ");
-                return Err(CliError::new(
+                CliError::new(
                     format!("Invalid OpenAPI specification:\n  {}", error_msg),
                     ExitCode::ConfigurationError,
                 )
                 .with_suggestion("Fix the validation errors above and try again".to_string())
-                .display_and_exit());
+                .display_and_exit();
             }
 
             if !validation.warnings.is_empty() && verbose {
@@ -7676,12 +7679,12 @@ async fn execute_generation(
                     .collect();
 
                 let error_msg = error_details.join("\n  ");
-                return Err(CliError::new(
+                CliError::new(
                     format!("Invalid GraphQL schema:\n  {}", error_msg),
                     ExitCode::ConfigurationError,
                 )
                 .with_suggestion("Fix the validation errors above and try again".to_string())
-                .display_and_exit());
+                .display_and_exit();
             }
 
             if !validation.warnings.is_empty() && verbose {
@@ -9393,7 +9396,7 @@ async fn handle_config_list_env_vars(
         }
         _ => {
             // Table format
-            println!("{:<40} {:<12} {:<15} {}", "Variable", "Category", "Default", "Description");
+            println!("{:<40} {:<12} {:<15} Description", "Variable", "Category", "Default");
             println!("{}", "-".repeat(100));
             for var in &vars {
                 let required = if var.required { "*" } else { "" };
@@ -9437,7 +9440,7 @@ async fn handle_config_show(
     };
 
     let content = tokio::fs::read_to_string(&config_file).await?;
-    let parsed: serde_json::Value = if config_file.extension().map_or(false, |e| e == "json") {
+    let parsed: serde_json::Value = if config_file.extension().is_some_and(|e| e == "json") {
         serde_json::from_str(&content)?
     } else {
         serde_yaml::from_str(&content)?

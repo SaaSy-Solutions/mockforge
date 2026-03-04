@@ -3,7 +3,6 @@
 //! Provides endpoints for managing user and organization settings, including BYOK configuration
 
 use axum::{extract::State, http::HeaderMap, Json};
-use serde::{Deserialize, Serialize};
 
 use crate::{
     cache::{org_setting_cache_key, ttl, Cache},
@@ -94,7 +93,7 @@ pub async fn get_byok_config(
         // No Redis - fallback to database
         let setting = OrgSetting::get(pool, org_ctx.org_id, "byok")
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         if let Some(setting) = setting {
             let config: BYOKConfig = serde_json::from_value(setting.setting_value)
@@ -154,7 +153,7 @@ pub async fn update_byok_config(
     // Store setting
     OrgSetting::set(pool, org_ctx.org_id, "byok", config_value)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Invalidate cache
     if let Some(redis) = &state.redis {
@@ -226,7 +225,7 @@ pub async fn delete_byok_config(
     // Delete setting
     OrgSetting::delete(pool, org_ctx.org_id, "byok")
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Invalidate cache
     if let Some(redis) = &state.redis {

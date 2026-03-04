@@ -25,6 +25,7 @@ fn is_safe_sql_identifier(name: &str) -> bool {
 
 /// Validates a field name against the entity schema AND ensures it's a safe SQL identifier.
 /// Returns the field name if valid, or an error otherwise.
+#[allow(dead_code)]
 fn validate_field_name<'a>(
     field_name: &'a str,
     entity: &crate::entities::Entity,
@@ -838,8 +839,11 @@ pub async fn get_relationship_handler(
             // Query the target entity
             let target_query =
                 format!("SELECT * FROM {} WHERE {} = ?", target_table, target_primary_key);
-            let target_results =
-                context.database.query(&target_query, &[fk_value.clone()]).await.map_err(|e| {
+            let target_results = context
+                .database
+                .query(&target_query, std::slice::from_ref(fk_value))
+                .await
+                .map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({"error": format!("Database query failed: {}", e)})),

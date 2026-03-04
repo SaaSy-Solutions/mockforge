@@ -220,7 +220,7 @@ impl RateLimiterState {
                     "Redis global rate limit check failed: {}, falling back to in-memory",
                     e
                 );
-                if !self.global_limiter.check().is_ok() {
+                if self.global_limiter.check().is_err() {
                     return false;
                 }
             }
@@ -255,7 +255,7 @@ impl RateLimiterState {
     /// Check rate limit using in-memory state
     async fn check_user_in_memory(&self, key: &str) -> bool {
         // First check global limiter
-        if !self.global_limiter.check().is_ok() {
+        if self.global_limiter.check().is_err() {
             return false;
         }
 

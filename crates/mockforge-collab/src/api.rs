@@ -873,6 +873,7 @@ pub struct CreateBackupRequest {
 }
 
 /// Create a backup of a workspace
+#[allow(clippy::large_futures)]
 async fn create_backup(
     State(state): State<ApiState>,
     Path(workspace_id): Path<Uuid>,

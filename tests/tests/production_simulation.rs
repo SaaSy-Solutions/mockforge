@@ -39,7 +39,7 @@ async fn test_production_high_load_http() {
     // Create multiple stubs
     for i in 0..100 {
         let _ = client
-            .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+            .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
             .json(&json!({
                 "path": format!("/api/load-test/{}", i),
                 "method": "GET",
@@ -59,7 +59,7 @@ async fn test_production_high_load_http() {
         let url = format!("http://localhost:{}/api/load-test/{}", http_port, i);
         handles.push(tokio::spawn(async move {
             for _ in 0..10 {
-                let _ = client.get(&url).send().await;
+                let _ = client.get(url.as_str()).send().await;
             }
         }));
     }
@@ -97,12 +97,12 @@ async fn test_production_multi_protocol_concurrent() {
 
     // Concurrent HTTP requests
     let http_handles: Vec<_> = (0..20)
-        .map(|i| {
+        .map(|_i| {
             let client = client.clone();
             let url = format!("http://localhost:{}/health", http_port);
             tokio::spawn(async move {
                 for _ in 0..5 {
-                    let _ = client.get(&url).send().await;
+                    let _ = client.get(url.as_str()).send().await;
                 }
             })
         })
@@ -139,7 +139,7 @@ async fn test_production_error_recovery() {
 
     // Create stub that returns errors
     let _ = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", 9080))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", 9080))
         .json(&json!({
             "path": "/api/error-test",
             "method": "GET",
@@ -153,7 +153,7 @@ async fn test_production_error_recovery() {
 
     // Make request and verify error handling
     let response = client
-        .get(&format!("http://localhost:{}/api/error-test", http_port))
+        .get(format!("http://localhost:{}/api/error-test", http_port))
         .send()
         .await
         .expect("Request should complete");
@@ -163,7 +163,7 @@ async fn test_production_error_recovery() {
 
     // Verify server is still running
     let health_response = client
-        .get(&format!("http://localhost:{}/health", http_port))
+        .get(format!("http://localhost:{}/health", http_port))
         .send()
         .await
         .expect("Health check should work");
@@ -197,7 +197,7 @@ async fn test_production_resource_cleanup() {
     // Create many stubs
     for i in 0..50 {
         let _ = client
-            .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+            .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
             .json(&json!({
                 "path": format!("/api/resource-test/{}", i),
                 "method": "GET",
@@ -210,7 +210,7 @@ async fn test_production_resource_cleanup() {
     // Delete all stubs
     for i in 0..50 {
         let _ = client
-            .delete(&format!(
+            .delete(format!(
                 "http://localhost:{}/__mockforge/api/mocks/resource-test/{}",
                 admin_port, i
             ))
@@ -220,7 +220,7 @@ async fn test_production_resource_cleanup() {
 
     // Verify cleanup
     let list_response = client
-        .get(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .get(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .send()
         .await;
 
@@ -254,7 +254,7 @@ async fn test_production_deployment_readiness() {
     let client = Client::new();
 
     // Verify health endpoints
-    let health_endpoints = vec![
+    let health_endpoints = [
         "/health",
         "/health/live",
         "/health/ready",
@@ -263,7 +263,7 @@ async fn test_production_deployment_readiness() {
 
     for endpoint in health_endpoints {
         let response = client
-            .get(&format!("http://localhost:{}{}", http_port, endpoint))
+            .get(format!("http://localhost:{}{}", http_port, endpoint))
             .send()
             .await
             .expect("Health endpoint should respond");
@@ -276,7 +276,7 @@ async fn test_production_deployment_readiness() {
     }
 
     // Verify metrics endpoint (if available)
-    let metrics_response = client.get(&format!("http://localhost:9090/metrics")).send().await;
+    let metrics_response = client.get("http://localhost:9090/metrics").send().await;
 
     // Metrics may or may not be available depending on configuration
     if let Ok(resp) = metrics_response {

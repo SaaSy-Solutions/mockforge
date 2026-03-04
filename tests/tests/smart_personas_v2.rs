@@ -2,22 +2,19 @@
 //!
 //! Tests persona graphs, lifecycle states, fidelity scores, and reality continuum integration.
 
-use chrono::{DateTime, Duration, Utc};
-use mockforge_core::fidelity::{
-    FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator,
-};
+use chrono::Duration;
+use mockforge_core::fidelity::{FidelityCalculator, SampleComparator, SchemaComparator};
 use mockforge_core::{ContinuumConfig, ContinuumRule, RealityContinuumEngine, TransitionMode};
 use mockforge_data::{
-    persona::{PersonaProfile, PersonaRegistry},
-    persona_graph::{Edge, PersonaGraph, PersonaNode},
+    persona::PersonaRegistry,
+    persona_graph::{PersonaGraph, PersonaNode},
     persona_lifecycle::{LifecycleState, PersonaLifecycle, TransitionRule},
     persona_lifecycle_response::{
         apply_billing_lifecycle_effects, apply_support_lifecycle_effects,
     },
     Domain,
 };
-use serde_json::{json, Value};
-use std::collections::HashMap;
+use serde_json::json;
 
 /// Test persona graph creation and basic node operations
 #[tokio::test]
@@ -402,10 +399,12 @@ async fn test_fidelity_score_calculation() {
 /// Test reality continuum integration with personas
 #[tokio::test]
 async fn test_reality_continuum_persona_integration() {
-    let mut config = ContinuumConfig::default();
-    config.enabled = true;
-    config.default_ratio = 0.5; // 50% real, 50% mock
-    config.transition_mode = TransitionMode::Manual;
+    let mut config = ContinuumConfig {
+        enabled: true,
+        default_ratio: 0.5, // 50% real, 50% mock
+        transition_mode: TransitionMode::Manual,
+        ..Default::default()
+    };
 
     // Add route-specific rule for persona endpoints
     config.routes.push(ContinuumRule::new("/api/users/*".to_string(), 0.7));

@@ -1,27 +1,29 @@
-//! Pillars: [DevX]
+//! Pillars: [`DevX`]
 //!
-//! Integration tests for MockForge SDK
+//! Integration tests for `MockForge` SDK
 
 use mockforge_sdk::MockServer;
 use serde_json::json;
 
 #[tokio::test]
 async fn test_basic_server_start_stop() {
-    let mut server = MockServer::new()
+    let server = Box::pin(MockServer::new()
         .port(0) // Use random port
-        .start()
-        .await
-        .expect("Failed to start server");
+        .start())
+    .await
+    .expect("Failed to start server");
 
     assert!(server.is_running());
     assert!(server.port() > 0);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_stub_get_request() {
-    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
+    let mut server = Box::pin(MockServer::new().port(0).start())
+        .await
+        .expect("Failed to start server");
 
     // Add a stub
     server
@@ -51,12 +53,14 @@ async fn test_stub_get_request() {
     assert_eq!(body["id"], 123);
     assert_eq!(body["name"], "John Doe");
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_stub_post_request() {
-    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
+    let mut server = Box::pin(MockServer::new().port(0).start())
+        .await
+        .expect("Failed to start server");
 
     // Add a stub for POST
     server
@@ -86,12 +90,14 @@ async fn test_stub_post_request() {
     assert_eq!(body["id"], 456);
     assert_eq!(body["status"], "created");
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_multiple_stubs() {
-    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
+    let mut server = Box::pin(MockServer::new().port(0).start())
+        .await
+        .expect("Failed to start server");
 
     // Add multiple stubs
     server
@@ -133,12 +139,14 @@ async fn test_multiple_stubs() {
         .expect("Failed to make request");
     assert_eq!(resp3.status(), 200);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_clear_stubs() {
-    let mut server = MockServer::new().port(0).start().await.expect("Failed to start server");
+    let mut server = Box::pin(MockServer::new().port(0).start())
+        .await
+        .expect("Failed to start server");
 
     // Add a stub
     server
@@ -149,5 +157,5 @@ async fn test_clear_stubs() {
     // Clear all stubs
     server.clear_stubs().await.expect("Failed to clear stubs");
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }

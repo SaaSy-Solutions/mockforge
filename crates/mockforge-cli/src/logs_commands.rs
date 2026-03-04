@@ -32,6 +32,7 @@ struct ApiResponse<T> {
 }
 
 /// Execute logs command
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_logs_command(
     admin_url: Option<String>,
     file: Option<PathBuf>,

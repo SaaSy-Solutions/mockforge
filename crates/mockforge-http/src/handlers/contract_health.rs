@@ -159,10 +159,12 @@ pub async fn get_timeline(
 
     // Get structural drift incidents
     if event_type_filter == "all" || event_type_filter == "structural" {
-        let mut query = mockforge_core::incidents::types::IncidentQuery::default();
-        query.workspace_id = params.workspace_id.clone();
-        query.endpoint = params.endpoint.clone();
-        query.method = params.method.clone();
+        let query = mockforge_core::incidents::types::IncidentQuery {
+            workspace_id: params.workspace_id.clone(),
+            endpoint: params.endpoint.clone(),
+            method: params.method.clone(),
+            ..mockforge_core::incidents::types::IncidentQuery::default()
+        };
 
         let incidents = state.incident_manager.query_incidents(query).await;
         for incident in incidents {
@@ -226,7 +228,7 @@ pub async fn get_timeline(
         .fetch_all(pool)
         .await
         {
-            use mockforge_core::contract_drift::threat_modeling::{ThreatLevel, AggregationLevel};
+            use mockforge_core::contract_drift::threat_modeling::ThreatLevel;
             for row in ta_rows {
                 let id: uuid::Uuid = match row.try_get("id") {
                     Ok(id) => id,

@@ -474,7 +474,7 @@ pub async fn compare_contracts(
 pub async fn validate_message(
     State(state): State<ProtocolContractsState>,
     Path(contract_id): Path<String>,
-    Json(request): Json<ValidateMessageRequest>,
+    Json(_request): Json<ValidateMessageRequest>,
 ) -> impl IntoResponse {
     let contracts = state.contracts.read().await;
 

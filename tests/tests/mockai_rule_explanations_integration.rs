@@ -56,7 +56,7 @@ async fn test_rule_generation_with_explanations() {
                 assert!(!explanation.rule_id.is_empty());
                 assert!(explanation.confidence >= 0.0 && explanation.confidence <= 1.0);
                 assert!(!explanation.reasoning.is_empty());
-                assert_eq!(explanation.generated_at.timestamp() > 0, true);
+                assert!(explanation.generated_at.timestamp() > 0);
             }
         }
         Err(e) => {

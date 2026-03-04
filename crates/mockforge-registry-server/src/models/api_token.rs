@@ -17,18 +17,20 @@ pub enum TokenScope {
     ManageBilling,
 }
 
-impl TokenScope {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for TokenScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenScope::ReadPackages => "read:packages".to_string(),
-            TokenScope::PublishPackages => "publish:packages".to_string(),
-            TokenScope::DeployMocks => "deploy:mocks".to_string(),
-            TokenScope::AdminOrg => "admin:org".to_string(),
-            TokenScope::ReadUsage => "read:usage".to_string(),
-            TokenScope::ManageBilling => "manage:billing".to_string(),
+            TokenScope::ReadPackages => write!(f, "read:packages"),
+            TokenScope::PublishPackages => write!(f, "publish:packages"),
+            TokenScope::DeployMocks => write!(f, "deploy:mocks"),
+            TokenScope::AdminOrg => write!(f, "admin:org"),
+            TokenScope::ReadUsage => write!(f, "read:usage"),
+            TokenScope::ManageBilling => write!(f, "manage:billing"),
         }
     }
+}
 
+impl TokenScope {
     pub fn from_string(s: &str) -> Option<Self> {
         match s {
             "read:packages" => Some(TokenScope::ReadPackages),
@@ -82,7 +84,7 @@ impl ApiToken {
 
         // Hash the token
         let hashed_token = bcrypt::hash(&full_token, bcrypt::DEFAULT_COST)
-            .map_err(|e| sqlx::Error::Protocol(format!("Failed to hash token: {}", e).into()))?;
+            .map_err(|e| sqlx::Error::Protocol(format!("Failed to hash token: {}", e)))?;
 
         // Convert scopes to strings
         let scope_strings: Vec<String> = scopes.iter().map(|s| s.to_string()).collect();
@@ -269,7 +271,7 @@ impl ApiToken {
     /// Check if token needs rotation (older than N days)
     pub fn needs_rotation(&self, days_old: i64) -> bool {
         let cutoff = Utc::now() - chrono::Duration::days(days_old);
-        self.created_at < cutoff && self.expires_at.map_or(true, |t| t > Utc::now())
+        self.created_at < cutoff && self.expires_at.is_none_or(|t| t > Utc::now())
     }
 
     /// Get age of token in days
@@ -438,7 +440,7 @@ mod tests {
         };
 
         let age = token.age_days();
-        assert!(age >= 41 && age <= 43); // Allow some tolerance
+        assert!((41..=43).contains(&age)); // Allow some tolerance
     }
 
     #[test]

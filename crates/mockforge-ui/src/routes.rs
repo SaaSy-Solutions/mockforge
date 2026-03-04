@@ -34,6 +34,7 @@ use mockforge_core::{get_global_logger, init_global_logger};
 /// * `mockai` - Optional MockAI instance for hot-reload support
 /// * `continuum_config` - Optional Reality Continuum configuration
 /// * `virtual_clock` - Optional virtual clock for time-based progression
+#[allow(clippy::too_many_arguments)]
 pub fn create_admin_router(
     http_server_addr: Option<std::net::SocketAddr>,
     ws_server_addr: Option<std::net::SocketAddr>,

@@ -35,7 +35,7 @@ pub async fn verify_email(
     // Find token
     let verification_token = VerificationToken::find_by_token(pool, &params.token)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::InvalidRequest("Invalid or expired verification token".to_string())
         })?;
@@ -50,7 +50,7 @@ pub async fn verify_email(
     // Get user
     let user = User::find_by_id(pool, verification_token.user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Mark user as verified
@@ -58,12 +58,12 @@ pub async fn verify_email(
         .bind(verification_token.user_id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Mark token as used
     VerificationToken::mark_as_used(pool, verification_token.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     tracing::info!("Email verified: user_id={}, email={}", user.id, user.email);
 
@@ -89,7 +89,7 @@ pub async fn resend_verification(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if already verified
@@ -101,9 +101,8 @@ pub async fn resend_verification(
     }
 
     // Create new verification token
-    let verification_token = VerificationToken::create(pool, user_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let verification_token =
+        VerificationToken::create(pool, user_id).await.map_err(ApiError::Database)?;
 
     // Send verification email (non-blocking)
     let verification_email = EmailService::generate_verification_email(

@@ -14,14 +14,12 @@ async fn test_server_builder_creation() {
 
 #[tokio::test]
 async fn test_port_in_use_error() {
-    let mut server1 = MockServer::new()
-        .port(33000)
-        .start()
+    let server1 = Box::pin(MockServer::new().port(33000).start())
         .await
         .expect("Failed to start first server");
 
     // Try to start second server on same port
-    let result = MockServer::new().port(33000).start().await;
+    let result = Box::pin(MockServer::new().port(33000).start()).await;
 
     // Should fail because port is already in use
     // Note: This might succeed if port binding isn't exclusive, so we just check the result
@@ -31,26 +29,25 @@ async fn test_port_in_use_error() {
         assert!(!err_msg.is_empty());
     }
 
-    server1.stop().await.expect("Failed to stop server");
+    Box::pin(server1.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_port_discovery_failed_error() {
     // Try to find port in a very small range that's likely occupied
-    let result = MockServer::new()
+    let result = Box::pin(MockServer::new()
         .auto_port()
         .port_range(1, 10) // System ports, likely all in use
-        .start()
-        .await;
+        .start())
+    .await;
 
     if result.is_err() {
         let err = result.unwrap_err();
-        let err_msg = format!("{:?}", err);
+        let err_msg = format!("{err:?}");
         // Should include helpful tip
         assert!(
             err_msg.contains("Port discovery failed") || err_msg.contains("port"),
-            "Error message: {}",
-            err_msg
+            "Error message: {err_msg}"
         );
     }
 }
@@ -60,10 +57,10 @@ async fn test_stub_not_found_error() {
     let err = Error::stub_not_found(
         "GET",
         "/api/missing",
-        vec!["GET /api/users".to_string(), "POST /api/users".to_string()],
+        &["GET /api/users".to_string(), "POST /api/users".to_string()],
     );
 
-    let err_msg = format!("{}", err);
+    let err_msg = format!("{err}");
     assert!(err_msg.contains("GET"));
     assert!(err_msg.contains("/api/missing"));
     assert!(err_msg.contains("GET /api/users"));
@@ -73,7 +70,7 @@ async fn test_stub_not_found_error() {
 async fn test_admin_api_error() {
     let err = Error::admin_api_error("create_mock", "Invalid JSON", "/api/mocks");
 
-    let err_msg = format!("{}", err);
+    let err_msg = format!("{err}");
     assert!(err_msg.contains("create_mock"));
     assert!(err_msg.contains("Invalid JSON"));
     assert!(err_msg.contains("/api/mocks"));
@@ -94,9 +91,9 @@ async fn test_error_messages_are_helpful() {
     ];
 
     for err in errors {
-        let msg = format!("{}", err);
+        let msg = format!("{err}");
         // All error messages should be non-empty and reasonably long
-        assert!(msg.len() > 20, "Error message too short: {}", msg);
+        assert!(msg.len() > 20, "Error message too short: {msg}");
         // Should contain actionable information (look for keywords)
         let lowercase_msg = msg.to_lowercase();
         let has_actionable_info = lowercase_msg.contains("tip:")
@@ -105,6 +102,6 @@ async fn test_error_messages_are_helpful() {
             || lowercase_msg.contains("call")
             || lowercase_msg.contains("ensure");
 
-        assert!(has_actionable_info, "Error message lacks actionable advice: {}", msg);
+        assert!(has_actionable_info, "Error message lacks actionable advice: {msg}");
     }
 }

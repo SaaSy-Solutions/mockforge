@@ -219,6 +219,7 @@ pub async fn handle_template_command(command: TemplateCommands) -> Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_register_template(
     manager: &mut TemplateLibraryManager,
     id: String,

@@ -122,6 +122,7 @@ impl BackupService {
     /// # Errors
     ///
     /// Returns an error if the workspace cannot be read or the storage backend fails.
+    #[allow(clippy::large_futures)]
     pub async fn backup_workspace(
         &self,
         workspace_id: Uuid,
@@ -158,6 +159,7 @@ impl BackupService {
     ///
     /// Returns an error if the workspace cannot be read, serialization fails,
     /// or the storage backend upload fails.
+    #[allow(clippy::large_futures)]
     pub async fn backup_workspace_with_config(
         &self,
         workspace_id: Uuid,
@@ -750,14 +752,13 @@ impl BackupService {
                     .load()
                     .await
             } else {
-                aws_config::load_from_env().await
+                aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await
             };
 
             let client = S3Client::new(&aws_config);
 
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-            let object_key =
-                format!("{}/workspace_{}_{}.{}", prefix, workspace_id, timestamp, format);
+            let object_key = format!("{prefix}/workspace_{workspace_id}_{timestamp}.{format}");
             let content_type = match format {
                 "yaml" => "application/x-yaml",
                 "json" => "application/json",
@@ -772,9 +773,9 @@ impl BackupService {
                 .body(ByteStream::from(data.as_bytes().to_vec()))
                 .send()
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to upload to S3: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to S3: {e}")))?;
 
-            let backup_url = format!("s3://{}/{}", bucket_name, object_key);
+            let backup_url = format!("s3://{bucket_name}/{object_key}");
             tracing::info!("Successfully uploaded backup to S3: {}", backup_url);
             Ok(backup_url)
         }
@@ -811,7 +812,7 @@ impl BackupService {
             let account_name = config
                 .get("account_name")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
+                .map(ToString::to_string)
                 .ok_or_else(|| {
                     CollabError::Internal(
                         "Azure account_name required in storage config".to_string(),
@@ -821,26 +822,24 @@ impl BackupService {
             let container_name = config
                 .get("container_name")
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "mockforge-backups".to_string());
+                .map_or_else(|| "mockforge-backups".to_string(), ToString::to_string);
 
             // Build storage credentials
             let storage_credentials = if let Some(account_key) =
-                config.get("account_key").and_then(|v| v.as_str()).map(|s| s.to_string())
+                config.get("account_key").and_then(|v| v.as_str()).map(ToString::to_string)
             {
                 StorageCredentials::access_key(account_name.clone(), account_key)
             } else if let Some(sas_token) =
-                config.get("sas_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+                config.get("sas_token").and_then(|v| v.as_str()).map(ToString::to_string)
             {
                 StorageCredentials::sas_token(sas_token)
-                    .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {}", e)))?
+                    .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {e}")))?
             } else {
                 let credential = Arc::new(
                     DefaultAzureCredential::create(TokenCredentialOptions::default()).map_err(
                         |e| {
                             CollabError::Internal(format!(
-                                "Failed to create Azure credentials: {}",
-                                e
+                                "Failed to create Azure credentials: {e}"
                             ))
                         },
                     )?,
@@ -864,11 +863,10 @@ impl BackupService {
                     _ => "application/octet-stream",
                 })
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to upload to Azure: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to Azure: {e}")))?;
 
             let backup_url = format!(
-                "https://{}.blob.core.windows.net/{}/{}",
-                account_name, container_name, blob_name
+                "https://{account_name}.blob.core.windows.net/{container_name}/{blob_name}"
             );
             tracing::info!("Successfully uploaded backup to Azure: {}", backup_url);
             Ok(backup_url)
@@ -883,7 +881,7 @@ impl BackupService {
     }
 
     /// Save backup to Google Cloud Storage
-    #[allow(unused_variables, clippy::unused_async)]
+    #[allow(unused_variables, clippy::unused_async, clippy::large_futures)]
     async fn save_to_gcs(
         &self,
         workspace_id: Uuid,
@@ -907,9 +905,10 @@ impl BackupService {
                 .unwrap_or("mockforge-backups");
 
             // Initialize GCS client using the new builder API
-            let client = Storage::builder().build().await.map_err(|e| {
-                CollabError::Internal(format!("Failed to create GCS client: {}", e))
-            })?;
+            let client = Storage::builder()
+                .build()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to create GCS client: {e}")))?;
 
             // Create object name with timestamp
             let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
@@ -922,9 +921,9 @@ impl BackupService {
                 .write_object(bucket_name, &object_name, payload)
                 .send_unbuffered()
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to upload to GCS: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to upload to GCS: {e}")))?;
 
-            let backup_url = format!("gs://{}/{}", bucket_name, object_name);
+            let backup_url = format!("gs://{bucket_name}/{object_name}");
             tracing::info!("Successfully uploaded backup to GCS: {}", backup_url);
             Ok(backup_url)
         }
@@ -954,24 +953,18 @@ impl BackupService {
 
             // Parse S3 URL (format: s3://bucket-name/path/to/file)
             if !backup_url.starts_with("s3://") {
-                return Err(CollabError::Internal(format!(
-                    "Invalid S3 URL format: {}",
-                    backup_url
-                )));
+                return Err(CollabError::Internal(format!("Invalid S3 URL format: {backup_url}")));
             }
 
             let url_parts: Vec<&str> = backup_url
                 .strip_prefix("s3://")
                 .ok_or_else(|| {
-                    CollabError::Internal(format!("Invalid S3 URL format: {}", backup_url))
+                    CollabError::Internal(format!("Invalid S3 URL format: {backup_url}"))
                 })?
                 .splitn(2, '/')
                 .collect();
             if url_parts.len() != 2 {
-                return Err(CollabError::Internal(format!(
-                    "Invalid S3 URL format: {}",
-                    backup_url
-                )));
+                return Err(CollabError::Internal(format!("Invalid S3 URL format: {backup_url}")));
             }
 
             let bucket = url_parts[0];
@@ -1015,7 +1008,7 @@ impl BackupService {
                     .await
             } else {
                 // Use default AWS config (from environment variables, IAM role, etc.)
-                aws_config::load_from_env().await
+                aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await
             };
 
             // Create S3 client
@@ -1028,7 +1021,7 @@ impl BackupService {
                 .key(key)
                 .send()
                 .await
-                .map_err(|e| CollabError::Internal(format!("Failed to delete S3 object: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Failed to delete S3 object: {e}")))?;
 
             tracing::info!("Successfully deleted S3 object: {}", backup_url);
             Ok(())
@@ -1059,14 +1052,13 @@ impl BackupService {
             // Parse Azure URL (format: https://account.blob.core.windows.net/container/path)
             if !backup_url.contains("blob.core.windows.net") {
                 return Err(CollabError::Internal(format!(
-                    "Invalid Azure Blob URL format: {}",
-                    backup_url
+                    "Invalid Azure Blob URL format: {backup_url}"
                 )));
             }
 
             // Parse URL properly
             let url = url::Url::parse(backup_url)
-                .map_err(|e| CollabError::Internal(format!("Invalid Azure URL: {}", e)))?;
+                .map_err(|e| CollabError::Internal(format!("Invalid Azure URL: {e}")))?;
 
             // Extract account name from hostname (e.g., "account.blob.core.windows.net" -> "account")
             let hostname = url
@@ -1080,7 +1072,7 @@ impl BackupService {
             let path = url.path();
             let path_parts: Vec<&str> = path.splitn(3, '/').filter(|s| !s.is_empty()).collect();
             if path_parts.len() < 2 {
-                return Err(CollabError::Internal(format!("Invalid Azure blob path: {}", path)));
+                return Err(CollabError::Internal(format!("Invalid Azure blob path: {path}")));
             }
 
             let container_name = path_parts[0].to_string();
@@ -1093,8 +1085,7 @@ impl BackupService {
                     DefaultAzureCredential::create(TokenCredentialOptions::default()).map_err(
                         |e| {
                             CollabError::Internal(format!(
-                                "Failed to create Azure credentials: {}",
-                                e
+                                "Failed to create Azure credentials: {e}"
                             ))
                         },
                     )?,
@@ -1105,16 +1096,16 @@ impl BackupService {
             // Build storage credentials from config or use DefaultAzureCredential
             let storage_credentials = if let Some(config) = storage_config {
                 if let Some(account_key) =
-                    config.get("account_key").and_then(|v| v.as_str()).map(|s| s.to_string())
+                    config.get("account_key").and_then(|v| v.as_str()).map(ToString::to_string)
                 {
                     // Use account key authentication
                     StorageCredentials::access_key(account_name.clone(), account_key)
                 } else if let Some(sas_token) =
-                    config.get("sas_token").and_then(|v| v.as_str()).map(|s| s.to_string())
+                    config.get("sas_token").and_then(|v| v.as_str()).map(ToString::to_string)
                 {
                     // Use SAS token authentication
                     StorageCredentials::sas_token(sas_token)
-                        .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {}", e)))?
+                        .map_err(|e| CollabError::Internal(format!("Invalid SAS token: {e}")))?
                 } else {
                     // Use DefaultAzureCredential for managed identity, environment vars, etc.
                     create_default_creds()?
@@ -1128,9 +1119,10 @@ impl BackupService {
             let blob_client = ClientBuilder::new(account_name, storage_credentials)
                 .blob_client(&container_name, &blob_name);
 
-            blob_client.delete().await.map_err(|e| {
-                CollabError::Internal(format!("Failed to delete Azure blob: {}", e))
-            })?;
+            blob_client
+                .delete()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to delete Azure blob: {e}")))?;
 
             tracing::info!("Successfully deleted Azure blob: {}", backup_url);
             Ok(())
@@ -1158,23 +1150,19 @@ impl BackupService {
 
             // Parse GCS URL (format: gs://bucket-name/path/to/file)
             if !backup_url.starts_with("gs://") {
-                return Err(CollabError::Internal(format!(
-                    "Invalid GCS URL format: {}",
-                    backup_url
-                )));
+                return Err(CollabError::Internal(format!("Invalid GCS URL format: {backup_url}")));
             }
 
             let url_parts: Vec<&str> = backup_url
                 .strip_prefix("gs://")
                 .ok_or_else(|| {
-                    CollabError::Internal(format!("Invalid GCS URL format: {}", backup_url))
+                    CollabError::Internal(format!("Invalid GCS URL format: {backup_url}"))
                 })?
                 .splitn(2, '/')
                 .collect();
             if url_parts.len() != 2 {
                 return Err(CollabError::Internal(format!(
-                    "Invalid GCS URL format (expected gs://bucket/object): {}",
-                    backup_url
+                    "Invalid GCS URL format (expected gs://bucket/object): {backup_url}"
                 )));
             }
 
@@ -1184,20 +1172,19 @@ impl BackupService {
             // Initialize GCS StorageControl client using the new API
             // Uses default credentials from environment (GOOGLE_APPLICATION_CREDENTIALS)
             // or metadata server when running on GCP
-            let client = StorageControl::builder().build().await.map_err(|e| {
-                CollabError::Internal(format!("Failed to create GCS client: {}", e))
-            })?;
+            let client = StorageControl::builder()
+                .build()
+                .await
+                .map_err(|e| CollabError::Internal(format!("Failed to create GCS client: {e}")))?;
 
             // Delete object using google-cloud-storage 1.5 API
             client
                 .delete_object()
-                .set_bucket(format!("projects/_/buckets/{}", bucket_name))
+                .set_bucket(format!("projects/_/buckets/{bucket_name}"))
                 .set_object(object_name)
                 .send()
                 .await
-                .map_err(|e| {
-                    CollabError::Internal(format!("Failed to delete GCS object: {}", e))
-                })?;
+                .map_err(|e| CollabError::Internal(format!("Failed to delete GCS object: {e}")))?;
 
             tracing::info!("Successfully deleted GCS object: {}", backup_url);
             Ok(())

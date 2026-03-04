@@ -8,15 +8,11 @@ use uuid::Uuid;
 /// Project visibility
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ProjectVisibility {
+    #[default]
     Private,
     Public,
-}
-
-impl Default for ProjectVisibility {
-    fn default() -> Self {
-        ProjectVisibility::Private
-    }
 }
 
 /// Project model
@@ -134,7 +130,7 @@ impl Project {
             return Ok(());
         }
 
-        updates.push(format!("updated_at = NOW()"));
+        updates.push("updated_at = NOW()".to_string());
         updates.push(format!("id = ${}", param_count));
 
         let sql = format!("UPDATE projects SET {} WHERE id = ${}", updates.join(", "), param_count);
@@ -166,11 +162,11 @@ impl Project {
     }
 }
 
-impl ProjectVisibility {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for ProjectVisibility {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProjectVisibility::Private => "private".to_string(),
-            ProjectVisibility::Public => "public".to_string(),
+            ProjectVisibility::Private => write!(f, "private"),
+            ProjectVisibility::Public => write!(f, "public"),
         }
     }
 }

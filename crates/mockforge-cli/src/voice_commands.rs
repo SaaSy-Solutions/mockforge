@@ -313,7 +313,7 @@ async fn handle_interactive(
     let mut current_spec: Option<OpenApiSpec> = None;
 
     // Initialize voice input handler
-    let voice_input = InteractiveVoiceInput::new();
+    let _voice_input = InteractiveVoiceInput::new();
     let stt_manager = SpeechToTextManager::new();
     let available_backends = stt_manager.list_backends();
 

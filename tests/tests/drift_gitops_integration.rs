@@ -11,7 +11,6 @@ use mockforge_core::pr_generation::{
     PRFileChange, PRFileChangeType, PRGenerationConfig, PRProvider,
 };
 use serde_json::json;
-use std::collections::HashMap;
 
 /// Test GitOps configuration validation
 #[tokio::test]
@@ -230,7 +229,7 @@ async fn test_multiple_incidents() {
         json!({"non_breaking_changes": 5}),
     );
 
-    let incidents = vec![incident1, incident2];
+    let incidents = [incident1, incident2];
     assert_eq!(incidents.len(), 2);
 }
 
@@ -335,7 +334,7 @@ async fn test_incident_types() {
 /// Test incident severity levels
 #[tokio::test]
 async fn test_incident_severity() {
-    let severities = vec![
+    let severities = [
         IncidentSeverity::Critical,
         IncidentSeverity::High,
         IncidentSeverity::Medium,

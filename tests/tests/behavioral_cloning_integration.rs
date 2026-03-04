@@ -5,7 +5,7 @@
 use chrono::Utc;
 use mockforge_recorder::behavioral_cloning::{
     BehavioralScenario, BehavioralScenarioReplayEngine, BehavioralScenarioStep, Flow,
-    FlowGroupingStrategy, FlowRecordingConfig, FlowStep, ReplayResponse, StateVariable,
+    FlowGroupingStrategy, FlowRecordingConfig, FlowStep, StateVariable,
 };
 use mockforge_recorder::models::{Protocol, RecordedRequest, RecordedResponse};
 use serde_json::json;

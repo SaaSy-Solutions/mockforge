@@ -41,7 +41,7 @@ async fn test_rust_sdk_integration() {
 
     // Simulate Rust SDK usage: create stub programmatically
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/rust-sdk-test",
             "method": "GET",
@@ -58,7 +58,7 @@ async fn test_rust_sdk_integration() {
 
     // Verify stub works
     let response = client
-        .get(&format!("http://localhost:{}/api/rust-sdk-test", http_port))
+        .get(format!("http://localhost:{}/api/rust-sdk-test", http_port))
         .send()
         .await
         .expect("Failed to make request");
@@ -97,7 +97,7 @@ async fn test_nodejs_sdk_integration() {
 
     // Test endpoints that Node.js SDK would use
     let health_response = client
-        .get(&format!("http://localhost:{}/__mockforge/health", admin_port))
+        .get(format!("http://localhost:{}/__mockforge/health", admin_port))
         .send()
         .await;
 
@@ -107,7 +107,7 @@ async fn test_nodejs_sdk_integration() {
 
     // Test stub creation endpoint (what Node.js SDK would call)
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/nodejs-sdk-test",
             "method": "GET",
@@ -155,7 +155,7 @@ async fn test_python_sdk_integration() {
 
     // Test endpoints that Python SDK would use
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/python-sdk-test",
             "method": "GET",
@@ -203,7 +203,7 @@ async fn test_go_sdk_integration() {
 
     // Test endpoints that Go SDK would use
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/go-sdk-test",
             "method": "GET",
@@ -251,7 +251,7 @@ async fn test_java_sdk_integration() {
 
     // Test endpoints that Java SDK would use
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/java-sdk-test",
             "method": "GET",
@@ -299,7 +299,7 @@ async fn test_dotnet_sdk_integration() {
 
     // Test endpoints that .NET SDK would use
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/dotnet-sdk-test",
             "method": "GET",
@@ -347,7 +347,7 @@ async fn test_sdk_common_functionality() {
 
     // Test health check (all SDKs use this)
     let health_response = client
-        .get(&format!("http://localhost:{}/health", http_port))
+        .get(format!("http://localhost:{}/health", http_port))
         .send()
         .await
         .expect("Failed to check health");
@@ -356,7 +356,7 @@ async fn test_sdk_common_functionality() {
 
     // Test stub creation (all SDKs use this)
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/common-test",
             "method": "GET",
@@ -373,7 +373,7 @@ async fn test_sdk_common_functionality() {
 
     // Test stub retrieval (all SDKs use this)
     let get_stub_response = client
-        .get(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .get(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .send()
         .await;
 

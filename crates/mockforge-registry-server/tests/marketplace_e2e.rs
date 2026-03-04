@@ -7,6 +7,7 @@
 
 // Note: This test requires the registry server to be running
 // Run with: REGISTRY_URL=http://localhost:8080 cargo test --test marketplace_e2e -- --ignored
+use base64::Engine;
 use reqwest::Client;
 use serde_json::json;
 use uuid::Uuid;
@@ -39,7 +40,7 @@ impl MarketplaceTestHelper {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let response = self
             .client
-            .post(&format!("{}/api/v1/auth/register", self.base_url))
+            .post(format!("{}/api/v1/auth/register", self.base_url))
             .json(&json!({
                 "username": username,
                 "email": email,
@@ -56,6 +57,7 @@ impl MarketplaceTestHelper {
     }
 
     /// Login with existing user
+    #[allow(dead_code)]
     async fn login(
         &mut self,
         email: &str,
@@ -63,7 +65,7 @@ impl MarketplaceTestHelper {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let response = self
             .client
-            .post(&format!("{}/api/v1/auth/login", self.base_url))
+            .post(format!("{}/api/v1/auth/login", self.base_url))
             .json(&json!({
                 "email": email,
                 "password": password
@@ -83,7 +85,7 @@ impl MarketplaceTestHelper {
         let token = self.auth_token.as_ref().ok_or("Not authenticated")?;
         let response = self
             .client
-            .post(&format!("{}/api/v1/orgs", self.base_url))
+            .post(format!("{}/api/v1/orgs", self.base_url))
             .header("Authorization", format!("Bearer {}", token))
             .json(&json!({
                 "name": name,
@@ -154,11 +156,11 @@ async fn test_plugin_marketplace_workflow() {
     // Step 3: Publish a plugin
     let wasm_data = MarketplaceTestHelper::create_test_wasm();
     let checksum = MarketplaceTestHelper::calculate_checksum(&wasm_data);
-    let wasm_base64 = base64::encode(&wasm_data);
+    let wasm_base64 = base64::engine::general_purpose::STANDARD.encode(&wasm_data);
 
     let publish_response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/publish", helper.base_url))
+        .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "name": format!("test-plugin-{}", timestamp),
@@ -190,7 +192,7 @@ async fn test_plugin_marketplace_workflow() {
     // Step 4: Search for the plugin
     let search_response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/search", helper.base_url))
+        .post(format!("{}/api/v1/plugins/search", helper.base_url))
         .json(&json!({
             "query": plugin_name.clone(),
             "page": 0,
@@ -203,12 +205,12 @@ async fn test_plugin_marketplace_workflow() {
     assert!(search_response.status().is_success());
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
-    assert!(search_body["plugins"].as_array().unwrap().len() > 0);
+    assert!(!search_body["plugins"].as_array().unwrap().is_empty());
 
     // Step 5: Get plugin details
     let get_response = helper
         .client
-        .get(&format!("{}/api/v1/plugins/{}", helper.base_url, plugin_name))
+        .get(format!("{}/api/v1/plugins/{}", helper.base_url, plugin_name))
         .send()
         .await
         .expect("Failed to get plugin");
@@ -221,7 +223,7 @@ async fn test_plugin_marketplace_workflow() {
     // Step 6: Submit a review
     let review_response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/{}/reviews", helper.base_url, plugin_name))
+        .post(format!("{}/api/v1/plugins/{}/reviews", helper.base_url, plugin_name))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "rating": 5,
@@ -237,7 +239,7 @@ async fn test_plugin_marketplace_workflow() {
     // Step 7: Get reviews
     let reviews_response = helper
         .client
-        .get(&format!("{}/api/v1/plugins/{}/reviews", helper.base_url, plugin_name))
+        .get(format!("{}/api/v1/plugins/{}/reviews", helper.base_url, plugin_name))
         .send()
         .await
         .expect("Failed to get reviews");
@@ -245,7 +247,7 @@ async fn test_plugin_marketplace_workflow() {
     assert!(reviews_response.status().is_success());
     let reviews_body: serde_json::Value =
         reviews_response.json().await.expect("Failed to parse response");
-    assert!(reviews_body["reviews"].as_array().unwrap().len() > 0);
+    assert!(!reviews_body["reviews"].as_array().unwrap().is_empty());
 }
 
 /// Test template marketplace workflow
@@ -275,12 +277,12 @@ async fn test_template_marketplace_workflow() {
     // Step 3: Publish a template
     let package_data = MarketplaceTestHelper::create_test_package();
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
-    let package_base64 = base64::encode(&package_data);
+    let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
 
     let template_name = format!("test-template-{}", timestamp);
     let publish_response = helper
         .client
-        .post(&format!("{}/api/v1/templates/publish", helper.base_url))
+        .post(format!("{}/api/v1/templates/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
@@ -312,7 +314,7 @@ async fn test_template_marketplace_workflow() {
     // Step 4: Search for the template
     let search_response = helper
         .client
-        .post(&format!("{}/api/v1/templates/search", helper.base_url))
+        .post(format!("{}/api/v1/templates/search", helper.base_url))
         .json(&json!({
             "query": template_name.clone(),
             "page": 0,
@@ -325,12 +327,12 @@ async fn test_template_marketplace_workflow() {
     assert!(search_response.status().is_success());
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
-    assert!(search_body["templates"].as_array().unwrap().len() > 0);
+    assert!(!search_body["templates"].as_array().unwrap().is_empty());
 
     // Step 5: Get template details
     let get_response = helper
         .client
-        .get(&format!("{}/api/v1/templates/{}", helper.base_url, template_name))
+        .get(format!("{}/api/v1/templates/{}", helper.base_url, template_name))
         .send()
         .await
         .expect("Failed to get template");
@@ -365,7 +367,7 @@ async fn test_scenario_marketplace_workflow() {
     // Step 3: Publish a scenario
     let package_data = MarketplaceTestHelper::create_test_package();
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
-    let package_base64 = base64::encode(&package_data);
+    let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
 
     let scenario_name = format!("test-scenario-{}", timestamp);
     let manifest = json!({
@@ -376,7 +378,7 @@ async fn test_scenario_marketplace_workflow() {
 
     let publish_response = helper
         .client
-        .post(&format!("{}/api/v1/scenarios/publish", helper.base_url))
+        .post(format!("{}/api/v1/scenarios/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
@@ -398,7 +400,7 @@ async fn test_scenario_marketplace_workflow() {
     // Step 4: Search for the scenario
     let search_response = helper
         .client
-        .post(&format!("{}/api/v1/scenarios/search", helper.base_url))
+        .post(format!("{}/api/v1/scenarios/search", helper.base_url))
         .json(&json!({
             "query": scenario_name.clone(),
             "page": 0,
@@ -411,12 +413,12 @@ async fn test_scenario_marketplace_workflow() {
     assert!(search_response.status().is_success());
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
-    assert!(search_body["scenarios"].as_array().unwrap().len() > 0);
+    assert!(!search_body["scenarios"].as_array().unwrap().is_empty());
 
     // Step 5: Get scenario details
     let get_response = helper
         .client
-        .get(&format!("{}/api/v1/scenarios/{}", helper.base_url, scenario_name))
+        .get(format!("{}/api/v1/scenarios/{}", helper.base_url, scenario_name))
         .send()
         .await
         .expect("Failed to get scenario");
@@ -426,7 +428,7 @@ async fn test_scenario_marketplace_workflow() {
     // Step 6: Submit a review
     let review_response = helper
         .client
-        .post(&format!("{}/api/v1/scenarios/{}/reviews", helper.base_url, scenario_name))
+        .post(format!("{}/api/v1/scenarios/{}/reviews", helper.base_url, scenario_name))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "rating": 5,
@@ -461,11 +463,11 @@ async fn test_upload_validation_errors() {
     // Test 1: Invalid WASM file (wrong magic bytes)
     let invalid_wasm = vec![0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
     let checksum = MarketplaceTestHelper::calculate_checksum(&invalid_wasm);
-    let wasm_base64 = base64::encode(&invalid_wasm);
+    let wasm_base64 = base64::engine::general_purpose::STANDARD.encode(&invalid_wasm);
 
     let response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/publish", helper.base_url))
+        .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "name": format!("test-plugin-{}", timestamp),
@@ -489,11 +491,11 @@ async fn test_upload_validation_errors() {
     // Test 2: Path traversal in name
     let wasm_data = MarketplaceTestHelper::create_test_wasm();
     let checksum = MarketplaceTestHelper::calculate_checksum(&wasm_data);
-    let wasm_base64 = base64::encode(&wasm_data);
+    let wasm_base64 = base64::engine::general_purpose::STANDARD.encode(&wasm_data);
 
     let response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/publish", helper.base_url))
+        .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "name": "../../etc/passwd",
@@ -518,11 +520,11 @@ async fn test_upload_validation_errors() {
     let mut large_wasm = vec![0u8; 11 * 1024 * 1024]; // 11 MB
     large_wasm[..4].copy_from_slice(&[0x00, 0x61, 0x73, 0x6D]);
     let checksum = MarketplaceTestHelper::calculate_checksum(&large_wasm);
-    let wasm_base64 = base64::encode(&large_wasm);
+    let wasm_base64 = base64::engine::general_purpose::STANDARD.encode(&large_wasm);
 
     let response = helper
         .client
-        .post(&format!("{}/api/v1/plugins/publish", helper.base_url))
+        .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "name": format!("test-plugin-{}", timestamp),

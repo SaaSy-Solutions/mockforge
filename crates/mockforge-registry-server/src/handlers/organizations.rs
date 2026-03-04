@@ -45,7 +45,7 @@ pub async fn create_organization(
     // Check if slug is already taken
     if Organization::find_by_slug(pool, &request.slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .is_some()
     {
         return Err(ApiError::InvalidRequest("Organization slug is already taken".to_string()));
@@ -62,7 +62,7 @@ pub async fn create_organization(
 
     let org = Organization::create(pool, &request.name, &request.slug, user_id, plan_enum)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(OrganizationResponse {
         id: org.id,
@@ -82,9 +82,7 @@ pub async fn list_organizations(
     let pool = state.db.pool();
 
     // Get all organizations where user is owner or member
-    let orgs = Organization::find_by_user(pool, user_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let orgs = Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
 
     // Convert to response format
     let responses: Vec<OrganizationResponse> = orgs
@@ -113,14 +111,12 @@ pub async fn get_organization(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access (owner or member)
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -149,13 +145,11 @@ pub async fn get_organization_members(
     // Verify user has access to this organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -169,7 +163,7 @@ pub async fn get_organization_members(
     let org_id_for_members = org.id;
 
     // Get all members (including owner)
-    let members = OrgMember::find_by_org(pool, org_id).await.map_err(|e| ApiError::Database(e))?;
+    let members = OrgMember::find_by_org(pool, org_id).await.map_err(ApiError::Database)?;
 
     // Get user details for each member
     let mut member_responses = Vec::new();
@@ -177,7 +171,7 @@ pub async fn get_organization_members(
     // Add owner as a member (if not already in members list)
     let owner_user = User::find_by_id(pool, org_owner_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Owner user not found".to_string()))?;
 
     let owner_in_members = members.iter().any(|m| m.user_id == org_owner_id);
@@ -197,7 +191,7 @@ pub async fn get_organization_members(
     for member in members {
         let user = User::find_by_id(pool, member.user_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
         member_responses.push(MemberResponse {
@@ -227,7 +221,7 @@ pub async fn add_organization_member(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
@@ -250,12 +244,12 @@ pub async fn add_organization_member(
     let target_user = if let Some(email) = &request.email {
         User::find_by_email(pool, email)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?
     } else if let Some(user_id_param) = request.user_id {
         User::find_by_id(pool, user_id_param)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?
     } else {
         return Err(ApiError::InvalidRequest(
@@ -272,7 +266,7 @@ pub async fn add_organization_member(
 
     if OrgMember::find(pool, org_id, target_user.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .is_some()
     {
         return Err(ApiError::InvalidRequest(
@@ -294,7 +288,7 @@ pub async fn add_organization_member(
     // Add member
     let member = OrgMember::create(pool, org_id, target_user.id, role)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit event
     let ip_address = headers
@@ -311,9 +305,7 @@ pub async fn add_organization_member(
         AuditEventType::MemberAdded,
         format!(
             "Added member {} ({}) with role {}",
-            target_user.username,
-            target_user.email,
-            role.to_string()
+            target_user.username, target_user.email, role
         ),
         None,
         ip_address.as_deref(),
@@ -344,7 +336,7 @@ pub async fn remove_organization_member(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
@@ -371,19 +363,19 @@ pub async fn remove_organization_member(
     // Check if member exists
     let _member = OrgMember::find(pool, org_id, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     // Get user details for audit log
     let target_user = User::find_by_id(pool, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Remove member
     OrgMember::delete(pool, org_id, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit event
     let ip_address = headers
@@ -423,7 +415,7 @@ pub async fn update_organization_member_role(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
@@ -452,7 +444,7 @@ pub async fn update_organization_member_role(
     // Check if member exists
     let member = OrgMember::find(pool, org_id, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     // Parse new role
@@ -469,12 +461,12 @@ pub async fn update_organization_member_role(
     // Update role
     OrgMember::update_role(pool, org_id, member_user_id, new_role)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get user details
     let target_user = User::find_by_id(pool, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Record audit event
@@ -494,8 +486,8 @@ pub async fn update_organization_member_role(
             "Changed role of {} ({}) from {} to {}",
             target_user.username,
             target_user.email,
-            member.role().to_string(),
-            new_role.to_string()
+            member.role(),
+            new_role
         ),
         None,
         ip_address.as_deref(),
@@ -506,7 +498,7 @@ pub async fn update_organization_member_role(
     // Get updated member
     let updated_member = OrgMember::find(pool, org_id, member_user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     Ok(Json(MemberResponse {
@@ -533,7 +525,7 @@ pub async fn update_organization(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner
@@ -551,7 +543,7 @@ pub async fn update_organization(
             .bind(org_id)
             .execute(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     // Update slug if provided
@@ -581,7 +573,7 @@ pub async fn update_organization(
             .bind(org_id)
             .execute(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     // Update plan if provided
@@ -599,7 +591,7 @@ pub async fn update_organization(
 
         Organization::update_plan(pool, org_id, new_plan)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         // Record audit event for plan change
         let ip_address = headers
@@ -615,7 +607,7 @@ pub async fn update_organization(
             org_id,
             Some(user_id),
             AuditEventType::OrgPlanChanged,
-            format!("Changed plan from {} to {}", org.plan().to_string(), new_plan.to_string()),
+            format!("Changed plan from {} to {}", org.plan(), new_plan),
             None,
             ip_address.as_deref(),
             user_agent.as_deref(),
@@ -626,7 +618,7 @@ pub async fn update_organization(
     // Get updated organization
     let updated_org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     Ok(Json(OrganizationResponse {
@@ -651,7 +643,7 @@ pub async fn delete_organization(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner
@@ -667,7 +659,7 @@ pub async fn delete_organization(
     .bind(org_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     if has_active_subscription.0 {
         return Err(ApiError::InvalidRequest(
@@ -700,7 +692,7 @@ pub async fn delete_organization(
         .bind(org_id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(
         serde_json::json!({"success": true, "message": "Organization deleted successfully"}),

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{resolve_org_context, AuthUser},
+    middleware::AuthUser,
     models::{AuditEventType, AuditLog, OrgMember, OrgRole, Organization},
     AppState,
 };
@@ -56,15 +56,13 @@ pub async fn get_audit_logs(
     // Verify organization exists
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is admin or owner of the organization
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         member.map(|m| m.role() == OrgRole::Admin).unwrap_or(false)
     } else {
         true
@@ -121,7 +119,7 @@ pub async fn get_audit_logs(
         event_type,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Get total count
     let total: (i64,) = if event_type.is_some() {
@@ -136,7 +134,7 @@ pub async fn get_audit_logs(
             .fetch_one(pool)
             .await
     }
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Convert to response format
     let log_responses: Vec<AuditLogResponse> = logs

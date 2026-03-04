@@ -7,9 +7,8 @@ use mockforge_core::ai_contract_diff::{
 };
 use mockforge_core::contract_drift::{
     BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType, DriftBudget,
-    DriftBudgetConfig, DriftBudgetEngine, DriftResult,
+    DriftBudgetConfig, DriftBudgetEngine,
 };
-use std::collections::HashMap;
 
 fn create_test_metadata(
     endpoint: &str,
@@ -41,15 +40,15 @@ async fn test_default_drift_budget_config() {
 /// Test drift budget configuration at different hierarchy levels
 #[tokio::test]
 async fn test_budget_hierarchy_configuration() {
-    let mut config = DriftBudgetConfig::default();
-
-    // Set default budget
-    config.default_budget = Some(DriftBudget {
-        max_breaking_changes: 0,
-        max_non_breaking_changes: 10,
-        enabled: true,
+    let mut config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_breaking_changes: 0,
+            max_non_breaking_changes: 10,
+            enabled: true,
+            ..Default::default()
+        }),
         ..Default::default()
-    });
+    };
 
     // Set workspace budget
     config.per_workspace_budgets.insert(
@@ -219,13 +218,15 @@ async fn test_breaking_change_detection_type_changes() {
 /// Test non-breaking change tracking (added optional fields)
 #[tokio::test]
 async fn test_non_breaking_change_tracking() {
-    let mut config = DriftBudgetConfig::default();
-    config.default_budget = Some(DriftBudget {
-        max_breaking_changes: 0,
-        max_non_breaking_changes: 5,
-        enabled: true,
+    let config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_breaking_changes: 0,
+            max_non_breaking_changes: 5,
+            enabled: true,
+            ..Default::default()
+        }),
         ..Default::default()
-    });
+    };
 
     let engine = DriftBudgetEngine::new(config);
 
@@ -277,13 +278,15 @@ async fn test_non_breaking_change_tracking() {
 /// Test budget exceeded scenario
 #[tokio::test]
 async fn test_budget_exceeded_scenario() {
-    let mut config = DriftBudgetConfig::default();
-    config.default_budget = Some(DriftBudget {
-        max_breaking_changes: 0,
-        max_non_breaking_changes: 2, // Very low budget
-        enabled: true,
+    let config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_breaking_changes: 0,
+            max_non_breaking_changes: 2, // Very low budget
+            enabled: true,
+            ..Default::default()
+        }),
         ..Default::default()
-    });
+    };
 
     let engine = DriftBudgetEngine::new(config);
 
@@ -346,15 +349,16 @@ async fn test_budget_exceeded_scenario() {
 /// Test budget lookup priority (most specific wins)
 #[tokio::test]
 async fn test_budget_lookup_priority() {
-    let mut config = DriftBudgetConfig::default();
+    let mut config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_non_breaking_changes: 10,
+            enabled: true,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
 
     // Set budgets at different levels with different values
-    config.default_budget = Some(DriftBudget {
-        max_non_breaking_changes: 10,
-        enabled: true,
-        ..Default::default()
-    });
-
     config.per_workspace_budgets.insert(
         "workspace-1".to_string(),
         DriftBudget {
@@ -451,8 +455,10 @@ async fn test_tag_based_budget_lookup() {
 /// Test disabled budget
 #[tokio::test]
 async fn test_disabled_budget() {
-    let mut config = DriftBudgetConfig::default();
-    config.enabled = false;
+    let config = DriftBudgetConfig {
+        enabled: false,
+        ..Default::default()
+    };
 
     let engine = DriftBudgetEngine::new(config);
 
@@ -485,12 +491,14 @@ async fn test_disabled_budget() {
 /// Test per-endpoint disabled budget
 #[tokio::test]
 async fn test_per_endpoint_disabled_budget() {
-    let mut config = DriftBudgetConfig::default();
-    config.default_budget = Some(DriftBudget {
-        max_breaking_changes: 0,
-        enabled: true,
+    let mut config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_breaking_changes: 0,
+            enabled: true,
+            ..Default::default()
+        }),
         ..Default::default()
-    });
+    };
 
     config.per_endpoint_budgets.insert(
         "POST /api/users".to_string(),
@@ -615,15 +623,17 @@ async fn test_potentially_breaking_changes() {
 /// Test budget with percentage-based field churn
 #[tokio::test]
 async fn test_percentage_based_budget() {
-    let mut config = DriftBudgetConfig::default();
-    config.default_budget = Some(DriftBudget {
-        max_breaking_changes: 0,
-        max_non_breaking_changes: 0,
-        max_field_churn_percent: Some(10.0), // 10% max churn
-        time_window_days: Some(30),
-        enabled: true,
+    let config = DriftBudgetConfig {
+        default_budget: Some(DriftBudget {
+            max_breaking_changes: 0,
+            max_non_breaking_changes: 0,
+            max_field_churn_percent: Some(10.0), // 10% max churn
+            time_window_days: Some(30),
+            enabled: true,
+            ..Default::default()
+        }),
         ..Default::default()
-    });
+    };
 
     let engine = DriftBudgetEngine::new(config);
 

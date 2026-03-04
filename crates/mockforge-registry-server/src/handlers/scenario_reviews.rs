@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{resolve_org_context, AuthUser},
+    middleware::AuthUser,
     models::{Scenario, ScenarioReview, User},
     AppState,
 };
@@ -25,7 +25,7 @@ pub async fn get_scenario_reviews(
 
     let scenario = Scenario::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let limit = params.per_page.unwrap_or(20) as i64;
@@ -33,17 +33,17 @@ pub async fn get_scenario_reviews(
 
     let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, limit, offset)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let total = ScenarioReview::count_by_scenario(pool, scenario.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let mut review_responses = Vec::new();
     for review in reviews {
         let reviewer = User::find_by_id(pool, review.reviewer_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .unwrap_or_else(|| User {
                 id: review.reviewer_id,
                 username: "unknown".to_string(),
@@ -85,7 +85,7 @@ pub async fn get_scenario_reviews(
 pub async fn submit_scenario_review(
     State(state): State<AppState>,
     AuthUser(reviewer_id): AuthUser,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     Path(name): Path<String>,
     Json(request): Json<SubmitScenarioReviewRequest>,
 ) -> ApiResult<Json<SubmitReviewResponse>> {
@@ -103,7 +103,7 @@ pub async fn submit_scenario_review(
 
     let scenario = Scenario::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     // Check if user already reviewed
@@ -114,7 +114,7 @@ pub async fn submit_scenario_review(
     .bind(reviewer_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     if existing.is_some() {
         return Err(ApiError::InvalidRequest(
@@ -132,12 +132,12 @@ pub async fn submit_scenario_review(
         &request.comment,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Update scenario stats
     ScenarioReview::update_scenario_stats(pool, scenario.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,

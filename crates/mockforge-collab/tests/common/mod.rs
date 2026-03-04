@@ -1,5 +1,7 @@
 //! Common test utilities and helpers
 
+#![allow(unreachable_pub)]
+
 use axum::Router;
 use mockforge_collab::{
     api::{create_router, ApiState},
@@ -66,7 +68,7 @@ impl TestContext {
         // Create event bus and sync engine
         let event_bus = Arc::new(EventBus::new(1000));
         let sync = Arc::new(SyncEngine::with_integration(
-            event_bus.clone(),
+            event_bus,
             db.clone(),
             core_bridge.clone(),
             workspace.clone(),
@@ -79,7 +81,7 @@ impl TestContext {
         let backup = Arc::new(BackupService::new(
             db.clone(),
             Some(backup_dir.to_string_lossy().to_string()),
-            core_bridge.clone(),
+            core_bridge,
             workspace.clone(),
         ));
 
@@ -89,9 +91,9 @@ impl TestContext {
             user: user.clone(),
             workspace: workspace.clone(),
             history: history.clone(),
-            merge: merge.clone(),
-            backup: backup.clone(),
-            sync: sync.clone(),
+            merge,
+            backup,
+            sync,
         };
         let router = create_router(api_state);
 
@@ -183,5 +185,5 @@ impl TestContext {
 
 /// Helper to create authorization header
 pub fn auth_header(token: &str) -> (&'static str, String) {
-    ("Authorization", format!("Bearer {}", token))
+    ("Authorization", format!("Bearer {token}"))
 }

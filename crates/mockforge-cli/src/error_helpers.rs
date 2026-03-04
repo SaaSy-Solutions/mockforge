@@ -5,7 +5,7 @@
 
 use crate::progress::{CliError, ExitCode};
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::Path;
 
 /// Enhanced error builder with context
 pub struct ErrorBuilder {
@@ -80,7 +80,6 @@ impl ErrorBuilder {
 }
 
 /// Common error patterns with enhanced messages
-
 /// Port already in use error
 pub fn port_in_use_error(port: u16, protocol: &str) -> CliError {
     ErrorBuilder::new(
@@ -101,7 +100,7 @@ pub fn port_in_use_error(port: u16, protocol: &str) -> CliError {
 }
 
 /// Configuration file not found error
-pub fn config_not_found_error(path: &PathBuf) -> CliError {
+pub fn config_not_found_error(path: &Path) -> CliError {
     ErrorBuilder::new(
         format!("Configuration file not found: {}", path.display()),
         ExitCode::FileNotFound,
@@ -114,7 +113,7 @@ pub fn config_not_found_error(path: &PathBuf) -> CliError {
 }
 
 /// Invalid OpenAPI spec error
-pub fn invalid_openapi_error(path: &PathBuf, error: &str) -> CliError {
+pub fn invalid_openapi_error(path: &Path, error: &str) -> CliError {
     ErrorBuilder::new(
         format!("Invalid OpenAPI specification: {}", error),
         ExitCode::ConfigurationError,
@@ -150,7 +149,7 @@ pub fn network_error(operation: &str, error: &str) -> CliError {
 }
 
 /// Permission denied error
-pub fn permission_denied_error(path: &PathBuf, operation: &str) -> CliError {
+pub fn permission_denied_error(path: &Path, operation: &str) -> CliError {
     ErrorBuilder::new(
         format!("Permission denied: cannot {} {}", operation, path.display()),
         ExitCode::PermissionDenied,
@@ -195,6 +194,7 @@ pub fn format_validation_errors(errors: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     // ErrorBuilder tests
     #[test]

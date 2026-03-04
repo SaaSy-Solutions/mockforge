@@ -62,9 +62,8 @@ fn is_origin_allowed(origin: &str) -> bool {
     for allowed_origin in allowed {
         if allowed_origin.starts_with("*.") {
             let suffix = &allowed_origin[1..]; // ".mockforge.dev"
-            if origin.ends_with(suffix) {
+            if let Some(prefix) = origin.strip_suffix(suffix) {
                 // Verify it's a valid subdomain (has a dot before the suffix)
-                let prefix = &origin[..origin.len() - suffix.len()];
                 if prefix.starts_with("https://") || prefix.starts_with("http://") {
                     return true;
                 }

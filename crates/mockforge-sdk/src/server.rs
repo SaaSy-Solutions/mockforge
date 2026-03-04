@@ -1,4 +1,5 @@
 //! Mock server implementation
+#![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
 
 use crate::builder::MockServerBuilder;
 use crate::stub::ResponseStub;
@@ -45,15 +46,13 @@ pub struct MockServer {
 impl MockServer {
     /// Create a new mock server builder
     #[must_use]
+    #[allow(clippy::new_ret_no_self)]
     pub const fn new() -> MockServerBuilder {
         MockServerBuilder::new()
     }
 
     /// Create a mock server from configuration
-    pub(crate) async fn from_config(
-        server_config: ServerConfig,
-        _core_config: Config,
-    ) -> Result<Self> {
+    pub(crate) fn from_config(server_config: ServerConfig, _core_config: Config) -> Result<Self> {
         let port = server_config.http.port;
         let host = server_config.http.host.clone();
 
@@ -73,6 +72,10 @@ impl MockServer {
     }
 
     /// Start the mock server
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal axum server task encounters an error.
     pub async fn start(&mut self) -> Result<()> {
         if self.server_handle.is_some() {
             return Err(Error::ServerAlreadyStarted(self.port));
@@ -89,12 +92,12 @@ impl MockServer {
         // This is important for port 0 (auto-assign) to work correctly
         let listener = tokio::net::TcpListener::bind(self.address)
             .await
-            .map_err(|e| Error::General(format!("Failed to bind to {}: {}", self.address, e)))?;
+            .map_err(|e| Error::General(format!("Failed to bind to {}: {e}", self.address)))?;
 
         // Get the actual bound address (important when using port 0)
         let actual_address = listener
             .local_addr()
-            .map_err(|e| Error::General(format!("Failed to get local address: {}", e)))?;
+            .map_err(|e| Error::General(format!("Failed to get local address: {e}")))?;
 
         // Update our address and port with the actual bound values
         self.address = actual_address;
@@ -142,9 +145,10 @@ impl MockServer {
             }
         }
 
+        let timeout_ms = u32::try_from(delay.as_millis()).unwrap_or(u32::MAX);
         Err(Error::General(format!(
             "Server failed to become ready within {}ms",
-            max_attempts * delay.as_millis() as u32
+            max_attempts * timeout_ms
         )))
     }
 
@@ -164,8 +168,7 @@ impl MockServer {
         let list_mocks = move || {
             let store = store_for_list.clone();
             async move {
-                let mocks = store.read().await;
-                let items: Vec<&Value> = mocks.values().collect();
+                let items: Vec<Value> = store.read().await.values().cloned().collect();
                 let total = items.len();
                 Json(serde_json::json!({
                     "mocks": items,
@@ -183,8 +186,7 @@ impl MockServer {
                     .get("id")
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
-                    .map(String::from)
-                    .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+                    .map_or_else(|| uuid::Uuid::new_v4().to_string(), String::from);
                 mock["id"] = serde_json::json!(id);
                 store.write().await.insert(id, mock.clone());
                 (StatusCode::CREATED, Json(mock))
@@ -195,10 +197,10 @@ impl MockServer {
         let get_mock = move |Path(id): Path<String>| {
             let store = store_for_get.clone();
             async move {
-                match store.read().await.get(&id) {
-                    Some(mock) => (StatusCode::OK, Json(mock.clone())).into_response(),
-                    None => StatusCode::NOT_FOUND.into_response(),
-                }
+                store.read().await.get(&id).map_or_else(
+                    || StatusCode::NOT_FOUND.into_response(),
+                    |mock| (StatusCode::OK, Json(mock.clone())).into_response(),
+                )
             }
         };
 
@@ -221,12 +223,10 @@ impl MockServer {
             }
         };
 
-        let store_for_stats = mock_store.clone();
         let get_stats = move || {
-            let store = store_for_stats.clone();
+            let store = mock_store.clone();
             async move {
-                let mocks = store.read().await;
-                let count = mocks.len();
+                let count = store.read().await.len();
                 Json(serde_json::json!({
                     "uptime_seconds": 1,  // Minimum uptime for tests
                     "total_requests": 0,
@@ -244,26 +244,29 @@ impl MockServer {
                 let method = request.method().to_string();
                 let path = request.uri().path().to_string();
 
-                // Search for a matching stub
-                let stubs = stub_store.read().await;
-                for stub in stubs.iter() {
-                    if stub.method.eq_ignore_ascii_case(&method) && stub.path == path {
-                        let mut response = Json(stub.body.clone()).into_response();
-                        *response.status_mut() =
-                            StatusCode::from_u16(stub.status).unwrap_or(StatusCode::OK);
+                // Search for a matching stub, cloning out before dropping the lock
+                let matching_stub = stub_store
+                    .read()
+                    .await
+                    .iter()
+                    .find(|s| s.method.eq_ignore_ascii_case(&method) && s.path == path)
+                    .cloned();
 
-                        for (key, value) in &stub.headers {
-                            if let Ok(header_name) =
-                                axum::http::HeaderName::from_bytes(key.as_bytes())
-                            {
-                                if let Ok(header_value) = axum::http::HeaderValue::from_str(value) {
-                                    response.headers_mut().insert(header_name, header_value);
-                                }
+                if let Some(stub) = matching_stub {
+                    let mut response = Json(stub.body).into_response();
+                    *response.status_mut() =
+                        StatusCode::from_u16(stub.status).unwrap_or(StatusCode::OK);
+
+                    for (key, value) in &stub.headers {
+                        if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes())
+                        {
+                            if let Ok(header_value) = axum::http::HeaderValue::from_str(value) {
+                                response.headers_mut().insert(header_name, header_value);
                             }
                         }
-
-                        return response;
                     }
+
+                    return response;
                 }
 
                 // No matching stub found
@@ -433,7 +436,7 @@ impl std::fmt::Debug for MockServer {
             .field("address", &self.address)
             .field("is_running", &self.server_handle.is_some())
             .field("routes_count", &self.routes.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -450,12 +453,13 @@ impl Drop for MockServer {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::mem::{size_of, size_of_val};
 
     #[test]
     fn test_mock_server_new() {
         let builder = MockServer::new();
         // Should return a MockServerBuilder
-        assert_eq!(std::mem::size_of_val(&builder), std::mem::size_of::<MockServerBuilder>());
+        assert_eq!(size_of_val(&builder), size_of::<MockServerBuilder>());
     }
 
     #[test]
@@ -486,12 +490,12 @@ mod tests {
         assert!(!server.is_running());
     }
 
-    #[tokio::test]
-    async fn test_from_config_valid() {
+    #[test]
+    fn test_from_config_valid() {
         let server_config = ServerConfig::default();
         let core_config = Config::default();
 
-        let result = MockServer::from_config(server_config, core_config).await;
+        let result = MockServer::from_config(server_config, core_config);
         assert!(result.is_ok());
 
         let server = result.unwrap();
@@ -499,13 +503,13 @@ mod tests {
         assert!(server.routes.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_from_config_invalid_address() {
+    #[test]
+    fn test_from_config_invalid_address() {
         let mut server_config = ServerConfig::default();
         server_config.http.host = "invalid host with spaces".to_string();
         let core_config = Config::default();
 
-        let result = MockServer::from_config(server_config, core_config).await;
+        let result = MockServer::from_config(server_config, core_config);
         assert!(result.is_err());
         match result {
             Err(Error::InvalidConfig(msg)) => {
@@ -613,7 +617,7 @@ mod tests {
         let server = MockServer::default();
         let router = server.build_simple_router(server.stub_store.clone());
         // Router should be created without panicking
-        assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
+        assert_eq!(size_of_val(&router), size_of::<Router>());
     }
 
     #[tokio::test]
@@ -624,7 +628,7 @@ mod tests {
 
         let router = server.build_simple_router(server.stub_store.clone());
         // Router should be built with the routes
-        assert_eq!(std::mem::size_of_val(&router), std::mem::size_of::<Router>());
+        assert_eq!(size_of_val(&router), size_of::<Router>());
     }
 
     #[tokio::test]
@@ -652,7 +656,7 @@ mod tests {
         }
 
         // Clean up
-        let _ = server.stop().await;
+        let _ = Box::pin(server.stop()).await;
     }
 
     #[test]

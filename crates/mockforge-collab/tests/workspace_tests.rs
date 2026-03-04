@@ -115,7 +115,7 @@ async fn test_get_workspace() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}"))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -143,7 +143,7 @@ async fn test_update_workspace() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(&format!("/workspaces/{}", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -179,7 +179,7 @@ async fn test_delete_workspace() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/workspaces/{}", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}"))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -203,7 +203,7 @@ async fn test_add_member_to_workspace() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/members", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/members"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -238,7 +238,7 @@ async fn test_list_members() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/members", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/members"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -274,7 +274,7 @@ async fn test_viewer_cannot_update_workspace() {
         .oneshot(
             Request::builder()
                 .method("PUT")
-                .uri(&format!("/workspaces/{}", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}"))
                 .header("content-type", "application/json")
                 .header(auth_header(&viewer_token).0, auth_header(&viewer_token).1)
                 .body(Body::from(

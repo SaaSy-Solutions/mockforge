@@ -8,16 +8,12 @@ use uuid::Uuid;
 /// Organization plan type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum Plan {
+    #[default]
     Free,
     Pro,
     Team,
-}
-
-impl Default for Plan {
-    fn default() -> Self {
-        Plan::Free
-    }
 }
 
 /// Organization model
@@ -37,16 +33,12 @@ pub struct Organization {
 /// Organization member role
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum OrgRole {
     Owner,
     Admin,
+    #[default]
     Member,
-}
-
-impl Default for OrgRole {
-    fn default() -> Self {
-        OrgRole::Member
-    }
 }
 
 /// Organization member
@@ -236,12 +228,12 @@ impl Organization {
     }
 }
 
-impl Plan {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for Plan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Plan::Free => "free".to_string(),
-            Plan::Pro => "pro".to_string(),
-            Plan::Team => "team".to_string(),
+            Plan::Free => write!(f, "free"),
+            Plan::Pro => write!(f, "pro"),
+            Plan::Team => write!(f, "team"),
         }
     }
 }
@@ -332,15 +324,17 @@ impl OrgMember {
     }
 }
 
-impl OrgRole {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for OrgRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OrgRole::Owner => "owner".to_string(),
-            OrgRole::Admin => "admin".to_string(),
-            OrgRole::Member => "member".to_string(),
+            OrgRole::Owner => write!(f, "owner"),
+            OrgRole::Admin => write!(f, "admin"),
+            OrgRole::Member => write!(f, "member"),
         }
     }
+}
 
+impl OrgRole {
     pub fn can_manage_members(&self) -> bool {
         matches!(self, OrgRole::Owner | OrgRole::Admin)
     }
@@ -389,6 +383,103 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "ai_tokens_per_month": 1000000,
             "hosted_mocks": true
         }),
+    }
+}
+
+/// Get permissions for a role
+/// Returns Vec<Permission> with all granted permissions based on role inheritance
+/// Owner: All permissions
+/// Admin: OrgRead, OrgManageMembers + marketplace publish/update permissions + hosted mocks
+/// Member: Read-only permissions for all resources
+impl OrgRole {
+    pub fn get_permissions(&self) -> Vec<crate::middleware::permissions::Permission> {
+        use crate::middleware::permissions::Permission;
+
+        match self {
+            OrgRole::Owner => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                Permission::OrgUpdate,
+                Permission::OrgDelete,
+                Permission::OrgManageMembers,
+                Permission::OrgManageBilling,
+                // Plugin permissions
+                Permission::PluginRead,
+                Permission::PluginPublish,
+                Permission::PluginYank,
+                Permission::PluginVerify,
+                // Template permissions
+                Permission::TemplateRead,
+                Permission::TemplatePublish,
+                Permission::TemplateUpdate,
+                Permission::TemplateDelete,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                Permission::ScenarioPublish,
+                Permission::ScenarioUpdate,
+                Permission::ScenarioDelete,
+                // Review permissions
+                Permission::ReviewCreate,
+                Permission::ReviewUpdate,
+                Permission::ReviewDelete,
+                Permission::ReviewModerate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                Permission::HostedMockCreate,
+                Permission::HostedMockUpdate,
+                Permission::HostedMockDelete,
+                Permission::HostedMockMetrics,
+                // Usage permissions
+                Permission::UsageRead,
+                // Admin permissions
+                Permission::AdminAll,
+            ],
+
+            OrgRole::Admin => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                Permission::OrgManageMembers,
+                // Plugin permissions
+                Permission::PluginRead,
+                Permission::PluginPublish,
+                // Template permissions
+                Permission::TemplateRead,
+                Permission::TemplatePublish,
+                Permission::TemplateUpdate,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                Permission::ScenarioPublish,
+                Permission::ScenarioUpdate,
+                // Review permissions
+                Permission::ReviewCreate,
+                Permission::ReviewUpdate,
+                Permission::ReviewModerate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                Permission::HostedMockCreate,
+                Permission::HostedMockUpdate,
+                Permission::HostedMockMetrics,
+                // Usage permissions
+                Permission::UsageRead,
+            ],
+
+            OrgRole::Member => vec![
+                // Organization permissions
+                Permission::OrgRead,
+                // Plugin permissions
+                Permission::PluginRead,
+                // Template permissions
+                Permission::TemplateRead,
+                // Scenario permissions
+                Permission::ScenarioRead,
+                // Review permissions
+                Permission::ReviewCreate,
+                // Hosted Mock permissions
+                Permission::HostedMockRead,
+                // Usage permissions
+                Permission::UsageRead,
+            ],
+        }
     }
 }
 
@@ -652,7 +743,7 @@ mod tests {
     fn test_plan_copy_and_clone() {
         let plan1 = Plan::Pro;
         let plan2 = plan1;
-        let plan3 = plan1.clone();
+        let plan3 = plan1;
 
         assert_eq!(plan1, plan2);
         assert_eq!(plan1, plan3);
@@ -662,7 +753,7 @@ mod tests {
     fn test_org_role_copy_and_clone() {
         let role1 = OrgRole::Admin;
         let role2 = role1;
-        let role3 = role1.clone();
+        let role3 = role1;
 
         assert_eq!(role1, role2);
         assert_eq!(role1, role3);
@@ -755,103 +846,6 @@ mod tests {
         assert_eq!(member_perms.len(), expected.len());
         for perm in &expected {
             assert!(member_perms.contains(perm), "Member missing {:?}", perm);
-        }
-    }
-}
-
-/// Get permissions for a role
-/// Returns Vec<Permission> with all granted permissions based on role inheritance
-/// Owner: All permissions
-/// Admin: OrgRead, OrgManageMembers + marketplace publish/update permissions + hosted mocks
-/// Member: Read-only permissions for all resources
-impl OrgRole {
-    pub fn get_permissions(&self) -> Vec<crate::middleware::permissions::Permission> {
-        use crate::middleware::permissions::Permission;
-
-        match self {
-            OrgRole::Owner => vec![
-                // Organization permissions
-                Permission::OrgRead,
-                Permission::OrgUpdate,
-                Permission::OrgDelete,
-                Permission::OrgManageMembers,
-                Permission::OrgManageBilling,
-                // Plugin permissions
-                Permission::PluginRead,
-                Permission::PluginPublish,
-                Permission::PluginYank,
-                Permission::PluginVerify,
-                // Template permissions
-                Permission::TemplateRead,
-                Permission::TemplatePublish,
-                Permission::TemplateUpdate,
-                Permission::TemplateDelete,
-                // Scenario permissions
-                Permission::ScenarioRead,
-                Permission::ScenarioPublish,
-                Permission::ScenarioUpdate,
-                Permission::ScenarioDelete,
-                // Review permissions
-                Permission::ReviewCreate,
-                Permission::ReviewUpdate,
-                Permission::ReviewDelete,
-                Permission::ReviewModerate,
-                // Hosted Mock permissions
-                Permission::HostedMockRead,
-                Permission::HostedMockCreate,
-                Permission::HostedMockUpdate,
-                Permission::HostedMockDelete,
-                Permission::HostedMockMetrics,
-                // Usage permissions
-                Permission::UsageRead,
-                // Admin permissions
-                Permission::AdminAll,
-            ],
-
-            OrgRole::Admin => vec![
-                // Organization permissions
-                Permission::OrgRead,
-                Permission::OrgManageMembers,
-                // Plugin permissions
-                Permission::PluginRead,
-                Permission::PluginPublish,
-                // Template permissions
-                Permission::TemplateRead,
-                Permission::TemplatePublish,
-                Permission::TemplateUpdate,
-                // Scenario permissions
-                Permission::ScenarioRead,
-                Permission::ScenarioPublish,
-                Permission::ScenarioUpdate,
-                // Review permissions
-                Permission::ReviewCreate,
-                Permission::ReviewUpdate,
-                Permission::ReviewModerate,
-                // Hosted Mock permissions
-                Permission::HostedMockRead,
-                Permission::HostedMockCreate,
-                Permission::HostedMockUpdate,
-                Permission::HostedMockMetrics,
-                // Usage permissions
-                Permission::UsageRead,
-            ],
-
-            OrgRole::Member => vec![
-                // Organization permissions
-                Permission::OrgRead,
-                // Plugin permissions
-                Permission::PluginRead,
-                // Template permissions
-                Permission::TemplateRead,
-                // Scenario permissions
-                Permission::ScenarioRead,
-                // Review permissions
-                Permission::ReviewCreate,
-                // Hosted Mock permissions
-                Permission::HostedMockRead,
-                // Usage permissions
-                Permission::UsageRead,
-            ],
         }
     }
 }

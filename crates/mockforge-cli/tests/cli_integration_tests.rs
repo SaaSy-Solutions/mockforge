@@ -1,3 +1,5 @@
+//! CLI integration tests
+#![allow(deprecated)]
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::process::Command;

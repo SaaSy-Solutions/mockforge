@@ -434,7 +434,7 @@ fn apply_cors_middleware(
         }
 
         let mut cors_layer = CorsLayer::new();
-        let mut is_wildcard_origin = false;
+        let is_wildcard_origin;
 
         // Configure allowed origins
         if config.allowed_origins.contains(&"*".to_string()) {
@@ -1613,7 +1613,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             // Convert to the type expected by RouteChaosInjector
             // Note: Both use the same mockforge-core, but we need to ensure type compatibility
             let route_configs_converted: Vec<mockforge_core::config::RouteConfig> =
-                route_configs.iter().cloned().collect();
+                route_configs.to_vec();
             match mockforge_route_chaos::RouteChaosInjector::new(route_configs_converted) {
                 Ok(injector) => {
                     info!(

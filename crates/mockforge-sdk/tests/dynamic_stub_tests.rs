@@ -122,14 +122,20 @@ async fn test_dynamic_stub_with_latency() {
 
 #[tokio::test]
 async fn test_dynamic_stub_request_body_access() {
-    let stub = DynamicStub::new("POST", "/api/echo", |ctx| match &ctx.body {
-        Some(body) => json!({
-            "echoed": body,
-            "message": "Body received"
-        }),
-        None => json!({
-            "error": "No body provided"
-        }),
+    let stub = DynamicStub::new("POST", "/api/echo", |ctx| {
+        ctx.body.as_ref().map_or_else(
+            || {
+                json!({
+                    "error": "No body provided"
+                })
+            },
+            |body| {
+                json!({
+                    "echoed": body,
+                    "message": "Body received"
+                })
+            },
+        )
     });
 
     // Test with body
@@ -167,10 +173,9 @@ async fn test_dynamic_stub_counter() {
     use std::sync::Arc;
 
     let counter = Arc::new(AtomicUsize::new(0));
-    let counter_clone = counter.clone();
 
     let stub = DynamicStub::new("GET", "/api/counter", move |_ctx| {
-        let count = counter_clone.fetch_add(1, Ordering::SeqCst);
+        let count = counter.fetch_add(1, Ordering::SeqCst);
         json!({
             "count": count
         })

@@ -20,19 +20,21 @@ pub enum SubscriptionStatus {
     IncompleteExpired,
 }
 
-impl SubscriptionStatus {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for SubscriptionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SubscriptionStatus::Active => "active".to_string(),
-            SubscriptionStatus::Trialing => "trialing".to_string(),
-            SubscriptionStatus::PastDue => "past_due".to_string(),
-            SubscriptionStatus::Canceled => "canceled".to_string(),
-            SubscriptionStatus::Unpaid => "unpaid".to_string(),
-            SubscriptionStatus::Incomplete => "incomplete".to_string(),
-            SubscriptionStatus::IncompleteExpired => "incomplete_expired".to_string(),
+            SubscriptionStatus::Active => write!(f, "active"),
+            SubscriptionStatus::Trialing => write!(f, "trialing"),
+            SubscriptionStatus::PastDue => write!(f, "past_due"),
+            SubscriptionStatus::Canceled => write!(f, "canceled"),
+            SubscriptionStatus::Unpaid => write!(f, "unpaid"),
+            SubscriptionStatus::Incomplete => write!(f, "incomplete"),
+            SubscriptionStatus::IncompleteExpired => write!(f, "incomplete_expired"),
         }
     }
+}
 
+impl SubscriptionStatus {
     pub fn from_string(s: &str) -> Self {
         match s {
             "active" => SubscriptionStatus::Active,
@@ -86,6 +88,7 @@ impl Subscription {
     }
 
     /// Create or update subscription from Stripe webhook
+    #[allow(clippy::too_many_arguments)]
     pub async fn upsert_from_stripe(
         pool: &sqlx::PgPool,
         org_id: Uuid,
@@ -402,7 +405,7 @@ mod tests {
     fn test_subscription_status_copy_and_clone() {
         let status1 = SubscriptionStatus::Active;
         let status2 = status1;
-        let status3 = status1.clone();
+        let status3 = status1;
 
         assert_eq!(status1, status2);
         assert_eq!(status1, status3);

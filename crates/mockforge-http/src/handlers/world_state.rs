@@ -292,7 +292,6 @@ async fn handle_world_state_stream(
 
     // Send periodic updates (every 5 seconds)
     let mut interval = interval(Duration::from_secs(5));
-    let mut closed = false;
 
     loop {
         tokio::select! {
@@ -305,16 +304,13 @@ async fn handle_world_state_stream(
                     }
                     Some(Ok(Message::Close(_))) => {
                         info!("WebSocket connection closed");
-                        closed = true;
                         break;
                     }
                     Some(Err(e)) => {
                         error!("WebSocket error: {}", e);
-                        closed = true;
                         break;
                     }
                     None => {
-                        closed = true;
                         break;
                     }
                     _ => {}
@@ -326,16 +322,11 @@ async fn handle_world_state_stream(
                 if let Ok(snapshot) = engine.get_current_snapshot().await {
                     if let Ok(json) = serde_json::to_string(&snapshot) {
                         if socket.send(Message::Text(json.into())).await.is_err() {
-                            closed = true;
                             break;
                         }
                     }
                 }
             }
-        }
-
-        if closed {
-            break;
         }
     }
 }

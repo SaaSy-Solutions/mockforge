@@ -77,19 +77,17 @@ pub async fn get_reviews(
     // Get plugin
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     // Get reviews with pagination
     let offset = query.page * query.per_page;
     let reviews = Review::get_by_plugin(pool, plugin.id, query.per_page, offset)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get total count
-    let total = Review::count_by_plugin(pool, plugin.id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let total = Review::count_by_plugin(pool, plugin.id).await.map_err(ApiError::Database)?;
 
     // Get users for reviews
     let mut reviews_with_users = Vec::new();
@@ -100,7 +98,7 @@ pub async fn get_reviews(
         .bind(review.user_id)
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
         reviews_with_users.push(ReviewWithUser {
             id: review.id.to_string(),
@@ -132,7 +130,7 @@ pub async fn get_reviews(
     .bind(plugin.id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let (average_rating, total_reviews) = stats_query;
 
@@ -143,7 +141,7 @@ pub async fn get_reviews(
     .bind(plugin.id)
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let mut rating_distribution = std::collections::HashMap::new();
     for (rating, count) in distribution_rows {
@@ -216,7 +214,7 @@ pub async fn submit_review(
     // Get plugin
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     // Parse user_id
@@ -231,7 +229,7 @@ pub async fn submit_review(
     .bind(user_uuid)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     if existing.is_some() {
         return Err(ApiError::InvalidRequest(
@@ -250,7 +248,7 @@ pub async fn submit_review(
         &request.comment,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Update plugin rating stats
     let stats = sqlx::query_as::<_, (f64, i64)>(
@@ -263,7 +261,7 @@ pub async fn submit_review(
     .bind(plugin.id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     sqlx::query("UPDATE plugins SET rating_avg = $1, rating_count = $2 WHERE id = $3")
         .bind(stats.0)
@@ -271,7 +269,7 @@ pub async fn submit_review(
         .bind(plugin.id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,
@@ -300,7 +298,7 @@ pub async fn vote_review(
     // Get plugin
     let plugin = Plugin::find_by_name(pool, &plugin_name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(plugin_name.clone()))?;
 
     // Update vote count
@@ -318,7 +316,7 @@ pub async fn vote_review(
         .bind(plugin.id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(serde_json::json!({
         "success": true,

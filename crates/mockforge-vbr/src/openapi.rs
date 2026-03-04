@@ -172,7 +172,7 @@ fn convert_schema_to_vbr(
                                     auto_generation.insert(field_name.clone(), rule);
                                 }
                             }
-                            Err(e) => {
+                            Err(_e) => {
                                 // If conversion fails, fall back to string type
                                 let field_def =
                                     FieldDefinition::new(field_name.clone(), "string".to_string())
@@ -368,10 +368,10 @@ fn detect_auto_generation(field_name: &str, schema: &Schema) -> Option<AutoGener
 
 /// Auto-detect foreign key relationships
 fn detect_foreign_keys(
-    entity_name: &str,
+    _entity_name: &str,
     vbr_schema: &mut VbrSchemaDefinition,
     entity_names: &[String],
-    warnings: &mut Vec<String>,
+    _warnings: &mut [String],
 ) {
     for field in &vbr_schema.base.fields {
         // Check if field name suggests a foreign key

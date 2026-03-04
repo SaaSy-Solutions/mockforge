@@ -8,6 +8,9 @@ use crate::{Error, Result};
 use async_trait::async_trait;
 use serde_json::Value;
 use sqlx::Column;
+
+/// Type alias for the complex in-memory table storage type
+type TableStorage = Arc<RwLock<HashMap<String, Vec<HashMap<String, Value>>>>>;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -296,7 +299,7 @@ fn row_value_to_json(row: &sqlx::sqlite::SqliteRow, idx: usize) -> Result<Value>
 /// JSON file database backend implementation
 pub struct JsonDatabase {
     path: std::path::PathBuf,
-    data: Arc<RwLock<HashMap<String, Vec<HashMap<String, Value>>>>>,
+    data: TableStorage,
 }
 
 impl JsonDatabase {
@@ -513,7 +516,7 @@ impl VirtualDatabase for JsonDatabase {
 
 /// In-memory database backend implementation
 pub struct InMemoryDatabase {
-    data: Arc<RwLock<HashMap<String, Vec<HashMap<String, Value>>>>>,
+    data: TableStorage,
 }
 
 impl InMemoryDatabase {
@@ -879,6 +882,7 @@ fn parse_insert_query(query: &str, params: &[Value]) -> Result<(String, HashMap<
 }
 
 /// Parse UPDATE query
+#[allow(clippy::type_complexity)]
 fn parse_update_query(
     query: &str,
     params: &[Value],

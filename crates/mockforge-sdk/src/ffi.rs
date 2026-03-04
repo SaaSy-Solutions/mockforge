@@ -24,17 +24,15 @@ pub struct MockServerHandle {
 /// This function is FFI-safe
 #[no_mangle]
 pub unsafe extern "C" fn mockforge_server_new(port: u16) -> *mut MockServerHandle {
-    let runtime = match Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return ptr::null_mut(),
+    let Ok(runtime) = Runtime::new() else {
+        return ptr::null_mut();
     };
 
     // Create and start the server
-    let server = runtime.block_on(async { MockServer::new().port(port).start().await });
+    let server = runtime.block_on(async { Box::pin(MockServer::new().port(port).start()).await });
 
-    let server = match server {
-        Ok(s) => s,
-        Err(_) => return ptr::null_mut(),
+    let Ok(server) = server else {
+        return ptr::null_mut();
     };
 
     let handle = MockServerHandle {
@@ -59,8 +57,8 @@ pub unsafe extern "C" fn mockforge_server_destroy(handle: *mut MockServerHandle)
     let server = handle.server.clone();
 
     handle.runtime.block_on(async move {
-        let mut server = server.lock().await;
-        let _ = std::mem::take(&mut *server).stop().await;
+        let taken = std::mem::take(&mut *server.lock().await);
+        let _ = Box::pin(taken.stop()).await;
     });
 }
 
@@ -84,19 +82,16 @@ pub unsafe extern "C" fn mockforge_server_stub(
 
     let handle = &*handle;
 
-    let method = match CStr::from_ptr(method).to_str() {
-        Ok(s) => s,
-        Err(_) => return -1,
+    let Ok(method) = CStr::from_ptr(method).to_str() else {
+        return -1;
     };
 
-    let path = match CStr::from_ptr(path).to_str() {
-        Ok(s) => s,
-        Err(_) => return -1,
+    let Ok(path) = CStr::from_ptr(path).to_str() else {
+        return -1;
     };
 
-    let body = match CStr::from_ptr(body).to_str() {
-        Ok(s) => s,
-        Err(_) => return -1,
+    let Ok(body) = CStr::from_ptr(body).to_str() else {
+        return -1;
     };
 
     let body_value: serde_json::Value = match serde_json::from_str(body) {
@@ -135,10 +130,7 @@ pub unsafe extern "C" fn mockforge_server_url(handle: *const MockServerHandle) -
         server.url()
     });
 
-    match CString::new(url) {
-        Ok(s) => s.into_raw(),
-        Err(_) => ptr::null_mut(),
-    }
+    CString::new(url).map_or(ptr::null_mut(), CString::into_raw)
 }
 
 /// Free a string returned by `MockForge`
@@ -170,7 +162,7 @@ mod tests {
     #[test]
     fn test_mock_server_handle_size() {
         // Verify the handle structure size is reasonable
-        assert!(std::mem::size_of::<MockServerHandle>() > 0);
+        assert!(size_of::<MockServerHandle>() > 0);
     }
 
     #[test]
@@ -355,10 +347,10 @@ mod tests {
     fn test_json_value_parsing() {
         unsafe {
             let valid_json = CString::new(r#"{"key":"value"}"#).unwrap();
-            let json_ptr = valid_json.as_ptr();
+            let json_raw_ptr = valid_json.as_ptr();
 
-            let json_str = CStr::from_ptr(json_ptr).to_str().unwrap();
-            let result: Result<serde_json::Value, _> = serde_json::from_str(json_str);
+            let json_content = CStr::from_ptr(json_raw_ptr).to_str().unwrap();
+            let result: Result<serde_json::Value, _> = serde_json::from_str(json_content);
             assert!(result.is_ok());
         }
     }
@@ -392,10 +384,10 @@ mod tests {
     #[tokio::test]
     async fn test_server_in_ffi_context() {
         // Test server creation and cleanup in async context
-        let result = MockServer::new().port(0).start().await;
+        let result = Box::pin(MockServer::new().port(0).start()).await;
         // Port 0 should allow the OS to assign a port
-        if let Ok(mut server) = result {
-            let _ = server.stop().await;
+        if let Ok(server) = result {
+            let _ = Box::pin(server.stop()).await;
         }
     }
 

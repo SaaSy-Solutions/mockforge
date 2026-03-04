@@ -710,7 +710,7 @@ async fn list_env_vars(category: Option<&str>, format: &str) -> Result<()> {
 }
 
 fn print_env_vars_table(vars: &[EnvVar]) {
-    println!("{:<40} {:<12} {:<15} {}", "Variable", "Category", "Default", "Description");
+    println!("{:<40} {:<12} {:<15} Description", "Variable", "Category", "Default");
     println!("{}", "-".repeat(100));
 
     for var in vars {

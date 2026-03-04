@@ -158,11 +158,10 @@ pub async fn rate_limit_middleware(
                 .unwrap_or_else(|_| Response::new(Body::from("Too Many Requests")));
 
             // Add Retry-After header (60 seconds = 1 minute window)
-            if let Ok(retry_after) = HeaderValue::from_static("60").try_into() {
-                response
-                    .headers_mut()
-                    .insert(HeaderName::from_static("retry-after"), retry_after);
-            }
+            let retry_after = HeaderValue::from_static("60");
+            response
+                .headers_mut()
+                .insert(HeaderName::from_static("retry-after"), retry_after);
 
             // Add rate limit headers to the 429 response
             let quota = limiter.get_quota_info();

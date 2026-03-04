@@ -4,10 +4,10 @@
 //!
 //! Tests the full flow of blending mock and real responses with time-based progression.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use mockforge_core::{
-    ContinuumConfig, ContinuumRule, MergeStrategy, RealityContinuumEngine, ResponseBlender,
-    TimeSchedule, TransitionCurve, TransitionMode, VirtualClock,
+    ContinuumConfig, ContinuumRule, RealityContinuumEngine, ResponseBlender, TimeSchedule,
+    TransitionCurve, TransitionMode, VirtualClock,
 };
 use std::sync::Arc;
 
@@ -24,11 +24,13 @@ async fn test_continuum_with_virtual_clock() {
         TimeSchedule::with_curve(start_time, end_time, 0.0, 1.0, TransitionCurve::Linear);
 
     // Create continuum config
-    let mut config = ContinuumConfig::default();
-    config.enabled = true;
-    config.transition_mode = TransitionMode::TimeBased;
-    config.time_schedule = Some(schedule);
-    config.default_ratio = 0.0;
+    let config = ContinuumConfig {
+        enabled: true,
+        transition_mode: TransitionMode::TimeBased,
+        time_schedule: Some(schedule),
+        default_ratio: 0.0,
+        ..Default::default()
+    };
 
     // Create engine with virtual clock
     let engine = RealityContinuumEngine::with_virtual_clock(config, clock.clone());
@@ -75,9 +77,11 @@ async fn test_continuum_response_blending() {
 
 #[tokio::test]
 async fn test_continuum_route_priority() {
-    let mut config = ContinuumConfig::default();
-    config.enabled = true;
-    config.default_ratio = 0.0;
+    let mut config = ContinuumConfig {
+        enabled: true,
+        default_ratio: 0.0,
+        ..Default::default()
+    };
 
     // Add route-specific rule
     config.routes.push(ContinuumRule::new("/api/users/*".to_string(), 0.7));

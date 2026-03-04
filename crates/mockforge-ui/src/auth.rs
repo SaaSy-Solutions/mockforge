@@ -165,6 +165,7 @@ pub struct UserStore {
     users: Arc<RwLock<HashMap<String, User>>>,
     rate_limiter: RateLimiter,
     account_lockout: AccountLockout,
+    #[allow(dead_code)]
     password_policy: PasswordPolicy,
 }
 
@@ -189,6 +190,7 @@ struct RateLimiter {
 #[derive(Debug, Clone)]
 struct AccountLockout {
     /// Failed login attempts per account
+    #[allow(clippy::type_complexity)]
     failed_attempts: Arc<RwLock<HashMap<String, (usize, Option<Instant>)>>>,
     /// Maximum failed attempts before lockout
     max_failed_attempts: usize,
@@ -237,6 +239,7 @@ impl AccountLockout {
     }
 
     /// Get remaining lockout time in seconds
+    #[allow(clippy::collapsible_match)]
     async fn remaining_lockout_time(&self, username: &str) -> Option<u64> {
         let attempts = self.failed_attempts.read().await;
         if let Some((_, locked_until)) = attempts.get(username) {
@@ -385,6 +388,7 @@ impl UserStore {
     }
 
     /// Create a new user with password policy validation
+    #[allow(dead_code)]
     pub(crate) async fn create_user(
         &self,
         username: String,

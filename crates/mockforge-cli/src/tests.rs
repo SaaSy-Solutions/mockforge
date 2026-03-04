@@ -2,6 +2,7 @@
 //!
 //! This module tests the enhanced CLI features including progress bars,
 //! error handling, watch mode, and user feedback.
+#![allow(deprecated)]
 
 use assert_cmd::prelude::*;
 use predicates::prelude::*;

@@ -99,6 +99,7 @@ impl ScenarioPromotion {
     }
 
     /// Create a new promotion request
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         scenario_id: Uuid,

@@ -317,7 +317,7 @@ mod tests {
 
     #[test]
     fn test_verification_state_default() {
-        let state = VerificationState::default();
+        let state = VerificationState;
         // size_of_val always >= 0 for usize
         let _ = std::mem::size_of_val(&state);
     }

@@ -80,7 +80,7 @@ async fn test_openapi_generation_from_exchanges() {
             // Check that paths were inferred
             let spec_json = serde_json::to_value(&result.spec.spec).unwrap();
             if let Some(paths) = spec_json.get("paths") {
-                assert!(paths.as_object().unwrap().len() > 0);
+                assert!(!paths.as_object().unwrap().is_empty());
             }
         }
         Err(e) => {
@@ -153,7 +153,7 @@ async fn test_recorder_to_openapi_conversion() {
         size_bytes: 0,
         timestamp: now,
     };
-    let exchange = RecordedExchange {
+    let _exchange = RecordedExchange {
         request,
         response: Some(response),
     };
@@ -195,7 +195,7 @@ async fn test_openapi_generation_with_filters() {
 
     if let Ok(result) = result {
         // Check that confidence filtering is applied
-        for (_, score) in &result.metadata.path_confidence {
+        for score in result.metadata.path_confidence.values() {
             // All paths should meet minimum confidence (or be filtered out)
             assert!(score.value >= 0.0 && score.value <= 1.0);
         }

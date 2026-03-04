@@ -507,7 +507,7 @@ mod tests {
 
         let report = generator.compare(vec![comparison]).unwrap();
         assert_eq!(report.overall_assessment.verdict, ComparisonVerdict::Worse);
-        assert!(report.regressions.len() > 0);
+        assert!(!report.regressions.is_empty());
     }
 
     #[test]

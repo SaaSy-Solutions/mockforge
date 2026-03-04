@@ -7,15 +7,15 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
     models::{
-        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Organization, Template,
-        TemplateCategory, TemplateVersion, UsageCounter, User,
+        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Template, TemplateCategory,
+        TemplateVersion, UsageCounter, User,
     },
     AppState,
 };
@@ -44,7 +44,7 @@ pub async fn search_templates(
     };
 
     // Validate and limit pagination parameters
-    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let per_page = query.per_page.clamp(1, 100); // Max 100 items per page
     let page = query.page;
     let limit = per_page as i64;
     let offset = (page * per_page) as i64;
@@ -60,7 +60,7 @@ pub async fn search_templates(
         offset,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Get total count for pagination (before converting entries)
     let total = Template::count_search(
@@ -71,18 +71,18 @@ pub async fn search_templates(
         org_id,
     )
     .await
-    .map_err(|e| ApiError::Database(e))? as usize;
+    .map_err(ApiError::Database)? as usize;
 
     // Convert to response format
     let mut entries = Vec::new();
     for template in templates {
-        let versions = TemplateVersion::get_by_template(pool, template.id)
+        let _versions = TemplateVersion::get_by_template(pool, template.id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         let author = User::find_by_id(pool, template.author_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .unwrap_or_else(|| User {
                 id: template.author_id,
                 username: "unknown".to_string(),
@@ -130,7 +130,7 @@ pub async fn search_templates(
                     protocols: vec![],
                 }
             }),
-            stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
+            stats: serde_json::from_value(stats).unwrap_or(TemplateStats {
                 downloads: 0,
                 stars: 0,
                 forks: 0,
@@ -164,12 +164,12 @@ pub async fn get_template(
 
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     let author = User::find_by_id(pool, template.author_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .unwrap_or_else(|| User {
             id: template.author_id,
             username: "unknown".to_string(),
@@ -220,7 +220,7 @@ pub async fn get_template(
                 protocols: vec![],
             }
         }),
-        stats: serde_json::from_value(stats).unwrap_or_else(|_| TemplateStats {
+        stats: serde_json::from_value(stats).unwrap_or(TemplateStats {
             downloads: 0,
             stars: 0,
             forks: 0,
@@ -253,9 +253,8 @@ pub async fn publish_template(
     let max_templates = limits.get("max_templates_published").and_then(|v| v.as_i64()).unwrap_or(3);
 
     if max_templates >= 0 {
-        let existing = Template::find_by_org(pool, org_ctx.org_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let existing =
+            Template::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
 
         if existing.len() as i64 >= max_templates {
             return Err(ApiError::InvalidRequest(format!(
@@ -271,7 +270,7 @@ pub async fn publish_template(
 
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let new_storage = usage.storage_bytes + request.file_size;
     if new_storage > storage_limit_bytes {
@@ -291,7 +290,8 @@ pub async fn publish_template(
     crate::validation::validate_base64(&request.package)?;
 
     // Decode package data
-    let package_data = base64::decode(&request.package)
+    let package_data = base64::engine::general_purpose::STANDARD
+        .decode(&request.package)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
 
     // Validate package file
@@ -322,7 +322,7 @@ pub async fn publish_template(
     let template = if let Some(existing) =
         Template::find_by_name_version(pool, &request.name, &request.version)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
     {
         existing
     } else {
@@ -338,7 +338,7 @@ pub async fn publish_template(
             request.content_json.clone(),
         )
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
     };
 
     // Create version entry
@@ -352,12 +352,12 @@ pub async fn publish_template(
         request.file_size,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Update storage usage
     UsageCounter::update_storage(pool, org_ctx.org_id, new_storage)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Track feature usage
     let _ = FeatureUsage::record(

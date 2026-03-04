@@ -43,6 +43,7 @@ pub struct SuspiciousActivity {
 
 impl SuspiciousActivity {
     /// Create a new suspicious activity record
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Option<Uuid>,
@@ -139,6 +140,7 @@ impl SuspiciousActivity {
 }
 
 /// Helper function to record suspicious activity
+#[allow(clippy::too_many_arguments)]
 pub async fn record_suspicious_activity(
     pool: &sqlx::PgPool,
     org_id: Option<Uuid>,

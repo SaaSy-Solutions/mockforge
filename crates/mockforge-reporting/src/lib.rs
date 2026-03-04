@@ -91,6 +91,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unnecessary_literal_unwrap)]
     fn test_result_ok() {
         let result: Result<i32> = Ok(42);
         assert!(result.is_ok());

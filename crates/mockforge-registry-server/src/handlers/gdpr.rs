@@ -132,7 +132,7 @@ pub async fn export_data(
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get user settings
@@ -141,19 +141,17 @@ pub async fn export_data(
             .bind(user_id)
             .fetch_all(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     // Get API tokens
     let api_tokens = sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE user_id = $1")
         .bind(user_id)
         .fetch_all(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get organizations (owned and memberships)
-    let orgs = Organization::find_by_user(pool, user_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let orgs = Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
 
     let mut org_data = Vec::new();
 
@@ -166,7 +164,7 @@ pub async fn export_data(
         .bind(user_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
         let role = membership.as_ref().map(|m| m.role.clone()).unwrap_or_else(|| {
             if org.owner_id == user_id {
@@ -182,14 +180,14 @@ pub async fn export_data(
                 .bind(org.id)
                 .fetch_all(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
         // Get projects
         let projects = sqlx::query_as::<_, Project>("SELECT * FROM projects WHERE org_id = $1")
             .bind(org.id)
             .fetch_all(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         // Get subscriptions
         let subscriptions =
@@ -197,7 +195,7 @@ pub async fn export_data(
                 .bind(org.id)
                 .fetch_all(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
         // Get usage
         let usage = UsageCounter::get_or_create_current(pool, org.id).await.ok();
@@ -208,7 +206,7 @@ pub async fn export_data(
                 .bind(org.id)
                 .fetch_all(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
         org_data.push(OrganizationData {
             id: org.id.to_string(),
@@ -327,12 +325,12 @@ pub async fn delete_data(
     }
 
     let pool = state.db.pool();
-    let mut tx = pool.begin().await.map_err(|e| ApiError::Database(e))?;
+    let mut tx = pool.begin().await.map_err(ApiError::Database)?;
 
     // Get user
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get organizations owned by user
@@ -341,7 +339,7 @@ pub async fn delete_data(
             .bind(user_id)
             .fetch_all(&mut *tx)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     // For each owned org, check if there are other members
     for org in &owned_orgs {
@@ -351,7 +349,7 @@ pub async fn delete_data(
                 .bind(user_id)
                 .fetch_one(&mut *tx)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
         if member_count.0 > 0 {
             // Transfer ownership to first admin or member
@@ -362,7 +360,7 @@ pub async fn delete_data(
             .bind(user_id)
             .fetch_optional(&mut *tx)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
             if let Some(new_owner_member) = new_owner {
                 // Update org owner
@@ -371,14 +369,14 @@ pub async fn delete_data(
                     .bind(org.id)
                     .execute(&mut *tx)
                     .await
-                    .map_err(|e| ApiError::Database(e))?;
+                    .map_err(ApiError::Database)?;
 
                 // Update member role to owner
                 sqlx::query("UPDATE org_members SET role = 'owner' WHERE id = $1")
                     .bind(new_owner_member.id)
                     .execute(&mut *tx)
                     .await
-                    .map_err(|e| ApiError::Database(e))?;
+                    .map_err(ApiError::Database)?;
             }
         } else {
             // No other members - delete the org and all its data
@@ -387,7 +385,7 @@ pub async fn delete_data(
                 .bind(org.id)
                 .execute(&mut *tx)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
         }
     }
 
@@ -396,28 +394,28 @@ pub async fn delete_data(
         .bind(user_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Delete user settings
     sqlx::query("DELETE FROM user_settings WHERE user_id = $1")
         .bind(user_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Delete API tokens
     sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
         .bind(user_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Delete user account
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(user_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Log deletion (for audit purposes)
     // In production, you might want to log this to a separate audit table
@@ -428,7 +426,7 @@ pub async fn delete_data(
         request.reason
     );
 
-    tx.commit().await.map_err(|e| ApiError::Database(e))?;
+    tx.commit().await.map_err(ApiError::Database)?;
 
     // Record audit event after commit (user is deleted, but this is compliance-required)
     record_audit_event(

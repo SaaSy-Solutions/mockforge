@@ -1,4 +1,5 @@
 //! Builder for configuring mock servers
+#![allow(clippy::missing_errors_doc)]
 
 use crate::server::MockServer;
 use crate::{Error, Result};
@@ -81,18 +82,21 @@ impl MockServerBuilder {
     }
 
     /// Set the host address
+    #[must_use]
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.host = Some(host.into());
         self
     }
 
     /// Load configuration from a YAML file
+    #[must_use]
     pub fn config_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_file = Some(path.into());
         self
     }
 
     /// Load routes from an `OpenAPI` specification
+    #[must_use]
     pub fn openapi_spec(mut self, path: impl Into<PathBuf>) -> Self {
         self.openapi_spec = Some(path.into());
         self
@@ -185,7 +189,7 @@ impl MockServerBuilder {
         }
 
         // Create and start the server
-        let mut server = MockServer::from_config(config, core_config).await?;
+        let mut server = MockServer::from_config(config, core_config)?;
         server.start().await?;
         Ok(server)
     }
@@ -395,7 +399,7 @@ mod tests {
         let result = find_available_port(30000, 35000);
         assert!(result.is_ok());
         let port = result.unwrap();
-        assert!(port >= 30000 && port <= 35000);
+        assert!((30000..=35000).contains(&port));
     }
 
     #[test]
@@ -428,11 +432,11 @@ mod tests {
         // Bind to all ports in a small range
         let port1 = 40000;
         let port2 = 40001;
-        let _listener1 = TcpListener::bind(("127.0.0.1", port1)).ok();
-        let _listener2 = TcpListener::bind(("127.0.0.1", port2)).ok();
+        let listener1 = TcpListener::bind(("127.0.0.1", port1)).ok();
+        let listener2 = TcpListener::bind(("127.0.0.1", port2)).ok();
 
         // If both binds succeeded, the search should fail
-        if _listener1.is_some() && _listener2.is_some() {
+        if listener1.is_some() && listener2.is_some() {
             let result = find_available_port(port1, port2);
             assert!(result.is_err());
             match result {

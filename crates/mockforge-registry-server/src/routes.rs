@@ -194,9 +194,6 @@ pub fn create_router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
 
     // Helper to count routes in a router
     fn count_routes_in_description(description: &str) -> usize {
@@ -222,7 +219,7 @@ mod tests {
 
         // Verify that the router contains references to various route paths
         // This is a basic structural test
-        assert!(description.len() > 0);
+        assert!(!description.is_empty());
     }
 
     #[test]

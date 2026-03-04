@@ -379,7 +379,6 @@ mod tests {
     use super::*;
     use axum::http::StatusCode;
     use mockforge_core::proxy::config::ProxyConfig;
-    use std::net::SocketAddr;
 
     #[tokio::test]
     async fn test_proxy_server_creation() {

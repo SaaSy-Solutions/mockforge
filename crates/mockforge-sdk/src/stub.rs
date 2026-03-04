@@ -196,6 +196,7 @@ impl ResponseStub {
     }
 
     /// Add a response header
+    #[must_use]
     pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into(), value.into());
         self
@@ -457,6 +458,7 @@ impl StubBuilder {
     }
 
     /// Add a response header
+    #[must_use]
     pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.insert(key.into(), value.into());
         self
@@ -871,7 +873,7 @@ mod tests {
 
         stub.remove_header("X-Custom").await;
         let headers = stub.get_headers().await;
-        assert!(headers.get("X-Custom").is_none());
+        assert!(!headers.contains_key("X-Custom"));
     }
 
     #[tokio::test]

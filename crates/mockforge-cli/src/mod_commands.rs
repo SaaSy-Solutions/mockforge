@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use clap::Subcommand;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// MOD subcommands
 #[derive(Subcommand, Debug)]
@@ -190,11 +190,7 @@ async fn handle_mod_init(
 }
 
 /// Create MOD directory structure
-async fn create_mod_structure(
-    base_dir: &PathBuf,
-    template: &str,
-    _project_name: &str,
-) -> Result<()> {
+async fn create_mod_structure(base_dir: &Path, template: &str, _project_name: &str) -> Result<()> {
     let dirs = match template {
         "solo" => vec!["contracts", "mocks", "scenarios", "personas"],
         "small-team" => vec![
@@ -274,7 +270,7 @@ async fn create_mod_structure(
 
 /// Generate mockforge.yaml configuration
 async fn generate_mockforge_config(
-    base_dir: &PathBuf,
+    base_dir: &Path,
     template: &str,
     project_name: &str,
 ) -> Result<()> {
@@ -373,7 +369,7 @@ scenarios:
 }
 
 /// Generate MOD README
-async fn generate_mod_readme(base_dir: &PathBuf, project_name: &str, template: &str) -> Result<()> {
+async fn generate_mod_readme(base_dir: &Path, project_name: &str, template: &str) -> Result<()> {
     let readme = format!(
         r#"# {project_name}
 
@@ -536,7 +532,7 @@ async fn handle_mod_review(
     contract: PathBuf,
     mock: String,
     implementation: String,
-    format: String,
+    _format: String,
 ) -> Result<()> {
     println!("📊 Reviewing mock vs. implementation...");
     println!("   Contract: {}", contract.display());

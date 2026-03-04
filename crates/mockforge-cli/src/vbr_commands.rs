@@ -446,8 +446,10 @@ async fn execute_serve_command(
     };
 
     // Create VBR config
-    let mut config = VbrConfig::default();
-    config.storage = storage_backend;
+    let mut config = VbrConfig {
+        storage: storage_backend,
+        ..VbrConfig::default()
+    };
     config.sessions.scoped_data = session_scoped;
     let session_timeout_secs = config.sessions.timeout;
     let session_storage_backend = config.storage.clone();
@@ -782,8 +784,10 @@ fn create_config_from_storage(
         }
     };
 
-    let mut config = VbrConfig::default();
-    config.storage = storage_backend;
+    let config = VbrConfig {
+        storage: storage_backend,
+        ..VbrConfig::default()
+    };
     Ok(config)
 }
 

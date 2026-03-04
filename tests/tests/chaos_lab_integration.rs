@@ -9,10 +9,6 @@
 //! - Error pattern configuration (burst, random, sequential)
 //! - Real-time configuration updates
 
-use serde_json::json;
-use std::time::Duration;
-use tokio::time::sleep;
-
 /// Test latency metrics tracking
 #[tokio::test]
 async fn test_latency_metrics_tracking() {
@@ -127,8 +123,6 @@ async fn test_error_pattern_configuration() {
 #[tokio::test]
 async fn test_profile_export_import() {
     use mockforge_chaos::api::ProfileManager;
-    use mockforge_chaos::config::ChaosConfig;
-    use serde_json;
 
     let profile_manager = ProfileManager::new();
 
@@ -153,7 +147,7 @@ async fn test_profile_export_import() {
 /// Test latency metrics API response format
 #[tokio::test]
 async fn test_latency_metrics_api_format() {
-    use mockforge_chaos::latency_metrics::{LatencyMetricsTracker, LatencySample, LatencyStats};
+    use mockforge_chaos::latency_metrics::LatencyMetricsTracker;
 
     let tracker = LatencyMetricsTracker::new();
 
@@ -211,7 +205,7 @@ async fn test_profile_crud_operations() {
     use mockforge_chaos::api::ProfileManager;
     use mockforge_chaos::config::ChaosConfig;
 
-    let profile_manager = ProfileManager::new();
+    let _profile_manager = ProfileManager::new();
 
     // Create a custom profile
     let custom_profile = mockforge_chaos::NetworkProfile {

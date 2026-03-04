@@ -11,15 +11,11 @@ use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
     config::{StorageBackend, VbrConfig},
     entities::Entity,
-    schema::{
-        AutoGenerationRule, CascadeAction, ForeignKeyDefinition, ManyToManyDefinition,
-        VbrSchemaDefinition,
-    },
+    schema::{AutoGenerationRule, ManyToManyDefinition, VbrSchemaDefinition},
     VbrEngine,
 };
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Test OpenAPI integration

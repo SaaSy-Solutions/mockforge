@@ -76,19 +76,20 @@ impl Default for RiskEngineConfig {
         risk_factors.insert("unusual_location".to_string(), 0.4);
         risk_factors.insert("suspicious_activity".to_string(), 0.5);
 
-        let mut risk_rules = Vec::new();
-        risk_rules.push(RiskRule {
-            condition: "risk_score > 0.9".to_string(),
-            action: RiskAction::Block,
-        });
-        risk_rules.push(RiskRule {
-            condition: "risk_score > 0.7".to_string(),
-            action: RiskAction::RequireMfa,
-        });
-        risk_rules.push(RiskRule {
-            condition: "risk_score > 0.5".to_string(),
-            action: RiskAction::DeviceChallenge,
-        });
+        let risk_rules = vec![
+            RiskRule {
+                condition: "risk_score > 0.9".to_string(),
+                action: RiskAction::Block,
+            },
+            RiskRule {
+                condition: "risk_score > 0.7".to_string(),
+                action: RiskAction::RequireMfa,
+            },
+            RiskRule {
+                condition: "risk_score > 0.5".to_string(),
+                action: RiskAction::DeviceChallenge,
+            },
+        ];
 
         Self {
             mfa_threshold: 0.7,
@@ -165,7 +166,7 @@ impl RiskEngine {
         }
 
         // Clamp score to 0.0 - 1.0
-        let risk_score = total_score.min(1.0).max(0.0);
+        let risk_score = total_score.clamp(0.0, 1.0);
 
         // Determine recommended action
         let recommended_action = self.determine_action(risk_score);

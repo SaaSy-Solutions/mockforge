@@ -187,7 +187,7 @@ pub async fn generate_mock(
 
     // Get deterministic config from workspace if available
     let deterministic_config = if let Some(workspace_id) = &request.workspace_id {
-        if let Ok(workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
+        if let Ok(_workspace) = state.workspace_persistence.load_workspace(workspace_id).await {
             // Check if workspace has deterministic mode config
             // For now, use default config - in production this would come from workspace config
             Some(DeterministicModeConfig::default())
@@ -289,7 +289,7 @@ pub async fn debug_analyze_with_context(
     // Create debug context integrator (optional - would need subsystem references in production)
     // For now, pass None as we don't have direct access to RealityEngine, etc. here
     // In production, these would be injected via State
-    let integrator: Option<&DebugContextIntegrator> = None;
+    let _integrator: Option<&DebugContextIntegrator> = None;
 
     let debug_request = DebugRequest {
         test_logs: request.test_logs,
@@ -591,7 +591,7 @@ pub struct ApplyPatchRequest {
 ///
 /// POST /api/v1/ai-studio/apply-patch
 pub async fn apply_patch(
-    State(state): State<AdminState>,
+    State(_state): State<AdminState>,
     Json(request): Json<ApplyPatchRequest>,
 ) -> Result<ResponseJson<ApiResponse<Value>>, StatusCode> {
     // Determine config file path
@@ -611,9 +611,9 @@ pub async fn apply_patch(
     // Parse config as JSON (works for YAML too via serde_yaml)
     let mut config_value: Value = if config_path.ends_with(".yaml") || config_path.ends_with(".yml")
     {
-        serde_yaml::from_str(&config_content).map_err(|e| StatusCode::BAD_REQUEST)?
+        serde_yaml::from_str(&config_content).map_err(|_e| StatusCode::BAD_REQUEST)?
     } else {
-        serde_json::from_str(&config_content).map_err(|e| StatusCode::BAD_REQUEST)?
+        serde_json::from_str(&config_content).map_err(|_e| StatusCode::BAD_REQUEST)?
     };
 
     // Parse patch operations
@@ -627,7 +627,7 @@ pub async fn apply_patch(
         };
 
     // Apply patch
-    patch(&mut config_value, &patch_ops).map_err(|e| StatusCode::BAD_REQUEST)?;
+    patch(&mut config_value, &patch_ops).map_err(|_e| StatusCode::BAD_REQUEST)?;
 
     // Save updated config
     let updated_content = if config_path.ends_with(".yaml") || config_path.ends_with(".yml") {
@@ -639,7 +639,7 @@ pub async fn apply_patch(
 
     tokio::fs::write(&config_path, updated_content)
         .await
-        .map_err(|e| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(ResponseJson(ApiResponse::success(serde_json::json!({
         "message": "Patch applied successfully",
@@ -732,8 +732,8 @@ pub async fn update_org_controls(
     Query(params): Query<HashMap<String, String>>,
     Json(controls): Json<OrgAiControlsConfig>,
 ) -> Result<ResponseJson<ApiResponse<OrgAiControlsConfig>>, StatusCode> {
-    let org_id = params.get("org_id").cloned();
-    let workspace_id = params.get("workspace_id").cloned();
+    let _org_id = params.get("org_id").cloned();
+    let _workspace_id = params.get("workspace_id").cloned();
 
     // Note: Database persistence requires OrgControlsAccessor to be available in State
     // To enable database persistence:

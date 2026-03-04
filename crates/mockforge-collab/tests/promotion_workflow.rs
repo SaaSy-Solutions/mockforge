@@ -3,7 +3,7 @@
 //! Tests the complete promotion workflow including:
 //! - Creating promotion requests
 //! - Approving/rejecting promotions
-//! - GitOps integration
+//! - `GitOps` integration
 //! - Promotion history tracking
 
 use mockforge_collab::promotion::{PromotionGitOpsConfig, PromotionService};
@@ -41,8 +41,8 @@ async fn create_test_user(pool: &Pool<Sqlite>) -> Uuid {
     let now = chrono::Utc::now().to_rfc3339();
 
     sqlx::query(
-        r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)"#,
+        r"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id.to_string())
     .bind("testuser")
@@ -63,8 +63,8 @@ async fn create_test_workspace(pool: &Pool<Sqlite>, owner_id: Uuid) -> Uuid {
     let now = chrono::Utc::now().to_rfc3339();
 
     sqlx::query(
-        r#"INSERT INTO workspaces (id, name, owner_id, config, version, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+        r"INSERT INTO workspaces (id, name, owner_id, config, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(workspace_id.to_string())
     .bind("Test Workspace")
@@ -178,7 +178,7 @@ async fn test_list_workspace_promotions() {
     for i in 0..5 {
         let request = PromotionRequest {
             entity_type: PromotionEntityType::Scenario,
-            entity_id: format!("scenario-{}", i),
+            entity_id: format!("scenario-{i}"),
             entity_version: None,
             workspace_id: workspace_id_str.clone(),
             from_environment: MockEnvironmentName::Dev,
@@ -217,7 +217,7 @@ async fn test_list_pending_promotions() {
     for i in 0..3 {
         let request = PromotionRequest {
             entity_type: PromotionEntityType::Scenario,
-            entity_id: format!("scenario-pending-{}", i),
+            entity_id: format!("scenario-pending-{i}"),
             entity_version: None,
             workspace_id: workspace_id_str.clone(),
             from_environment: MockEnvironmentName::Dev,

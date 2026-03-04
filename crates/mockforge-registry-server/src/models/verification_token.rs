@@ -27,7 +27,7 @@ impl VerificationToken {
             rng.gen()
         };
         use base64::engine::general_purpose;
-        let token = general_purpose::URL_SAFE_NO_PAD.encode(&token_bytes);
+        let token = general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
 
         // Token expires in 24 hours
         let expires_at = Utc::now() + chrono::Duration::hours(24);

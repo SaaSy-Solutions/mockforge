@@ -44,7 +44,7 @@ pub async fn promote_scenario(
     // Check fine-grained RBAC for ScenarioPromote permission
     let member = OrgMember::find(pool, org_ctx.org_id, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -66,12 +66,12 @@ pub async fn promote_scenario(
 
     // Validate promotion path
     mockforge_core::workspace::ScenarioPromotionWorkflow::validate_promotion_path(from_env, to_env)
-        .map_err(|e| ApiError::InvalidRequest(e))?;
+        .map_err(ApiError::InvalidRequest)?;
 
     // Get scenario
     let scenario = Scenario::find_by_id(pool, request.scenario_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::ScenarioNotFound("Scenario not found".to_string()))?;
 
     // Determine if approval is required
@@ -97,7 +97,7 @@ pub async fn promote_scenario(
         request.comments.as_deref(),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // If no approval required, auto-complete the promotion
     if !requires_approval {
@@ -112,12 +112,12 @@ pub async fn promote_scenario(
             Some(promotion.id),
         )
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
         // Mark promotion as completed
         ScenarioPromotion::mark_completed(pool, promotion.id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     Ok(Json(PromoteScenarioResponse {
@@ -153,7 +153,7 @@ pub async fn list_promotions(
     // Check fine-grained RBAC for ScenarioPromote permission (needed to view promotions)
     let member = OrgMember::find(pool, org_ctx.org_id, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -173,7 +173,7 @@ pub async fn list_promotions(
     // Get promotions
     let promotions = ScenarioPromotion::list_by_workspace(pool, workspace_id, status_filter)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(PromotionListResponse { promotions }))
 }
@@ -198,7 +198,7 @@ pub async fn approve_promotion(
     // Check fine-grained RBAC for ScenarioApprove permission
     let member = OrgMember::find(pool, org_ctx.org_id, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -215,7 +215,7 @@ pub async fn approve_promotion(
     // Get promotion
     let promotion = ScenarioPromotion::find_by_id(pool, promotion_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))?;
 
     // Verify it's for the correct workspace
@@ -237,7 +237,7 @@ pub async fn approve_promotion(
     let approved = promotion
         .approve(pool, user_id, request.comments.as_deref())
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Complete the promotion by setting the version in the target environment
     ScenarioEnvironmentVersion::set_version(
@@ -250,12 +250,12 @@ pub async fn approve_promotion(
         Some(approved.id),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Mark promotion as completed
     ScenarioPromotion::mark_completed(pool, approved.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(ApprovePromotionResponse {
         promotion_id: approved.id,
@@ -284,7 +284,7 @@ pub async fn reject_promotion(
     // Check fine-grained RBAC for ScenarioApprove permission
     let member = OrgMember::find(pool, org_ctx.org_id, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -301,7 +301,7 @@ pub async fn reject_promotion(
     // Get promotion
     let promotion = ScenarioPromotion::find_by_id(pool, promotion_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))?;
 
     // Verify it's for the correct workspace
@@ -315,7 +315,7 @@ pub async fn reject_promotion(
     let rejected = promotion
         .reject(pool, user_id, &request.reason)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(RejectPromotionResponse {
         promotion_id: rejected.id,

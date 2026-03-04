@@ -5,13 +5,11 @@
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::multi_tenant::MultiTenantWorkspaceRegistry;
 use mockforge_core::voice::command_parser::{
-    EntityEndpointRequirement, EntityRequirement, FieldRequirement, ParsedCommand,
-    ParsedWorkspaceCreation, PersonaRelationship, PersonaRequirement, ScenarioRequirement,
-    ScenarioStepRequirement, VoiceCommandParser,
+    EntityEndpointRequirement, EntityRequirement, FieldRequirement, ParsedWorkspaceCreation,
+    PersonaRelationship, PersonaRequirement, ScenarioRequirement, ScenarioStepRequirement,
+    VoiceCommandParser,
 };
-use mockforge_core::voice::workspace_builder::{BuiltWorkspace, WorkspaceBuilder};
-use mockforge_data::Domain;
-use serde_json::json;
+use mockforge_core::voice::workspace_builder::WorkspaceBuilder;
 use std::collections::HashMap;
 
 /// Test command parser creation

@@ -45,7 +45,7 @@ pub async fn verify_plugin(
         .bind(user_uuid)
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     if !user.0 {
         return Err(ApiError::PermissionDenied);
@@ -54,7 +54,7 @@ pub async fn verify_plugin(
     // Get plugin
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     // Update verification status
@@ -69,7 +69,7 @@ pub async fn verify_plugin(
         .bind(plugin.id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let message = if request.verified {
         format!("Plugin '{}' has been verified", name)
@@ -119,7 +119,7 @@ pub async fn get_plugin_badges(
     // Get plugin
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     let mut badges = Vec::new();
@@ -197,7 +197,7 @@ pub async fn get_admin_stats(
         .bind(user_uuid)
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     if !user.0 {
         return Err(ApiError::PermissionDenied);
@@ -209,19 +209,19 @@ pub async fn get_admin_stats(
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let user_count = sqlx::query_as::<_, (i64,)>("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let review_stats = sqlx::query_as::<_, (i64, f64)>(
         "SELECT COUNT(*), COALESCE(AVG(rating), 0.0)::float8 FROM reviews",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     Ok(Json(StatsResponse {
         total_plugins: plugin_stats.0,

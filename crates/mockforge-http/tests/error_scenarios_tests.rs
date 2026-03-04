@@ -3,7 +3,7 @@
 //! These tests verify that the HTTP server handles errors gracefully,
 //! including malformed requests, large payloads, timeouts, and edge cases.
 
-use axum::http::{Method, StatusCode, Uri};
+use axum::http::Method;
 use mockforge_http::build_router;
 use reqwest::Client;
 use serde_json::json;
@@ -45,7 +45,7 @@ async fn test_malformed_json_request_body() {
 
     for body in malformed_bodies {
         let response = client
-            .post(&format!("{}/api/test", base_url))
+            .post(format!("{}/api/test", base_url))
             .header("Content-Type", "application/json")
             .body(body)
             .send()
@@ -83,7 +83,7 @@ async fn test_very_large_request_body() {
     let large_json = json!({"data": large_body});
 
     let response = client
-        .post(&format!("{}/api/test", base_url))
+        .post(format!("{}/api/test", base_url))
         .header("Content-Type", "application/json")
         .json(&large_json)
         .timeout(Duration::from_secs(30))
@@ -116,7 +116,7 @@ async fn test_malformed_headers() {
     // Test with various malformed header scenarios
     // Note: reqwest validates headers, so we test what we can
     let response = client
-        .get(&format!("{}/health", base_url))
+        .get(format!("{}/health", base_url))
         .header("Content-Type", "application/json; charset=utf-8")
         .send()
         .await;
@@ -149,7 +149,7 @@ async fn test_invalid_http_methods() {
 
     for method_str in methods {
         let method = Method::from_bytes(method_str.as_bytes()).unwrap();
-        let response = client.request(method, &format!("{}/api/test", base_url)).send().await;
+        let response = client.request(method, format!("{}/api/test", base_url)).send().await;
 
         // Should handle all methods gracefully
         let _ = response;
@@ -260,7 +260,7 @@ async fn test_concurrent_requests_during_shutdown() {
 
     // Spawn multiple concurrent requests
     let mut handles = vec![];
-    for i in 0..10 {
+    for _i in 0..10 {
         let url = format!("{}/health", base_url);
         let client_clone = client.clone();
         let handle = tokio::spawn(async move {
@@ -300,7 +300,7 @@ async fn test_timeout_handling() {
 
     // Request should timeout gracefully
     let response =
-        timeout(Duration::from_secs(1), client.get(&format!("{}/health", base_url)).send()).await;
+        timeout(Duration::from_secs(1), client.get(format!("{}/health", base_url)).send()).await;
 
     // Should handle timeout without panicking
     let _ = response;
@@ -326,11 +326,7 @@ async fn test_missing_content_type_header() {
     let base_url = format!("http://{}", addr);
 
     // Request without Content-Type header
-    let response = client
-        .post(&format!("{}/api/test", base_url))
-        .body("raw body data")
-        .send()
-        .await;
+    let response = client.post(format!("{}/api/test", base_url)).body("raw body data").send().await;
 
     // Should handle missing Content-Type gracefully
     let _ = response;

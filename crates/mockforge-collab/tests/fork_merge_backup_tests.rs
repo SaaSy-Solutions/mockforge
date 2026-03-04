@@ -30,7 +30,7 @@ async fn test_fork_workspace_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
@@ -61,7 +61,7 @@ async fn test_fork_workspace_success() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/forks", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/forks"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -92,7 +92,7 @@ async fn test_fork_workspace_unauthorized() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&unauthorized_token).0, auth_header(&unauthorized_token).1)
                 .body(Body::from(
@@ -131,7 +131,7 @@ async fn test_list_forks() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker1_token).0, auth_header(&forker1_token).1)
                 .body(Body::from(
@@ -152,7 +152,7 @@ async fn test_list_forks() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker2_token).0, auth_header(&forker2_token).1)
                 .body(Body::from(
@@ -174,7 +174,7 @@ async fn test_list_forks() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/forks", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/forks"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -209,7 +209,7 @@ async fn test_merge_workspaces_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
@@ -240,7 +240,7 @@ async fn test_merge_workspaces_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/merge", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/merge"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -257,10 +257,10 @@ async fn test_merge_workspaces_success() {
     let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(status, StatusCode::OK, "Merge error: {:?}", json);
+    assert_eq!(status, StatusCode::OK, "Merge error: {json:?}");
 
-    assert!(json["workspace"].is_object(), "Expected workspace in response: {:?}", json);
-    assert!(json["conflicts"].is_array(), "Expected conflicts in response: {:?}", json);
+    assert!(json["workspace"].is_object(), "Expected workspace in response: {json:?}");
+    assert!(json["conflicts"].is_array(), "Expected conflicts in response: {json:?}");
 }
 
 #[tokio::test]
@@ -283,7 +283,7 @@ async fn test_merge_workspaces_with_conflicts() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
@@ -314,7 +314,7 @@ async fn test_merge_workspaces_with_conflicts() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/merge", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/merge"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -356,7 +356,7 @@ async fn test_list_merges() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/fork", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/fork"))
                 .header("content-type", "application/json")
                 .header(auth_header(&forker_token).0, auth_header(&forker_token).1)
                 .body(Body::from(
@@ -386,7 +386,7 @@ async fn test_list_merges() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/merge", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/merge"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -407,7 +407,7 @@ async fn test_list_merges() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/merges", source_workspace_id))
+                .uri(format!("/workspaces/{source_workspace_id}/merges"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -435,7 +435,7 @@ async fn test_create_backup() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/backup", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/backup"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -454,7 +454,7 @@ async fn test_create_backup() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(status, StatusCode::OK, "Backup error response: {:?}", json);
+    assert_eq!(status, StatusCode::OK, "Backup error response: {json:?}");
 
     assert!(json["id"].is_string());
     assert_eq!(json["workspace_id"], workspace_id.to_string());
@@ -477,7 +477,7 @@ async fn test_list_backups() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/workspaces/{}/backup", workspace_id))
+                    .uri(format!("/workspaces/{workspace_id}/backup"))
                     .header("content-type", "application/json")
                     .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                     .body(Body::from(
@@ -501,7 +501,7 @@ async fn test_list_backups() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/backups", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/backups"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -535,7 +535,7 @@ async fn test_delete_backup() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/backup", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/backup"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -561,7 +561,7 @@ async fn test_delete_backup() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/workspaces/{}/backups/{}", workspace_id, backup_id))
+                .uri(format!("/workspaces/{workspace_id}/backups/{backup_id}"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -594,7 +594,7 @@ async fn test_restore_workspace() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/backup", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/backup"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -620,7 +620,7 @@ async fn test_restore_workspace() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/restore", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/restore"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -655,7 +655,7 @@ async fn test_get_workspace_state() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/state", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/state"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -687,7 +687,7 @@ async fn test_update_workspace_state() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/state", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/state"))
                 .header("content-type", "application/json")
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::from(
@@ -708,7 +708,7 @@ async fn test_update_workspace_state() {
     let status = response.status();
     let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(status, StatusCode::OK, "Update state error: {:?}", json);
+    assert_eq!(status, StatusCode::OK, "Update state error: {json:?}");
     assert_eq!(json["workspace_id"], workspace_id.to_string());
 }
 
@@ -727,13 +727,13 @@ async fn test_get_state_history() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/workspaces/{}/state", workspace_id))
+                    .uri(format!("/workspaces/{workspace_id}/state"))
                     .header("content-type", "application/json")
                     .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                     .body(Body::from(
                         json!({
                             "state": {
-                                "name": format!("Updated Workspace {}", i),
+                                "name": format!("Updated Workspace {i}"),
                                 "folders": [],
                                 "requests": []
                             }
@@ -753,7 +753,7 @@ async fn test_get_state_history() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/state/history", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/state/history"))
                 .header(auth_header(&owner_token).0, auth_header(&owner_token).1)
                 .body(Body::empty())
                 .unwrap(),

@@ -21,7 +21,7 @@ async fn test_create_commit_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -69,7 +69,7 @@ async fn test_create_commit_viewer_forbidden() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&viewer_token).0, auth_header(&viewer_token).1)
                 .body(Body::from(
@@ -99,7 +99,7 @@ async fn test_create_commit_empty_message_validation() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -131,7 +131,7 @@ async fn test_create_commit_message_too_long() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -161,7 +161,7 @@ async fn test_list_commits_with_pagination() {
             .create_commit(
                 workspace_id,
                 user.id,
-                format!("Commit {}", i),
+                format!("Commit {i}"),
                 None,
                 i,
                 json!({"version": i}),
@@ -178,7 +178,7 @@ async fn test_list_commits_with_pagination() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/commits?limit=3&offset=0", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits?limit=3&offset=0"))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -224,7 +224,7 @@ async fn test_get_commit() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/commits/{}", workspace_id, commit.id))
+                .uri(format!("/workspaces/{workspace_id}/commits/{}", commit.id))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -270,7 +270,7 @@ async fn test_get_commit_wrong_workspace() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/commits/{}", workspace2_id, commit.id))
+                .uri(format!("/workspaces/{workspace2_id}/commits/{}", commit.id))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -308,7 +308,7 @@ async fn test_restore_to_commit() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/restore/{}", workspace_id, commit.id))
+                .uri(format!("/workspaces/{workspace_id}/restore/{}", commit.id))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -351,7 +351,7 @@ async fn test_restore_viewer_forbidden() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/restore/{}", workspace_id, commit.id))
+                .uri(format!("/workspaces/{workspace_id}/restore/{}", commit.id))
                 .header(auth_header(&viewer_token).0, auth_header(&viewer_token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -389,7 +389,7 @@ async fn test_create_snapshot_success() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/snapshots", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/snapshots"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -434,7 +434,7 @@ async fn test_create_snapshot_invalid_name() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/snapshots", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/snapshots"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -472,7 +472,7 @@ async fn test_create_snapshot_name_too_long() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/snapshots", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/snapshots"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -503,7 +503,7 @@ async fn test_list_snapshots() {
             .create_commit(
                 workspace_id,
                 user.id,
-                format!("Release {}", i),
+                format!("Release {i}"),
                 None,
                 i,
                 json!({}),
@@ -515,8 +515,8 @@ async fn test_list_snapshots() {
         ctx.history
             .create_snapshot(
                 workspace_id,
-                format!("v{}.0.0", i),
-                Some(format!("Release {}", i)),
+                format!("v{i}.0.0"),
+                Some(format!("Release {i}")),
                 commit.id,
                 user.id,
             )
@@ -530,7 +530,7 @@ async fn test_list_snapshots() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/snapshots", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/snapshots"))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -576,7 +576,7 @@ async fn test_get_snapshot_by_name() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/workspaces/{}/snapshots/v1.0.0", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/snapshots/v1.0.0"))
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::empty())
                 .unwrap(),
@@ -606,7 +606,7 @@ async fn test_commit_version_increment() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(
@@ -632,7 +632,7 @@ async fn test_commit_version_increment() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/workspaces/{}/commits", workspace_id))
+                .uri(format!("/workspaces/{workspace_id}/commits"))
                 .header("content-type", "application/json")
                 .header(auth_header(&token).0, auth_header(&token).1)
                 .body(Body::from(

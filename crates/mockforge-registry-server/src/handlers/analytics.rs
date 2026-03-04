@@ -129,7 +129,7 @@ pub async fn get_analytics(
     // Check if user is admin
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     if !user.is_admin {
@@ -140,13 +140,13 @@ pub async fn get_analytics(
     let total_users: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let verified_users: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_verified = TRUE")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let unverified_users = total_users.0 - verified_users.0;
 
@@ -155,45 +155,45 @@ pub async fn get_analytics(
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let new_users_7d: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let new_users_30d: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     // Subscription Analytics
     let total_orgs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM organizations")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let plan_distribution = sqlx::query_as::<_, (String, i64)>(
         "SELECT plan, COUNT(*) FROM organizations GROUP BY plan",
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let active_subs: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE status IN ('active', 'trialing')")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let trial_orgs: (i64,) = sqlx::query_as(
         "SELECT COUNT(DISTINCT org_id) FROM subscriptions WHERE status = 'trialing'",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Revenue estimate (Pro: $29, Team: $99)
     let revenue_estimate = plan_distribution
@@ -211,21 +211,21 @@ pub async fn get_analytics(
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let total_storage: (Option<i64>,) = sqlx::query_as(
         "SELECT SUM(storage_bytes) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())"
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
         "SELECT SUM(ai_tokens_used) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())"
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Top orgs by usage
     let top_orgs = sqlx::query_as::<_, (Uuid, String, String, i64, i64)>(
@@ -246,98 +246,98 @@ pub async fn get_analytics(
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Feature Analytics
     let hosted_mocks_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE deleted_at IS NULL")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let hosted_mocks_orgs: (i64,) =
         sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM hosted_mocks WHERE deleted_at IS NULL")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let hosted_mocks_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM hosted_mocks WHERE created_at > NOW() - INTERVAL '30 days' AND deleted_at IS NULL"
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let plugins_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM plugins")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let plugins_orgs: (i64,) =
         sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM plugins WHERE org_id IS NOT NULL")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let plugins_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM plugins WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let templates_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM templates")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let templates_orgs: (i64,) =
         sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM templates WHERE org_id IS NOT NULL")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let templates_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM templates WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let scenarios_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scenarios")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let scenarios_orgs: (i64,) =
         sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM scenarios WHERE org_id IS NOT NULL")
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let scenarios_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM scenarios WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let api_tokens_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_tokens")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let api_tokens_orgs: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM api_tokens")
         .fetch_one(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let api_tokens_30d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM api_tokens WHERE created_at > NOW() - INTERVAL '30 days'",
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Growth Analytics (last 30 days daily)
     let user_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
@@ -351,7 +351,7 @@ pub async fn get_analytics(
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let org_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
         r#"
@@ -364,7 +364,7 @@ pub async fn get_analytics(
     )
     .fetch_all(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Activity Analytics
     let logins_24h: (i64,) = sqlx::query_as(
@@ -372,14 +372,14 @@ pub async fn get_analytics(
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let logins_7d: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM login_attempts WHERE success = TRUE AND created_at > NOW() - INTERVAL '7 days'"
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // API requests (approximate from usage counters)
     let api_requests_24h: (i64,) = sqlx::query_as(
@@ -390,7 +390,7 @@ pub async fn get_analytics(
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let api_requests_7d: (i64,) = sqlx::query_as(
         r#"
@@ -400,7 +400,7 @@ pub async fn get_analytics(
     )
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     Ok(Json(AnalyticsResponse {
         users: UserAnalytics {
@@ -550,7 +550,7 @@ pub async fn get_conversion_funnel(
     // Check if user is admin
     let user = User::find_by_id(pool, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     if !user.is_admin {
@@ -574,7 +574,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 2: Email Verified
     let verified: (i64,) = sqlx::query_as(&format!(
@@ -583,7 +583,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 3: First Login (users who have logged in at least once)
     // Note: login_attempts uses email, not user_id, so we join via email
@@ -599,7 +599,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 4: Organization Created (users who created an org)
     let org_created: (i64,) = sqlx::query_as(&format!(
@@ -615,7 +615,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 5: First Feature Use (users who used any feature)
     let feature_users: (i64,) = sqlx::query_as(&format!(
@@ -629,7 +629,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 6: Checkout Initiated (users who started checkout)
     let checkout_initiated: (i64,) = sqlx::query_as(&format!(
@@ -644,7 +644,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Stage 7: Paid Subscription (users with active paid subscriptions)
     let paid_subscribers: (i64,) = sqlx::query_as(&format!(
@@ -662,7 +662,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Calculate average time to convert (signup to paid subscription)
     let time_to_convert: Option<f64> = sqlx::query_scalar::<_, Option<f64>>(&format!(
@@ -680,7 +680,7 @@ pub async fn get_conversion_funnel(
     ))
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Build funnel stages
     let mut stages = Vec::new();

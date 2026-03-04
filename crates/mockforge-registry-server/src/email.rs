@@ -1067,7 +1067,7 @@ Privacy: https://mockforge.dev/privacy
                     url
                 )
             })
-            .unwrap_or_else(String::new);
+            .unwrap_or_default();
 
         let error_section = error_message
             .map(|msg| {
@@ -1079,7 +1079,7 @@ Privacy: https://mockforge.dev/privacy
                     msg
                 )
             })
-            .unwrap_or_else(String::new);
+            .unwrap_or_default();
 
         let html_body = format!(
             r#"
@@ -1154,8 +1154,8 @@ Privacy: https://mockforge.dev/privacy
             status,
             deployment_url
                 .map(|url| format!("View deployment: {}", url))
-                .unwrap_or_else(String::new),
-            error_message.map(|msg| format!("Error: {}", msg)).unwrap_or_else(String::new),
+                .unwrap_or_default(),
+            error_message.map(|msg| format!("Error: {}", msg)).unwrap_or_default(),
             chrono::Utc::now().year()
         );
 

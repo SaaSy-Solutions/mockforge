@@ -50,13 +50,13 @@ async fn test_client_rejects_empty_server_url() {
 async fn test_client_state_tracking() {
     // This test would require a mock server or actual server
     // For now, we verify the state enum and methods exist
-    let _state = ConnectionState::Disconnected;
-    let _state2 = ConnectionState::Connecting;
-    let _state3 = ConnectionState::Connected;
-    let _state4 = ConnectionState::Reconnecting;
+    let state = ConnectionState::Disconnected;
+    let state2 = ConnectionState::Connecting;
+    let state3 = ConnectionState::Connected;
+    let state4 = ConnectionState::Reconnecting;
 
     // Verify states are distinct
-    assert_ne!(_state, _state2);
-    assert_ne!(_state2, _state3);
-    assert_ne!(_state3, _state4);
+    assert_ne!(state, state2);
+    assert_ne!(state2, state3);
+    assert_ne!(state3, state4);
 }

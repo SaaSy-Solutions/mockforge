@@ -30,7 +30,7 @@ pub struct ContactResponse {
 /// Can be called by authenticated or anonymous users
 pub async fn submit_contact(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     OptionalAuthUser(user_id): OptionalAuthUser,
     Json(request): Json<ContactRequest>,
 ) -> ApiResult<Json<ContactResponse>> {
@@ -48,13 +48,10 @@ pub async fn submit_contact(
     // Get user info if authenticated
     let (user_email, username, org_name, plan) = if let Some(user_id) = user_id {
         use crate::models::User;
-        if let Some(user) =
-            User::find_by_id(pool, user_id).await.map_err(|e| ApiError::Database(e))?
-        {
+        if let Some(user) = User::find_by_id(pool, user_id).await.map_err(ApiError::Database)? {
             // Try to get org context for plan info
-            let orgs = Organization::find_by_user(pool, user_id)
-                .await
-                .map_err(|e| ApiError::Database(e))?;
+            let orgs =
+                Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
             let org = orgs.first();
 
             (

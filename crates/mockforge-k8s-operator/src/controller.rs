@@ -5,7 +5,6 @@ use crate::reconciler::Reconciler;
 use crate::{OperatorError, Result};
 use futures::StreamExt;
 use kube::{
-    api::ListParams,
     runtime::{
         controller::{Action, Controller as KubeController},
         utils::WatchStreamExt,

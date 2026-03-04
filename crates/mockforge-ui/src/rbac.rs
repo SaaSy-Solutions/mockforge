@@ -378,7 +378,7 @@ pub fn get_user_context_from_request(request: &Request) -> Option<UserContext> {
 }
 
 /// Helper to get user context from axum State (if stored)
-pub fn get_user_context_from_state<T>(state: &T) -> Option<UserContext>
+pub fn get_user_context_from_state<T>(_state: &T) -> Option<UserContext>
 where
     T: std::any::Any,
 {
@@ -791,7 +791,7 @@ mod tests {
 
         // These would be tested in the actual middleware
         // Here we verify the logic exists
-        for (path, expected_action) in test_cases {
+        for (_path, expected_action) in test_cases {
             assert!(!expected_action.is_empty());
         }
     }

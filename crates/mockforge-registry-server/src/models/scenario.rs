@@ -33,6 +33,7 @@ pub struct Scenario {
 
 impl Scenario {
     /// Create a new scenario
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Option<Uuid>,
@@ -169,6 +170,7 @@ impl Scenario {
     }
 
     /// Search scenarios
+    #[allow(clippy::too_many_arguments)]
     pub async fn search(
         pool: &sqlx::PgPool,
         query: Option<&str>,
@@ -262,6 +264,7 @@ pub struct ScenarioVersion {
 
 impl ScenarioVersion {
     /// Create a new version
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         scenario_id: Uuid,

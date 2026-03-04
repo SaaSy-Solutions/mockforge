@@ -173,7 +173,7 @@ pub fn create_token(user_id: &str, secret: &str) -> Result<String> {
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims> {
     // Try the primary secret first
     match verify_token_with_secret(token, secret) {
-        Ok(claims) => return Ok(claims),
+        Ok(claims) => Ok(claims),
         Err(primary_err) => {
             // If a previous secret is configured, try it for key rotation overlap
             if let Ok(previous_secret) = std::env::var("JWT_SECRET_PREVIOUS") {

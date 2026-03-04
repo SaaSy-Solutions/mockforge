@@ -45,7 +45,7 @@ pub async fn search_plugins(
     });
 
     // Validate and limit pagination parameters
-    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let per_page = query.per_page.clamp(1, 100); // Max 100 items per page
     let page = query.page;
     let limit = per_page as i64;
     let offset = (page * per_page) as i64;
@@ -72,20 +72,19 @@ pub async fn search_plugins(
     // Convert to registry entries
     let mut entries = Vec::new();
     for plugin in plugins {
-        let tags = Plugin::get_tags(pool, plugin.id).await.map_err(|e| ApiError::Database(e))?;
+        let tags = Plugin::get_tags(pool, plugin.id).await.map_err(ApiError::Database)?;
 
         let versions = PluginVersion::get_by_plugin(pool, plugin.id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         let category = map_category_from_string(&plugin.category);
 
         // Load versions with dependencies
         let mut version_entries = Vec::new();
         for v in versions {
-            let dependencies = PluginVersion::get_dependencies(pool, v.id)
-                .await
-                .map_err(|e| ApiError::Database(e))?;
+            let dependencies =
+                PluginVersion::get_dependencies(pool, v.id).await.map_err(ApiError::Database)?;
 
             version_entries.push(VersionEntry {
                 version: v.version,
@@ -102,7 +101,7 @@ pub async fn search_plugins(
         // Fetch author information
         let author = User::find_by_id(pool, plugin.author_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .unwrap_or_else(|| {
                 // Create a minimal user struct for display purposes
                 // This should not happen in production, but handle gracefully
@@ -149,7 +148,7 @@ pub async fn search_plugins(
     // Count total matching results for pagination metadata
     let total = Plugin::count_search(pool, query.query.as_deref(), category_str, &query.tags)
         .await
-        .map_err(|e| ApiError::Database(e))? as usize;
+        .map_err(ApiError::Database)? as usize;
 
     let results = SearchResults {
         plugins: entries,
@@ -173,23 +172,22 @@ pub async fn get_plugin(
 
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
-    let tags = Plugin::get_tags(pool, plugin.id).await.map_err(|e| ApiError::Database(e))?;
+    let tags = Plugin::get_tags(pool, plugin.id).await.map_err(ApiError::Database)?;
 
     let versions = PluginVersion::get_by_plugin(pool, plugin.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let category = map_category_from_string(&plugin.category);
 
     // Load versions with dependencies
     let mut version_entries = Vec::new();
     for v in versions {
-        let dependencies = PluginVersion::get_dependencies(pool, v.id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let dependencies =
+            PluginVersion::get_dependencies(pool, v.id).await.map_err(ApiError::Database)?;
 
         version_entries.push(VersionEntry {
             version: v.version,
@@ -206,7 +204,7 @@ pub async fn get_plugin(
     // Fetch author information
     let author = User::find_by_id(pool, plugin.author_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .unwrap_or_else(|| User {
             id: plugin.author_id,
             username: "Unknown".to_string(),
@@ -260,18 +258,18 @@ pub async fn get_version(
 
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     let plugin_version = PluginVersion::find(pool, plugin.id, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
     // Load dependencies
     let dependencies = PluginVersion::get_dependencies(pool, plugin_version.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let entry = VersionEntry {
         version: plugin_version.version,
@@ -326,9 +324,7 @@ pub async fn publish_plugin(
     let pool = state.db.pool();
 
     // Check if plugin exists
-    let existing = Plugin::find_by_name(pool, &request.name)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let existing = Plugin::find_by_name(pool, &request.name).await.map_err(ApiError::Database)?;
 
     let plugin = if let Some(mut plugin) = existing {
         // Update existing plugin
@@ -349,7 +345,7 @@ pub async fn publish_plugin(
             author_id,
         )
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
     };
 
     // Validate input fields
@@ -400,14 +396,14 @@ pub async fn publish_plugin(
         None,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Add dependencies if provided
     if let Some(deps) = request.dependencies {
         for (dep_name, dep_version) in deps {
             PluginVersion::add_dependency(pool, version.id, &dep_name, &dep_version)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
         }
     }
 
@@ -453,17 +449,15 @@ pub async fn yank_version(
 
     let plugin = Plugin::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     let plugin_version = PluginVersion::find(pool, plugin.id, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
-    PluginVersion::yank(pool, plugin_version.id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    PluginVersion::yank(pool, plugin_version.id).await.map_err(ApiError::Database)?;
 
     Ok(Json(serde_json::json!({
         "success": true,

@@ -243,6 +243,7 @@ async fn handle_mailbox_export(
 }
 
 /// Search emails in mailbox
+#[allow(clippy::too_many_arguments)]
 async fn handle_mailbox_search(
     sender: Option<String>,
     recipient: Option<String>,

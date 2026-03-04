@@ -31,7 +31,7 @@ pub async fn get_usage(
     // Get current usage counter
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get plan limits
     let limits = &org_ctx.org.limits_json;
@@ -85,7 +85,7 @@ pub async fn get_usage_history(
     // Get all usage counters for this org
     let counters = UsageCounter::get_all_for_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Convert to response format
     let history: Vec<UsagePeriod> = counters

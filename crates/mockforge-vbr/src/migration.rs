@@ -10,6 +10,7 @@ use crate::{Error, Result};
 /// Migration manager for database schema evolution
 pub struct MigrationManager {
     /// Current migration version
+    #[allow(dead_code)]
     version: u64,
 }
 

@@ -31,14 +31,12 @@ pub async fn get_organization_settings(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -47,8 +45,7 @@ pub async fn get_organization_settings(
     }
 
     // Get BYOK settings (if any exist)
-    let byok_setting =
-        OrgSetting::get(pool, org_id, "byok").await.map_err(|e| ApiError::Database(e))?;
+    let byok_setting = OrgSetting::get(pool, org_id, "byok").await.map_err(ApiError::Database)?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -86,7 +83,7 @@ pub async fn update_organization_settings(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner or admin
@@ -122,17 +119,16 @@ pub async fn update_organization_settings(
 
         OrgSetting::set(pool, org_id, "byok", config_value)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     // Get updated organization and settings
     let updated_org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let byok_setting =
-        OrgSetting::get(pool, org_id, "byok").await.map_err(|e| ApiError::Database(e))?;
+    let byok_setting = OrgSetting::get(pool, org_id, "byok").await.map_err(ApiError::Database)?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -185,14 +181,12 @@ pub async fn get_organization_usage(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -207,7 +201,7 @@ pub async fn get_organization_usage(
     .bind(org_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let total_storage_gb: (Option<f64>,) = sqlx::query_as(
         "SELECT COALESCE(SUM(storage_bytes), 0)::FLOAT8 / 1073741824.0 FROM usage_counters WHERE org_id = $1",
@@ -215,7 +209,7 @@ pub async fn get_organization_usage(
     .bind(org_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
         "SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
@@ -223,7 +217,7 @@ pub async fn get_organization_usage(
     .bind(org_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Get feature usage counts
     let hosted_mocks_count: (i64,) =
@@ -231,21 +225,21 @@ pub async fn get_organization_usage(
             .bind(org_id)
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let plugins_published: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM plugins WHERE org_id = $1")
             .bind(org_id)
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     let api_tokens_count: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM api_tokens WHERE org_id = $1")
             .bind(org_id)
             .fetch_one(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     Ok(Json(OrganizationUsageResponse {
         org_id: org.id,
@@ -269,7 +263,7 @@ pub async fn get_organization_billing(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner (billing info is sensitive)
@@ -278,9 +272,7 @@ pub async fn get_organization_billing(
     }
 
     // Get subscription info
-    let subscription = Subscription::find_by_org(pool, org_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let subscription = Subscription::find_by_org(pool, org_id).await.map_err(ApiError::Database)?;
 
     Ok(Json(OrganizationBillingResponse {
         org_id: org.id,
@@ -354,14 +346,12 @@ pub async fn get_organization_ai_settings(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -370,9 +360,8 @@ pub async fn get_organization_ai_settings(
     }
 
     // Get AI settings
-    let ai_setting = OrgSetting::get(pool, org_id, "ai_settings")
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let ai_setting =
+        OrgSetting::get(pool, org_id, "ai_settings").await.map_err(ApiError::Database)?;
 
     let ai_settings = if let Some(setting) = &ai_setting {
         serde_json::from_value(setting.setting_value.clone())
@@ -396,7 +385,7 @@ pub async fn update_organization_ai_settings(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner or admin
@@ -422,7 +411,7 @@ pub async fn update_organization_ai_settings(
 
     OrgSetting::set(pool, org_id, "ai_settings", config_value)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit event
     record_audit_event(

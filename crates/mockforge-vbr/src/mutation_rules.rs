@@ -1262,7 +1262,7 @@ mod tests {
     #[test]
     fn test_comparison_operator_clone() {
         let op = ComparisonOperator::Gt;
-        let cloned = op.clone();
+        let cloned = op;
         assert!(matches!(cloned, ComparisonOperator::Gt));
     }
 

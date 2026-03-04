@@ -115,7 +115,7 @@ pub struct ResolveIncidentRequest {
 ///
 /// POST /api/v1/drift/budgets
 pub async fn create_budget(
-    State(state): State<DriftBudgetState>,
+    State(_state): State<DriftBudgetState>,
     Json(request): Json<CreateDriftBudgetRequest>,
 ) -> Result<Json<DriftBudgetResponse>, StatusCode> {
     let budget = DriftBudget {
@@ -549,10 +549,12 @@ pub async fn get_drift_metrics(
     Query(params): Query<GetMetricsQuery>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Query incidents for metrics
-    let mut query = IncidentQuery::default();
-    query.endpoint = params.endpoint;
-    query.method = params.method;
-    query.workspace_id = params.workspace_id;
+    let mut query = IncidentQuery {
+        endpoint: params.endpoint,
+        method: params.method,
+        workspace_id: params.workspace_id,
+        ..IncidentQuery::default()
+    };
 
     // Filter by date range if days specified
     if let Some(days) = params.days {

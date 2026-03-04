@@ -141,7 +141,9 @@ impl AgingManager {
                                         "DELETE FROM {} WHERE {} = ?",
                                         table_name, pk_field
                                     );
-                                    database.execute(&delete_query, &[pk_value.clone()]).await?;
+                                    database
+                                        .execute(&delete_query, std::slice::from_ref(pk_value))
+                                        .await?;
                                     total_cleaned += 1;
                                 }
                             }

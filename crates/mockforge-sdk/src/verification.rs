@@ -2,6 +2,7 @@
 //!
 //! Provides methods to verify that specific requests were made (or not made)
 //! during test execution.
+#![allow(async_fn_in_trait)]
 
 use crate::Error;
 use mockforge_core::{
@@ -364,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn test_verify_sequence_error_when_logger_not_initialized() {
         let server = crate::server::MockServer::default();
-        let patterns = vec![
+        let patterns = [
             create_verification_request("POST", "/api/users"),
             create_verification_request("GET", "/api/users/1"),
         ];
@@ -429,13 +430,13 @@ mod tests {
 
     #[test]
     fn test_verification_sequence_single() {
-        let patterns = vec![create_verification_request("GET", "/api/test")];
+        let patterns = [create_verification_request("GET", "/api/test")];
         assert_eq!(patterns.len(), 1);
     }
 
     #[test]
     fn test_verification_sequence_multiple() {
-        let patterns = vec![
+        let patterns = [
             create_verification_request("POST", "/api/users"),
             create_verification_request("GET", "/api/users/1"),
             create_verification_request("PUT", "/api/users/1"),

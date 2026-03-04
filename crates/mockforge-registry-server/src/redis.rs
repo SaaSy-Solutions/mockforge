@@ -208,7 +208,7 @@ mod tests {
         // Month should be 2 digits
         assert_eq!(parts[1].len(), 2);
         let month: u32 = parts[1].parse().expect("Month should be numeric");
-        assert!(month >= 1 && month <= 12);
+        assert!((1..=12).contains(&month));
     }
 
     #[test]

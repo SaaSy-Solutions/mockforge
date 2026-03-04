@@ -12,10 +12,9 @@ use mockforge_pipelines::{
     pipeline::{Pipeline, PipelineDefinition, PipelineExecution, PipelineExecutor},
     PipelineEvent,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
 /// State for pipeline handlers

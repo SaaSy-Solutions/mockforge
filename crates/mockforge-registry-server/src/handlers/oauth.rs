@@ -37,7 +37,7 @@ impl OAuthProvider {
         }
     }
 
-    fn to_string(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             OAuthProvider::GitHub => "github",
             OAuthProvider::Google => "google",
@@ -73,7 +73,7 @@ pub async fn oauth_authorize(
     if let Some(redis) = &state.redis {
         // Store state token with provider info and timestamp for verification
         // Format: "provider:timestamp" (e.g., "github:1234567890")
-        let state_value = format!("{}:{}", provider.to_string(), chrono::Utc::now().timestamp());
+        let state_value = format!("{}:{}", provider.as_str(), chrono::Utc::now().timestamp());
         redis
             .set_with_expiry(&state_key, &state_value, 900) // 15 minutes expiration
             .await
@@ -116,7 +116,7 @@ pub async fn oauth_callback(
                 Some(value) => {
                     // Verify provider matches the one in the stored state
                     // This prevents cross-provider CSRF attacks
-                    let expected_prefix = format!("{}:", provider.to_string());
+                    let expected_prefix = format!("{}:", provider.as_str());
                     if !value.starts_with(&expected_prefix) {
                         return Err(ApiError::InvalidRequest(
                             "OAuth state token provider mismatch. Possible CSRF attack."
@@ -176,7 +176,7 @@ pub async fn oauth_callback(
                 .bind(&user_info.provider_id)
                 .fetch_optional(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
             if let Some(user) = existing {
                 user
@@ -184,7 +184,7 @@ pub async fn oauth_callback(
                 // Check if email already exists (link accounts)
                 let email_user = User::find_by_email(pool, &user_info.email)
                     .await
-                    .map_err(|e| ApiError::Database(e))?;
+                    .map_err(ApiError::Database)?;
 
                 if let Some(user) = email_user {
                     // Link GitHub account to existing user
@@ -194,7 +194,7 @@ pub async fn oauth_callback(
                         .bind(user.id)
                         .execute(pool)
                         .await
-                        .map_err(|e| ApiError::Database(e))?;
+                        .map_err(ApiError::Database)?;
                     user
                 } else {
                     // Create new user
@@ -208,7 +208,7 @@ pub async fn oauth_callback(
                 .bind(&user_info.provider_id)
                 .fetch_optional(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
 
             if let Some(user) = existing {
                 user
@@ -216,7 +216,7 @@ pub async fn oauth_callback(
                 // Check if email already exists (link accounts)
                 let email_user = User::find_by_email(pool, &user_info.email)
                     .await
-                    .map_err(|e| ApiError::Database(e))?;
+                    .map_err(ApiError::Database)?;
 
                 if let Some(user) = email_user {
                     // Link Google account to existing user
@@ -226,7 +226,7 @@ pub async fn oauth_callback(
                         .bind(user.id)
                         .execute(pool)
                         .await
-                        .map_err(|e| ApiError::Database(e))?;
+                        .map_err(ApiError::Database)?;
                     user
                 } else {
                     // Create new user
@@ -239,7 +239,7 @@ pub async fn oauth_callback(
     // Create personal organization if it doesn't exist
     let _personal_org = Organization::get_or_create_personal_org(pool, user.id, &user.username)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Send welcome email for new OAuth users (non-blocking)
     // Check if this is a new user by checking if they were just created
@@ -258,7 +258,7 @@ pub async fn oauth_callback(
 
     // Generate token pair (access + refresh)
     let (token_pair, jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
-        .map_err(|e| ApiError::Internal(e))?;
+        .map_err(ApiError::Internal)?;
 
     // Store refresh token JTI in database for revocation support
     let expires_at = Utc::now()
@@ -280,7 +280,7 @@ pub async fn oauth_callback(
         "user_id": user.id.to_string(),
         "username": user.username,
         "email": user.email,
-        "provider": provider.to_string(),
+        "provider": provider.as_str(),
     });
 
     Ok(Json(response).into_response())
@@ -383,7 +383,7 @@ async fn create_oauth_user(
     let mut counter = 0;
     while User::find_by_username(pool, &username)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .is_some()
     {
         counter += 1;
@@ -401,7 +401,7 @@ async fn create_oauth_user(
     .bind(&username)
     .bind(&user_info.email)
     .bind(&password_hash)
-    .bind(provider.to_string())
+    .bind(provider.as_str())
     .bind(if provider == OAuthProvider::GitHub {
         Some(&user_info.provider_id)
     } else {
@@ -415,7 +415,7 @@ async fn create_oauth_user(
     .bind(user_info.avatar_url.as_deref())
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     Ok(user)
 }

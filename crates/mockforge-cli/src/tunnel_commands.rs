@@ -167,16 +167,15 @@ pub async fn handle_tunnel_command(cmd: TunnelSubcommand) -> anyhow::Result<()> 
             auth_token,
             tunnel_id,
         } => {
-            let mut config = TunnelConfig::default();
-            config.server_url =
-                server_url.or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok());
+            let config = TunnelConfig {
+                server_url: server_url
+                    .or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok()),
+                auth_token,
+                ..TunnelConfig::default()
+            };
 
             if config.server_url.is_none() {
                 return Err(anyhow::anyhow!("server_url required. Set via --server-url or MOCKFORGE_TUNNEL_SERVER_URL env var"));
-            }
-
-            if let Some(token) = auth_token {
-                config.auth_token = Some(token);
             }
 
             let manager = TunnelManager::new(&config)?;
@@ -201,16 +200,15 @@ pub async fn handle_tunnel_command(cmd: TunnelSubcommand) -> anyhow::Result<()> 
             auth_token,
             tunnel_id,
         } => {
-            let mut config = TunnelConfig::default();
-            config.server_url =
-                server_url.or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok());
+            let config = TunnelConfig {
+                server_url: server_url
+                    .or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok()),
+                auth_token,
+                ..TunnelConfig::default()
+            };
 
             if config.server_url.is_none() {
                 return Err(anyhow::anyhow!("server_url required. Set via --server-url or MOCKFORGE_TUNNEL_SERVER_URL env var"));
-            }
-
-            if let Some(token) = auth_token {
-                config.auth_token = Some(token);
             }
 
             let manager = TunnelManager::new(&config)?;
@@ -241,16 +239,15 @@ pub async fn handle_tunnel_command(cmd: TunnelSubcommand) -> anyhow::Result<()> 
             server_url,
             auth_token,
         } => {
-            let mut config = TunnelConfig::default();
-            config.server_url =
-                server_url.or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok());
+            let config = TunnelConfig {
+                server_url: server_url
+                    .or_else(|| std::env::var("MOCKFORGE_TUNNEL_SERVER_URL").ok()),
+                auth_token,
+                ..TunnelConfig::default()
+            };
 
             if config.server_url.is_none() {
                 return Err(anyhow::anyhow!("server_url required. Set via --server-url or MOCKFORGE_TUNNEL_SERVER_URL env var"));
-            }
-
-            if let Some(token) = auth_token {
-                config.auth_token = Some(token);
             }
 
             let manager = TunnelManager::new(&config)?;

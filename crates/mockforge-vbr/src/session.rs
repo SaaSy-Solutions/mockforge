@@ -19,6 +19,7 @@ pub struct SessionDataManager {
     /// Session manager from mockforge-core
     pub session_manager: Arc<SessionManager>,
     /// Storage backend configuration for session databases
+    #[allow(dead_code)]
     storage_backend: StorageBackend,
     /// Per-session database instances (in-memory by default)
     session_databases: Arc<RwLock<HashMap<String, Arc<dyn VirtualDatabase + Send + Sync>>>>,
@@ -79,7 +80,7 @@ impl SessionDataManager {
     /// Clean up databases for expired sessions
     pub async fn cleanup_expired_sessions(&self) -> Result<usize> {
         // Get expired sessions from SessionManager
-        let expired_count = self.session_manager.cleanup_expired_sessions().await;
+        let _expired_count = self.session_manager.cleanup_expired_sessions().await;
 
         // Get list of active sessions
         let active_sessions = self.session_manager.list_sessions().await;

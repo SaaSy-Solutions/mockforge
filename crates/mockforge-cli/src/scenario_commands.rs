@@ -1270,7 +1270,7 @@ async fn apply_vbr_entities_from_scenario(
             Ok(vbr_schema) => {
                 // Create entity with state machine if provided
                 // Convert state machine to the type expected by Entity::with_state_machine
-                let entity = if let Some(ref state_machine) = entity_def.state_machine {
+                let _entity = if let Some(ref state_machine) = entity_def.state_machine {
                     // Convert from mockforge_scenarios::StateMachine to mockforge_core::intelligent_behavior::rules::StateMachine
                     use mockforge_core::intelligent_behavior::rules::StateMachine as CoreStateMachine;
                     let core_state_machine: CoreStateMachine =

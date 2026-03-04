@@ -532,7 +532,7 @@ mod tests {
     async fn test_authenticate_jwt_invalid_format() {
         let state = create_test_auth_state_with_jwt();
         let auth_header = "Bearer invalid-token-format";
-        let result = authenticate_jwt(&state, &auth_header).await;
+        let result = authenticate_jwt(&state, auth_header).await;
 
         assert!(result.is_some());
         assert!(matches!(result.unwrap(), AuthResult::Failure(_)));
@@ -643,7 +643,7 @@ mod tests {
         });
 
         let auth_header = "Bearer some-token";
-        let result = authenticate_jwt(&state, &auth_header).await;
+        let result = authenticate_jwt(&state, auth_header).await;
 
         assert!(result.is_none());
     }
@@ -687,7 +687,7 @@ mod tests {
         // Invalid base64
         let auth_header = "Basic invalid-base64!!!";
 
-        let result = authenticate_basic(&state, &auth_header);
+        let result = authenticate_basic(&state, auth_header);
 
         assert!(result.is_some());
         assert!(matches!(result.unwrap(), AuthResult::Failure(_)));

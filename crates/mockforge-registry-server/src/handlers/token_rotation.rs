@@ -52,7 +52,7 @@ pub async fn rotate_token(
     // Verify token belongs to org
     let old_token = ApiToken::find_by_id(pool, token_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Token not found".to_string()))?;
 
     if old_token.org_id != org_ctx.org_id {
@@ -63,10 +63,10 @@ pub async fn rotate_token(
 
     // Rotate token
     let delete_old = request.delete_old.unwrap_or(false);
-    let (new_full_token, new_token, deleted_token) =
+    let (new_full_token, new_token, _deleted_token) =
         ApiToken::rotate(pool, token_id, request.new_name.as_deref(), delete_old)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
     // Record audit log
     let ip_address = headers
@@ -155,9 +155,8 @@ pub async fn get_tokens_needing_rotation(
     let threshold_days = query.threshold_days.unwrap_or(90);
 
     // Get all tokens for org
-    let all_tokens = ApiToken::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let all_tokens =
+        ApiToken::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
 
     // Filter tokens needing rotation
     let tokens_needing_rotation: Vec<TokenRotationStatus> = all_tokens

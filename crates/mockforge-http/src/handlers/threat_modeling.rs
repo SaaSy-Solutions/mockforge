@@ -460,7 +460,7 @@ pub async fn list_findings(
         use mockforge_core::contract_drift::threat_modeling::{ThreatCategory, ThreatLevel};
         use std::collections::HashMap;
 
-        let finding_type = match finding_type_str.as_str() {
+        let _finding_type = match finding_type_str.as_str() {
             "pii_exposure" => ThreatCategory::PiiExposure,
             "dos_risk" => ThreatCategory::DoSRisk,
             "error_leakage" => ThreatCategory::ErrorLeakage,
@@ -475,7 +475,7 @@ pub async fn list_findings(
             _ => continue, // Skip invalid finding types
         };
 
-        let severity = match severity_str.as_str() {
+        let _severity = match severity_str.as_str() {
             "low" => ThreatLevel::Low,
             "medium" => ThreatLevel::Medium,
             "high" => ThreatLevel::High,

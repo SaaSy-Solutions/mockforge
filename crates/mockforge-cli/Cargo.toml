@@ -104,6 +104,7 @@ smtp = ["mockforge-smtp", "mockforge-http/smtp"]
 tcp = ["mockforge-tcp"]
 pipelines = ["dep:mockforge-pipelines"]
 tui = ["dep:mockforge-tui"]
+vue = []
 
 [dev-dependencies]
 assert_cmd = "2.0"

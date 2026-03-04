@@ -36,6 +36,7 @@ pub struct OrgTemplate {
 
 impl OrgTemplate {
     /// Create a new organization template
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Uuid,

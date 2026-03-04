@@ -35,12 +35,12 @@ pub async fn get_subscription(
     // Get subscription
     let subscription = Subscription::find_by_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get current usage
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get plan limits
     let limits = org_ctx.org.limits_json.clone();
@@ -331,7 +331,7 @@ async fn handle_checkout_completed(
 
         Organization::update_stripe_customer_id(pool, org_id, Some(&customer_id_str))
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     Ok(())
@@ -345,13 +345,13 @@ async fn get_org_owner_email(
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get owner user
     let owner = User::find_by_id(pool, org.owner_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization owner not found".to_string()))?;
 
     Ok((owner.email, owner.username))
@@ -381,7 +381,7 @@ async fn handle_subscription_event(
     // Determine plan from price_id (using config for exact matching)
     let plan = determine_plan_from_price_id(&price_id, config);
 
-    let status = SubscriptionStatus::from_string(&subscription.status.to_string());
+    let status = SubscriptionStatus::from_string(subscription.status.as_ref());
 
     let current_period_start =
         chrono::DateTime::<chrono::Utc>::from_timestamp(subscription.current_period_start, 0)
@@ -395,15 +395,14 @@ async fn handle_subscription_event(
 
     let canceled_at = subscription
         .canceled_at
-        .map(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0))
-        .flatten();
+        .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
 
     // Get org_id from metadata or find by customer_id
     let org_id = subscription
         .metadata
         .get("org_id")
         .and_then(|s| Uuid::parse_str(s).ok())
-        .or_else(|| {
+        .or({
             // Fallback: find org by stripe_customer_id
             // This requires async, so we'll need to handle it differently
             // For now, require metadata
@@ -428,24 +427,24 @@ async fn handle_subscription_event(
         canceled_at,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Get old plan before updating
     let old_org = Organization::find_by_id(pool, org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
     let old_plan = old_org.plan();
 
     // Update organization plan
     Organization::update_plan(pool, org_id, plan)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Update stripe_customer_id on org
     Organization::update_stripe_customer_id(pool, org_id, Some(&stripe_customer_id))
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     tracing::info!("Subscription updated: org_id={}, plan={:?}", org_id, plan);
 
@@ -524,7 +523,7 @@ async fn handle_subscription_deleted(
     // Find subscription
     let subscription_record = Subscription::find_by_stripe_subscription_id(pool, &stripe_sub_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::InvalidRequest("Subscription not found in database".to_string())
         })?;
@@ -532,19 +531,19 @@ async fn handle_subscription_deleted(
     // Update status to canceled
     Subscription::update_status(pool, subscription_record.id, SubscriptionStatus::Canceled)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Get the organization before downgrading to log the old plan
     let org = Organization::find_by_id(pool, subscription_record.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
     let old_plan = org.plan();
 
     // Downgrade org to free plan
     Organization::update_plan(pool, subscription_record.org_id, Plan::Free)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     tracing::info!("Subscription canceled: org_id={}", subscription_record.org_id);
 
@@ -605,14 +604,14 @@ async fn handle_payment_succeeded(
     .bind(&customer_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?
+    .map_err(ApiError::Database)?
     .ok_or_else(|| ApiError::InvalidRequest("Subscription not found".to_string()))?;
 
     // Update status to active if it was past_due
     if subscription.status() == SubscriptionStatus::PastDue {
         Subscription::update_status(pool, subscription.id, SubscriptionStatus::Active)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
     }
 
     tracing::info!("Payment succeeded: org_id={}", subscription.org_id);
@@ -637,13 +636,13 @@ async fn handle_payment_failed(
     .bind(&customer_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?
+    .map_err(ApiError::Database)?
     .ok_or_else(|| ApiError::InvalidRequest("Subscription not found".to_string()))?;
 
     // Update status to past_due
     Subscription::update_status(pool, subscription.id, SubscriptionStatus::PastDue)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     tracing::info!("Payment failed: org_id={}", subscription.org_id);
 
@@ -669,7 +668,7 @@ async fn handle_payment_failed(
         if let Ok(email_service) = EmailService::from_env() {
             let org = Organization::find_by_id(pool, subscription.org_id)
                 .await
-                .map_err(|e| ApiError::Database(e))?
+                .map_err(ApiError::Database)?
                 .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
             let amount = invoice.amount_due.map(|a| a as f64 / 100.0).unwrap_or(0.0); // Convert cents to dollars

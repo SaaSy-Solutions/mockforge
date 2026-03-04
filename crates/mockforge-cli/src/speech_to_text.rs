@@ -10,6 +10,7 @@
 
 use std::fmt;
 use std::io::{self, Write};
+#[allow(unused_imports)]
 use std::path::PathBuf;
 
 /// Speech-to-text errors
@@ -274,7 +275,8 @@ impl GoogleSpeechBackend {
 
     async fn transcribe_audio(&self, audio_data: &[u8]) -> Result<String, SttError> {
         // Base64 encode audio
-        let audio_base64 = base64::encode(audio_data);
+        use base64::Engine;
+        let audio_base64 = base64::engine::general_purpose::STANDARD.encode(audio_data);
 
         let request_body = serde_json::json!({
             "config": {
@@ -568,6 +570,7 @@ pub struct SpeechToTextManager {
 impl SpeechToTextManager {
     /// Create a new STT manager with default backends
     pub fn new() -> Self {
+        #[allow(clippy::vec_init_then_push)]
         let mut backends: Vec<Box<dyn SpeechToTextBackend>> = Vec::new();
 
         // Always add text input as fallback (last, so it's only used if nothing else is available)

@@ -2,6 +2,7 @@
 
 #[cfg(feature = "server")]
 use mockforge_tunnel::server::start_test_server;
+#[cfg(feature = "server")]
 use reqwest::StatusCode;
 #[cfg(feature = "server")]
 use std::time::Duration;

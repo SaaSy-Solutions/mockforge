@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{SuspiciousActivity, SuspiciousActivityType, User},
+    models::SuspiciousActivity,
     AppState,
 };
 
@@ -68,7 +68,7 @@ pub async fn get_suspicious_activities(
         query.limit.or(Some(100)),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Get total count
     let total: (i64,) = sqlx::query_as(
@@ -77,7 +77,7 @@ pub async fn get_suspicious_activities(
     .bind(org_ctx.org_id)
     .fetch_one(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     let activity_responses: Vec<SuspiciousActivityResponse> = activities
         .into_iter()
@@ -114,7 +114,7 @@ pub async fn resolve_suspicious_activity(
     // Mark as resolved
     SuspiciousActivity::resolve(pool, activity_id, user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(serde_json::json!({
         "success": true,

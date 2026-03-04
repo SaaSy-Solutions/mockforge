@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 /// Handle the contract-sync command
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_contract_sync(
     repository_url: String,
     branch: Option<String>,

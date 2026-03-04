@@ -250,7 +250,7 @@ mod tests {
     fn test_pillar_types_match() {
         // Verify all pillar types from core match analytics types
         // This ensures the conversion in the record method is complete
-        let core_pillars = vec![
+        let core_pillars = [
             CorePillar::Reality,
             CorePillar::Contracts,
             CorePillar::DevX,
@@ -258,7 +258,7 @@ mod tests {
             CorePillar::Ai,
         ];
 
-        let analytics_pillars = vec![
+        let analytics_pillars = [
             AnalyticsPillar::Reality,
             AnalyticsPillar::Contracts,
             AnalyticsPillar::DevX,

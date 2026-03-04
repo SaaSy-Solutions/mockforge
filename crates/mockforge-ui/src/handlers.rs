@@ -367,6 +367,7 @@ impl AdminState {
     /// * `mockai` - Optional MockAI instance for hot-reload support
     /// * `continuum_config` - Optional Reality Continuum configuration
     /// * `virtual_clock` - Optional virtual clock for time-based progression
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
         ws_server_addr: Option<std::net::SocketAddr>,

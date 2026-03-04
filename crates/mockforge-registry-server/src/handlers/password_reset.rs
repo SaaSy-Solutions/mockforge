@@ -49,9 +49,7 @@ pub async fn request_password_reset(
 
     // Create password reset token (reusing VerificationToken model)
     // Token expires in 1 hour
-    let reset_token = VerificationToken::create(pool, user.id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    let reset_token = VerificationToken::create(pool, user.id).await.map_err(ApiError::Database)?;
 
     // Update token expiration to 1 hour (instead of default 24 hours)
     sqlx::query(
@@ -60,7 +58,7 @@ pub async fn request_password_reset(
     .bind(reset_token.id)
     .execute(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Send password reset email (non-blocking)
     let email_service = match EmailService::from_env() {
@@ -124,7 +122,7 @@ pub async fn confirm_password_reset(
     // Find token
     let reset_token = VerificationToken::find_by_token(pool, &request.token)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Invalid or expired reset token".to_string()))?;
 
     // Check if token is valid (not expired and not used)
@@ -137,11 +135,11 @@ pub async fn confirm_password_reset(
     // Get user
     let user = User::find_by_id(pool, reset_token.user_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Hash new password
-    let password_hash = hash_password(&request.new_password).map_err(|e| ApiError::Internal(e))?;
+    let password_hash = hash_password(&request.new_password).map_err(ApiError::Internal)?;
 
     // Update user password
     sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
@@ -149,12 +147,12 @@ pub async fn confirm_password_reset(
         .bind(user.id)
         .execute(pool)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Mark token as used
     VerificationToken::mark_as_used(pool, reset_token.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     tracing::info!("Password reset completed: user_id={}, email={}", user.id, user.email);
 

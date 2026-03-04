@@ -27,9 +27,11 @@ use tokio::sync::{broadcast, RwLock};
 use tracing::*;
 
 /// Default broadcast channel capacity for message events
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 const DEFAULT_MESSAGE_BROADCAST_CAPACITY: usize = 1000;
 
 /// Get the broadcast channel capacity from environment or use default
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 fn get_message_broadcast_capacity() -> usize {
     std::env::var("MOCKFORGE_MESSAGE_BROADCAST_CAPACITY")
         .ok()
@@ -67,6 +69,7 @@ pub struct MqttMessageEvent {
 }
 
 #[cfg(feature = "kafka")]
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaMessageEvent {
     pub topic: String,
@@ -2457,6 +2460,7 @@ pub fn management_router(state: ManagementState) -> Router {
 }
 
 #[cfg(feature = "kafka")]
+/// Kafka broker statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaBrokerStats {
     /// Number of topics
@@ -2472,6 +2476,7 @@ pub struct KafkaBrokerStats {
 }
 
 #[cfg(feature = "kafka")]
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaTopicInfo {
     pub name: String,
@@ -2480,6 +2485,7 @@ pub struct KafkaTopicInfo {
 }
 
 #[cfg(feature = "kafka")]
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KafkaConsumerGroupInfo {
     pub group_id: String,
@@ -2675,6 +2681,7 @@ async fn get_kafka_group(
 // ========== Kafka Produce Handler ==========
 
 #[cfg(feature = "kafka")]
+/// Request body for producing a Kafka message
 #[derive(Debug, Deserialize)]
 pub struct KafkaProduceRequest {
     /// Topic to produce to
@@ -2798,6 +2805,7 @@ async fn produce_kafka_message(
 }
 
 #[cfg(feature = "kafka")]
+/// Request body for producing a batch of Kafka messages
 #[derive(Debug, Deserialize)]
 pub struct KafkaBatchProduceRequest {
     /// List of messages to produce
@@ -3005,7 +3013,7 @@ async fn kafka_messages_stream(
     State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let mut rx = state.message_events.subscribe();
+    let rx = state.message_events.subscribe();
     let topic_filter = params.get("topic").cloned();
 
     let stream = stream::unfold(rx, move |mut rx| {
@@ -3158,28 +3166,30 @@ async fn generate_ai_spec(
         LlmProvider::OpenAICompatible => "gpt-3.5-turbo".to_string(),
     });
 
-    // Build RagConfig using default() and override fields
-    let mut rag_config = RagConfig::default();
-    rag_config.provider = provider;
-    rag_config.api_endpoint = api_endpoint;
-    rag_config.api_key = api_key;
-    rag_config.model = model;
-    rag_config.max_tokens = std::env::var("MOCKFORGE_RAG_MAX_TOKENS")
-        .unwrap_or_else(|_| "4096".to_string())
-        .parse()
-        .unwrap_or(4096);
-    rag_config.temperature = std::env::var("MOCKFORGE_RAG_TEMPERATURE")
-        .unwrap_or_else(|_| "0.3".to_string())
-        .parse()
-        .unwrap_or(0.3); // Lower temperature for more structured output
-    rag_config.timeout_secs = std::env::var("MOCKFORGE_RAG_TIMEOUT")
-        .unwrap_or_else(|_| "60".to_string())
-        .parse()
-        .unwrap_or(60);
-    rag_config.max_context_length = std::env::var("MOCKFORGE_RAG_CONTEXT_WINDOW")
-        .unwrap_or_else(|_| "4000".to_string())
-        .parse()
-        .unwrap_or(4000);
+    // Build RagConfig using struct literal with defaults
+    let rag_config = RagConfig {
+        provider,
+        api_endpoint,
+        api_key,
+        model,
+        max_tokens: std::env::var("MOCKFORGE_RAG_MAX_TOKENS")
+            .unwrap_or_else(|_| "4096".to_string())
+            .parse()
+            .unwrap_or(4096),
+        temperature: std::env::var("MOCKFORGE_RAG_TEMPERATURE")
+            .unwrap_or_else(|_| "0.3".to_string())
+            .parse()
+            .unwrap_or(0.3), // Lower temperature for more structured output
+        timeout_secs: std::env::var("MOCKFORGE_RAG_TIMEOUT")
+            .unwrap_or_else(|_| "60".to_string())
+            .parse()
+            .unwrap_or(60),
+        max_context_length: std::env::var("MOCKFORGE_RAG_CONTEXT_WINDOW")
+            .unwrap_or_else(|_| "4000".to_string())
+            .parse()
+            .unwrap_or(4000),
+        ..Default::default()
+    };
 
     // Build the prompt for spec generation
     let spec_type_label = match request.spec_type.as_str() {
@@ -3842,8 +3852,7 @@ async fn update_chaos_config(
     {
         if let Some(chaos_state) = &_state.chaos_api_state {
             use mockforge_chaos::config::{
-                ChaosConfig, FaultInjectionConfig, LatencyConfig, RateLimitConfig,
-                TrafficShapingConfig,
+                FaultInjectionConfig, LatencyConfig, RateLimitConfig, TrafficShapingConfig,
             };
 
             let mut config = chaos_state.config.write().await;

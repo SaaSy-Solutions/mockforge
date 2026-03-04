@@ -102,13 +102,11 @@ fn extract_entity_id_from_path(path: &str) -> Option<String> {
 #[cfg(feature = "persona-graph")]
 fn enrich_with_persona_graph(
     graph: &mockforge_data::PersonaGraph,
-    persona_id: &str,
+    _persona_id: &str,
     response: &mut Value,
     path: &str,
     entity_id: Option<&str>,
 ) {
-    use mockforge_data::PersonaGraph;
-
     // Determine entity type from path
     let path_lower = path.to_lowercase();
     let entity_type = if path_lower.contains("/users/") || path_lower.contains("/user/") {

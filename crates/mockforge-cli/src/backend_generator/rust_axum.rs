@@ -974,7 +974,7 @@ fn generate_todo_md(
     todos: &[TodoItem],
     routes: &[RouteInfo],
 ) -> Result<GeneratedFile> {
-    let project_name = sanitize_name(&spec.spec.info.title);
+    let _project_name = sanitize_name(&spec.spec.info.title);
     let date_str = Utc::now().format("%Y-%m-%d").to_string();
 
     let mut content = format!(

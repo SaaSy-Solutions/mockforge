@@ -169,7 +169,7 @@ async fn test_all_random_token_types() {
     assert!(resolved["hex"].is_string());
     assert!(resolved["hex_short"].is_string());
     let hex_str = resolved["hex"].as_str().unwrap();
-    assert!(hex_str.len() > 0);
+    assert!(!hex_str.is_empty());
 
     // Verify alphanumeric
     assert!(resolved["alphanumeric"].is_string());

@@ -5,7 +5,9 @@ use serde_json::json;
 
 #[tokio::test]
 async fn test_admin_client_list_mocks() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -13,12 +15,14 @@ async fn test_admin_client_list_mocks() {
     let mocks = admin_client.list_mocks().await.expect("Failed to list mocks");
     assert_eq!(mocks.total, 0);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_admin_client_create_mock() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -40,12 +44,14 @@ async fn test_admin_client_create_mock() {
     let mocks = admin_client.list_mocks().await.expect("Failed to list mocks");
     assert_eq!(mocks.total, 1);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_admin_client_get_mock() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -64,12 +70,14 @@ async fn test_admin_client_get_mock() {
     assert_eq!(fetched.method, "GET");
     assert_eq!(fetched.path, "/api/users");
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_admin_client_update_mock() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -99,12 +107,14 @@ async fn test_admin_client_update_mock() {
     assert_eq!(updated.name, "Updated");
     assert_eq!(updated.response.body["value"], 2);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_admin_client_delete_mock() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -121,12 +131,14 @@ async fn test_admin_client_delete_mock() {
     let result = admin_client.get_mock(&created.id).await;
     assert!(result.is_err());
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
 async fn test_admin_client_get_stats() {
-    let mut server = MockServer::new().auto_port().start().await.expect("Failed to start server");
+    let server = Box::pin(MockServer::new().auto_port().start())
+        .await
+        .expect("Failed to start server");
 
     let admin_client = AdminClient::new(server.url());
 
@@ -135,7 +147,7 @@ async fn test_admin_client_get_stats() {
     assert!(stats.uptime_seconds > 0);
     assert_eq!(stats.active_mocks, 0);
 
-    server.stop().await.expect("Failed to stop server");
+    Box::pin(server.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]

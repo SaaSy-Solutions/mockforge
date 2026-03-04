@@ -2,6 +2,11 @@
 //!
 //! Provides programmatic access to `MockForge`'s management API for
 //! creating, updating, and managing mocks at runtime.
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::must_use_candidate,
+    clippy::return_self_not_must_use
+)]
 
 use crate::{Error, Result};
 use reqwest::Client;

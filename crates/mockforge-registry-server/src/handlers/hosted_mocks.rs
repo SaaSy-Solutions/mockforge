@@ -45,7 +45,7 @@ pub async fn create_deployment(
         // Count existing active deployments
         let existing = HostedMock::find_by_org(pool, org_ctx.org_id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         let active_count = existing
             .iter()
@@ -92,9 +92,9 @@ pub async fn create_deployment(
     }
 
     // Check if slug is already taken
-    if HostedMock::find_by_slug(pool, org_ctx.org_id, &slug)
+    if HostedMock::find_by_slug(pool, org_ctx.org_id, slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .is_some()
     {
         return Err(ApiError::InvalidRequest(format!(
@@ -109,13 +109,13 @@ pub async fn create_deployment(
         org_ctx.org_id,
         request.project_id,
         &request.name,
-        &slug,
+        slug,
         request.description.as_deref(),
         request.config_json,
         request.openapi_spec_url.as_deref(),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Log deployment creation
     DeploymentLog::create(
@@ -129,13 +129,13 @@ pub async fn create_deployment(
         })),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Mark as pending - the deployment orchestrator will pick it up and deploy it
     // The orchestrator polls for pending/deploying deployments every 10 seconds
     HostedMock::update_status(pool, deployment.id, DeploymentStatus::Pending, None)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Track feature usage
     let _ = FeatureUsage::record(
@@ -179,7 +179,7 @@ pub async fn create_deployment(
     // Return deployment info
     let deployment = HostedMock::find_by_id(pool, deployment.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("Failed to retrieve created deployment"))
         })?;
@@ -203,7 +203,7 @@ pub async fn list_deployments(
     // Get all deployments
     let deployments = HostedMock::find_by_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let responses: Vec<DeploymentResponse> =
         deployments.into_iter().map(DeploymentResponse::from).collect();
@@ -228,7 +228,7 @@ pub async fn get_deployment(
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -259,7 +259,7 @@ pub async fn update_deployment_status(
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -275,7 +275,7 @@ pub async fn update_deployment_status(
 
     HostedMock::update_status(pool, deployment_id, status, request.error_message.as_deref())
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Update URLs if provided
     if request.deployment_url.is_some() || request.internal_url.is_some() {
@@ -286,46 +286,42 @@ pub async fn update_deployment_status(
             request.internal_url.as_deref(),
         )
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
     }
 
     // Get updated deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
         })?;
 
     // Send deployment status notification email (non-blocking)
-    if let Ok(org) = Organization::find_by_id(pool, deployment.org_id).await {
-        if let Some(org) = org {
-            if let Ok(owner) = User::find_by_id(pool, org.owner_id).await {
-                if let Some(owner) = owner {
-                    let status_str = format!("{:?}", deployment.status()).to_lowercase();
-                    let email_msg = crate::email::EmailService::generate_deployment_status_email(
-                        &owner.username,
-                        &owner.email,
-                        &deployment.name,
-                        &status_str,
-                        deployment.deployment_url.as_deref(),
-                        request.error_message.as_deref(),
-                    );
+    if let Ok(Some(org)) = Organization::find_by_id(pool, deployment.org_id).await {
+        if let Ok(Some(owner)) = User::find_by_id(pool, org.owner_id).await {
+            let status_str = format!("{:?}", deployment.status()).to_lowercase();
+            let email_msg = crate::email::EmailService::generate_deployment_status_email(
+                &owner.username,
+                &owner.email,
+                &deployment.name,
+                &status_str,
+                deployment.deployment_url.as_deref(),
+                request.error_message.as_deref(),
+            );
 
-                    tokio::spawn(async move {
-                        match crate::email::EmailService::from_env() {
-                            Ok(email_service) => {
-                                if let Err(e) = email_service.send(email_msg).await {
-                                    tracing::warn!("Failed to send deployment status email: {}", e);
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!("Failed to create email service: {}", e);
-                            }
+            tokio::spawn(async move {
+                match crate::email::EmailService::from_env() {
+                    Ok(email_service) => {
+                        if let Err(e) = email_service.send(email_msg).await {
+                            tracing::warn!("Failed to send deployment status email: {}", e);
                         }
-                    });
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create email service: {}", e);
+                    }
                 }
-            }
+            });
         }
     }
 
@@ -349,7 +345,7 @@ pub async fn delete_deployment(
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -386,7 +382,7 @@ pub async fn delete_deployment(
     // Update status to deleting before cleanup
     HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Trigger actual deletion (stop service, cleanup resources, etc.)
     // Try to delete from Fly.io if configured
@@ -474,9 +470,7 @@ pub async fn delete_deployment(
     }
 
     // Soft delete from database
-    HostedMock::delete(pool, deployment_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    HostedMock::delete(pool, deployment_id).await.map_err(ApiError::Database)?;
 
     DeploymentLog::create(pool, deployment_id, "info", "Deployment deleted successfully", None)
         .await
@@ -505,7 +499,7 @@ pub async fn get_deployment_logs(
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -518,7 +512,7 @@ pub async fn get_deployment_logs(
     // Get logs
     let logs = DeploymentLog::find_by_mock(pool, deployment_id, Some(100))
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let responses: Vec<LogResponse> = logs.into_iter().map(LogResponse::from).collect();
 
@@ -542,7 +536,7 @@ pub async fn get_deployment_metrics(
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -555,7 +549,7 @@ pub async fn get_deployment_metrics(
     // Get current metrics
     let metrics = DeploymentMetrics::get_or_create_current(pool, deployment_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(MetricsResponse::from(metrics)))
 }

@@ -684,11 +684,8 @@ fn generate_plugin_code(
     let src_dir = output_dir.join("src");
     let lib_rs_path = src_dir.join("lib.rs");
 
-    // Read existing lib.rs
-    let mut lib_content = fs::read_to_string(&lib_rs_path)?;
-
     // Generate type-specific implementation
-    let type_impl = match plugin_type {
+    let lib_content = match plugin_type {
         "auth" => generate_auth_plugin_code(plugin_name),
         "datasource" => generate_datasource_plugin_code(plugin_name),
         "response" => generate_response_plugin_code(plugin_name),
@@ -696,10 +693,6 @@ fn generate_plugin_code(
         "chaos" => generate_chaos_plugin_code(plugin_name),
         _ => generate_template_plugin_code(plugin_name), // template is default
     };
-
-    // Replace the implementation section
-    // This is a simplified approach - in production, you'd use a proper template engine
-    lib_content = type_impl;
 
     fs::write(&lib_rs_path, lib_content)?;
 

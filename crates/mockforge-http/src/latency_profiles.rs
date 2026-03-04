@@ -1,6 +1,6 @@
 //! Operation-aware latency/failure profiles (per operationId and per tag).
 use globwalk::GlobWalkerBuilder;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
@@ -73,7 +73,7 @@ impl LatencyProfiles {
         if let Some(p) = profile {
             let base = p.fixed_ms.unwrap_or(0);
             let jitter = p.jitter_ms.unwrap_or(0);
-            let mut rng = thread_rng();
+            let mut rng = rand::rng();
             let extra: u64 = if jitter > 0 {
                 rng.random_range(0..=jitter)
             } else {

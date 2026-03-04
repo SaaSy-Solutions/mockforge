@@ -93,7 +93,7 @@ pub async fn create_sso_config(
     // Get organization
     let org = Organization::find_by_id(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -111,15 +111,14 @@ pub async fn create_sso_config(
     })?;
 
     // Validate SAML fields if provider is SAML
-    if provider == SSOProvider::Saml {
-        if request.saml_entity_id.is_none()
+    if provider == SSOProvider::Saml
+        && (request.saml_entity_id.is_none()
             || request.saml_sso_url.is_none()
-            || request.saml_x509_cert.is_none()
-        {
-            return Err(ApiError::InvalidRequest(
-                "SAML configuration requires entity_id, sso_url, and x509_cert".to_string(),
-            ));
-        }
+            || request.saml_x509_cert.is_none())
+    {
+        return Err(ApiError::InvalidRequest(
+            "SAML configuration requires entity_id, sso_url, and x509_cert".to_string(),
+        ));
     }
 
     // Create or update SSO configuration
@@ -138,7 +137,7 @@ pub async fn create_sso_config(
         request.allow_unsolicited_responses.unwrap_or(false),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Record audit log
     let ip_address = headers
@@ -212,7 +211,7 @@ pub async fn get_sso_config(
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     if let Some(config) = config {
         Ok(Json(Some(SSOConfigResponse {
@@ -267,7 +266,7 @@ pub async fn enable_sso(
     // Get organization
     let org = Organization::find_by_id(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -278,7 +277,7 @@ pub async fn enable_sso(
     // Check if SSO is configured
     let _config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::InvalidRequest("SSO not configured. Please configure SSO first.".to_string())
         })?;
@@ -286,7 +285,7 @@ pub async fn enable_sso(
     // Enable SSO
     SSOConfiguration::enable(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit log
     let ip_address = headers
@@ -345,7 +344,7 @@ pub async fn disable_sso(
     // Disable SSO
     SSOConfiguration::disable(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit log
     let ip_address = headers
@@ -404,7 +403,7 @@ pub async fn delete_sso_config(
     // Delete SSO configuration
     SSOConfiguration::delete(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit log
     let ip_address = headers
@@ -444,13 +443,13 @@ pub async fn get_saml_metadata(
     // Find organization by slug
     let org = Organization::find_by_slug(pool, &org_slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::InvalidRequest("SSO not configured for this organization".to_string())
         })?;
@@ -503,7 +502,7 @@ pub async fn initiate_saml_login(
     // Find organization by slug
     let org = Organization::find_by_slug(pool, &org_slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -514,7 +513,7 @@ pub async fn initiate_saml_login(
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| {
             ApiError::InvalidRequest("SSO not configured for this organization".to_string())
         })?;
@@ -571,13 +570,13 @@ pub async fn saml_acs(
     // Find organization by slug
     let org = Organization::find_by_slug(pool, &org_slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("SSO not configured".to_string()))?;
 
     if !config.enabled {
@@ -640,7 +639,7 @@ pub async fn saml_acs(
         let expires_at = user_info
             .not_on_or_after
             .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(1));
-        let issued_at = user_info.issued_at.unwrap_or_else(|| chrono::Utc::now());
+        let issued_at = user_info.issued_at.unwrap_or_else(chrono::Utc::now);
 
         SAMLAssertionId::record_used(
             pool,
@@ -676,14 +675,14 @@ pub async fn saml_acs(
         session_expires,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Generate short-lived access token (1 hour) for URL redirect
     // Note: For SSO flows, we pass only an access token in the URL for security
     // (refresh tokens should not be in URLs). The client should call /api/auth/refresh
     // with this token to get a proper token pair for ongoing sessions.
     let token = crate::auth::create_token(&user.id.to_string(), &state.config.jwt_secret)
-        .map_err(|e| ApiError::Internal(e))?;
+        .map_err(ApiError::Internal)?;
 
     // Redirect to app with token
     let app_base_url =
@@ -715,13 +714,13 @@ pub async fn saml_slo(
     // Find organization by slug
     let org = Organization::find_by_slug(pool, &org_slug)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
     let config = SSOConfiguration::find_by_org(pool, org.id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("SSO not configured".to_string()))?;
 
     // Handle logout request or response
@@ -741,7 +740,7 @@ pub async fn saml_slo(
                 .bind(session_index)
                 .execute(pool)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
         }
 
         // Generate logout response
@@ -1200,7 +1199,7 @@ async fn find_or_create_user_from_saml(
 ) -> Result<User, ApiError> {
     // Try to find user by email
     let user = if let Some(email) = &user_info.email {
-        User::find_by_email(pool, email).await.map_err(|e| ApiError::Database(e))?
+        User::find_by_email(pool, email).await.map_err(ApiError::Database)?
     } else {
         None
     };
@@ -1213,13 +1212,13 @@ async fn find_or_create_user_from_saml(
         // Check if user is already a member
         if OrgMember::find(pool, org.id, user.id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .is_none()
         {
             // Add user to organization as member
             OrgMember::create(pool, org.id, user.id, OrgRole::Member)
                 .await
-                .map_err(|e| ApiError::Database(e))?;
+                .map_err(ApiError::Database)?;
         }
 
         user
@@ -1236,19 +1235,19 @@ async fn find_or_create_user_from_saml(
 
         // Generate a random password (user won't need it for SSO login)
         let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         // Create user
         let user = User::create(pool, &username, email, &password_hash)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         // Mark user as verified (SSO users are pre-verified)
         sqlx::query("UPDATE users SET is_verified = TRUE WHERE id = $1")
             .bind(user.id)
             .execute(pool)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         // Add user to organization as member
         use crate::models::organization::OrgMember;
@@ -1256,7 +1255,7 @@ async fn find_or_create_user_from_saml(
 
         OrgMember::create(pool, org.id, user.id, OrgRole::Member)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         user
     };

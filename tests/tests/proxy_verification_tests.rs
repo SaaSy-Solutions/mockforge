@@ -5,12 +5,11 @@
 
 use axum::{
     body::Body,
-    http::{Method, Request, StatusCode, Uri},
+    http::{Method, Request, StatusCode},
     Router,
 };
 use mockforge_core::proxy::config::ProxyConfig;
-use mockforge_http::proxy_server::{get_proxy_stats, ProxyServer};
-use std::net::SocketAddr;
+use mockforge_http::proxy_server::ProxyServer;
 use tower::ServiceExt;
 
 /// Test configuration for proxy verification
@@ -37,7 +36,7 @@ impl Default for ProxyTestConfig {
 
 /// Test helper for creating a mock target server
 pub async fn create_mock_target_server(
-    port: u16,
+    _port: u16,
 ) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         .route("/api/users", axum::routing::get(|| async {
@@ -72,11 +71,13 @@ pub async fn create_mock_target_server(
 pub async fn create_proxy_server(
     config: ProxyTestConfig,
 ) -> Result<ProxyServer, Box<dyn std::error::Error + Send + Sync>> {
-    let mut proxy_config = ProxyConfig::default();
-    proxy_config.enabled = true;
-    proxy_config.target_url = Some(format!("http://127.0.0.1:{}", config.target_port));
-    proxy_config.prefix = Some("/proxy/".to_string());
-    proxy_config.passthrough_by_default = true;
+    let proxy_config = ProxyConfig {
+        enabled: true,
+        target_url: Some(format!("http://127.0.0.1:{}", config.target_port)),
+        prefix: Some("/proxy/".to_string()),
+        passthrough_by_default: true,
+        ..Default::default()
+    };
 
     let proxy_server = ProxyServer::new(proxy_config, config.log_requests, config.log_responses);
     Ok(proxy_server)
@@ -119,8 +120,10 @@ async fn test_proxy_request_forwarding() {
     let target_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let target_port = target_listener.local_addr().unwrap().port();
 
-    let mut config = ProxyTestConfig::default();
-    config.target_port = target_port;
+    let config = ProxyTestConfig {
+        target_port,
+        ..Default::default()
+    };
 
     // Create and start mock target server
     let target_app = create_mock_target_server(target_port).await.unwrap();

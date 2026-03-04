@@ -2,6 +2,7 @@
 
 #[cfg(feature = "server")]
 use mockforge_tunnel::server::start_test_server;
+#[cfg(feature = "server")]
 use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
 
 #[cfg(feature = "server")]

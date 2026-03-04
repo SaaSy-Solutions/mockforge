@@ -111,7 +111,7 @@ async fn handle_analytics_socket(socket: WebSocket, state: AnalyticsStreamState)
                             *cfg = new_config;
                         }
                     }
-                    Ok(Message::Ping(data)) => {
+                    Ok(Message::Ping(_data)) => {
                         debug!("Received ping");
                         // Pong is handled automatically by axum
                     }

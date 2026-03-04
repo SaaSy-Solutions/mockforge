@@ -4,20 +4,18 @@
 //! - Per-route fault injection and latency
 //! - Conditional proxying
 
-use axum::http::{HeaderMap, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::{
-    conditions::ConditionContext,
     config::{RouteConfig, RouteFaultInjectionConfig, RouteFaultType, RouteLatencyConfig},
     priority_handler::RouteChaosInjectorTrait,
     proxy::{
         conditional::{evaluate_proxy_condition, find_matching_rule},
-        config::{ProxyConfig, ProxyRule},
+        config::ProxyRule,
     },
     stateful_handler::{
         ResourceIdExtract, StateResponse, StatefulConfig, StatefulResponseHandler,
         TransitionTrigger,
     },
-    Result,
 };
 use mockforge_recorder::{
     models::{Protocol, RecordedExchange, RecordedRequest, RecordedResponse},
@@ -26,7 +24,6 @@ use mockforge_recorder::{
 use mockforge_route_chaos::{RouteChaosInjector, RouteMatcher};
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 

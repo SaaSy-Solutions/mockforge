@@ -215,7 +215,7 @@ pub async fn deep_health_check(State(state): State<AdminState>) -> Json<HealthRe
     });
 
     // Calculate overall duration
-    let duration = SystemTime::now().duration_since(start).unwrap().as_millis() as u64;
+    let _duration = SystemTime::now().duration_since(start).unwrap().as_millis() as u64;
 
     // Determine overall status - unhealthy if any critical service is unhealthy
     let critical_failures = checks.iter().any(|c| {

@@ -43,8 +43,8 @@ impl FileType {
         }
     }
 
-    /// Parse file type from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse file type from string, returning None for unknown types
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "pdf" => Some(FileType::Pdf),
             "csv" => Some(FileType::Csv),
@@ -52,6 +52,14 @@ impl FileType {
             "epcis" | "xml" => Some(FileType::Epcis),
             _ => None,
         }
+    }
+}
+
+impl std::str::FromStr for FileType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s).ok_or_else(|| format!("Unknown file type: {s}"))
     }
 }
 

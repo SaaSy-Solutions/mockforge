@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::{resolve_org_context, AuthUser},
+    middleware::AuthUser,
     models::{Template, TemplateReview, User},
     AppState,
 };
@@ -25,7 +25,7 @@ pub async fn get_template_reviews(
 
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     let limit = params.per_page.unwrap_or(20) as i64;
@@ -33,17 +33,17 @@ pub async fn get_template_reviews(
 
     let reviews = TemplateReview::get_by_template(pool, template.id, limit, offset)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let total = TemplateReview::count_by_template(pool, template.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let mut review_responses = Vec::new();
     for review in reviews {
         let reviewer = User::find_by_id(pool, review.reviewer_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .unwrap_or_else(|| User {
                 id: review.reviewer_id,
                 username: "unknown".to_string(),
@@ -85,7 +85,7 @@ pub async fn get_template_reviews(
 pub async fn submit_template_review(
     State(state): State<AppState>,
     AuthUser(reviewer_id): AuthUser,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     Path((name, version)): Path<(String, String)>,
     Json(request): Json<SubmitTemplateReviewRequest>,
 ) -> ApiResult<Json<SubmitReviewResponse>> {
@@ -103,7 +103,7 @@ pub async fn submit_template_review(
 
     let template = Template::find_by_name_version(pool, &name, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     // Check if user already reviewed
@@ -114,7 +114,7 @@ pub async fn submit_template_review(
     .bind(reviewer_id)
     .fetch_optional(pool)
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     if existing.is_some() {
         return Err(ApiError::InvalidRequest(
@@ -132,12 +132,12 @@ pub async fn submit_template_review(
         &request.comment,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Update template stats
     TemplateReview::update_template_stats(pool, template.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,

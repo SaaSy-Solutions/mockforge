@@ -19,18 +19,20 @@ pub enum DeploymentStatus {
     Deleting,
 }
 
-impl DeploymentStatus {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for DeploymentStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DeploymentStatus::Pending => "pending".to_string(),
-            DeploymentStatus::Deploying => "deploying".to_string(),
-            DeploymentStatus::Active => "active".to_string(),
-            DeploymentStatus::Stopped => "stopped".to_string(),
-            DeploymentStatus::Failed => "failed".to_string(),
-            DeploymentStatus::Deleting => "deleting".to_string(),
+            DeploymentStatus::Pending => write!(f, "pending"),
+            DeploymentStatus::Deploying => write!(f, "deploying"),
+            DeploymentStatus::Active => write!(f, "active"),
+            DeploymentStatus::Stopped => write!(f, "stopped"),
+            DeploymentStatus::Failed => write!(f, "failed"),
+            DeploymentStatus::Deleting => write!(f, "deleting"),
         }
     }
+}
 
+impl DeploymentStatus {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "pending" => Some(DeploymentStatus::Pending),
@@ -53,15 +55,17 @@ pub enum HealthStatus {
     Unknown,
 }
 
-impl HealthStatus {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for HealthStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HealthStatus::Healthy => "healthy".to_string(),
-            HealthStatus::Unhealthy => "unhealthy".to_string(),
-            HealthStatus::Unknown => "unknown".to_string(),
+            HealthStatus::Healthy => write!(f, "healthy"),
+            HealthStatus::Unhealthy => write!(f, "unhealthy"),
+            HealthStatus::Unknown => write!(f, "unknown"),
         }
     }
+}
 
+impl HealthStatus {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "healthy" => Some(HealthStatus::Healthy),
@@ -110,6 +114,7 @@ impl HostedMock {
     }
 
     /// Create a new hosted mock deployment
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Uuid,

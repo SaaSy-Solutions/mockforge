@@ -42,7 +42,7 @@ pub async fn list_templates(
     // Get templates
     let templates = OrgTemplate::list_by_org(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     Ok(Json(TemplateListResponse { templates }))
 }
@@ -71,7 +71,7 @@ pub async fn get_template(
     // Get template
     let template = OrgTemplate::find_by_id(pool, template_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     // Verify template belongs to org
@@ -132,7 +132,7 @@ pub async fn create_template(
         request.is_default.unwrap_or(false),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Record audit event
     record_audit_event(
@@ -195,7 +195,7 @@ pub async fn update_template(
     // Get template
     let template = OrgTemplate::find_by_id(pool, template_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     // Verify template belongs to org
@@ -214,7 +214,7 @@ pub async fn update_template(
             request.is_default,
         )
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Record audit event
     record_audit_event(
@@ -275,7 +275,7 @@ pub async fn delete_template(
     // Get template to verify it belongs to org
     let template = OrgTemplate::find_by_id(pool, template_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     if template.org_id != org_ctx.org_id {
@@ -283,9 +283,7 @@ pub async fn delete_template(
     }
 
     // Delete template
-    OrgTemplate::delete(pool, template_id)
-        .await
-        .map_err(|e| ApiError::Database(e))?;
+    OrgTemplate::delete(pool, template_id).await.map_err(ApiError::Database)?;
 
     // Record audit event
     record_audit_event(

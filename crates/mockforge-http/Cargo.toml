@@ -74,6 +74,7 @@ sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chron
 dashmap = { version = "6.1", optional = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
 mockforge-runtime-daemon = { version = "0.3.31", path = "../mockforge-runtime-daemon", optional = true }
+mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
 
 [features]
 default = []
@@ -93,6 +94,10 @@ runtime-daemon = ["mockforge-runtime-daemon"]
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration
 mqtt = ["mockforge-mqtt"]
+# Enable Kafka integration (requires mockforge-kafka dependency when available)
+kafka = []
+# Enable chaos engineering API management (mockforge-chaos is always included)
+chaos = []
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

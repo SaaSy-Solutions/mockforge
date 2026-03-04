@@ -1,7 +1,6 @@
 /**
  * Integration tests for Analytics API V2
  */
-
 #[cfg(test)]
 mod tests {
     use axum::{

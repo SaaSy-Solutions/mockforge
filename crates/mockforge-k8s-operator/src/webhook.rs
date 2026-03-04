@@ -5,7 +5,6 @@ use cron::Schedule;
 // Note: k8s-openapi doesn't include admission API types, so we define them manually
 // These match the Kubernetes admission webhook API v1
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::str::FromStr;
 use tracing::info;
 
@@ -74,7 +73,6 @@ impl WebhookHandler {
                         message: Some("Missing object in request".to_string()),
                         ..Default::default()
                     }),
-                    ..Default::default()
                 };
             }
         };
@@ -87,10 +85,9 @@ impl WebhookHandler {
                     uid: request.uid.clone(),
                     allowed: false,
                     status: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Status {
-                        message: Some(format!("Failed to parse ChaosOrchestration: {}", e)),
+                        message: Some(format!("Failed to parse ChaosOrchestration: {e}")),
                         ..Default::default()
                     }),
-                    ..Default::default()
                 };
             }
         };
@@ -101,10 +98,9 @@ impl WebhookHandler {
                 uid: request.uid.clone(),
                 allowed: false,
                 status: Some(k8s_openapi::apimachinery::pkg::apis::meta::v1::Status {
-                    message: Some(format!("Validation failed: {}", e)),
+                    message: Some(format!("Validation failed: {e}")),
                     ..Default::default()
                 }),
-                ..Default::default()
             };
         }
 
@@ -208,6 +204,7 @@ impl Default for WebhookHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_validate_empty_name() {

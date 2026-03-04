@@ -21,20 +21,22 @@ pub enum TemplateCategory {
     CustomScenario,
 }
 
-impl TemplateCategory {
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for TemplateCategory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TemplateCategory::NetworkChaos => "network-chaos".to_string(),
-            TemplateCategory::ServiceFailure => "service-failure".to_string(),
-            TemplateCategory::LoadTesting => "load-testing".to_string(),
-            TemplateCategory::ResilienceTesting => "resilience-testing".to_string(),
-            TemplateCategory::SecurityTesting => "security-testing".to_string(),
-            TemplateCategory::DataCorruption => "data-corruption".to_string(),
-            TemplateCategory::MultiProtocol => "multi-protocol".to_string(),
-            TemplateCategory::CustomScenario => "custom-scenario".to_string(),
+            TemplateCategory::NetworkChaos => write!(f, "network-chaos"),
+            TemplateCategory::ServiceFailure => write!(f, "service-failure"),
+            TemplateCategory::LoadTesting => write!(f, "load-testing"),
+            TemplateCategory::ResilienceTesting => write!(f, "resilience-testing"),
+            TemplateCategory::SecurityTesting => write!(f, "security-testing"),
+            TemplateCategory::DataCorruption => write!(f, "data-corruption"),
+            TemplateCategory::MultiProtocol => write!(f, "multi-protocol"),
+            TemplateCategory::CustomScenario => write!(f, "custom-scenario"),
         }
     }
+}
 
+impl TemplateCategory {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "network-chaos" => Some(TemplateCategory::NetworkChaos),
@@ -81,6 +83,7 @@ impl Template {
     }
 
     /// Create a new template
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Option<Uuid>,

@@ -5,11 +5,10 @@
 
 use axum::{
     body::Body,
-    extract::{Path, State},
     http::{Request, Response, StatusCode},
     middleware::Next,
 };
-use mockforge_core::behavioral_cloning::{ProbabilisticModel, SequenceLearner};
+use mockforge_core::behavioral_cloning::ProbabilisticModel;
 use mockforge_recorder::database::RecorderDatabase;
 use rand::Rng;
 use std::collections::HashMap;
@@ -164,11 +163,10 @@ pub async fn behavioral_cloning_middleware(req: Request<Body>, next: Next) -> Re
             // Apply error pattern body if sample responses are available
             if !pattern.sample_responses.is_empty() {
                 use axum::body::Body;
-                use axum::body::HttpBody;
 
                 // Pick a random sample response (or first one)
                 let sample_idx = if pattern.sample_responses.len() > 1 {
-                    rand::thread_rng().gen_range(0..pattern.sample_responses.len())
+                    rand::rng().random_range(0..pattern.sample_responses.len())
                 } else {
                     0
                 };

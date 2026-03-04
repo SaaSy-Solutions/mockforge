@@ -557,6 +557,7 @@ async fn handle_sync_command(cmd: SyncCommands) -> Result<()> {
 }
 
 /// Handle sync start command
+#[allow(clippy::too_many_arguments)]
 async fn handle_sync_start(
     workspace: Option<String>,
     all: bool,

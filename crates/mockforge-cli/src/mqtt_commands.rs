@@ -56,7 +56,7 @@ async fn handle_publish_command(
     mqtt_options.set_keep_alive(Duration::from_secs(5));
 
     // Create client
-    let (client, eventloop) = AsyncClient::new(mqtt_options, 10);
+    let (client, _eventloop) = AsyncClient::new(mqtt_options, 10);
 
     // Convert QoS level
     let qos_level = match qos {

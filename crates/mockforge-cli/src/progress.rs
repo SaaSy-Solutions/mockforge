@@ -6,7 +6,7 @@
 use console::style;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -220,7 +220,7 @@ pub fn require_registry<'a, T>(opt: &'a Option<T>, registry_name: &str) -> Resul
 }
 
 /// Helper function to get file name from path with error handling
-pub fn get_file_name(path: &PathBuf) -> Result<String, CliError> {
+pub fn get_file_name(path: &Path) -> Result<String, CliError> {
     path.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()).ok_or_else(|| {
         CliError::new(
             format!("Could not extract file name from path: {}", path.display()),

@@ -595,6 +595,6 @@ mod tests {
 
         let graph = builder.build();
         // Either 1 (replaced) or 2 (both added) depending on implementation
-        assert!(graph.nodes.len() >= 1);
+        assert!(!graph.nodes.is_empty());
     }
 }

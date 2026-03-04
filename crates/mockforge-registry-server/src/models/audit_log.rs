@@ -66,6 +66,7 @@ pub struct AuditLog {
 
 impl AuditLog {
     /// Create a new audit log entry
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Uuid,
@@ -155,6 +156,7 @@ impl AuditLog {
 }
 
 /// Helper function to record audit events from request context
+#[allow(clippy::too_many_arguments)]
 pub async fn record_audit_event(
     pool: &sqlx::PgPool,
     org_id: Uuid,

@@ -216,6 +216,7 @@ impl Plugin {
     }
 
     /// Create new plugin
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         name: &str,

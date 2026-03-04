@@ -7,7 +7,7 @@
 //! - Token/session expiration with virtual clock
 //! - VBR snapshot integration
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use mockforge_core::time_travel::{TimeTravelConfig, TimeTravelManager, VirtualClock};
 use mockforge_core::time_travel_now;
 use mockforge_vbr::{
@@ -16,7 +16,6 @@ use mockforge_vbr::{
     VbrEngine,
 };
 use std::sync::Arc;
-use tokio::time::sleep;
 
 #[tokio::test]
 async fn test_virtual_clock_basic() {
@@ -204,7 +203,7 @@ async fn test_vbr_snapshot_with_time_travel() {
 
     assert!(metadata.time_travel_state.is_some());
     let restored_state = metadata.time_travel_state.unwrap();
-    assert_eq!(restored_state.enabled, true);
+    assert!(restored_state.enabled);
     assert_eq!(restored_state.scale_factor, 2.0);
 }
 
@@ -252,7 +251,6 @@ async fn test_cron_job_execution() {
 
     let scheduler = mockforge_core::time_travel::cron::CronScheduler::new(clock.clone());
 
-    let mut execution_count = 0;
     let execution_count_ptr = Arc::new(std::sync::Mutex::new(0));
 
     let count_clone = execution_count_ptr.clone();

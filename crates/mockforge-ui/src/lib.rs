@@ -34,6 +34,7 @@ use std::net::SocketAddr;
 /// * `mockai` - Optional MockAI instance for hot-reload support
 /// * `continuum_config` - Optional Reality Continuum configuration
 /// * `virtual_clock` - Optional virtual clock for time-based progression
+#[allow(clippy::too_many_arguments)]
 pub async fn start_admin_server(
     addr: SocketAddr,
     http_server_addr: Option<SocketAddr>,

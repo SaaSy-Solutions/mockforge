@@ -1,4 +1,4 @@
-//! Integration tests for MockOps Pipelines
+//! Integration tests for `MockOps` Pipelines
 //!
 //! Tests that verify pipeline execution, event handling, and step execution
 //! work correctly end-to-end.
@@ -145,7 +145,7 @@ async fn test_pipeline_execution_notify_step() {
     assert!(result.is_ok(), "Pipeline execution should complete");
 }
 
-/// Test pipeline execution with regenerate_sdk step
+/// Test pipeline execution with `regenerate_sdk` step
 #[tokio::test]
 async fn test_pipeline_execution_regenerate_sdk_step() {
     // Create a temporary directory for SDK output
@@ -155,7 +155,7 @@ async fn test_pipeline_execution_regenerate_sdk_step() {
 
     // Create a minimal OpenAPI spec file for testing
     let spec_path = temp_dir.path().join("api.yaml");
-    let spec_content = r#"
+    let spec_content = r"
 openapi: 3.0.0
 info:
   title: Test API
@@ -166,7 +166,7 @@ paths:
       responses:
         '200':
           description: Success
-"#;
+";
     fs::write(&spec_path, spec_content).await.expect("Failed to write spec file");
 
     let mut executor = PipelineExecutor::new();

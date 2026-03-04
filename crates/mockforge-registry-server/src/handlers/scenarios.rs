@@ -7,6 +7,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -44,7 +45,7 @@ pub async fn search_scenarios(
     };
 
     // Validate and limit pagination parameters
-    let per_page = query.per_page.min(100).max(1); // Max 100 items per page
+    let per_page = query.per_page.clamp(1, 100); // Max 100 items per page
     let page = query.page;
     let limit = per_page as i64;
     let offset = (page * per_page) as i64;
@@ -67,7 +68,7 @@ pub async fn search_scenarios(
         org_id,
     )
     .await
-    .map_err(|e| ApiError::Database(e))? as usize;
+    .map_err(ApiError::Database)? as usize;
 
     // Search scenarios
     let scenarios = Scenario::search(
@@ -81,18 +82,18 @@ pub async fn search_scenarios(
         offset,
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Convert to registry entries
     let mut entries = Vec::new();
     for scenario in scenarios {
         let versions = ScenarioVersion::get_by_scenario(pool, scenario.id)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         let author = User::find_by_id(pool, scenario.author_id)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .unwrap_or_else(|| User {
                 id: scenario.author_id,
                 username: "unknown".to_string(),
@@ -126,14 +127,14 @@ pub async fn search_scenarios(
         // Load top 3 reviews (most helpful) for search results
         let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 3, 0)
             .await
-            .map_err(|e| ApiError::Database(e))?;
+            .map_err(ApiError::Database)?;
 
         // Batch load all reviewers to avoid N+1 queries
         let reviewer_ids: Vec<Uuid> = reviews.iter().map(|r| r.reviewer_id).collect();
         let reviewers: std::collections::HashMap<Uuid, User> = if !reviewer_ids.is_empty() {
             User::find_by_ids(pool, &reviewer_ids)
                 .await
-                .map_err(|e| ApiError::Database(e))?
+                .map_err(ApiError::Database)?
                 .into_iter()
                 .map(|u| (u.id, u))
                 .collect()
@@ -217,16 +218,16 @@ pub async fn get_scenario(
 
     let scenario = Scenario::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let versions = ScenarioVersion::get_by_scenario(pool, scenario.id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let author = User::find_by_id(pool, scenario.author_id)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .unwrap_or_else(|| User {
             id: scenario.author_id,
             username: "unknown".to_string(),
@@ -259,14 +260,14 @@ pub async fn get_scenario(
     // Load top 5 reviews (most helpful) for single scenario view
     let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 5, 0)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Batch load all reviewers to avoid N+1 queries
     let reviewer_ids: Vec<Uuid> = reviews.iter().map(|r| r.reviewer_id).collect();
     let reviewers: std::collections::HashMap<Uuid, User> = if !reviewer_ids.is_empty() {
         User::find_by_ids(pool, &reviewer_ids)
             .await
-            .map_err(|e| ApiError::Database(e))?
+            .map_err(ApiError::Database)?
             .into_iter()
             .map(|u| (u.id, u))
             .collect()
@@ -340,12 +341,12 @@ pub async fn get_scenario_version(
 
     let scenario = Scenario::find_by_name(pool, &name)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let scenario_version = ScenarioVersion::find(pool, scenario.id, &version)
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
     Ok(Json(ScenarioVersionEntry {
@@ -379,9 +380,8 @@ pub async fn publish_scenario(
     let max_scenarios = limits.get("max_scenarios_published").and_then(|v| v.as_i64()).unwrap_or(1);
 
     if max_scenarios >= 0 {
-        let existing = Scenario::find_by_org(pool, org_ctx.org_id)
-            .await
-            .map_err(|e| ApiError::Database(e))?;
+        let existing =
+            Scenario::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
 
         if existing.len() as i64 >= max_scenarios {
             return Err(ApiError::InvalidRequest(format!(
@@ -397,7 +397,7 @@ pub async fn publish_scenario(
 
     let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     let new_storage = usage.storage_bytes + request.size as i64;
     if new_storage > storage_limit_bytes {
@@ -437,7 +437,8 @@ pub async fn publish_scenario(
     crate::validation::validate_version(&version)?;
 
     // Decode package data
-    let package_data = base64::decode(&request.package)
+    let package_data = base64::engine::general_purpose::STANDARD
+        .decode(&request.package)
         .map_err(|e| ApiError::InvalidRequest(format!("Invalid base64: {}", e)))?;
 
     // Validate package file
@@ -482,7 +483,7 @@ pub async fn publish_scenario(
 
     // Create or update scenario
     let scenario = if let Some(existing) =
-        Scenario::find_by_name(pool, &name).await.map_err(|e| ApiError::Database(e))?
+        Scenario::find_by_name(pool, &name).await.map_err(ApiError::Database)?
     {
         // Update existing scenario
         existing
@@ -505,7 +506,7 @@ pub async fn publish_scenario(
             manifest.clone(),
         )
         .await
-        .map_err(|e| ApiError::Database(e))?
+        .map_err(ApiError::Database)?
     };
 
     // Create version entry
@@ -526,12 +527,12 @@ pub async fn publish_scenario(
         min_mockforge_version.as_deref(),
     )
     .await
-    .map_err(|e| ApiError::Database(e))?;
+    .map_err(ApiError::Database)?;
 
     // Update storage usage
     UsageCounter::update_storage(pool, org_ctx.org_id, new_storage)
         .await
-        .map_err(|e| ApiError::Database(e))?;
+        .map_err(ApiError::Database)?;
 
     // Track feature usage
     let _ = FeatureUsage::record(
@@ -605,18 +606,14 @@ fn default_per_page() -> usize {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ScenarioSortOrder {
+    #[default]
     Relevance,
     Downloads,
     Rating,
     Recent,
     Name,
-}
-
-impl Default for ScenarioSortOrder {
-    fn default() -> Self {
-        ScenarioSortOrder::Relevance
-    }
 }
 
 #[derive(Debug, Serialize)]

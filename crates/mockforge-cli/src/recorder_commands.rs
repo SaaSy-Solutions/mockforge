@@ -86,6 +86,7 @@ pub async fn handle_recorder_command(command: RecorderCommands) -> anyhow::Resul
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_convert(
     recording_id: Option<String>,
     input: Option<PathBuf>,
@@ -100,7 +101,7 @@ async fn handle_convert(
 ) -> anyhow::Result<()> {
     let stub_format = match format.to_lowercase().as_str() {
         "json" => StubFormat::Json,
-        "yaml" | _ => StubFormat::Yaml,
+        _ => StubFormat::Yaml,
     };
 
     let converter = StubMappingConverter::new(detect_dynamic_values);
@@ -328,7 +329,7 @@ mod tests {
         for (input, expected) in formats {
             let result = match input.to_lowercase().as_str() {
                 "json" => "json",
-                "yaml" | _ => "yaml",
+                _ => "yaml",
             };
             assert_eq!(result, expected, "Format '{}' should map to '{}'", input, expected);
         }

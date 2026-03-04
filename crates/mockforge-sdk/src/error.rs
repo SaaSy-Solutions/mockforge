@@ -125,13 +125,13 @@ impl Error {
     /// let err = Error::stub_not_found(
     ///     "GET",
     ///     "/api/missing",
-    ///     vec!["GET /api/users".to_string()]
+    ///     &["GET /api/users".to_string()]
     /// );
     /// ```
     pub fn stub_not_found(
         method: impl Into<String>,
         path: impl Into<String>,
-        available: Vec<String>,
+        available: &[String],
     ) -> Self {
         Self::StubNotFound {
             method: method.into(),
@@ -225,7 +225,7 @@ mod tests {
         let err = Error::stub_not_found(
             "GET",
             "/api/missing",
-            vec!["GET /api/users".to_string(), "POST /api/orders".to_string()],
+            &["GET /api/users".to_string(), "POST /api/orders".to_string()],
         );
         let msg = format!("{err}");
         assert!(msg.contains("GET"));
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_stub_not_found_error_no_available() {
-        let err = Error::stub_not_found("DELETE", "/api/users/1", vec![]);
+        let err = Error::stub_not_found("DELETE", "/api/users/1", &[]);
         let msg = format!("{err}");
         assert!(msg.contains("DELETE"));
         assert!(msg.contains("/api/users/1"));
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_stub_not_found_with_single_available() {
-        let err = Error::stub_not_found("POST", "/api/create", vec!["GET /api/list".to_string()]);
+        let err = Error::stub_not_found("POST", "/api/create", &["GET /api/list".to_string()]);
         let msg = format!("{err}");
         assert!(msg.contains("GET /api/list"));
         assert!(!msg.contains(", ")); // No comma for single item
@@ -342,7 +342,10 @@ mod tests {
     fn test_result_type_ok() {
         let result: Result<i32> = Ok(42);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 42);
+        let Ok(value) = result else {
+            panic!("Expected Ok value");
+        };
+        assert_eq!(value, 42);
     }
 
     #[test]

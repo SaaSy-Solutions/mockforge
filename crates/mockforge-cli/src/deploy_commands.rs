@@ -417,7 +417,7 @@ async fn deploy_mock_api(
     Ok(())
 }
 
-async fn get_deployment_status(config_path: Option<PathBuf>) -> anyhow::Result<()> {
+async fn get_deployment_status(_config_path: Option<PathBuf>) -> anyhow::Result<()> {
     info!("📊 Getting deployment status...");
 
     // Check for deployment metadata
