@@ -170,7 +170,7 @@ impl ConflictResolver {
                             // Only in theirs
                             resolved.insert(key.clone(), t.clone());
                         }
-                        (None, None) => unreachable!(),
+                        (None, None) => {} // Key in all_keys but absent from both - skip
                     }
                 }
 

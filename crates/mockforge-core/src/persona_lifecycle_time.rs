@@ -140,7 +140,8 @@ fn evaluate_lifecycle_condition(
     }
 
     // Parse "variable operator value" expressions
-    // Try two-character operators first (>=, <=, ==, !=), then single-character (>, <)
+    // Try two-character operators first (>=, <=, ==, !=), then single-character (>, <),
+    // then word-based operators (contains, starts_with, ends_with)
     let operators = [">=", "<=", "!=", "==", ">", "<"];
     let mut parts: Option<(&str, &str, &str)> = None;
 
@@ -151,6 +152,21 @@ fn evaluate_lifecycle_condition(
             if !var.is_empty() && !val.is_empty() {
                 parts = Some((var, op, val));
                 break;
+            }
+        }
+    }
+
+    // Try word-based operators if no symbolic operator found
+    if parts.is_none() {
+        let word_operators = [" contains ", " starts_with ", " ends_with "];
+        for op in &word_operators {
+            if let Some(idx) = expr.find(op) {
+                let var = expr[..idx].trim();
+                let val = expr[idx + op.len()..].trim();
+                if !var.is_empty() && !val.is_empty() {
+                    parts = Some((var, op.trim(), val));
+                    break;
+                }
             }
         }
     }
