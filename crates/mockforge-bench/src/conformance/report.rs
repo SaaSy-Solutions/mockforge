@@ -68,21 +68,37 @@ impl ConformanceReport {
             categories.insert(cat, CategoryResult::default());
         }
 
-        // Map check results to features
+        // Map check results to features.
+        // In --conformance-all-operations mode, check names are path-qualified
+        // (e.g. "constraint:required:/users") so we match by prefix as well as
+        // exact name.
         for feature in ConformanceFeature::all() {
             let check_name = feature.check_name();
             let category = feature.category();
 
             let entry = categories.entry(category).or_default();
 
+            // First try exact match (reference mode)
             if let Some((passes, fails)) = self.check_results.get(check_name) {
                 if *fails == 0 && *passes > 0 {
                     entry.passed += 1;
                 } else {
                     entry.failed += 1;
                 }
+            } else {
+                // Try prefix match (all-operations mode: "constraint:required:/path")
+                let prefix = format!("{}:", check_name);
+                for (name, (passes, fails)) in &self.check_results {
+                    if name.starts_with(&prefix) {
+                        if *fails == 0 && *passes > 0 {
+                            entry.passed += 1;
+                        } else {
+                            entry.failed += 1;
+                        }
+                    }
+                }
+                // Features not in results are not counted
             }
-            // Features not in results are not counted (not tested)
         }
 
         categories
