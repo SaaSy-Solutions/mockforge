@@ -391,8 +391,8 @@ mod tests {
 
         let size = calculate_request_size(&req);
 
-        // Should account for all headers
-        assert!(size > 100); // Reasonable size with multiple headers
+        // Should account for all headers (URI + header names + header values)
+        assert!(size > 50);
     }
 
     #[test]

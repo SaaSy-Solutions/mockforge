@@ -332,31 +332,89 @@ fn matches_wildcard_pattern(pattern: &str, path: &str) -> bool {
     false
 }
 
-/// Check if a JSONPath exists in a JSON value (simplified implementation)
+/// Check if a JSONPath exists in a JSON value
+///
+/// Supports:
+/// - `$` — root element
+/// - `$.field.subfield` — nested object access
+/// - `$.items[0].name` — array index access
+/// - `$.items[*]` — array wildcard (checks array is non-empty)
 fn json_path_exists(json: &serde_json::Value, json_path: &str) -> bool {
-    // Simple implementation - for full JSONPath support, use a library like jsonpath-rs
-    // This handles simple paths like $.field or $.field.subfield
-    if let Some(path) = json_path.strip_prefix("$.") {
-        let parts: Vec<&str> = path.split('.').collect();
+    let path = if json_path == "$" {
+        return true;
+    } else if let Some(p) = json_path.strip_prefix("$.") {
+        p
+    } else if let Some(p) = json_path.strip_prefix('$') {
+        p.strip_prefix('.').unwrap_or(p)
+    } else {
+        json_path
+    };
 
-        let mut current = json;
-        for part in parts {
-            if let Some(obj) = current.as_object() {
-                if let Some(value) = obj.get(part) {
-                    current = value;
+    let mut current = json;
+    for segment in split_json_path_segments(path) {
+        match segment {
+            JsonPathSegment::Field(name) => {
+                if let Some(obj) = current.as_object() {
+                    if let Some(value) = obj.get(name) {
+                        current = value;
+                    } else {
+                        return false;
+                    }
                 } else {
                     return false;
                 }
-            } else {
+            }
+            JsonPathSegment::Index(idx) => {
+                if let Some(arr) = current.as_array() {
+                    if let Some(value) = arr.get(idx) {
+                        current = value;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            JsonPathSegment::Wildcard => {
+                if let Some(arr) = current.as_array() {
+                    return !arr.is_empty();
+                }
                 return false;
             }
         }
-        true
-    } else {
-        // For complex JSONPath expressions, would need a proper JSONPath library
-        tracing::warn!("Complex JSONPath expressions not yet fully supported: {}", json_path);
-        false
     }
+    true
+}
+
+enum JsonPathSegment<'a> {
+    Field(&'a str),
+    Index(usize),
+    Wildcard,
+}
+
+/// Split a JSONPath (without the leading `$`) into segments
+fn split_json_path_segments(path: &str) -> Vec<JsonPathSegment<'_>> {
+    let mut segments = Vec::new();
+    for part in path.split('.') {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(bracket_start) = part.find('[') {
+            let field_name = &part[..bracket_start];
+            if !field_name.is_empty() {
+                segments.push(JsonPathSegment::Field(field_name));
+            }
+            let bracket_content = &part[bracket_start + 1..part.len() - 1];
+            if bracket_content == "*" {
+                segments.push(JsonPathSegment::Wildcard);
+            } else if let Ok(idx) = bracket_content.parse::<usize>() {
+                segments.push(JsonPathSegment::Index(idx));
+            }
+        } else {
+            segments.push(JsonPathSegment::Field(part));
+        }
+    }
+    segments
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
