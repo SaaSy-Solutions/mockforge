@@ -10,9 +10,11 @@ use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use mockforge_core::{
     ai_contract_diff::CapturedRequest, request_capture::get_global_capture_manager,
 };
-use serde_json::Value;
 use std::collections::HashMap;
 use tracing::debug;
+
+/// Maximum request body size to buffer for capture (1 MB).
+const MAX_CAPTURE_BODY_SIZE: usize = 1024 * 1024;
 
 /// Middleware to capture requests for contract diff analysis
 pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Response {
@@ -24,13 +26,6 @@ pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Respon
     // Extract headers
     let headers = extract_headers_for_capture(req.headers());
 
-    // Extract user agent
-    let user_agent = req
-        .headers()
-        .get("user-agent")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
-
     // Extract query parameters
     let query_params = if let Some(query) = query {
         parse_query_params(query)
@@ -38,28 +33,41 @@ pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Respon
         HashMap::new()
     };
 
-    // Clone request body for capture (we'll read it after the response)
-    // Note: In a real implementation, we'd need to buffer the body
-    // For now, we'll capture what we can without the body
+    // Buffer the request body so we can capture it and still forward it.
+    let (parts, body) = req.into_parts();
+    let body_bytes = match axum::body::to_bytes(body, MAX_CAPTURE_BODY_SIZE).await {
+        Ok(b) => b,
+        Err(_) => {
+            // Body too large or read error — forward without capturing body.
+            let rebuilt = Request::from_parts(parts, Body::empty());
+            return next.run(rebuilt).await;
+        }
+    };
+
+    // Try to parse body as JSON for structured capture
+    let captured_body = if !body_bytes.is_empty() {
+        serde_json::from_slice::<serde_json::Value>(&body_bytes).ok()
+    } else {
+        None
+    };
+
+    // Reconstruct the request with the buffered body
+    let rebuilt = Request::from_parts(parts, Body::from(body_bytes));
 
     // Call the next middleware/handler
-    let response = next.run(req).await;
+    let response = next.run(rebuilt).await;
 
     // Extract response status
     let status_code = response.status().as_u16();
 
-    // Create captured request
-    let captured = CapturedRequest::new(&method, &path, "proxy_middleware")
+    // Create captured request with body
+    let mut captured = CapturedRequest::new(&method, &path, "proxy_middleware")
         .with_headers(headers)
         .with_query_params(query_params)
-        .with_response(status_code, None); // Response body capture would require buffering
+        .with_response(status_code, None);
 
-    if let Some(ua) = user_agent {
-        // Note: CapturedRequest doesn't have a with_user_agent method yet
-        // We'll add it to metadata for now
-        let mut metadata = HashMap::new();
-        metadata.insert("user_agent".to_string(), Value::String(ua));
-        // We can't modify captured here, but we could extend CapturedRequest
+    if let Some(body_value) = captured_body {
+        captured = captured.with_body(body_value);
     }
 
     // Capture the request (fire and forget)

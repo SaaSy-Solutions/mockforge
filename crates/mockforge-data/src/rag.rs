@@ -57,6 +57,8 @@ pub enum EmbeddingProvider {
     OpenAI,
     /// Generic OpenAI-compatible embeddings API
     OpenAICompatible,
+    /// Local Ollama instance
+    Ollama,
 }
 
 /// RAG configuration
@@ -414,6 +416,7 @@ impl RagEngine {
             EmbeddingProvider::OpenAICompatible => {
                 self.generate_openai_compatible_embedding(text).await
             }
+            EmbeddingProvider::Ollama => self.generate_ollama_embedding(text).await,
         }
     }
 
@@ -522,6 +525,57 @@ impl RagEngine {
         }
 
         Err(crate::Error::generic("Invalid embedding response format"))
+    }
+
+    /// Generate embedding using Ollama API
+    ///
+    /// Ollama exposes embeddings via `POST /api/embeddings` with `{ model, prompt }`.
+    async fn generate_ollama_embedding(&self, text: &str) -> Result<Vec<f32>> {
+        let base_url = self.config.embedding_endpoint.as_ref().unwrap_or(&self.config.api_endpoint);
+
+        // Ollama embedding endpoint
+        let endpoint = if base_url.ends_with("/api/embeddings") {
+            base_url.clone()
+        } else {
+            format!("{}/api/embeddings", base_url.trim_end_matches('/'))
+        };
+
+        let model = &self.config.embedding_model;
+        let request_body = serde_json::json!({
+            "model": model,
+            "prompt": text
+        });
+
+        debug!("Generating embedding for text with Ollama (model: {})", model);
+
+        let response = self
+            .client
+            .post(&endpoint)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| {
+                crate::Error::generic(format!("Ollama embedding request failed: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(crate::Error::generic(format!("Ollama embedding error: {}", error_text)));
+        }
+
+        let response_json: Value = response.json().await.map_err(|e| {
+            crate::Error::generic(format!("Failed to parse Ollama embedding response: {}", e))
+        })?;
+
+        // Ollama returns { "embedding": [...] }
+        if let Some(embedding) = response_json.get("embedding").and_then(|e| e.as_array()) {
+            let embedding_vec: Vec<f32> =
+                embedding.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect();
+            return Ok(embedding_vec);
+        }
+
+        Err(crate::Error::generic("Invalid Ollama embedding response format"))
     }
 
     /// Compute embeddings for all document chunks
