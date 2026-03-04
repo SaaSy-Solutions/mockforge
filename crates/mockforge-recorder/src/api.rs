@@ -3,7 +3,7 @@
 use crate::{
     diff::ComparisonResult,
     har_export::export_to_har,
-    integration_testing::{IntegrationTestGenerator, IntegrationWorkflow, WorkflowSetup},
+    integration_testing::{IntegrationTestGenerator, IntegrationWorkflow},
     models::RecordedExchange,
     query::{execute_query, QueryFilter, QueryResult},
     recorder::Recorder,
@@ -21,14 +21,20 @@ use axum::{
     Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{debug, error};
 
 /// API state
 #[derive(Clone)]
 pub struct ApiState {
+    /// Core recorder instance
     pub recorder: Arc<Recorder>,
+    /// Optional sync service
     pub sync_service: Option<Arc<SyncService>>,
+    /// In-memory workflow storage
+    workflows: Arc<RwLock<HashMap<String, IntegrationWorkflow>>>,
 }
 
 /// Create the management API router
@@ -39,6 +45,7 @@ pub fn create_api_router(
     let state = ApiState {
         recorder,
         sync_service,
+        workflows: Arc::new(RwLock::new(HashMap::new())),
     };
 
     Router::new()
@@ -516,34 +523,30 @@ struct CreateWorkflowRequest {
 
 /// Create a new integration test workflow
 async fn create_workflow(
-    State(_state): State<ApiState>,
+    State(state): State<ApiState>,
     Json(request): Json<CreateWorkflowRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // For now, just return the workflow with success
-    // In a full implementation, this would store in a database
+    let workflow = request.workflow;
+    let id = workflow.id.clone();
+
+    state.workflows.write().await.insert(id.clone(), workflow.clone());
+
     Ok(Json(serde_json::json!({
         "success": true,
-        "workflow": request.workflow,
+        "workflow": workflow,
         "message": "Workflow created successfully"
     })))
 }
 
 /// Get workflow by ID
 async fn get_workflow(
-    State(_state): State<ApiState>,
+    State(state): State<ApiState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // Mock workflow for demonstration
-    // In a full implementation, this would fetch from database
-    let workflow = IntegrationWorkflow {
-        id: id.clone(),
-        name: "Sample Workflow".to_string(),
-        description: "A sample integration test workflow".to_string(),
-        steps: vec![],
-        setup: WorkflowSetup::default(),
-        cleanup: vec![],
-        created_at: chrono::Utc::now(),
-    };
+    let workflows = state.workflows.read().await;
+    let workflow = workflows
+        .get(&id)
+        .ok_or_else(|| ApiError::NotFound(format!("Workflow '{}' not found", id)))?;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -881,6 +884,7 @@ async fn get_snapshots_by_cycle(
 mod tests {
     use super::*;
     use crate::database::RecorderDatabase;
+    use crate::integration_testing::WorkflowSetup;
     use crate::models::{Protocol, RecordedRequest};
     use axum::http::StatusCode as HttpStatusCode;
 
@@ -899,6 +903,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         assert!(state.sync_service.is_none());
@@ -921,6 +926,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let response = get_status(State(state)).await;
@@ -935,6 +941,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let response = get_status(State(state)).await;
@@ -949,6 +956,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let response = enable_recording(State(state)).await;
@@ -964,6 +972,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let response = disable_recording(State(state)).await;
@@ -998,6 +1007,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let response = clear_recordings(State(state)).await.unwrap();
@@ -1268,6 +1278,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = get_request(State(state), Path("non-existent".to_string())).await;
@@ -1285,6 +1296,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = get_response(State(state), Path("non-existent".to_string())).await;
@@ -1302,6 +1314,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = get_sync_status(State(state)).await;
@@ -1319,6 +1332,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let result = get_sync_config(State(state)).await;
@@ -1336,6 +1350,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let filter = QueryFilter::default();
@@ -1374,6 +1389,7 @@ mod tests {
         let state = ApiState {
             recorder: recorder.clone(),
             sync_service: None,
+            workflows: Arc::new(RwLock::new(HashMap::new())),
         };
 
         let params = ListParams {
