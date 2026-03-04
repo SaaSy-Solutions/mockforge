@@ -35,10 +35,7 @@ pub fn generate_id(
             // Auto-increment should be handled by database
             Err(Error::generic("AutoIncrement should be handled by database".to_string()))
         }
-        AutoGenerationRule::Custom(_) => {
-            // Custom rules would need an evaluation engine
-            Err(Error::generic("Custom rules not yet supported".to_string()))
-        }
+        AutoGenerationRule::Custom(expr) => evaluate_custom_expression(expr),
     }
 }
 
@@ -174,6 +171,31 @@ pub async fn get_and_increment_counter(
         .await?;
 
     Ok(new_value)
+}
+
+/// Evaluate a custom SQL-like expression for ID generation
+///
+/// Supports common expressions:
+/// - `NOW()` / `CURRENT_TIMESTAMP` — ISO 8601 timestamp
+/// - `UUID()` / `GEN_RANDOM_UUID()` — UUID v4
+/// - `RANDOM()` — random integer
+/// - Literal strings (returned as-is)
+fn evaluate_custom_expression(expr: &str) -> Result<String> {
+    let normalized = expr.trim().to_uppercase();
+    match normalized.as_str() {
+        "NOW()" | "CURRENT_TIMESTAMP" | "CURRENT_TIMESTAMP()" => {
+            Ok(chrono::Utc::now().to_rfc3339())
+        }
+        "UUID()" | "GEN_RANDOM_UUID()" => Ok(Uuid::new_v4().to_string()),
+        "RANDOM()" => {
+            let mut rng = rand::rng();
+            Ok(rng.random::<u32>().to_string())
+        }
+        _ => {
+            // Return the expression as a literal value
+            Ok(expr.to_string())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -378,9 +400,27 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_id_custom_error() {
+    fn test_generate_id_custom_now() {
         let rule = AutoGenerationRule::Custom("NOW()".to_string());
         let result = generate_id(&rule, "Entity", "id", None);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        // Should be an ISO 8601 timestamp
+        let value = result.unwrap();
+        assert!(value.contains('T'), "Expected timestamp format, got: {}", value);
+    }
+
+    #[test]
+    fn test_generate_id_custom_uuid() {
+        let rule = AutoGenerationRule::Custom("UUID()".to_string());
+        let result = generate_id(&rule, "Entity", "id", None).unwrap();
+        assert_eq!(result.len(), 36); // UUID format: 8-4-4-4-12
+        assert!(result.contains('-'));
+    }
+
+    #[test]
+    fn test_generate_id_custom_literal() {
+        let rule = AutoGenerationRule::Custom("default_value".to_string());
+        let result = generate_id(&rule, "Entity", "id", None).unwrap();
+        assert_eq!(result, "default_value");
     }
 }

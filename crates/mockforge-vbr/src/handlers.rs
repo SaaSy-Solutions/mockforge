@@ -138,8 +138,9 @@ async fn apply_auto_generation(
                         Value::String(id)
                     }
                     crate::schema::AutoGenerationRule::Custom(_) => {
-                        // Custom rules would need evaluation engine
-                        continue;
+                        let id =
+                            crate::id_generation::generate_id(rule, entity_name, field_name, None)?;
+                        Value::String(id)
                     }
                 };
                 obj.insert(field_name.clone(), generated_value);
