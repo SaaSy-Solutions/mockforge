@@ -209,6 +209,13 @@ fn evaluate_lifecycle_condition(
     match operator {
         "==" => actual_str == threshold_str,
         "!=" => actual_str != threshold_str,
+        ">" => actual_str > threshold_str,
+        "<" => actual_str < threshold_str,
+        ">=" => actual_str >= threshold_str,
+        "<=" => actual_str <= threshold_str,
+        "contains" => actual_str.contains(threshold_str),
+        "starts_with" => actual_str.starts_with(threshold_str),
+        "ends_with" => actual_str.ends_with(threshold_str),
         _ => {
             debug!(operator = operator, "Operator not supported for string comparison");
             false

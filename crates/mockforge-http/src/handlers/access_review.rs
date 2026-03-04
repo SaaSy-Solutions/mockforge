@@ -402,7 +402,10 @@ pub async fn start_review(
             StatusCode::INTERNAL_SERVER_ERROR
         })?,
         ReviewType::ResourceAccess => {
-            return Err(StatusCode::NOT_IMPLEMENTED);
+            service.start_resource_access_review(Vec::new()).await.map_err(|e| {
+                error!("Failed to start resource access review: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
         }
     };
 
