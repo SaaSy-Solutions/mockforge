@@ -212,23 +212,9 @@ impl RiskEngine {
 
     /// Evaluate a risk condition
     fn evaluate_condition(&self, condition: &str, risk_score: f64) -> bool {
-        // Simple condition evaluation
-        // In production, use a proper expression evaluator
-        if condition.contains(">") {
-            let parts: Vec<&str> = condition.split('>').collect();
-            if parts.len() == 2 {
-                if let Ok(threshold) = parts[1].trim().parse::<f64>() {
-                    return risk_score > threshold;
-                }
-            }
-        } else if condition.contains("<") {
-            let parts: Vec<&str> = condition.split('<').collect();
-            if parts.len() == 2 {
-                if let Ok(threshold) = parts[1].trim().parse::<f64>() {
-                    return risk_score < threshold;
-                }
-            }
-        } else if condition.contains(">=") {
+        // Check multi-character operators before single-character ones
+        // to avoid `>=` being incorrectly matched by `>`.
+        if condition.contains(">=") {
             let parts: Vec<&str> = condition.split(">=").collect();
             if parts.len() == 2 {
                 if let Ok(threshold) = parts[1].trim().parse::<f64>() {
@@ -247,6 +233,20 @@ impl RiskEngine {
             if parts.len() == 2 {
                 if let Ok(threshold) = parts[1].trim().parse::<f64>() {
                     return (risk_score - threshold).abs() < 0.001;
+                }
+            }
+        } else if condition.contains('>') {
+            let parts: Vec<&str> = condition.split('>').collect();
+            if parts.len() == 2 {
+                if let Ok(threshold) = parts[1].trim().parse::<f64>() {
+                    return risk_score > threshold;
+                }
+            }
+        } else if condition.contains('<') {
+            let parts: Vec<&str> = condition.split('<').collect();
+            if parts.len() == 2 {
+                if let Ok(threshold) = parts[1].trim().parse::<f64>() {
+                    return risk_score < threshold;
                 }
             }
         }
