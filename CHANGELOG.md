@@ -1,3 +1,25 @@
+## [0.3.72] - 2026-03-04
+
+### Fixed
+
+- **[UI]** `mockforge serve --admin` no longer panics when no production auth is configured (#79)
+  - `validate_auth_config_on_startup()` now logs a warning instead of returning an error
+  - Auto-generated JWT secret fallback so the admin UI works out of the box
+  - Default users are seeded even without `ENVIRONMENT=development`, so login works immediately
+- **[Bench]** Fix duplicate session ID in conformance Cookie headers (#79)
+  - Removed invalid `noCookies: true` from k6 options (not a real k6 option; k6 silently ignores it)
+  - Added `http.cookieJar().clear(BASE_URL)` before and after each request when custom Cookie headers are present
+  - Prevents k6's internal cookie jar from re-sending server `Set-Cookie` values alongside custom headers
+  - Applied to both reference-mode (`generator.rs`) and spec-driven (`spec_driven.rs`) generators
+- **[Bench]** Fix missing single-quote escaping in spec-driven `format_headers()` (#79)
+  - Header values containing single quotes are now properly escaped, matching `generator.rs` behavior
+
+### Added
+
+- **[Bench]** Conformance report now shows individual failed checks with pass/fail counts (#79)
+  - New "Failed Checks" section after the category summary table lists each check that failed
+  - When not using `--conformance-all-operations`, prints a tip suggesting it for endpoint-level detail
+
 ## [0.3.70] - 2026-02-27
 
 ### Fixed

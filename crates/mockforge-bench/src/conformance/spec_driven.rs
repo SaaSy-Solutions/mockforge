@@ -598,9 +598,6 @@ impl SpecDrivenConformanceGenerator {
         if self.config.skip_tls_verify {
             script.push_str("  insecureSkipTLSVerify: true,\n");
         }
-        if self.config.has_cookie_header() {
-            script.push_str("  noCookies: true,\n");
-        }
         script.push_str("  thresholds: {\n");
         script.push_str("    checks: ['rate>0'],\n");
         script.push_str("  },\n");
@@ -612,6 +609,13 @@ impl SpecDrivenConformanceGenerator {
 
         // Default function
         script.push_str("export default function () {\n");
+
+        if self.config.has_cookie_header() {
+            script.push_str(
+                "  // Clear cookie jar to prevent server Set-Cookie from duplicating custom Cookie header\n",
+            );
+            script.push_str("  http.cookieJar().clear(BASE_URL);\n\n");
+        }
 
         // Group operations by category
         let mut category_ops: std::collections::BTreeMap<
@@ -814,6 +818,11 @@ impl SpecDrivenConformanceGenerator {
             ));
         }
 
+        // Clear cookie jar after each request to prevent Set-Cookie leaking
+        if self.config.has_cookie_header() {
+            script.push_str("      http.cookieJar().clear(BASE_URL);\n");
+        }
+
         script.push_str("    }\n");
     }
 
@@ -886,8 +895,10 @@ impl SpecDrivenConformanceGenerator {
 
     /// Format header params as a JS object literal
     fn format_headers(headers: &[(String, String)]) -> String {
-        let entries: Vec<String> =
-            headers.iter().map(|(k, v)| format!("'{}': '{}'", k, v)).collect();
+        let entries: Vec<String> = headers
+            .iter()
+            .map(|(k, v)| format!("'{}': '{}'", k, v.replace('\'', "\\'")))
+            .collect();
         format!("{{ {} }}", entries.join(", "))
     }
 

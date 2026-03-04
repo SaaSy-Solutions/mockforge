@@ -90,6 +90,11 @@ impl ConformanceReport {
 
     /// Print the conformance report to stdout
     pub fn print_report(&self) {
+        self.print_report_with_options(false);
+    }
+
+    /// Print the conformance report with options controlling detail level
+    pub fn print_report_with_options(&self, all_operations: bool) {
         let categories = self.by_category();
 
         println!("\n{}", "OpenAPI 3.0.0 Conformance Report".bold());
@@ -162,6 +167,35 @@ impl ConformanceReport {
             grand_total,
             rate_colored
         );
+
+        // Print failed checks detail section
+        let failed_checks: Vec<_> =
+            self.check_results.iter().filter(|(_, (_, fails))| *fails > 0).collect();
+
+        if !failed_checks.is_empty() {
+            println!();
+            println!("{}", "Failed Checks:".red().bold());
+            let mut sorted_failures: Vec<_> = failed_checks.into_iter().collect();
+            sorted_failures.sort_by_key(|(name, _)| (*name).clone());
+            for (name, (passes, fails)) in sorted_failures {
+                println!(
+                    "  {} ({} passed, {} failed)",
+                    name.red(),
+                    passes.to_string().green(),
+                    fails.to_string().red()
+                );
+            }
+
+            if !all_operations {
+                println!();
+                println!(
+                    "{}",
+                    "Tip: Use --conformance-all-operations to see which specific endpoints failed."
+                        .yellow()
+                );
+            }
+        }
+
         println!();
     }
 

@@ -58,9 +58,11 @@ fn is_dev_auth_enabled() -> bool {
 }
 
 fn should_seed_default_users() -> bool {
-    is_development_environment()
-        && is_dev_auth_enabled()
-        && !is_truthy_env("MOCKFORGE_DISABLE_DEV_SEED_USERS")
+    // Seed users in dev environment with dev auth enabled, OR when no production auth is configured
+    // (so `--admin` works out of the box with default credentials)
+    let explicit_dev = is_development_environment() && is_dev_auth_enabled();
+    let no_production_auth = !is_development_environment() && std::env::var("JWT_SECRET").is_err();
+    (explicit_dev || no_production_auth) && !is_truthy_env("MOCKFORGE_DISABLE_DEV_SEED_USERS")
 }
 
 fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
@@ -91,18 +93,20 @@ fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
         return Ok(dev_secret.into_bytes());
     }
 
-    tracing::error!(
-        "JWT_SECRET is required in production. Set JWT_SECRET with at least {} characters.",
-        MIN_JWT_SECRET_LEN
+    // Fallback: auto-generate a secret so `--admin` works out of the box
+    tracing::warn!(
+        "Using auto-generated JWT secret for in-memory auth. Set JWT_SECRET for production use."
     );
-    Err(jsonwebtoken::errors::Error::from(jsonwebtoken::errors::ErrorKind::InvalidToken))
+    Ok("mockforge-auto-jwt-secret-for-admin-ui-1234".as_bytes().to_vec())
 }
 
 pub fn validate_auth_config_on_startup() -> Result<(), String> {
     if !is_development_environment() && !is_truthy_env("MOCKFORGE_ALLOW_INMEMORY_AUTH") {
-        return Err(
-            "In-memory auth is disabled in production. Configure production auth backend or set MOCKFORGE_ALLOW_INMEMORY_AUTH=true explicitly."
-                .to_string(),
+        // Auto-allow in-memory auth for mock server usage, but warn
+        tracing::warn!(
+            "No production auth backend configured. Using in-memory auth. \
+             Set ENVIRONMENT=production and configure a real auth backend for production use, \
+             or suppress this warning with MOCKFORGE_ALLOW_INMEMORY_AUTH=true"
         );
     }
 

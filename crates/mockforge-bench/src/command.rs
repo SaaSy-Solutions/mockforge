@@ -1965,7 +1965,7 @@ impl BenchCommand {
         let report_path = self.output.join("conformance-report.json");
         if report_path.exists() {
             let report = ConformanceReport::from_file(&report_path)?;
-            report.print_report();
+            report.print_report_with_options(self.conformance_all_operations);
 
             // Output in requested format
             if self.conformance_report_format == "sarif" {

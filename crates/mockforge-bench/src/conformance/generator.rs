@@ -106,9 +106,6 @@ impl ConformanceGenerator {
         if self.config.skip_tls_verify {
             script.push_str("  insecureSkipTLSVerify: true,\n");
         }
-        if self.config.has_cookie_header() {
-            script.push_str("  noCookies: true,\n");
-        }
         script.push_str("  thresholds: {\n");
         script.push_str("    checks: ['rate>0'],\n");
         script.push_str("  },\n");
@@ -122,6 +119,13 @@ impl ConformanceGenerator {
 
         // Default function
         script.push_str("export default function () {\n");
+
+        if self.config.has_cookie_header() {
+            script.push_str(
+                "  // Clear cookie jar to prevent server Set-Cookie from duplicating custom Cookie header\n",
+            );
+            script.push_str("  http.cookieJar().clear(BASE_URL);\n\n");
+        }
 
         if self.config.should_include_category("Parameters") {
             self.generate_parameters_group(&mut script);
@@ -214,6 +218,7 @@ impl ConformanceGenerator {
                 ));
             }
         }
+        self.maybe_clear_cookie_jar(script);
     }
 
     /// Emit a POST/PUT/PATCH request with optional custom headers merged in.
@@ -230,6 +235,7 @@ impl ConformanceGenerator {
             "      let res = http.{}(`{}`, {}, {{ headers: {} }});\n",
             method, url, body, merged
         ));
+        self.maybe_clear_cookie_jar(script);
     }
 
     /// Emit a DELETE/HEAD/OPTIONS request with optional custom headers.
@@ -243,6 +249,16 @@ impl ConformanceGenerator {
             ));
         } else {
             script.push_str(&format!("      let res = http.{}(`{}`);\n", method, url));
+        }
+        self.maybe_clear_cookie_jar(script);
+    }
+
+    /// Emit cookie jar clearing after a request when custom Cookie headers are used.
+    /// Prevents k6's internal cookie jar from re-sending server Set-Cookie values
+    /// alongside the custom Cookie header on subsequent requests.
+    fn maybe_clear_cookie_jar(&self, script: &mut String) {
+        if self.config.has_cookie_header() {
+            script.push_str("      http.cookieJar().clear(BASE_URL);\n");
         }
     }
 
@@ -343,6 +359,7 @@ impl ConformanceGenerator {
                 "      let res = http.post(`${BASE_URL}/conformance/body/form`, { field1: 'value1', field2: 'value2' });\n",
             );
         }
+        self.maybe_clear_cookie_jar(script);
         script.push_str(
             "      check(res, { 'body:form-urlencoded': (r) => r.status >= 200 && r.status < 500 });\n",
         );
@@ -363,6 +380,7 @@ impl ConformanceGenerator {
                 "      let res = http.post(`${BASE_URL}/conformance/body/multipart`, data);\n",
             );
         }
+        self.maybe_clear_cookie_jar(script);
         script.push_str(
             "      check(res, { 'body:multipart': (r) => r.status >= 200 && r.status < 500 });\n",
         );
