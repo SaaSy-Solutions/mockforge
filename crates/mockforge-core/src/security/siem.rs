@@ -181,7 +181,14 @@ pub struct EventFilter {
     pub include: Option<Vec<String>>,
     /// Exclude patterns (e.g., ["severity:low"])
     pub exclude: Option<Vec<String>>,
-    /// Additional filter conditions (not implemented in initial version)
+    /// Additional filter conditions using `key=value` syntax
+    ///
+    /// Conditions match against event metadata fields. Supported syntax:
+    /// - `key=value` — metadata key must equal value (string comparison)
+    /// - `key!=value` — metadata key must not equal value
+    /// - `key` — metadata key must be present (any value)
+    ///
+    /// All conditions must match for the event to be included (AND logic).
     pub conditions: Option<Vec<String>>,
 }
 
@@ -234,7 +241,44 @@ impl EventFilter {
             }
         }
 
+        // Check conditions (all must match — AND logic)
+        if let Some(ref conditions) = self.conditions {
+            for condition in conditions {
+                if !self.evaluate_condition(condition, event) {
+                    return false;
+                }
+            }
+        }
+
         true
+    }
+
+    /// Evaluate a single condition against an event
+    ///
+    /// Supports:
+    /// - `key=value` — metadata value must equal value
+    /// - `key!=value` — metadata value must not equal value
+    /// - `key` — metadata key must be present
+    fn evaluate_condition(&self, condition: &str, event: &SecurityEvent) -> bool {
+        if let Some((key, value)) = condition.split_once("!=") {
+            let key = key.trim();
+            let value = value.trim();
+            match event.metadata.get(key) {
+                Some(v) => !metadata_value_matches(v, value),
+                None => true, // absent key != value is true
+            }
+        } else if let Some((key, value)) = condition.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
+            match event.metadata.get(key) {
+                Some(v) => metadata_value_matches(v, value),
+                None => false,
+            }
+        } else {
+            // Presence check: key must exist
+            let key = condition.trim();
+            event.metadata.contains_key(key)
+        }
     }
 
     fn matches_pattern(&self, event_type: &str, pattern: &str) -> bool {
@@ -245,6 +289,17 @@ impl EventFilter {
         } else {
             event_type == pattern
         }
+    }
+}
+
+/// Compare a serde_json::Value against a string for condition evaluation
+fn metadata_value_matches(value: &serde_json::Value, expected: &str) -> bool {
+    match value {
+        serde_json::Value::String(s) => s == expected,
+        serde_json::Value::Number(n) => n.to_string() == expected,
+        serde_json::Value::Bool(b) => (expected == "true" && *b) || (expected == "false" && !b),
+        serde_json::Value::Null => expected == "null",
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => false,
     }
 }
 

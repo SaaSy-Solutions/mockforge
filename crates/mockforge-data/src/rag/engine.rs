@@ -433,7 +433,7 @@ impl RagEngine {
         // Perform semantic search
         let semantic_results = self.semantic_search(query_embedding, candidates.clone()).await?;
 
-        // Perform keyword search (placeholder)
+        // Perform keyword search
         let keyword_results = self.keyword_search(query, &candidates).await?;
 
         // Combine results using weights

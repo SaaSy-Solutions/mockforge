@@ -171,15 +171,29 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             let config = PluginLoaderConfig::default();
             let installer = PluginInstaller::new(config)?;
 
-            let plugins = installer.list_installed().await;
-
-            if plugins.is_empty() {
-                println!("  No plugins installed");
+            if detailed {
+                let plugins_with_meta = installer.list_plugins_with_metadata().await;
+                if plugins_with_meta.is_empty() {
+                    println!("  No plugins installed");
+                } else {
+                    for (plugin_id, meta) in plugins_with_meta {
+                        println!("  - {}", plugin_id);
+                        println!("    Version: {}", meta.version);
+                        println!("    Source:  {}", meta.source);
+                        let installed = format_epoch_timestamp(meta.installed_at);
+                        println!("    Installed: {}", installed);
+                        if let Some(updated_at) = meta.updated_at {
+                            let updated = format_epoch_timestamp(updated_at);
+                            println!("    Updated: {}", updated);
+                        }
+                    }
+                }
             } else {
-                for plugin_id in plugins {
-                    if detailed {
-                        println!("  - {} (detailed info coming soon)", plugin_id);
-                    } else {
+                let plugins = installer.list_installed().await;
+                if plugins.is_empty() {
+                    println!("  No plugins installed");
+                } else {
+                    for plugin_id in plugins {
                         println!("  - {}", plugin_id);
                     }
                 }
@@ -188,7 +202,27 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
 
         PluginCommands::Info { plugin_id } => {
             println!("ℹ️  Plugin information: {}", plugin_id);
-            println!("  (Detailed plugin info coming soon)");
+
+            let config = PluginLoaderConfig::default();
+            let installer = PluginInstaller::new(config)?;
+            let pid = mockforge_plugin_core::PluginId::new(&plugin_id);
+
+            match installer.get_plugin_metadata(&pid).await {
+                Some(meta) => {
+                    println!("  ID:        {}", meta.plugin_id);
+                    println!("  Version:   {}", meta.version);
+                    println!("  Source:    {}", meta.source);
+                    let installed = format_epoch_timestamp(meta.installed_at);
+                    println!("  Installed: {}", installed);
+                    if let Some(updated_at) = meta.updated_at {
+                        let updated = format_epoch_timestamp(updated_at);
+                        println!("  Updated:   {}", updated);
+                    }
+                }
+                None => {
+                    println!("  Plugin '{}' not found or has no metadata", plugin_id);
+                }
+            }
         }
 
         PluginCommands::Update { plugin_id, all } => {
@@ -567,6 +601,13 @@ async fn use_cargo_generate(
     generate_plugin_code(output_dir, plugin_name, plugin_type)?;
 
     Ok(())
+}
+
+/// Format a Unix epoch timestamp (seconds) as a human-readable UTC string
+fn format_epoch_timestamp(epoch_secs: u64) -> String {
+    chrono::DateTime::from_timestamp(epoch_secs as i64, 0)
+        .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string())
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 /// Get the plugin template directory

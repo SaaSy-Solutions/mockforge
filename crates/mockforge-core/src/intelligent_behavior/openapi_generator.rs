@@ -489,7 +489,12 @@ impl OpenApiSpecGenerator {
                     "PUT" => path_item.put = Some(operation),
                     "DELETE" => path_item.delete = Some(operation),
                     "PATCH" => path_item.patch = Some(operation),
-                    _ => {} // Other methods not yet supported
+                    "HEAD" => path_item.head = Some(operation),
+                    "OPTIONS" => path_item.options = Some(operation),
+                    "TRACE" => path_item.trace = Some(operation),
+                    other => {
+                        tracing::debug!(method = other, path = %path, "Skipping unsupported HTTP method");
+                    }
                 }
             }
 
