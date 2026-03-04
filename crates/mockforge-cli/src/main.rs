@@ -44,6 +44,7 @@ mod governance_commands;
 mod import_commands;
 #[allow(dead_code)]
 mod import_utils;
+mod insomnia_import;
 #[cfg(feature = "kafka")]
 mod kafka_commands;
 #[allow(dead_code)]

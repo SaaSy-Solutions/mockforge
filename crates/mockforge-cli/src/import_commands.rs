@@ -1,8 +1,9 @@
 //! Schema-driven mock generation commands
 //!
 //! This module provides CLI commands for importing API specifications
-//! (OpenAPI/AsyncAPI) and automatically generating comprehensive mock endpoints.
+//! (OpenAPI/AsyncAPI/Insomnia) and automatically generating comprehensive mock endpoints.
 
+use crate::insomnia_import::import_insomnia_export;
 use clap::Subcommand;
 use colored::Colorize;
 use mockforge_core::import::asyncapi_import::{import_asyncapi_spec, AsyncApiImportResult};
@@ -67,6 +68,30 @@ pub enum ImportCommands {
         verbose: bool,
     },
 
+    /// Import Insomnia export and generate mock endpoints
+    ///
+    /// Examples:
+    ///   mockforge import insomnia ./insomnia-export.json
+    ///   mockforge import insomnia ./insomnia-export.json --output mocks.json
+    ///   mockforge import insomnia ./insomnia-export.json --environment "Production"
+    #[command(verbatim_doc_comment)]
+    Insomnia {
+        /// Path to Insomnia export file (JSON)
+        export_path: PathBuf,
+
+        /// Output file for generated mocks (JSON format)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Environment name to use for variable resolution
+        #[arg(short, long)]
+        environment: Option<String>,
+
+        /// Show detailed import information
+        #[arg(short = 'V', long)]
+        verbose: bool,
+    },
+
     /// Show coverage statistics for imported specifications
     ///
     /// Examples:
@@ -111,6 +136,15 @@ pub async fn handle_import_command(
                 verbose,
             )
             .await
+        }
+        ImportCommands::Insomnia {
+            export_path,
+            output,
+            environment,
+            verbose,
+        } => {
+            handle_insomnia_import(&export_path, output.as_deref(), environment.as_deref(), verbose)
+                .await
         }
         ImportCommands::Coverage {
             spec_path,
@@ -198,6 +232,69 @@ async fn handle_asyncapi_import(
         println!(
             "{}",
             format!("✅ Saved {} channels to {}", result.channels.len(), output_path.display())
+                .green()
+                .bold()
+        );
+    }
+
+    Ok(())
+}
+
+/// Handle Insomnia export import
+async fn handle_insomnia_import(
+    export_path: &Path,
+    output: Option<&Path>,
+    environment: Option<&str>,
+    verbose: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("{}", "📋 Importing Insomnia Export...".cyan().bold());
+    println!();
+
+    let content = fs::read_to_string(export_path)
+        .map_err(|e| format!("Failed to read Insomnia export: {}", e))?;
+
+    let result = import_insomnia_export(&content, environment)
+        .map_err(|e| format!("Failed to import Insomnia export: {}", e))?;
+
+    // Display results
+    println!("{}", "📖 Import Results:".bold());
+    println!("  Routes imported: {}", result.routes.len().to_string().green());
+    println!("  Variables resolved: {}", result.variables.len().to_string().cyan());
+
+    if !result.warnings.is_empty() {
+        println!();
+        println!("{}", "⚠️  Warnings:".yellow().bold());
+        for warning in &result.warnings {
+            println!("  - {}", warning.yellow());
+        }
+    }
+
+    if verbose {
+        println!();
+        println!("{}", "📍 Imported Routes:".bold());
+        for route in &result.routes {
+            println!("  {} {} → {}", route.method.cyan(), route.path, route.response.status);
+        }
+
+        if !result.variables.is_empty() {
+            println!();
+            println!("{}", "🔑 Resolved Variables:".bold());
+            for (key, value) in &result.variables {
+                println!("  {} = {}", key.cyan(), value);
+            }
+        }
+    }
+
+    // Save to output file if specified
+    if let Some(output_path) = output {
+        let routes_json = serde_json::to_string_pretty(&result.routes)
+            .map_err(|e| format!("Failed to serialize routes: {}", e))?;
+        fs::write(output_path, routes_json)
+            .map_err(|e| format!("Failed to write output file: {}", e))?;
+        println!();
+        println!(
+            "{}",
+            format!("✅ Saved {} routes to {}", result.routes.len(), output_path.display())
                 .green()
                 .bold()
         );

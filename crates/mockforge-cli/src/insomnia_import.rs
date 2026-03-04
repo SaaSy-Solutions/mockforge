@@ -3,6 +3,8 @@
 //! This module handles parsing Insomnia exports and converting them
 //! to MockForge routes and configurations.
 
+#![allow(dead_code)] // Serde deserialization structs have fields read by the framework
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -32,7 +34,7 @@ pub struct InsomniaResource {
     pub body: Option<InsomniaBody>,
     pub authentication: Option<InsomniaAuth>,
     pub parameters: Option<Vec<InsomniaParameter>>,
-    pub data: Option<Value>, // For environment data
+    pub data: Option<Value>,         // For environment data
     pub environment: Option<String>, // Environment name
 }
 
@@ -61,7 +63,11 @@ pub struct InsomniaParameter {
 }
 
 /// Insomnia authentication
+///
+/// Fields are populated via serde deserialization from Insomnia exports.
+/// Not all fields are used for every auth type.
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct InsomniaAuth {
     #[serde(rename = "type")]
     pub auth_type: String,
@@ -72,6 +78,18 @@ pub struct InsomniaAuth {
     pub prefix: Option<String>,
     pub key: Option<String>,
     pub value: Option<String>,
+    /// OAuth2 access token URL
+    #[serde(rename = "accessTokenUrl")]
+    pub access_token_url: Option<String>,
+    /// OAuth2 client ID
+    #[serde(rename = "clientId")]
+    pub client_id: Option<String>,
+    /// OAuth2 grant type
+    #[serde(rename = "grantType")]
+    pub grant_type: Option<String>,
+    /// OAuth2 access token value (stored after successful OAuth flow)
+    #[serde(rename = "accessToken")]
+    pub access_token: Option<String>,
 }
 
 /// MockForge route structure for import
@@ -101,7 +119,10 @@ pub struct InsomniaImportResult {
 }
 
 /// Import an Insomnia export
-pub fn import_insomnia_export(content: &str, environment: Option<&str>) -> Result<InsomniaImportResult, String> {
+pub fn import_insomnia_export(
+    content: &str,
+    environment: Option<&str>,
+) -> Result<InsomniaImportResult, String> {
     let export: InsomniaExport = serde_json::from_str(content)
         .map_err(|e| format!("Failed to parse Insomnia export: {}", e))?;
 
@@ -129,7 +150,11 @@ pub fn import_insomnia_export(content: &str, environment: Option<&str>) -> Resul
         if resource.resource_type == "request" {
             match convert_insomnia_request_to_route(resource, &variables) {
                 Ok(route) => routes.push(route),
-                Err(e) => warnings.push(format!("Failed to convert request '{}': {}", resource.name.as_deref().unwrap_or("unnamed"), e)),
+                Err(e) => warnings.push(format!(
+                    "Failed to convert request '{}': {}",
+                    resource.name.as_deref().unwrap_or("unnamed"),
+                    e
+                )),
             }
         }
     }
@@ -171,12 +196,9 @@ fn convert_insomnia_request_to_route(
     resource: &InsomniaResource,
     variables: &HashMap<String, String>,
 ) -> Result<MockForgeRoute, String> {
-    let method = resource.method.as_deref()
-        .ok_or("Request missing method")?
-        .to_uppercase();
+    let method = resource.method.as_deref().ok_or("Request missing method")?.to_uppercase();
 
-    let raw_url = resource.url.as_deref()
-        .ok_or("Request missing URL")?;
+    let raw_url = resource.url.as_deref().ok_or("Request missing URL")?;
 
     let url = resolve_variables(raw_url, variables);
 
@@ -188,10 +210,7 @@ fn convert_insomnia_request_to_route(
     if let Some(resource_headers) = &resource.headers {
         for header in resource_headers {
             if !header.disabled.unwrap_or(false) && !header.name.is_empty() {
-                headers.insert(
-                    header.name.clone(),
-                    resolve_variables(&header.value, variables),
-                );
+                headers.insert(header.name.clone(), resolve_variables(&header.value, variables));
             }
         }
     }
@@ -247,7 +266,7 @@ fn add_auth_headers(
             if let (Some(username), Some(password)) = (&auth.username, &auth.password) {
                 let user = resolve_variables(username, variables);
                 let pass = resolve_variables(password, variables);
-                use base64::{Engine as _, engine::general_purpose};
+                use base64::{engine::general_purpose, Engine as _};
                 let credentials = general_purpose::STANDARD.encode(format!("{}:{}", user, pass));
                 headers.insert("Authorization".to_string(), format!("Basic {}", credentials));
             }
@@ -259,14 +278,31 @@ fn add_auth_headers(
                 headers.insert(resolved_key, resolved_value);
             }
         }
+        "oauth2" => {
+            // OAuth2: use the stored access token if available, otherwise fall back to token field
+            if let Some(access_token) = &auth.access_token {
+                let resolved = resolve_variables(access_token, variables);
+                if !resolved.is_empty() {
+                    headers.insert("Authorization".to_string(), format!("Bearer {}", resolved));
+                }
+            } else if let Some(token) = &auth.token {
+                let resolved = resolve_variables(token, variables);
+                if !resolved.is_empty() {
+                    headers.insert("Authorization".to_string(), format!("Bearer {}", resolved));
+                }
+            }
+        }
         _ => {
-            // Other auth types (OAuth, etc.) not yet supported
+            // Unsupported auth types are silently skipped
         }
     }
 }
 
 /// Extract request body from Insomnia resource
-fn extract_request_body(resource: &InsomniaResource, variables: &HashMap<String, String>) -> Option<String> {
+fn extract_request_body(
+    resource: &InsomniaResource,
+    variables: &HashMap<String, String>,
+) -> Option<String> {
     if let Some(body) = &resource.body {
         if let Some(text) = &body.text {
             return Some(resolve_variables(text, variables));

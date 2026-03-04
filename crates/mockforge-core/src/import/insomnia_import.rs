@@ -104,6 +104,18 @@ pub struct InsomniaAuth {
     pub key: Option<String>,
     /// API key value (for apikey auth)
     pub value: Option<String>,
+    /// OAuth2 access token URL
+    #[serde(rename = "accessTokenUrl")]
+    pub access_token_url: Option<String>,
+    /// OAuth2 client ID
+    #[serde(rename = "clientId")]
+    pub client_id: Option<String>,
+    /// OAuth2 grant type
+    #[serde(rename = "grantType")]
+    pub grant_type: Option<String>,
+    /// OAuth2 access token value (stored after successful OAuth flow)
+    #[serde(rename = "accessToken")]
+    pub access_token: Option<String>,
 }
 
 /// MockForge route structure for import
@@ -303,8 +315,22 @@ fn add_auth_headers(
                 headers.insert(resolved_key, resolved_value);
             }
         }
+        "oauth2" => {
+            // OAuth2: use the stored access token if available, otherwise fall back to token field
+            if let Some(access_token) = &auth.access_token {
+                let resolved = resolve_variables(access_token, variables);
+                if !resolved.is_empty() {
+                    headers.insert("Authorization".to_string(), format!("Bearer {}", resolved));
+                }
+            } else if let Some(token) = &auth.token {
+                let resolved = resolve_variables(token, variables);
+                if !resolved.is_empty() {
+                    headers.insert("Authorization".to_string(), format!("Bearer {}", resolved));
+                }
+            }
+        }
         _ => {
-            // Other auth types (OAuth, etc.) not yet supported
+            // Unsupported auth types are silently skipped
         }
     }
 }

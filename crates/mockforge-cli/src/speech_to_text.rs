@@ -569,8 +569,8 @@ pub struct SpeechToTextManager {
 
 impl SpeechToTextManager {
     /// Create a new STT manager with default backends
+    #[allow(clippy::vec_init_then_push)]
     pub fn new() -> Self {
-        #[allow(clippy::vec_init_then_push)]
         let mut backends: Vec<Box<dyn SpeechToTextBackend>> = Vec::new();
 
         // Always add text input as fallback (last, so it's only used if nothing else is available)
