@@ -398,7 +398,7 @@ impl OpenApiRouteRegistry {
                 async move {
                     tracing::debug!("Handling request for route: {} {}", route.method, route.path);
                     let (status, response, trace) =
-                        route.mock_response_with_status_and_scenario_and_trace(None);
+                        route.mock_response_with_status_and_scenario_and_trace(None, None);
                     tracing::debug!("Generated response with status: {}", status);
 
                     // Create response with trace attached to extensions

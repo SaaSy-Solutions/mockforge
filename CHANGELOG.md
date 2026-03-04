@@ -1,3 +1,23 @@
+## [0.3.73] - 2026-03-04
+
+### Fixed
+
+- **[Core]** Mock server now supports `X-Mockforge-Response-Status` header to return non-default status codes (#79)
+  - Conformance checks for `response:404` and `response:400` previously always failed because the server returned the first declared status (usually 200)
+  - New `has_response_for_status()` validates the requested code exists in the spec before overriding
+  - Both OpenAPI handler paths extract and pass the header through
+- **[Core]** Response generation no longer replaces object-typed properties with string examples (#79)
+  - When a property schema declares `type: object`, the fallback now preserves an empty `{}` instead of generating a name-based string like `"example config"`
+  - Fixes `response:schema:validation` failures where JSON schema validation rejected string values for object properties
+  - Added `is_object_typed_property()` helper for type-aware fallback decisions
+- **[Data]** `generate_by_type("object")` now returns `{}` instead of `"unknown_type_object"` (#79)
+  - Also added `"array"` handler returning `[]`
+
+### Changed
+
+- **[Bench]** Spec-driven conformance generator now sends `X-Mockforge-Response-Status` header for `response:400` and `response:404` checks (#79)
+  - Tells the mock server which status code to return, enabling accurate status-code conformance testing
+
 ## [0.3.72] - 2026-03-04
 
 ### Fixed

@@ -373,9 +373,18 @@ impl OpenApiRouteRegistry {
                     .map(|s| s.to_string())
                     .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
 
+                // Check for status code override header
+                let status_override = headers
+                    .get("X-Mockforge-Response-Status")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u16>().ok());
+
                 // Generate mock response for this request with scenario support
-                let (selected_status, mock_response) =
-                    route_clone.mock_response_with_status_and_scenario(scenario.as_deref());
+                let (selected_status, mock_response) = route_clone
+                    .mock_response_with_status_and_scenario_and_override(
+                        scenario.as_deref(),
+                        status_override,
+                    );
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = Map::new();
@@ -872,6 +881,12 @@ impl OpenApiRouteRegistry {
                     .map(|s| s.to_string())
                     .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
 
+                // Check for status code override header
+                let status_override = headers
+                    .get("X-Mockforge-Response-Status")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u16>().ok());
+
                 // Admin routes are mounted separately; no validation skip needed here.
                 // Build params maps
                 let mut path_map = Map::new();
@@ -996,8 +1011,11 @@ impl OpenApiRouteRegistry {
                 }
 
                 // Generate mock response with scenario support
-                let (selected_status, mock_response) =
-                    route_clone.mock_response_with_status_and_scenario(scenario.as_deref());
+                let (selected_status, mock_response) = route_clone
+                    .mock_response_with_status_and_scenario_and_override(
+                        scenario.as_deref(),
+                        status_override,
+                    );
 
                 // Expand templating tokens in response if enabled (options or env)
                 let mut response = mock_response.clone();

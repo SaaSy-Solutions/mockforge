@@ -710,7 +710,20 @@ impl SpecDrivenConformanceGenerator {
 
         // Build effective headers: merge spec-derived headers with custom headers.
         // Custom headers override spec-derived ones with the same name.
-        let effective_headers = self.effective_headers(&op.header_params);
+        let mut effective_headers = self.effective_headers(&op.header_params);
+
+        // For non-default response code checks, add header to tell the mock server
+        // which status code to return (the server defaults to the first declared status)
+        if matches!(feature, ConformanceFeature::Response400 | ConformanceFeature::Response404) {
+            let expected_code = match feature {
+                ConformanceFeature::Response400 => "400",
+                ConformanceFeature::Response404 => "404",
+                _ => unreachable!(),
+            };
+            effective_headers
+                .push(("X-Mockforge-Response-Status".to_string(), expected_code.to_string()));
+        }
+
         let has_headers = !effective_headers.is_empty();
         let headers_obj = if has_headers {
             Self::format_headers(&effective_headers)

@@ -153,6 +153,8 @@ impl EnhancedFaker {
                 Value::Number(serde_json::Number::from_f64(self.float_range(0.0, 1000.0)).unwrap())
             }
             "bool" | "boolean" => Value::Bool(self.boolean(0.5)),
+            "object" => Value::Object(serde_json::Map::new()),
+            "array" => Value::Array(vec![]),
             "word" => Value::String(self.word()),
             "sentence" => Value::String(self.sentence()),
             "paragraph" => Value::String(self.paragraph()),

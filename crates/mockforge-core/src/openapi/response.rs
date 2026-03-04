@@ -1006,9 +1006,17 @@ impl ResponseGenerator {
                         }
                     };
                     let value = match value {
-                        Value::Null => Self::generate_example_for_property(prop_name),
-                        Value::Object(ref obj) if obj.is_empty() => {
-                            Self::generate_example_for_property(prop_name)
+                        Value::Null | Value::Object(_)
+                            if matches!(&value, Value::Null)
+                                || matches!(&value, Value::Object(obj) if obj.is_empty()) =>
+                        {
+                            // If the property schema indicates an object type, keep it as
+                            // an empty object rather than replacing with a string-based example
+                            if Self::is_object_typed_property(prop_schema) {
+                                Value::Object(serde_json::Map::new())
+                            } else {
+                                Self::generate_example_for_property(prop_name)
+                            }
                         }
                         _ => value,
                     };
@@ -1649,6 +1657,20 @@ impl ResponseGenerator {
             Value::String("This is a sample description text.".to_string())
         } else {
             Value::String(format!("example {}", prop_name))
+        }
+    }
+
+    /// Check if a property schema indicates an object type.
+    /// Used to avoid replacing empty objects with string-based examples
+    /// when the schema declares the property as an object.
+    fn is_object_typed_property(schema_ref: &ReferenceOr<Box<Schema>>) -> bool {
+        match schema_ref {
+            ReferenceOr::Item(schema) => matches!(
+                &schema.schema_kind,
+                openapiv3::SchemaKind::Type(openapiv3::Type::Object(_))
+            ),
+            // References typically point to named object schemas
+            ReferenceOr::Reference { .. } => true,
         }
     }
 

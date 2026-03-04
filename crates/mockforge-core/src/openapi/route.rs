@@ -351,7 +351,21 @@ impl OpenApiRoute {
         &self,
         scenario: Option<&str>,
     ) -> (u16, serde_json::Value) {
-        let (status, body, _) = self.mock_response_with_status_and_scenario_and_trace(scenario);
+        self.mock_response_with_status_and_scenario_and_override(scenario, None)
+    }
+
+    /// Generate a mock response with status code, scenario, and optional status override
+    ///
+    /// # Arguments
+    /// * `scenario` - Optional scenario name to select from the OpenAPI examples
+    /// * `status_override` - Optional HTTP status code to use instead of the default
+    pub fn mock_response_with_status_and_scenario_and_override(
+        &self,
+        scenario: Option<&str>,
+        status_override: Option<u16>,
+    ) -> (u16, serde_json::Value) {
+        let (status, body, _) =
+            self.mock_response_with_status_and_scenario_and_trace(scenario, status_override);
         (status, body)
     }
 
@@ -361,6 +375,7 @@ impl OpenApiRoute {
     pub fn mock_response_with_status_and_scenario_and_trace(
         &self,
         scenario: Option<&str>,
+        status_override: Option<u16>,
     ) -> (
         u16,
         serde_json::Value,
@@ -369,8 +384,10 @@ impl OpenApiRoute {
         use crate::openapi::response_trace;
         use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 
-        // Find the first available status code from the OpenAPI spec
-        let status_code = self.find_first_available_status_code();
+        // Use status override if the spec has a response for that code, otherwise default
+        let status_code = status_override
+            .filter(|code| self.has_response_for_status(*code))
+            .unwrap_or_else(|| self.find_first_available_status_code());
 
         // Check if token expansion should be enabled
         let expand_tokens = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
@@ -425,6 +442,15 @@ impl OpenApiRoute {
                 (status_code, response_body, trace)
             }
         }
+    }
+
+    /// Check if the operation declares a response for the given HTTP status code
+    pub fn has_response_for_status(&self, code: u16) -> bool {
+        self.operation
+            .responses
+            .responses
+            .iter()
+            .any(|(status, _)| matches!(status, openapiv3::StatusCode::Code(c) if *c == code))
     }
 
     /// Find the first available status code from the OpenAPI operation responses
