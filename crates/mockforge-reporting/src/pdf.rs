@@ -212,6 +212,51 @@ impl PdfReportGenerator {
             );
         }
 
+        // Charts section (text-based metric visualization)
+        if self.config.include_charts {
+            y -= 15.0;
+            current_layer.use_text("Performance Overview", 14.0, Mm(20.0), Mm(y), &font_bold);
+
+            // Success rate bar
+            y -= 8.0;
+            let success_rate = if report.metrics.total_requests > 0 {
+                report.metrics.successful_requests as f64 / report.metrics.total_requests as f64
+            } else {
+                0.0
+            };
+            let bar_len = (success_rate * 30.0) as usize;
+            let bar =
+                format!("Success Rate: [{:>30}] {:.1}%", "#".repeat(bar_len), success_rate * 100.0);
+            current_layer.use_text(bar, 9.0, Mm(20.0), Mm(y), &font);
+
+            // Step completion bar
+            y -= 6.0;
+            let step_rate = if report.total_steps > 0 {
+                report.completed_steps as f64 / report.total_steps as f64
+            } else {
+                0.0
+            };
+            let bar_len = (step_rate * 30.0) as usize;
+            let bar =
+                format!("Steps Done:   [{:>30}] {:.1}%", "#".repeat(bar_len), step_rate * 100.0);
+            current_layer.use_text(bar, 9.0, Mm(20.0), Mm(y), &font);
+
+            // Latency breakdown
+            y -= 6.0;
+            current_layer.use_text(
+                format!(
+                    "Latency (ms):  avg={:.1}  p95={:.1}  p99={:.1}",
+                    report.metrics.avg_latency_ms,
+                    report.metrics.p95_latency_ms,
+                    report.metrics.p99_latency_ms,
+                ),
+                9.0,
+                Mm(20.0),
+                Mm(y),
+                &font,
+            );
+        }
+
         // Failures section
         if !report.failures.is_empty() {
             y -= 15.0;

@@ -2,14 +2,16 @@
 //!
 //! Middleware that routes a percentage of team traffic to deceptive deploys.
 
+use axum::body::Body;
 use axum::extract::Request;
+use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use mockforge_core::deceptive_canary::DeceptiveCanaryRouter;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Deceptive canary middleware state
 #[derive(Clone)]
@@ -102,12 +104,8 @@ pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
         drop(router); // Release read lock before awaiting
 
         if !canary_url.is_empty() {
-            // Proxy request to deceptive deploy
-            // For now, we'll just add a header indicating canary routing
-            // Full proxying would require more complex logic
-            let mut response = next.run(req).await;
-            response.headers_mut().insert("X-Deceptive-Canary", "true".parse().unwrap());
-            return response;
+            // Proxy request to the canary deployment
+            return proxy_to_canary(&canary_url, req).await;
         }
     } else {
         drop(router); // Release read lock before awaiting
@@ -115,4 +113,88 @@ pub async fn deceptive_canary_middleware(req: Request, next: Next) -> Response {
 
     // Continue with normal request processing
     next.run(req).await
+}
+
+/// Proxy a request to the canary deployment URL and return the response.
+async fn proxy_to_canary(canary_url: &str, req: Request) -> Response {
+    let client = reqwest::Client::new();
+
+    // Build the target URL by combining the canary base URL with the request path/query
+    let target_url = format!(
+        "{}{}{}",
+        canary_url.trim_end_matches('/'),
+        req.uri().path(),
+        req.uri().query().map(|q| format!("?{q}")).unwrap_or_default()
+    );
+
+    let method: reqwest::Method = match req.method().as_str().parse() {
+        Ok(m) => m,
+        Err(_) => {
+            warn!("Canary proxy: unsupported HTTP method {}", req.method());
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    // Forward headers (skip hop-by-hop headers)
+    let mut proxy_req = client.request(method, &target_url);
+    for (name, value) in req.headers() {
+        let n = name.as_str();
+        if !matches!(n, "host" | "connection" | "transfer-encoding" | "keep-alive" | "upgrade") {
+            if let Ok(v) = value.to_str() {
+                proxy_req = proxy_req.header(n, v);
+            }
+        }
+    }
+
+    // Forward body
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
+        Ok(b) => b,
+        Err(e) => {
+            warn!("Canary proxy: failed to read request body: {e}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+    if !body_bytes.is_empty() {
+        proxy_req = proxy_req.body(body_bytes.to_vec());
+    }
+
+    // Send the proxied request
+    let canary_response = match proxy_req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Canary proxy: request to {target_url} failed: {e}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    // Build the Axum response from the canary response
+    let status =
+        StatusCode::from_u16(canary_response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+
+    let mut builder = Response::builder().status(status);
+
+    // Copy response headers
+    for (name, value) in canary_response.headers() {
+        let n = name.as_str();
+        if !matches!(n, "transfer-encoding" | "connection") {
+            if let Ok(v) = HeaderValue::from_bytes(value.as_bytes()) {
+                builder = builder.header(n, v);
+            }
+        }
+    }
+
+    // Mark as canary-routed
+    builder = builder.header("X-Deceptive-Canary", "true");
+
+    let response_body = match canary_response.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            warn!("Canary proxy: failed to read response body: {e}");
+            return StatusCode::BAD_GATEWAY.into_response();
+        }
+    };
+
+    builder
+        .body(Body::from(response_body))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
