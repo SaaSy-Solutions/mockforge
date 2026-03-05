@@ -41,26 +41,9 @@ fn main() {
     let ui_dist_path = Path::new(&crate_dir).join("ui/dist");
     let ui_public_path = Path::new(&crate_dir).join("ui/public");
 
-    // Ensure dist directory exists
+    // Ensure dist directory exists (for local dev builds)
     if !ui_dist_path.exists() {
         fs::create_dir_all(&ui_dist_path).expect("Failed to create ui/dist directory");
-    }
-
-    // Copy PWA manifest.json and sw.js from public to dist if they don't exist in dist
-    // Note: Vite will generate its own manifest.json during build, so we need to preserve
-    // the PWA manifest with a different name or handle it separately
-    let pwa_manifest_source = ui_public_path.join("manifest.json");
-    let pwa_manifest_dest = ui_dist_path.join("pwa-manifest.json");
-    let sw_source = ui_public_path.join("sw.js");
-    let sw_dest = ui_dist_path.join("sw.js");
-
-    if pwa_manifest_source.exists() && !pwa_manifest_dest.exists() {
-        fs::copy(&pwa_manifest_source, &pwa_manifest_dest)
-            .expect("Failed to copy PWA manifest.json from public to dist");
-    }
-
-    if sw_source.exists() && !sw_dest.exists() {
-        fs::copy(&sw_source, &sw_dest).expect("Failed to copy sw.js from public to dist");
     }
 
     // Try to run the UI build script, but don't fail if it doesn't exist or fails
@@ -86,9 +69,9 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", ui_dist_path.join("index.html").display());
     println!("cargo:rerun-if-changed={}", ui_dist_path.join("manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("pwa-manifest.json").display());
-    println!("cargo:rerun-if-changed={}", ui_dist_path.join("sw.js").display());
     println!("cargo:rerun-if-changed={}", ui_dist_path.join("assets").display());
+    println!("cargo:rerun-if-changed={}", ui_public_path.join("manifest.json").display());
+    println!("cargo:rerun-if-changed={}", ui_public_path.join("sw.js").display());
 
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let out_path = Path::new(&out_dir);

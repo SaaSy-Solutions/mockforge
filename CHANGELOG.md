@@ -1,7 +1,11 @@
-## [0.3.73] - 2026-03-04
+## [0.3.73] - 2026-03-05
 
 ### Fixed
 
+- **[UI]** Fix `cargo publish` failure for `mockforge-ui` caused by `build.rs` modifying source directory
+  - Removed code that copied `pwa-manifest.json` and `sw.js` into `ui/dist/` during build (violates cargo's source-dir-immutability rule)
+  - `serve_service_worker` now reads `sw.js` from `ui/public/` (same pattern as `serve_manifest`)
+  - Added `sw.js` to the crate's `include` list so it's packaged correctly
 - **[Core]** Mock server now supports `X-Mockforge-Response-Status` header to return non-default status codes (#79)
   - Conformance checks for `response:404` and `response:400` previously always failed because the server returned the first declared status (usually 200)
   - New `has_response_for_status()` validates the requested code exists in the spec before overriding

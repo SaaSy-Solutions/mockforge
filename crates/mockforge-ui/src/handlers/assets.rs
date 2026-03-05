@@ -116,7 +116,7 @@ pub async fn serve_manifest() -> impl IntoResponse {
 pub async fn serve_service_worker() -> impl IntoResponse {
     (
         [(http::header::CONTENT_TYPE, "application/javascript")],
-        include_str!("../../ui/dist/sw.js"),
+        include_str!("../../ui/public/sw.js"),
     )
 }
 

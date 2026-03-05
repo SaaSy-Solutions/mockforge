@@ -17,6 +17,7 @@ include = [
     "/ui/dist/**/*",
     "/ui/public/*.png",
     "/ui/public/manifest.json",
+    "/ui/public/sw.js",
     "/build.rs",
     "/build_ui.sh",
     "/Cargo.toml",
