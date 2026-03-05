@@ -33,8 +33,10 @@ fn main() {
     println!("cargo:info=Found {} proto files: {:?}", proto_files.len(), proto_files);
 
     // Configure tonic build
+    let descriptor_path = format!("{}/file_descriptor_set.bin", out_dir);
     let config = tonic_prost_build::configure()
         .out_dir(&out_dir)
+        .file_descriptor_set_path(&descriptor_path)
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
         .type_attribute(".", "#[allow(missing_docs)]");
 

@@ -34,7 +34,7 @@ impl ProtocolHandler for TestProtocolHandler {
         true
     }
 
-    fn set_enabled(&mut self, _enabled: bool) {
+    fn set_enabled(&self, _enabled: bool) {
         // No-op for test
     }
 
@@ -59,7 +59,7 @@ impl ProtocolHandler for TestProtocolHandler {
         HashMap::new()
     }
 
-    fn update_configuration(&mut self, _config: HashMap<String, String>) -> Result<()> {
+    fn update_configuration(&self, _config: HashMap<String, String>) -> Result<()> {
         Ok(())
     }
 }

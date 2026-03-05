@@ -183,8 +183,13 @@ impl VoiceSpecGenerator {
 
         let path_item = match path_item {
             ReferenceOr::Item(item) => item,
-            ReferenceOr::Reference { .. } => {
-                return Err(crate::Error::generic("Path reference not supported"));
+            ReferenceOr::Reference { reference } => {
+                tracing::warn!(
+                    "Skipping path '{}': uses $ref '{}' which cannot be modified in-place",
+                    endpoint.path,
+                    reference
+                );
+                return Ok(());
             }
         };
 

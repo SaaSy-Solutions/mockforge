@@ -30,7 +30,16 @@ mod ref_resolver {
                 let components = spec.components.as_ref()?;
                 match components.parameters.get(name)? {
                     ReferenceOr::Item(param) => Some(param),
-                    ReferenceOr::Reference { .. } => None, // No recursive ref chasing
+                    ReferenceOr::Reference {
+                        reference: inner_ref,
+                    } => {
+                        // One level of recursive resolution
+                        let inner_name = inner_ref.strip_prefix("#/components/parameters/")?;
+                        match components.parameters.get(inner_name)? {
+                            ReferenceOr::Item(param) => Some(param),
+                            ReferenceOr::Reference { .. } => None,
+                        }
+                    }
                 }
             }
         }
@@ -47,7 +56,16 @@ mod ref_resolver {
                 let components = spec.components.as_ref()?;
                 match components.request_bodies.get(name)? {
                     ReferenceOr::Item(body) => Some(body),
-                    ReferenceOr::Reference { .. } => None,
+                    ReferenceOr::Reference {
+                        reference: inner_ref,
+                    } => {
+                        // One level of recursive resolution
+                        let inner_name = inner_ref.strip_prefix("#/components/requestBodies/")?;
+                        match components.request_bodies.get(inner_name)? {
+                            ReferenceOr::Item(body) => Some(body),
+                            ReferenceOr::Reference { .. } => None,
+                        }
+                    }
                 }
             }
         }
@@ -107,7 +125,16 @@ mod ref_resolver {
                 let components = spec.components.as_ref()?;
                 match components.responses.get(name)? {
                     ReferenceOr::Item(resp) => Some(resp),
-                    ReferenceOr::Reference { .. } => None,
+                    ReferenceOr::Reference {
+                        reference: inner_ref,
+                    } => {
+                        // One level of recursive resolution
+                        let inner_name = inner_ref.strip_prefix("#/components/responses/")?;
+                        match components.responses.get(inner_name)? {
+                            ReferenceOr::Item(resp) => Some(resp),
+                            ReferenceOr::Reference { .. } => None,
+                        }
+                    }
                 }
             }
         }

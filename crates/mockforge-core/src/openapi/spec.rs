@@ -405,8 +405,30 @@ impl OpenApiSpec {
 
         let scheme = match scheme {
             ReferenceOr::Item(s) => s,
-            ReferenceOr::Reference { .. } => {
-                return Err(Error::generic("Referenced security schemes not supported"))
+            ReferenceOr::Reference { reference } => {
+                // Resolve $ref like "#/components/securitySchemes/BearerAuth"
+                let ref_name =
+                    reference.strip_prefix("#/components/securitySchemes/").ok_or_else(|| {
+                        Error::generic(format!(
+                            "Unsupported security scheme reference format: {}",
+                            reference
+                        ))
+                    })?;
+                match security_schemes.get(ref_name) {
+                    Some(ReferenceOr::Item(resolved)) => resolved,
+                    Some(ReferenceOr::Reference { .. }) => {
+                        return Err(Error::generic(format!(
+                            "Nested security scheme reference not supported: {}",
+                            ref_name
+                        )))
+                    }
+                    None => {
+                        return Err(Error::generic(format!(
+                            "Security scheme '{}' not found",
+                            ref_name
+                        )))
+                    }
+                }
             }
         };
 
@@ -492,6 +514,45 @@ impl OpenApiSpec {
 mod tests {
     use super::*;
     use openapiv3::{SchemaKind, Type};
+
+    #[test]
+    fn resolves_security_scheme_ref() {
+        let yaml = r#"
+openapi: 3.0.3
+info:
+  title: Test API
+  version: "1.0.0"
+paths:
+  /test:
+    get:
+      security:
+        - BearerRef: []
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    BearerRef:
+      $ref: '#/components/securitySchemes/BearerAuth'
+        "#;
+
+        let spec = OpenApiSpec::from_string(yaml, Some("yaml")).expect("spec parses");
+
+        // Bearer token should satisfy the referenced scheme
+        let result = spec
+            .is_security_scheme_satisfied("BearerRef", Some("Bearer token123"), None)
+            .expect("should resolve ref");
+        assert!(result);
+
+        // Missing token should fail
+        let result = spec
+            .is_security_scheme_satisfied("BearerRef", None, None)
+            .expect("should resolve ref");
+        assert!(!result);
+    }
 
     #[test]
     fn resolves_nested_schema_references() {

@@ -6,6 +6,7 @@
 
 pub mod http_bridge;
 pub mod proto_parser;
+pub mod router;
 pub mod service_generator;
 
 use crate::reflection::{MockReflectionProxy, ProxyConfig};
@@ -335,38 +336,27 @@ async fn start_grpc_only_server(
         Server::builder()
     };
 
-    // Start actual gRPC server on the specified port
-    info!(
-        "Starting gRPC server on {} with {} discovered services",
-        mockforge_core::wildcard_socket_addr(port),
-        registry_arc.service_names().len()
-    );
-
-    // Log discovered services
-    for service_name in registry_arc.service_names() {
-        info!("  - Service: {}", service_name);
-    }
-
-    // Create a basic gRPC server that at least starts successfully
-    // Full implementation would require generating actual service implementations
     use std::net::SocketAddr;
 
     let grpc_addr: SocketAddr = mockforge_core::wildcard_socket_addr(port);
 
-    info!("gRPC server listening on {} (basic implementation)", grpc_addr);
-    info!("Discovered services are logged but not yet fully implemented:");
+    // Log discovered services
+    info!(
+        "Starting gRPC server on {} with {} discovered services",
+        grpc_addr,
+        registry_arc.service_names().len()
+    );
     for service_name in registry_arc.service_names() {
-        info!("  - {}", service_name);
+        info!("  - Dynamic service: {}", service_name);
     }
 
-    // Create a basic gRPC server with the discovered services
+    // Build the built-in Greeter service
     use crate::generated::greeter_server::{Greeter, GreeterServer};
     use crate::generated::{HelloReply, HelloRequest};
     use tonic::{Request, Response, Status};
 
-    // Basic implementation of the Greeter service
     #[derive(Debug, Default)]
-    pub struct MockGreeterService;
+    struct MockGreeterService;
 
     use futures::StreamExt;
     use std::pin::Pin;
@@ -383,30 +373,22 @@ async fn start_grpc_only_server(
             request: Request<HelloRequest>,
         ) -> Result<Response<HelloReply>, Status> {
             info!("gRPC say_hello request: {:?}", request);
-
             let req = request.into_inner();
             let reply = HelloReply {
                 message: format!("Hello {}! This is a mock response from MockForge", req.name),
                 metadata: None,
                 items: vec![],
             };
-
             Ok(Response::new(reply))
         }
 
-        /// Server streaming: Returns multiple responses for a single request
         async fn say_hello_stream(
             &self,
             request: Request<HelloRequest>,
         ) -> Result<Response<Self::SayHelloStreamStream>, Status> {
             info!("gRPC say_hello_stream request: {:?}", request);
-            let req = request.into_inner();
-            let name = req.name.clone();
-
-            // Create a channel to send responses
+            let name = request.into_inner().name;
             let (tx, rx) = tokio::sync::mpsc::channel(128);
-
-            // Spawn a task to send multiple responses
             tokio::spawn(async move {
                 for i in 1..=5 {
                     let reply = HelloReply {
@@ -417,37 +399,27 @@ async fn start_grpc_only_server(
                         metadata: None,
                         items: vec![],
                     };
-
                     if tx.send(Ok(reply)).await.is_err() {
-                        // Client disconnected
                         break;
                     }
-
-                    // Small delay between messages to simulate streaming
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 }
             });
-
             let stream = ReceiverStream::new(rx);
             Ok(Response::new(Box::pin(stream) as Self::SayHelloStreamStream))
         }
 
-        /// Client streaming: Collects multiple requests and returns a single response
         async fn say_hello_client_stream(
             &self,
             request: Request<tonic::Streaming<HelloRequest>>,
         ) -> Result<Response<HelloReply>, Status> {
             info!("gRPC say_hello_client_stream started");
-
             let mut stream = request.into_inner();
             let mut names = Vec::new();
             let mut count = 0;
-
-            // Collect all incoming requests
             while let Some(req) = stream.next().await {
                 match req {
                     Ok(hello_request) => {
-                        info!("Received client stream message: {:?}", hello_request);
                         names.push(hello_request.name);
                         count += 1;
                     }
@@ -457,8 +429,6 @@ async fn start_grpc_only_server(
                     }
                 }
             }
-
-            // Create aggregated response
             let message = if names.is_empty() {
                 "Hello! No names received in the stream.".to_string()
             } else {
@@ -468,36 +438,26 @@ async fn start_grpc_only_server(
                     count
                 )
             };
-
-            let reply = HelloReply {
+            Ok(Response::new(HelloReply {
                 message,
                 metadata: None,
                 items: vec![],
-            };
-
-            Ok(Response::new(reply))
+            }))
         }
 
-        /// Bidirectional streaming: Echo back responses for each request
         async fn chat(
             &self,
             request: Request<tonic::Streaming<HelloRequest>>,
         ) -> Result<Response<Self::ChatStream>, Status> {
             info!("gRPC chat (bidirectional streaming) started");
-
             let mut stream = request.into_inner();
             let (tx, rx) = tokio::sync::mpsc::channel(128);
-
-            // Spawn a task to process incoming messages and send responses
             tokio::spawn(async move {
                 let mut message_count = 0;
-
                 while let Some(req) = stream.next().await {
                     match req {
                         Ok(hello_request) => {
                             message_count += 1;
-                            info!("Chat received: {:?}", hello_request);
-
                             let reply = HelloReply {
                                 message: format!(
                                     "Chat response {}: Hello {}! from MockForge",
@@ -506,9 +466,7 @@ async fn start_grpc_only_server(
                                 metadata: None,
                                 items: vec![],
                             };
-
                             if tx.send(Ok(reply)).await.is_err() {
-                                // Client disconnected
                                 break;
                             }
                         }
@@ -521,25 +479,20 @@ async fn start_grpc_only_server(
                         }
                     }
                 }
-
                 info!("Chat session ended after {} messages", message_count);
             });
-
             let output_stream = ReceiverStream::new(rx);
             Ok(Response::new(Box::pin(output_stream) as Self::ChatStream))
         }
     }
 
-    let greeter = MockGreeterService;
-
-    info!("gRPC server listening on {} with Greeter service", grpc_addr);
-
-    // Build the server with services
-    let mut router = server_builder.add_service(GreeterServer::new(greeter));
+    // Build tonic Routes with built-in services
+    let mut routes_builder = tonic::service::RoutesBuilder::default();
+    routes_builder.add_service(GreeterServer::new(MockGreeterService));
+    info!("Registered built-in Greeter service");
 
     // Add reflection service if enabled
     if config.enable_reflection {
-        // Build reflection service from the descriptor pool
         let encoded_fd_set = registry_arc.descriptor_pool().encode_to_vec();
         let reflection_service = ReflectionBuilder::configure()
             .register_encoded_file_descriptor_set(&encoded_fd_set)
@@ -551,13 +504,51 @@ async fn start_grpc_only_server(
                     e
                 ))
             })?;
-
-        router = router.add_service(reflection_service);
+        routes_builder.add_service(reflection_service);
         info!("gRPC reflection service enabled");
     }
 
-    router.serve(grpc_addr).await?;
+    // Convert to axum router and add dynamic service fallback
+    let registry_for_fallback = registry_arc.clone();
+    let axum_router =
+        routes_builder
+            .routes()
+            .into_axum_router()
+            .fallback(move |req: axum::extract::Request| {
+                let registry = registry_for_fallback.clone();
+                async move {
+                    let path = req.uri().path().to_string();
+                    match router::parse_grpc_path(&path) {
+                        Some((service_name, method_name)) => {
+                            // Collect the request body (limit to 4MB)
+                            let body = axum::body::to_bytes(req.into_body(), 4 * 1024 * 1024)
+                                .await
+                                .unwrap_or_default();
 
+                            match router::handle_dynamic_grpc_request(
+                                &registry,
+                                service_name,
+                                method_name,
+                                body,
+                            )
+                            .await
+                            {
+                                Ok(response) => response,
+                                Err(status) => router::create_grpc_error_response(status),
+                            }
+                        }
+                        None => router::create_grpc_error_response(Status::unimplemented(
+                            "Unknown path",
+                        )),
+                    }
+                }
+            });
+
+    // Convert back to tonic Routes and serve with the configured server
+    let routes = tonic::service::Routes::from(axum_router);
+    server_builder.add_routes(routes).serve(grpc_addr).await?;
+
+    info!("gRPC server stopped");
     Ok(())
 }
 

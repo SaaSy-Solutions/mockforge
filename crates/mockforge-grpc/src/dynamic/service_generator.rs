@@ -695,6 +695,11 @@ impl DynamicGrpcService {
         &self.service.name
     }
 
+    /// Get the mock response for a method, if one exists
+    pub fn get_mock_response(&self, method_name: &str) -> Option<&MockResponse> {
+        self.mock_responses.get(method_name)
+    }
+
     /// Set a custom mock response for a method
     pub fn set_mock_response(&mut self, method_name: &str, response: MockResponse) {
         self.mock_responses.insert(method_name.to_string(), response);

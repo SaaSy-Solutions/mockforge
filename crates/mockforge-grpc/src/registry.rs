@@ -105,6 +105,16 @@ impl GrpcProtoRegistry {
 
     /// Generate mock data from a message descriptor
     fn generate_mock_from_descriptor(descriptor: &MessageDescriptor) -> serde_json::Value {
+        Self::generate_mock_from_descriptor_with_depth(descriptor, 0)
+    }
+
+    /// Generate mock data with depth tracking to prevent infinite recursion
+    fn generate_mock_from_descriptor_with_depth(
+        descriptor: &MessageDescriptor,
+        depth: usize,
+    ) -> serde_json::Value {
+        const MAX_DEPTH: usize = 5;
+
         let mut fields = serde_json::Map::new();
 
         for field in descriptor.fields() {
@@ -140,11 +150,22 @@ impl GrpcProtoRegistry {
                     }
                 }
                 prost_reflect::Kind::Bytes => serde_json::json!("mock_bytes"),
-                prost_reflect::Kind::Message(_msg_desc) => {
-                    // Nested message - generate recursively or use simple mock
-                    serde_json::json!({})
+                prost_reflect::Kind::Message(msg_desc) => {
+                    if depth < MAX_DEPTH {
+                        Self::generate_mock_from_descriptor_with_depth(&msg_desc, depth + 1)
+                    } else {
+                        serde_json::json!({})
+                    }
                 }
-                prost_reflect::Kind::Enum(_enum_desc) => serde_json::json!(0),
+                prost_reflect::Kind::Enum(enum_desc) => {
+                    // Use first non-zero value if available
+                    let val = enum_desc
+                        .values()
+                        .find(|v| v.number() != 0)
+                        .map(|v| v.number())
+                        .unwrap_or(0);
+                    serde_json::json!(val)
+                }
             };
 
             fields.insert(field_name.to_string(), mock_value);

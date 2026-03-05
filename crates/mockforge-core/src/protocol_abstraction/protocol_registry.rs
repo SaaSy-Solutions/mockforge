@@ -10,6 +10,11 @@ use std::sync::Arc;
 use super::{Protocol, ProtocolRequest, ProtocolResponse, SpecRegistry};
 
 /// Trait for protocol-specific handlers
+///
+/// Methods that modify state (`set_enabled`, `update_configuration`) take `&self`
+/// rather than `&mut self` because handlers are stored as `Arc<dyn ProtocolHandler>`.
+/// Implementations should use interior mutability (e.g., `Mutex`, `RwLock`) for
+/// mutable fields.
 #[async_trait::async_trait]
 pub trait ProtocolHandler: Send + Sync {
     /// Get the protocol this handler supports
@@ -18,8 +23,9 @@ pub trait ProtocolHandler: Send + Sync {
     /// Check if this handler is enabled
     fn is_enabled(&self) -> bool;
 
-    /// Enable or disable this protocol handler
-    fn set_enabled(&mut self, enabled: bool);
+    /// Enable or disable this protocol handler.
+    /// Implementors should use interior mutability (e.g., `Mutex<bool>`).
+    fn set_enabled(&self, enabled: bool);
 
     /// Get the spec registry for this protocol if available
     fn spec_registry(&self) -> Option<&dyn SpecRegistry>;
@@ -33,8 +39,9 @@ pub trait ProtocolHandler: Send + Sync {
     /// Get handler-specific configuration as key-value pairs
     fn get_configuration(&self) -> HashMap<String, String>;
 
-    /// Update handler configuration from key-value pairs
-    fn update_configuration(&mut self, config: HashMap<String, String>) -> Result<()>;
+    /// Update handler configuration from key-value pairs.
+    /// Implementors should use interior mutability (e.g., `Mutex<HashMap<..>>`).
+    fn update_configuration(&self, config: HashMap<String, String>) -> Result<()>;
 }
 
 /// Protocol registry for managing multiple protocol handlers
@@ -152,16 +159,15 @@ impl ProtocolRegistry {
 
     /// Update configuration for a specific protocol
     pub fn update_protocol_configuration(
-        &mut self,
+        &self,
         protocol: Protocol,
-        _config: HashMap<String, String>,
+        config: HashMap<String, String>,
     ) -> Result<()> {
-        // Note: Configuration updates are not supported for handlers stored in Arc
-        // This would require a different design where handlers can be mutated
-        Err(crate::Error::generic(format!(
-            "Configuration updates not supported for protocol: {}",
-            protocol
-        )))
+        if let Some(handler) = self.handlers.get(&protocol) {
+            handler.update_configuration(config)
+        } else {
+            Err(crate::Error::protocol_not_found(protocol.to_string()))
+        }
     }
 }
 
@@ -203,7 +209,7 @@ mod tests {
             *self.enabled.lock().unwrap()
         }
 
-        fn set_enabled(&mut self, enabled: bool) {
+        fn set_enabled(&self, enabled: bool) {
             *self.enabled.lock().unwrap() = enabled;
         }
 
@@ -228,7 +234,7 @@ mod tests {
             self.config.lock().unwrap().clone()
         }
 
-        fn update_configuration(&mut self, config: HashMap<String, String>) -> Result<()> {
+        fn update_configuration(&self, config: HashMap<String, String>) -> Result<()> {
             *self.config.lock().unwrap() = config;
             Ok(())
         }
@@ -300,6 +306,32 @@ mod tests {
         };
 
         let result = futures::executor::block_on(registry.handle_request(request));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_protocol_configuration() {
+        let mut registry = ProtocolRegistry::new();
+        let handler = Arc::new(MockProtocolHandler::new(Protocol::Http));
+        registry.register_handler(handler).unwrap();
+
+        // Update configuration
+        let mut config = HashMap::new();
+        config.insert("timeout".to_string(), "30".to_string());
+        config.insert("retries".to_string(), "3".to_string());
+        registry.update_protocol_configuration(Protocol::Http, config.clone()).unwrap();
+
+        // Verify round-trip
+        let configs = registry.get_all_configurations();
+        let http_config = configs.get(&Protocol::Http).unwrap();
+        assert_eq!(http_config.get("timeout").unwrap(), "30");
+        assert_eq!(http_config.get("retries").unwrap(), "3");
+    }
+
+    #[test]
+    fn test_update_protocol_configuration_not_found() {
+        let registry = ProtocolRegistry::new();
+        let result = registry.update_protocol_configuration(Protocol::Http, HashMap::new());
         assert!(result.is_err());
     }
 }
