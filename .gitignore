@@ -158,6 +158,7 @@ vscode-extension/*.vsix
 
 # Generated files
 desktop-app/gen/
+conformance-report.json
 
 # Test data (databases, fixtures)
 tests/data/
