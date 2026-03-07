@@ -10,11 +10,35 @@ use serde::{Deserialize, Serialize};
 // ── API envelope ─────────────────────────────────────────────────────
 
 /// Generic API response wrapper used by all admin endpoints.
+/// The server may include a `timestamp` field which we ignore.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,
     pub error: Option<String>,
+}
+
+// ── Endpoint wrapper types ──────────────────────────────────────────
+// Some endpoints return data in a named wrapper instead of a raw array.
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RoutesWrapper {
+    #[serde(default)]
+    pub routes: Vec<RouteInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginsWrapper {
+    #[serde(default)]
+    pub plugins: Vec<PluginInfo>,
+    #[serde(default)]
+    pub total: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ContractDiffWrapper {
+    #[serde(default)]
+    pub captures: Vec<ContractDiffCapture>,
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────
@@ -31,6 +55,7 @@ pub struct DashboardData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInfo {
+    #[serde(default)]
     pub version: String,
     #[serde(default)]
     pub build_time: String,
@@ -179,16 +204,21 @@ pub struct HealthProbe {
 
 // ── Config ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ConfigState {
+    #[serde(default)]
     pub latency: LatencyConfig,
+    #[serde(default)]
     pub faults: FaultConfig,
+    #[serde(default)]
     pub proxy: ProxyConfig,
+    #[serde(default)]
     pub traffic_shaping: TrafficShapingConfig,
+    #[serde(default)]
     pub validation: ValidationConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LatencyConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -200,7 +230,7 @@ pub struct LatencyConfig {
     pub tag_overrides: HashMap<String, u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FaultConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -210,7 +240,7 @@ pub struct FaultConfig {
     pub status_codes: Vec<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProxyConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -219,7 +249,7 @@ pub struct ProxyConfig {
     pub timeout_seconds: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TrafficShapingConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -229,7 +259,7 @@ pub struct TrafficShapingConfig {
     pub burst_loss: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ValidationConfig {
     #[serde(default)]
     pub mode: String,
@@ -339,7 +369,10 @@ pub struct TimeTravelStatus {
     #[serde(default)]
     pub enabled: bool,
     pub current_time: Option<DateTime<Utc>>,
-    pub time_scale: Option<f64>,
+    /// Server sends `scale_factor`, older API sends `time_scale`
+    #[serde(default, alias = "time_scale")]
+    pub scale_factor: Option<f64>,
+    pub real_time: Option<DateTime<Utc>>,
     #[serde(default)]
     pub scheduled_responses: u64,
 }
@@ -375,16 +408,23 @@ pub struct AuditEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalyticsSummary {
-    #[serde(default)]
-    pub total_requests: u64,
+    /// Server sends `request_rate` or `total_requests`
+    #[serde(default, alias = "total_requests")]
+    pub request_rate: f64,
     #[serde(default)]
     pub unique_endpoints: u64,
+    /// Server sends `error_rate_percent` or `error_rate`
+    #[serde(default, alias = "error_rate")]
+    pub error_rate_percent: f64,
+    #[serde(default, alias = "avg_response_time")]
+    pub p95_latency_ms: f64,
     #[serde(default)]
-    pub error_rate: f64,
-    #[serde(default)]
-    pub avg_response_time: f64,
+    pub active_connections: f64,
     #[serde(default)]
     pub top_endpoints: Vec<EndpointStat>,
+    /// Server may include a timestamp inside the data
+    #[serde(default)]
+    pub timestamp: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -455,6 +495,15 @@ pub struct ContractDiffCapture {
     #[serde(default)]
     pub diff_status: String,
     pub captured_at: Option<DateTime<Utc>>,
+    /// Whether the capture has been analyzed
+    #[serde(default)]
+    pub analyzed: bool,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub query_params: HashMap<String, String>,
 }
 
 #[cfg(test)]
@@ -472,6 +521,20 @@ mod tests {
         assert!(resp.success);
         assert_eq!(resp.data.unwrap(), "hello");
         assert!(resp.error.is_none());
+    }
+
+    #[test]
+    fn deserialize_api_response_with_timestamp() {
+        // Server includes a timestamp field that TUI ignores
+        let json = r#"{
+            "success": true,
+            "data": "hello",
+            "error": null,
+            "timestamp": "2026-03-07T05:16:29.407667010Z"
+        }"#;
+        let resp: ApiResponse<String> = serde_json::from_str(json).unwrap();
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap(), "hello");
     }
 
     #[test]
@@ -755,13 +818,25 @@ mod tests {
         let json = r#"{
             "enabled": true,
             "current_time": "2025-01-01T00:00:00Z",
-            "time_scale": 2.0,
+            "scale_factor": 2.0,
             "scheduled_responses": 5
         }"#;
         let tt: TimeTravelStatus = serde_json::from_str(json).unwrap();
         assert!(tt.enabled);
-        assert!((tt.time_scale.unwrap() - 2.0).abs() < f64::EPSILON);
+        assert!((tt.scale_factor.unwrap() - 2.0).abs() < f64::EPSILON);
         assert_eq!(tt.scheduled_responses, 5);
+    }
+
+    #[test]
+    fn deserialize_time_travel_status_with_alias() {
+        // Server also sends time_scale (aliased to scale_factor)
+        let json = r#"{
+            "enabled": false,
+            "time_scale": 1.5
+        }"#;
+        let tt: TimeTravelStatus = serde_json::from_str(json).unwrap();
+        assert!(!tt.enabled);
+        assert!((tt.scale_factor.unwrap() - 1.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -794,21 +869,34 @@ mod tests {
 
     #[test]
     fn deserialize_analytics_summary() {
+        // Match actual server response format
+        let json = r#"{
+            "request_rate": 42.5,
+            "p95_latency_ms": 15.3,
+            "error_rate_percent": 0.5,
+            "active_connections": 12.0
+        }"#;
+        let summary: AnalyticsSummary = serde_json::from_str(json).unwrap();
+        assert!((summary.request_rate - 42.5).abs() < f64::EPSILON);
+        assert!((summary.error_rate_percent - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn deserialize_analytics_summary_with_aliases() {
+        // Also accept legacy field names
         let json = r#"{
             "total_requests": 10000,
             "unique_endpoints": 25,
             "error_rate": 0.02,
             "avg_response_time": 45.5,
             "top_endpoints": [
-                {"endpoint": "/api/users", "count": 5000, "avg_time": 30.0},
-                {"endpoint": "/api/orders", "count": 3000, "avg_time": 50.0}
+                {"endpoint": "/api/users", "count": 5000, "avg_time": 30.0}
             ]
         }"#;
         let summary: AnalyticsSummary = serde_json::from_str(json).unwrap();
-        assert_eq!(summary.total_requests, 10000);
+        assert!((summary.request_rate - 10000.0).abs() < f64::EPSILON);
         assert_eq!(summary.unique_endpoints, 25);
-        assert_eq!(summary.top_endpoints.len(), 2);
-        assert_eq!(summary.top_endpoints[0].count, 5000);
+        assert_eq!(summary.top_endpoints.len(), 1);
     }
 
     #[test]

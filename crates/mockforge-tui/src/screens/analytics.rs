@@ -63,9 +63,17 @@ impl Screen for AnalyticsScreen {
             .border_style(Theme::dim())
             .style(Theme::surface());
 
-        let total_requests = data.get("total_requests").and_then(|v| v.as_u64()).unwrap_or(0);
+        let total_requests = data
+            .get("request_rate")
+            .or_else(|| data.get("total_requests"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         let unique_endpoints = data.get("unique_endpoints").and_then(|v| v.as_u64()).unwrap_or(0);
-        let error_rate = data.get("error_rate").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let error_rate = data
+            .get("error_rate_percent")
+            .or_else(|| data.get("error_rate"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
 
         let error_style = if error_rate > 0.05 {
             Theme::error()
@@ -76,8 +84,8 @@ impl Screen for AnalyticsScreen {
         let lines = vec![
             Line::from(""),
             Line::from(vec![
-                Span::styled("  Total Requests:    ", Theme::dim()),
-                Span::styled(total_requests.to_string(), Style::default().fg(Theme::FG)),
+                Span::styled("  Request Rate:      ", Theme::dim()),
+                Span::styled(format!("{total_requests:.1}/s"), Style::default().fg(Theme::FG)),
             ]),
             Line::from(vec![
                 Span::styled("  Unique Endpoints:  ", Theme::dim()),
@@ -107,10 +115,11 @@ impl Screen for AnalyticsScreen {
             match client.get_analytics_summary().await {
                 Ok(data) => {
                     let json = serde_json::json!({
-                        "total_requests": data.total_requests,
+                        "request_rate": data.request_rate,
                         "unique_endpoints": data.unique_endpoints,
-                        "error_rate": data.error_rate,
-                        "avg_response_time": data.avg_response_time,
+                        "error_rate_percent": data.error_rate_percent,
+                        "p95_latency_ms": data.p95_latency_ms,
+                        "active_connections": data.active_connections,
                     });
                     let payload = serde_json::to_string(&json).unwrap_or_default();
                     let _ = tx.send(Event::Data {

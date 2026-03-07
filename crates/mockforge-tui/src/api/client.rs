@@ -56,33 +56,87 @@ impl MockForgeClient {
         req
     }
 
-    /// Send a GET and unwrap the `ApiResponse<T>` envelope.
+    /// Send a GET, check for JSON content type, and unwrap the `ApiResponse<T>` envelope.
     async fn get_api<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let resp: ApiResponse<T> = self
-            .get(path)
-            .send()
-            .await
-            .with_context(|| format!("GET {path}"))?
-            .json()
-            .await
+        let resp = self.get(path).send().await.with_context(|| format!("GET {path}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from {path}");
+        }
+
+        // Guard against HTML responses from the SPA fallback (endpoint doesn't exist).
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint {path} not available (got HTML)");
+        }
+
+        let body = resp.text().await.with_context(|| format!("read body from {path}"))?;
+
+        let envelope: ApiResponse<T> = serde_json::from_str(&body)
             .with_context(|| format!("deserialise response from {path}"))?;
 
-        if resp.success {
-            resp.data.context("API returned success but no data")
+        if envelope.success {
+            envelope.data.context("API returned success but no data")
         } else {
-            anyhow::bail!("API error: {}", resp.error.unwrap_or_else(|| "unknown".into()))
+            anyhow::bail!("API error: {}", envelope.error.unwrap_or_else(|| "unknown".into()))
         }
     }
 
-    /// Send a GET and return raw JSON (for endpoints that don't use `ApiResponse`).
+    /// Send a GET, check for JSON content type, and return raw JSON.
     async fn get_raw<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        self.get(path)
-            .send()
-            .await
-            .with_context(|| format!("GET {path}"))?
-            .json()
-            .await
-            .with_context(|| format!("deserialise response from {path}"))
+        let resp = self.get(path).send().await.with_context(|| format!("GET {path}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from {path}");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint {path} not available (got HTML)");
+        }
+
+        let body = resp.text().await.with_context(|| format!("read body from {path}"))?;
+
+        serde_json::from_str(&body).with_context(|| format!("deserialise response from {path}"))
+    }
+
+    /// POST helper that expects an `ApiResponse<String>` result.
+    async fn post_api(&self, path: &str, body: &serde_json::Value) -> Result<String> {
+        let resp = self.post(path, body).send().await.with_context(|| format!("POST {path}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from {path}");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint {path} not available");
+        }
+
+        let body_text = resp.text().await.context("read POST response body")?;
+        let envelope: ApiResponse<String> = serde_json::from_str(&body_text)
+            .with_context(|| format!("deserialise response from {path}"))?;
+
+        if envelope.success {
+            Ok(envelope.data.unwrap_or_default())
+        } else {
+            anyhow::bail!("API error: {}", envelope.error.unwrap_or_else(|| "unknown".into()))
+        }
     }
 
     // ── Tier 1 endpoints ─────────────────────────────────────────────
@@ -92,7 +146,43 @@ impl MockForgeClient {
     }
 
     pub async fn get_routes(&self) -> Result<Vec<RouteInfo>> {
-        self.get_api("/__mockforge/routes").await
+        // Server may return ApiResponse<Vec<RouteInfo>> or {"routes": [...]}
+        let resp = self
+            .get("/__mockforge/routes")
+            .send()
+            .await
+            .context("GET /__mockforge/routes")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from /__mockforge/routes");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint /__mockforge/routes not available");
+        }
+
+        let body = resp.text().await.context("read routes response")?;
+
+        // Try ApiResponse envelope first
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<Vec<RouteInfo>>>(&body) {
+            if envelope.success {
+                return envelope.data.context("routes: no data");
+            }
+        }
+
+        // Try {"routes": [...]} wrapper
+        if let Ok(wrapper) = serde_json::from_str::<RoutesWrapper>(&body) {
+            return Ok(wrapper.routes);
+        }
+
+        // Try raw array
+        serde_json::from_str::<Vec<RouteInfo>>(&body).context("deserialise routes response")
     }
 
     pub async fn get_logs(&self, limit: Option<u32>) -> Result<Vec<RequestLog>> {
@@ -116,11 +206,79 @@ impl MockForgeClient {
     }
 
     pub async fn get_server_info(&self) -> Result<ServerInfo> {
-        self.get_api("/__mockforge/server-info").await
+        // Server may return ApiResponse<ServerInfo> or raw ServerInfo
+        let resp = self
+            .get("/__mockforge/server-info")
+            .send()
+            .await
+            .context("GET /__mockforge/server-info")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from /__mockforge/server-info");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint /__mockforge/server-info not available");
+        }
+
+        let body = resp.text().await.context("read server-info response")?;
+
+        // Try ApiResponse envelope first
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<ServerInfo>>(&body) {
+            if envelope.success {
+                return envelope.data.context("server-info: no data");
+            }
+        }
+
+        // Try raw ServerInfo
+        serde_json::from_str::<ServerInfo>(&body).context("deserialise server-info response")
     }
 
     pub async fn get_plugins(&self) -> Result<Vec<PluginInfo>> {
-        self.get_api("/__mockforge/plugins").await
+        // Server returns ApiResponse<{"plugins": [...], "total": N}>
+        let resp = self
+            .get("/__mockforge/plugins")
+            .send()
+            .await
+            .context("GET /__mockforge/plugins")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from /__mockforge/plugins");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint /__mockforge/plugins not available");
+        }
+
+        let body = resp.text().await.context("read plugins response")?;
+
+        // Try ApiResponse<Vec<PluginInfo>> first
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<Vec<PluginInfo>>>(&body) {
+            if envelope.success {
+                return envelope.data.context("plugins: no data");
+            }
+        }
+
+        // Try ApiResponse<PluginsWrapper>
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<PluginsWrapper>>(&body) {
+            if envelope.success {
+                return Ok(envelope.data.map(|w| w.plugins).unwrap_or_default());
+            }
+        }
+
+        Ok(Vec::new())
     }
 
     pub async fn get_fixtures(&self) -> Result<Vec<FixtureInfo>> {
@@ -146,19 +304,8 @@ impl MockForgeClient {
     }
 
     pub async fn toggle_chaos(&self, enabled: bool) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/chaos/toggle", &serde_json::json!({ "enabled": enabled }))
-            .send()
+        self.post_api("/__mockforge/chaos/toggle", &serde_json::json!({ "enabled": enabled }))
             .await
-            .context("POST chaos/toggle")?
-            .json()
-            .await
-            .context("deserialise chaos toggle response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!("chaos toggle failed: {}", resp.error.unwrap_or_else(|| "unknown".into()))
-        }
     }
 
     pub async fn get_chaos_scenarios(&self) -> Result<serde_json::Value> {
@@ -166,47 +313,35 @@ impl MockForgeClient {
     }
 
     pub async fn start_chaos_scenario(&self, name: &str) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post(&format!("/__mockforge/chaos/scenarios/{name}"), &serde_json::json!({}))
-            .send()
+        self.post_api(&format!("/__mockforge/chaos/scenarios/{name}"), &serde_json::json!({}))
             .await
-            .context("POST chaos/scenarios start")?
-            .json()
-            .await
-            .context("deserialise chaos scenario response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "start scenario failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
     }
 
     pub async fn stop_chaos_scenario(&self, name: &str) -> Result<String> {
         let url = format!("{}/__mockforge/chaos/scenarios/{name}", self.base_url);
-        let resp: ApiResponse<String> = self
-            .client
-            .delete(&url)
-            .send()
-            .await
-            .context("DELETE chaos/scenarios stop")?
-            .json()
-            .await
-            .context("deserialise chaos scenario stop response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
+        let resp = self.client.delete(&url).send().await.context("DELETE chaos/scenarios stop")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from chaos stop");
+        }
+
+        let body = resp.text().await.context("read chaos stop response")?;
+        let envelope: ApiResponse<String> =
+            serde_json::from_str(&body).context("deserialise chaos stop response")?;
+        if envelope.success {
+            Ok(envelope.data.unwrap_or_default())
         } else {
             anyhow::bail!(
                 "stop scenario failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
+                envelope.error.unwrap_or_else(|| "unknown".into())
             )
         }
     }
 
     pub async fn get_time_travel_status(&self) -> Result<TimeTravelStatus> {
-        self.get_api("/__mockforge/time-travel/status").await
+        // Server returns raw TimeTravelStatus, not ApiResponse-wrapped
+        self.get_raw("/__mockforge/time-travel/status").await
     }
 
     pub async fn get_chains(&self) -> Result<Vec<ChainInfo>> {
@@ -228,7 +363,44 @@ impl MockForgeClient {
     }
 
     pub async fn get_contract_diff_captures(&self) -> Result<Vec<ContractDiffCapture>> {
-        self.get_api("/__mockforge/contract-diff/captures").await
+        // Server returns {"captures": [...]} not ApiResponse-wrapped
+        let resp = self
+            .get("/__mockforge/contract-diff/captures")
+            .send()
+            .await
+            .context("GET /__mockforge/contract-diff/captures")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from contract-diff/captures");
+        }
+
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint contract-diff/captures not available");
+        }
+
+        let body = resp.text().await.context("read contract-diff response")?;
+
+        // Try {"captures": [...]} wrapper first (actual server format)
+        if let Ok(wrapper) = serde_json::from_str::<ContractDiffWrapper>(&body) {
+            return Ok(wrapper.captures);
+        }
+
+        // Try ApiResponse envelope
+        if let Ok(envelope) = serde_json::from_str::<ApiResponse<Vec<ContractDiffCapture>>>(&body) {
+            if envelope.success {
+                return envelope.data.context("contract-diff: no data");
+            }
+        }
+
+        // Try raw array
+        serde_json::from_str::<Vec<ContractDiffCapture>>(&body)
+            .context("deserialise contract-diff response")
     }
 
     // ── Behavioral cloning / VBR ───────────────────────────────────
@@ -240,135 +412,82 @@ impl MockForgeClient {
     // ── Config mutations ─────────────────────────────────────────────
 
     pub async fn update_latency(&self, config: &LatencyConfig) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/config/latency", config)
-            .send()
+        self.post_api("/__mockforge/config/latency", &serde_json::to_value(config)?)
             .await
-            .context("POST config/latency")?
-            .json()
-            .await
-            .context("deserialise latency response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "update latency failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
     }
 
     pub async fn update_faults(&self, config: &FaultConfig) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/config/faults", config)
-            .send()
+        self.post_api("/__mockforge/config/faults", &serde_json::to_value(config)?)
             .await
-            .context("POST config/faults")?
-            .json()
-            .await
-            .context("deserialise faults response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "update faults failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
     }
 
     pub async fn update_proxy(&self, config: &ProxyConfig) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/config/proxy", config)
-            .send()
-            .await
-            .context("POST config/proxy")?
-            .json()
-            .await
-            .context("deserialise proxy response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!("update proxy failed: {}", resp.error.unwrap_or_else(|| "unknown".into()))
-        }
+        self.post_api("/__mockforge/config/proxy", &serde_json::to_value(config)?).await
     }
 
     // ── Verification ─────────────────────────────────────────────────
 
     pub async fn verify(&self, query: &serde_json::Value) -> Result<VerificationResult> {
-        let resp: ApiResponse<VerificationResult> = self
+        let resp = self
             .post("/__mockforge/verification/verify", query)
             .send()
             .await
-            .context("POST verification/verify")?
-            .json()
-            .await
-            .context("deserialise verification response")?;
-        if resp.success {
-            resp.data.context("verification returned no data")
+            .context("POST verification/verify")?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from verification/verify");
+        }
+
+        let body = resp.text().await.context("read verification response")?;
+        let envelope: ApiResponse<VerificationResult> =
+            serde_json::from_str(&body).context("deserialise verification response")?;
+
+        if envelope.success {
+            envelope.data.context("verification returned no data")
         } else {
-            anyhow::bail!("verification failed: {}", resp.error.unwrap_or_else(|| "unknown".into()))
+            anyhow::bail!(
+                "verification failed: {}",
+                envelope.error.unwrap_or_else(|| "unknown".into())
+            )
         }
     }
 
     // ── Time travel mutations ────────────────────────────────────────
 
     pub async fn enable_time_travel(&self) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/time-travel/enable", &serde_json::json!({}))
-            .send()
-            .await
-            .context("POST time-travel/enable")?
-            .json()
-            .await
-            .context("deserialise time-travel response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "enable time-travel failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
+        self.post_api("/__mockforge/time-travel/enable", &serde_json::json!({})).await
     }
 
     pub async fn disable_time_travel(&self) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/time-travel/disable", &serde_json::json!({}))
-            .send()
-            .await
-            .context("POST time-travel/disable")?
-            .json()
-            .await
-            .context("deserialise time-travel response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "disable time-travel failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
+        self.post_api("/__mockforge/time-travel/disable", &serde_json::json!({})).await
     }
 
     // ── Chain execution ──────────────────────────────────────────────
 
     pub async fn execute_chain(&self, id: &str) -> Result<serde_json::Value> {
         let path = format!("/__mockforge/chains/{id}/execute");
-        let resp: ApiResponse<serde_json::Value> = self
+        let resp = self
             .post(&path, &serde_json::json!({}))
             .send()
             .await
-            .with_context(|| format!("POST chains/{id}/execute"))?
-            .json()
-            .await
-            .context("deserialise chain execution response")?;
-        if resp.success {
-            resp.data.context("chain execution returned no data")
+            .with_context(|| format!("POST {path}"))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from {path}");
+        }
+
+        let body = resp.text().await.context("read chain execution response")?;
+        let envelope: ApiResponse<serde_json::Value> =
+            serde_json::from_str(&body).context("deserialise chain execution response")?;
+
+        if envelope.success {
+            envelope.data.context("chain execution returned no data")
         } else {
             anyhow::bail!(
                 "chain execution failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
+                envelope.error.unwrap_or_else(|| "unknown".into())
             )
         }
     }
@@ -380,22 +499,7 @@ impl MockForgeClient {
     }
 
     pub async fn clear_import_history(&self) -> Result<String> {
-        let resp: ApiResponse<String> = self
-            .post("/__mockforge/import/history/clear", &serde_json::json!({}))
-            .send()
-            .await
-            .context("POST import/history/clear")?
-            .json()
-            .await
-            .context("deserialise import clear response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "clear import history failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
+        self.post_api("/__mockforge/import/history/clear", &serde_json::json!({})).await
     }
 
     // ── Recorder ─────────────────────────────────────────────────────
@@ -410,44 +514,17 @@ impl MockForgeClient {
         } else {
             "/__mockforge/recorder/stop"
         };
-        let resp: ApiResponse<String> = self
-            .post(path, &serde_json::json!({}))
-            .send()
-            .await
-            .with_context(|| format!("POST {path}"))?
-            .json()
-            .await
-            .context("deserialise recorder toggle response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "recorder toggle failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
+        self.post_api(path, &serde_json::json!({})).await
     }
 
     // ── Workspace activation ──────────────────────────────────────────
 
     pub async fn activate_workspace(&self, workspace_id: &str) -> Result<String> {
-        let path = format!("/__mockforge/workspaces/{workspace_id}/activate");
-        let resp: ApiResponse<String> = self
-            .post(&path, &serde_json::json!({}))
-            .send()
-            .await
-            .with_context(|| format!("POST {path}"))?
-            .json()
-            .await
-            .context("deserialise workspace activation response")?;
-        if resp.success {
-            Ok(resp.data.unwrap_or_default())
-        } else {
-            anyhow::bail!(
-                "workspace activation failed: {}",
-                resp.error.unwrap_or_else(|| "unknown".into())
-            )
-        }
+        self.post_api(
+            &format!("/__mockforge/workspaces/{workspace_id}/activate"),
+            &serde_json::json!({}),
+        )
+        .await
     }
 
     // ── World State ──────────────────────────────────────────────────

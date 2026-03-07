@@ -31,7 +31,16 @@ impl AnalyticsDatabase {
         let db_url = if database_path.to_str() == Some(":memory:") {
             "sqlite::memory:".to_string()
         } else {
-            format!("sqlite://{}", database_path.display())
+            // Ensure parent directory exists so SQLite can create the file.
+            if let Some(parent) = database_path.parent() {
+                if !parent.as_os_str().is_empty() && !parent.exists() {
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        error!("Failed to create analytics database directory: {}", e);
+                        AnalyticsError::Database(sqlx::Error::Io(e))
+                    })?;
+                }
+            }
+            format!("sqlite://{}?mode=rwc", database_path.display())
         };
 
         info!("Connecting to analytics database: {}", db_url);

@@ -103,7 +103,8 @@ impl Screen for TimeTravelScreen {
         let enabled = data.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
         let current_time = data.get("current_time").and_then(|v| v.as_str()).unwrap_or("--");
         let time_scale = data
-            .get("time_scale")
+            .get("scale_factor")
+            .or_else(|| data.get("time_scale"))
             .and_then(|v| v.as_f64())
             .map(|s| format!("{s:.1}x"))
             .unwrap_or_else(|| "--".to_string());
@@ -162,7 +163,7 @@ impl Screen for TimeTravelScreen {
                                 let json = serde_json::json!({
                                     "enabled": data.enabled,
                                     "current_time": data.current_time,
-                                    "time_scale": data.time_scale,
+                                    "scale_factor": data.scale_factor,
                                     "scheduled_responses": data.scheduled_responses,
                                 });
                                 let payload = serde_json::to_string(&json).unwrap_or_default();
@@ -205,7 +206,7 @@ impl Screen for TimeTravelScreen {
                     let json = serde_json::json!({
                         "enabled": data.enabled,
                         "current_time": data.current_time,
-                        "time_scale": data.time_scale,
+                        "scale_factor": data.scale_factor,
                         "scheduled_responses": data.scheduled_responses,
                     });
                     let payload = serde_json::to_string(&json).unwrap_or_default();
