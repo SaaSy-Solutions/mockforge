@@ -288,7 +288,10 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
     let method = request.method().as_str();
     let headers = request.headers();
 
-    // Skip RBAC for public routes
+    // Skip RBAC for public routes.
+    // All GET requests to /__mockforge/* are read-only admin data — the admin server
+    // is already on a separate port that users explicitly enable with --admin, so
+    // requiring auth for read-only access is unnecessary and blocks tools like the TUI.
     let is_public_route = path == "/"
         || path.starts_with("/assets/")
         || path == "/__mockforge/auth/login"
@@ -298,7 +301,8 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
         || path.starts_with("/mockforge-")
         || path == "/manifest.json"
         || path == "/sw.js"
-        || path == "/api-docs";
+        || path == "/api-docs"
+        || (method == "GET" && path.starts_with("/__mockforge/"));
 
     if is_public_route {
         return Ok(next.run(request).await);
@@ -744,6 +748,31 @@ mod tests {
 
         let request = axum::http::Request::builder()
             .uri("/assets/style.css")
+            .method(Method::GET)
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_rbac_middleware_allows_get_mockforge_api() {
+        use axum::routing::get;
+        use axum::{body::Body, middleware::from_fn, Router};
+        use tower::ServiceExt;
+
+        async fn handler() -> &'static str {
+            "OK"
+        }
+
+        let app = Router::new()
+            .route("/__mockforge/dashboard", get(handler))
+            .layer(from_fn(rbac_middleware));
+
+        // GET to /__mockforge/* should be allowed without auth
+        let request = axum::http::Request::builder()
+            .uri("/__mockforge/dashboard")
             .method(Method::GET)
             .body(Body::empty())
             .unwrap();
