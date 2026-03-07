@@ -3,7 +3,7 @@
 //! This module handles checking for updates and installing them.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Update check result
 #[derive(Debug, Clone, Serialize, Deserialize)]

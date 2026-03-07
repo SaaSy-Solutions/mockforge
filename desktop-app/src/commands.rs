@@ -7,7 +7,7 @@ use mockforge_core::ServerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::RwLock;
 
@@ -150,7 +150,8 @@ pub async fn open_config_file(app: AppHandle) -> Result<Option<String>, String> 
 
     match file_path {
         Some(path) => {
-            let content = tokio::fs::read_to_string(path.path())
+            let file_path = path.as_path().ok_or_else(|| "Invalid file path".to_string())?;
+            let content = tokio::fs::read_to_string(file_path)
                 .await
                 .map_err(|e| format!("Failed to read file: {}", e))?;
             Ok(Some(content))
@@ -172,10 +173,11 @@ pub async fn save_config_file(content: String, app: AppHandle) -> Result<Option<
 
     match file_path {
         Some(path) => {
-            tokio::fs::write(path.path(), content)
+            let file_path = path.as_path().ok_or_else(|| "Invalid file path".to_string())?;
+            tokio::fs::write(file_path, content)
                 .await
                 .map_err(|e| format!("Failed to write file: {}", e))?;
-            Ok(Some(path.path().to_string_lossy().to_string()))
+            Ok(Some(file_path.to_string_lossy().to_string()))
         }
         None => Ok(None),
     }

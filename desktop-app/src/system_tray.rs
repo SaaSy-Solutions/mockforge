@@ -2,7 +2,7 @@
 
 use tauri::menu::MenuEvent;
 use tauri::tray::{TrayIcon, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Handle tray menu item clicks
 pub fn handle_menu_event(app: &AppHandle, event: &MenuEvent) {

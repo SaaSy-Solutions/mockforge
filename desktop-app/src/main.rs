@@ -6,7 +6,7 @@ use crate::server::MockServerManager;
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Listener, Manager};
 use tokio::sync::RwLock;
 
 mod app;
@@ -31,7 +31,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_global_shortcut::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
@@ -101,12 +101,11 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let app_handle = app.handle().clone();
                 window.listen("tauri://file-drop", move |event| {
-                    if let Some(payload) = event.payload() {
-                        if let Ok(paths) = serde_json::from_str::<Vec<String>>(payload) {
-                            if let Some(path) = paths.first() {
-                                if let Some(window) = app_handle.get_webview_window("main") {
-                                    let _ = window.emit("file-dropped", path);
-                                }
+                    let payload = event.payload();
+                    if let Ok(paths) = serde_json::from_str::<Vec<String>>(payload) {
+                        if let Some(path) = paths.first() {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.emit("file-dropped", path);
                             }
                         }
                     }

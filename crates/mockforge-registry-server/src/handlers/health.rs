@@ -315,6 +315,10 @@ fn check_email_config() -> ComponentHealth {
 mod tests {
     use super::*;
 
+    /// Mutex to serialize tests that mutate environment variables.
+    /// Without this, parallel test threads race on EMAIL_PROVIDER, EMAIL_API_KEY, SMTP_HOST, etc.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_component_status_serialization() {
         assert_eq!(serde_json::to_string(&ComponentStatus::Healthy).unwrap(), "\"healthy\"");
@@ -390,7 +394,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_disabled() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::remove_var("EMAIL_PROVIDER");
+        std::env::remove_var("EMAIL_API_KEY");
+        std::env::remove_var("SMTP_HOST");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Degraded);
         assert!(health.message.as_ref().unwrap().contains("disabled"));
@@ -398,8 +405,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_postmark_with_key() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::set_var("EMAIL_PROVIDER", "postmark");
         std::env::set_var("EMAIL_API_KEY", "test-key");
+        std::env::remove_var("SMTP_HOST");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Healthy);
         assert!(health.message.as_ref().unwrap().contains("postmark"));
@@ -409,8 +418,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_postmark_without_key() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::set_var("EMAIL_PROVIDER", "postmark");
         std::env::remove_var("EMAIL_API_KEY");
+        std::env::remove_var("SMTP_HOST");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Degraded);
         assert!(health.message.as_ref().unwrap().contains("EMAIL_API_KEY missing"));
@@ -419,8 +430,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_smtp_with_host() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::set_var("EMAIL_PROVIDER", "smtp");
         std::env::set_var("SMTP_HOST", "localhost");
+        std::env::remove_var("EMAIL_API_KEY");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Healthy);
         assert!(health.message.as_ref().unwrap().contains("SMTP"));
@@ -430,8 +443,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_smtp_without_host() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::set_var("EMAIL_PROVIDER", "smtp");
         std::env::remove_var("SMTP_HOST");
+        std::env::remove_var("EMAIL_API_KEY");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Degraded);
         assert!(health.message.as_ref().unwrap().contains("SMTP_HOST missing"));
@@ -440,7 +455,10 @@ mod tests {
 
     #[test]
     fn test_check_email_config_unknown_provider() {
+        let _lock = ENV_MUTEX.lock().unwrap();
         std::env::set_var("EMAIL_PROVIDER", "unknown");
+        std::env::remove_var("EMAIL_API_KEY");
+        std::env::remove_var("SMTP_HOST");
         let health = check_email_config();
         assert_eq!(health.status, ComponentStatus::Degraded);
         assert!(health.message.as_ref().unwrap().contains("Unknown"));

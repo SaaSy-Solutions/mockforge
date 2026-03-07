@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::mpsc;
 use std::thread;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// System theme preference
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
