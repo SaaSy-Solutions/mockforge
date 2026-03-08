@@ -59,6 +59,21 @@ pub struct Federation {
 }
 
 impl Federation {
+    /// Create an empty federation with no services
+    #[must_use]
+    pub fn empty() -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            name: String::from("default"),
+            description: String::new(),
+            org_id: Uuid::nil(),
+            services: Vec::new(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     /// Create a new federation from config
     ///
     /// # Errors

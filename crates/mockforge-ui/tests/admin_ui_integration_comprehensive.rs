@@ -35,6 +35,9 @@ fn create_test_router() -> axum::Router {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     )
 }
 

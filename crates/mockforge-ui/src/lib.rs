@@ -34,6 +34,9 @@ use std::net::SocketAddr;
 /// * `mockai` - Optional MockAI instance for hot-reload support
 /// * `continuum_config` - Optional Reality Continuum configuration
 /// * `virtual_clock` - Optional virtual clock for time-based progression
+/// * `recorder` - Optional traffic recorder
+/// * `federation` - Optional federation instance
+/// * `vbr_engine` - Optional VBR engine
 #[allow(clippy::too_many_arguments)]
 pub async fn start_admin_server(
     addr: SocketAddr,
@@ -52,6 +55,9 @@ pub async fn start_admin_server(
     >,
     continuum_config: Option<mockforge_core::ContinuumConfig>,
     virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
+    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
+    vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = create_admin_router(
         http_server_addr,
@@ -66,6 +72,9 @@ pub async fn start_admin_server(
         mockai,
         continuum_config,
         virtual_clock,
+        recorder,
+        federation,
+        vbr_engine,
     );
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);

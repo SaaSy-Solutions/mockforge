@@ -37,6 +37,7 @@ mockforge-ui = { version = "0.3.70", path = "../mockforge-ui" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
+mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 mockforge-bench = { version = "0.3.70", path = "../mockforge-bench" }
 mockforge-ftp = { version = "0.3.70", path = "../mockforge-ftp", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }

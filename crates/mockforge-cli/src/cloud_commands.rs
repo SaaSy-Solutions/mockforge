@@ -1484,7 +1484,7 @@ async fn handle_deployments(service_url: String) -> Result<()> {
     }
 
     println!("{}", "Cloud Deployments".cyan().bold());
-    println!("{:<36}  {:<20}  {:<10}  {:<10}  {}", "ID", "NAME", "STATUS", "HEALTH", "URL");
+    println!("{:<36}  {:<20}  {:<10}  {:<10}  URL", "ID", "NAME", "STATUS", "HEALTH");
     println!("{}", "-".repeat(110));
 
     for d in deployments {

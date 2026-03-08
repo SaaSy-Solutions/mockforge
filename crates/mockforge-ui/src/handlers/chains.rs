@@ -127,7 +127,10 @@ mod tests {
     use std::net::SocketAddr;
 
     fn create_test_state(http_addr: Option<SocketAddr>) -> AdminState {
-        AdminState::new(http_addr, None, None, None, false, 8080, None, None, None, None, None)
+        AdminState::new(
+            http_addr, None, None, None, false, 8080, None, None, None, None, None, None, None,
+            None,
+        )
     }
 
     // ==================== Proxy to HTTP Server Tests ====================

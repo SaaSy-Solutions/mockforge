@@ -256,7 +256,9 @@ mod tests {
     use super::*;
 
     fn create_test_state() -> AdminState {
-        AdminState::new(None, None, None, None, false, 8080, None, None, None, None, None)
+        AdminState::new(
+            None, None, None, None, false, 8080, None, None, None, None, None, None, None, None,
+        )
     }
 
     // ==================== RequestMetrics Tests ====================

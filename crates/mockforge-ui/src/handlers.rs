@@ -56,10 +56,12 @@ pub mod analytics_v2;
 pub mod assets;
 pub mod behavioral_cloning;
 pub mod chains;
+pub mod chaos_api;
 pub mod community;
 pub mod contract_diff;
 pub mod coverage_metrics;
 pub mod failure_analysis;
+pub mod federation_api;
 pub mod graph;
 pub mod health;
 pub mod migration;
@@ -68,9 +70,12 @@ pub mod playground;
 pub mod plugin;
 pub mod promotions;
 pub mod protocol_contracts;
+pub mod recorder_api;
+pub mod vbr_api;
 pub mod verification;
 pub mod voice;
 pub mod workspaces;
+pub mod world_state_proxy;
 
 // Re-export commonly used types
 pub use assets::*;
@@ -301,6 +306,12 @@ pub struct AdminState {
     /// MockAI instance (optional)
     /// Allows updating MockAI configuration at runtime
     pub mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    /// Traffic recorder (optional)
+    pub recorder: Option<Arc<mockforge_recorder::Recorder>>,
+    /// Federation instance (optional)
+    pub federation: Option<Arc<mockforge_federation::Federation>>,
+    /// VBR engine (optional)
+    pub vbr_engine: Option<Arc<mockforge_vbr::VbrEngine>>,
 }
 
 impl AdminState {
@@ -367,6 +378,9 @@ impl AdminState {
     /// * `mockai` - Optional MockAI instance for hot-reload support
     /// * `continuum_config` - Optional Reality Continuum configuration
     /// * `virtual_clock` - Optional virtual clock for time-based progression
+    /// * `recorder` - Optional traffic recorder
+    /// * `federation` - Optional federation instance
+    /// * `vbr_engine` - Optional VBR engine
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         http_server_addr: Option<std::net::SocketAddr>,
@@ -380,6 +394,9 @@ impl AdminState {
         mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
         continuum_config: Option<mockforge_core::ContinuumConfig>,
         virtual_clock: Option<Arc<mockforge_core::VirtualClock>>,
+        recorder: Option<Arc<mockforge_recorder::Recorder>>,
+        federation: Option<Arc<mockforge_federation::Federation>>,
+        vbr_engine: Option<Arc<mockforge_vbr::VbrEngine>>,
     ) -> Self {
         let start_time = Utc::now();
 
@@ -464,6 +481,9 @@ impl AdminState {
             chaos_api_state,
             latency_injector,
             mockai,
+            recorder,
+            federation,
+            vbr_engine,
         }
     }
 
@@ -4885,6 +4905,9 @@ mod tests {
             None,
             true,
             8080,
+            None,
+            None,
+            None,
             None,
             None,
             None,

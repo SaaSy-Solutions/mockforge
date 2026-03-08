@@ -167,7 +167,7 @@ impl App {
                     self.route_data(screen, &payload);
                 }
                 Event::ApiError { screen, message } => {
-                    self.error_count += 1;
+                    self.error_count = (self.error_count + 1).min(999);
                     self.route_error(screen, &message);
                 }
                 Event::LogLine(line) => {

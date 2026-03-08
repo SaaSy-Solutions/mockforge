@@ -74,7 +74,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.75"
+version = "0.3.76"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -108,6 +108,8 @@ private_interfaces = "allow"
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
+# Allow multiple crate versions — transitive deps cause unavoidable duplicates
+multiple_crate_versions = "allow"
 
 # Common workspace dependencies
 [workspace.dependencies]

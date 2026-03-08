@@ -34,6 +34,9 @@ use mockforge_core::{get_global_logger, init_global_logger};
 /// * `mockai` - Optional MockAI instance for hot-reload support
 /// * `continuum_config` - Optional Reality Continuum configuration
 /// * `virtual_clock` - Optional virtual clock for time-based progression
+/// * `recorder` - Optional traffic recorder
+/// * `federation` - Optional federation instance
+/// * `vbr_engine` - Optional VBR engine
 #[allow(clippy::too_many_arguments)]
 pub fn create_admin_router(
     http_server_addr: Option<std::net::SocketAddr>,
@@ -52,6 +55,9 @@ pub fn create_admin_router(
     >,
     continuum_config: Option<mockforge_core::ContinuumConfig>,
     virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
+    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
+    vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
@@ -98,6 +104,9 @@ pub fn create_admin_router(
         mockai,
         continuum_config,
         virtual_clock,
+        recorder,
+        federation,
+        vbr_engine,
     );
 
     // Start system monitoring background task to poll CPU, memory, and thread metrics
@@ -350,7 +359,23 @@ pub fn create_admin_router(
         .route("/healthz", get(health::deep_health_check))
         .route("/readyz", get(health::readiness_probe))
         .route("/livez", get(health::liveness_probe))
-        .route("/startupz", get(health::startup_probe));
+        .route("/startupz", get(health::startup_probe))
+        // Chaos engineering routes (TUI dashboard)
+        .route("/__mockforge/chaos", get(chaos_api::get_chaos_status))
+        .route("/__mockforge/chaos/toggle", post(chaos_api::toggle_chaos))
+        .route("/__mockforge/chaos/scenarios/predefined", get(chaos_api::get_chaos_scenarios_predefined))
+        .route("/__mockforge/chaos/scenarios/{name}", post(chaos_api::start_chaos_scenario))
+        .route("/__mockforge/chaos/scenarios/{name}", delete(chaos_api::stop_chaos_scenario))
+        // Recorder routes (TUI dashboard)
+        .route("/__mockforge/recorder/status", get(recorder_api::get_recorder_status))
+        .route("/__mockforge/recorder/start", post(recorder_api::start_recorder))
+        .route("/__mockforge/recorder/stop", post(recorder_api::stop_recorder))
+        // World-state route (TUI dashboard)
+        .route("/__mockforge/world-state", get(world_state_proxy::get_world_state))
+        // Federation route (TUI dashboard)
+        .route("/__mockforge/federation/peers", get(federation_api::get_federation_peers))
+        // VBR route (TUI dashboard)
+        .route("/__mockforge/vbr/status", get(vbr_api::get_vbr_status));
 
     // Analytics routes with Prometheus integration
     let analytics_state = AnalyticsState::new(prometheus_url);
@@ -691,6 +716,9 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         );
 
         // Router should be created successfully
@@ -712,9 +740,290 @@ mod tests {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         );
 
         // Router should still work without server addresses
         let _ = router;
+    }
+
+    fn make_test_router() -> Router {
+        create_admin_router(
+            None,
+            None,
+            None,
+            None,
+            true,
+            8080,
+            "http://localhost:9090".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    /// Helper: send a request and return (status, content-type, body)
+    async fn send(
+        router: Router,
+        method: &str,
+        uri: &str,
+        body: Option<&str>,
+        auth_token: Option<&str>,
+    ) -> (axum::http::StatusCode, String, String) {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let mut builder = Request::builder().method(method).uri(uri);
+        if let Some(token) = auth_token {
+            builder = builder.header("authorization", format!("Bearer {}", token));
+        }
+        if body.is_some() {
+            builder = builder.header("content-type", "application/json");
+        }
+        let req = builder.body(Body::from(body.unwrap_or("").to_string())).unwrap();
+
+        let response = router.oneshot(req).await.unwrap();
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap().to_string())
+            .unwrap_or_default();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        (status, content_type, text)
+    }
+
+    /// Helper: send an authenticated request using dev custom headers.
+    /// This avoids the JWT login flow (and its rate limiter / async bcrypt seeding).
+    async fn send_authed(
+        router: Router,
+        method: &str,
+        uri: &str,
+        body: Option<&str>,
+    ) -> (axum::http::StatusCode, String, String) {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("x-user-id", "admin-001")
+            .header("x-username", "admin")
+            .header("x-user-role", "admin");
+        if body.is_some() {
+            builder = builder.header("content-type", "application/json");
+        }
+        let req = builder.body(Body::from(body.unwrap_or("").to_string())).unwrap();
+
+        let response = router.oneshot(req).await.unwrap();
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap().to_string())
+            .unwrap_or_default();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        (status, content_type, text)
+    }
+
+    #[tokio::test]
+    async fn test_tui_get_endpoints_return_json_without_auth() {
+        let router = make_test_router();
+
+        let endpoints = vec![
+            "/__mockforge/chaos",
+            "/__mockforge/recorder/status",
+            "/__mockforge/world-state",
+            "/__mockforge/federation/peers",
+            "/__mockforge/vbr/status",
+            "/__mockforge/chaos/scenarios/predefined",
+        ];
+
+        for endpoint in endpoints {
+            let (status, content_type, body) =
+                send(router.clone(), "GET", endpoint, None, None).await;
+
+            assert_eq!(
+                status,
+                axum::http::StatusCode::OK,
+                "GET {} returned status {} — body: {}",
+                endpoint,
+                status,
+                &body[..body.len().min(200)]
+            );
+            assert!(
+                content_type.contains("application/json"),
+                "GET {} returned content-type '{}' instead of JSON — body: {}",
+                endpoint,
+                content_type,
+                &body[..body.len().min(200)]
+            );
+
+            let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_else(|e| {
+                panic!(
+                    "GET {} returned non-JSON body: {} — error: {}",
+                    endpoint,
+                    &body[..body.len().min(200)],
+                    e
+                )
+            });
+            assert_eq!(
+                parsed["success"],
+                serde_json::Value::Bool(true),
+                "GET {} missing success:true — got: {}",
+                endpoint,
+                parsed
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tui_post_endpoints_require_auth() {
+        let router = make_test_router();
+
+        let post_endpoints = vec![
+            ("/__mockforge/chaos/toggle", r#"{"enabled":true}"#),
+            ("/__mockforge/recorder/start", ""),
+            ("/__mockforge/recorder/stop", ""),
+        ];
+
+        for (endpoint, body) in &post_endpoints {
+            let req_body = if body.is_empty() { None } else { Some(*body) };
+            let (status, _, _) = send(router.clone(), "POST", endpoint, req_body, None).await;
+            assert_eq!(
+                status,
+                axum::http::StatusCode::UNAUTHORIZED,
+                "POST {} should require auth but returned {}",
+                endpoint,
+                status
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tui_post_endpoints_with_auth() {
+        let router = make_test_router();
+
+        // --- Chaos toggle ---
+        let (status, ct, body) = send_authed(
+            router.clone(),
+            "POST",
+            "/__mockforge/chaos/toggle",
+            Some(r#"{"enabled":true}"#),
+        )
+        .await;
+        assert_eq!(status, axum::http::StatusCode::OK, "POST chaos/toggle failed: {}", body);
+        assert!(ct.contains("application/json"), "chaos/toggle not JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        // Without chaos_api_state, success is false (not configured) — that's correct behavior
+        assert!(parsed.get("success").is_some(), "chaos/toggle missing success field");
+
+        // --- Recorder start ---
+        let (status, ct, body) =
+            send_authed(router.clone(), "POST", "/__mockforge/recorder/start", None).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "POST recorder/start failed: {}", body);
+        assert!(ct.contains("application/json"), "recorder/start not JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(parsed.get("success").is_some(), "recorder/start missing success field");
+
+        // --- Recorder stop ---
+        let (status, ct, body) =
+            send_authed(router.clone(), "POST", "/__mockforge/recorder/stop", None).await;
+        assert_eq!(status, axum::http::StatusCode::OK, "POST recorder/stop failed: {}", body);
+        assert!(ct.contains("application/json"), "recorder/stop not JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(parsed.get("success").is_some(), "recorder/stop missing success field");
+
+        // --- Chaos scenario start (without chaos_api_state → 503) ---
+        let (status, ct, body) =
+            send_authed(router.clone(), "POST", "/__mockforge/chaos/scenarios/test-scenario", None)
+                .await;
+        assert!(ct.contains("application/json"), "start scenario not JSON");
+        assert!(
+            status == axum::http::StatusCode::OK
+                || status == axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "POST chaos/scenarios/test-scenario returned unexpected status {} — body: {}",
+            status,
+            body
+        );
+
+        // --- Chaos scenario stop ---
+        let (status, ct, body) = send_authed(
+            router.clone(),
+            "DELETE",
+            "/__mockforge/chaos/scenarios/test-scenario",
+            None,
+        )
+        .await;
+        assert!(ct.contains("application/json"), "stop scenario not JSON");
+        assert!(
+            status == axum::http::StatusCode::OK
+                || status == axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "DELETE chaos/scenarios/test-scenario returned unexpected status {} — body: {}",
+            status,
+            body
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tui_get_endpoints_response_structure() {
+        let router = make_test_router();
+
+        // Chaos: verify shape
+        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/chaos", None, None).await;
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let data = &v["data"];
+        assert!(data.get("enabled").is_some(), "chaos missing 'enabled'");
+        assert!(
+            data.get("active_scenario_count").is_some(),
+            "chaos missing 'active_scenario_count'"
+        );
+
+        // Recorder: verify shape
+        let (_, _, body) =
+            send(router.clone(), "GET", "/__mockforge/recorder/status", None, None).await;
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let data = &v["data"];
+        assert!(data.get("recording").is_some(), "recorder missing 'recording'");
+        assert!(data.get("recorded_count").is_some(), "recorder missing 'recorded_count'");
+
+        // Federation: verify shape (empty array when not configured)
+        let (_, _, body) =
+            send(router.clone(), "GET", "/__mockforge/federation/peers", None, None).await;
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(v["data"].is_array(), "federation peers should be an array");
+
+        // VBR: verify shape
+        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/vbr/status", None, None).await;
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let data = &v["data"];
+        assert!(data.get("enabled").is_some(), "vbr missing 'enabled'");
+        assert!(data.get("model_count").is_some(), "vbr missing 'model_count'");
+        assert!(data.get("training_status").is_some(), "vbr missing 'training_status'");
+
+        // Predefined scenarios: verify shape
+        let (_, _, body) =
+            send(router.clone(), "GET", "/__mockforge/chaos/scenarios/predefined", None, None)
+                .await;
+        let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert!(v["success"].as_bool().unwrap(), "predefined scenarios not success");
+        let scenarios = v["data"].as_array().expect("predefined scenarios should be array");
+        // Empty when chaos_api_state is None — that's correct behavior
+        if !scenarios.is_empty() {
+            assert!(scenarios[0].get("name").is_some(), "scenario missing 'name'");
+            assert!(scenarios[0].get("description").is_some(), "scenario missing 'description'");
+            assert!(scenarios[0].get("severity").is_some(), "scenario missing 'severity'");
+        }
     }
 }

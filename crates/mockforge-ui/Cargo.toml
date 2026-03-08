@@ -55,6 +55,7 @@ mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
 mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
+mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 base64 = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"

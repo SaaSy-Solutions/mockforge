@@ -4236,6 +4236,12 @@ pub async fn handle_serve(
     }
 
     println!("🚀 Starting MockForge servers...");
+
+    // Initialize the global request logger early, BEFORE any server tasks are spawned.
+    // This ensures HTTP request logs are captured from the very first request,
+    // not just after the admin UI router happens to initialize.
+    mockforge_core::init_global_logger(1000);
+
     println!("📡 HTTP server on port {}", config.http.port);
     println!("🔌 WebSocket server on port {}", config.websocket.port);
     println!("⚡ gRPC server on port {}", config.grpc.port);
@@ -5701,6 +5707,52 @@ pub async fn handle_serve(
         None
     };
 
+    // Create recorder instance if configured
+    let recorder_for_admin: Option<Arc<mockforge_recorder::Recorder>> =
+        if let Some(ref recorder_config) = config.observability.recorder {
+            if recorder_config.enabled {
+                match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path)
+                    .await
+                {
+                    Ok(db) => {
+                        tracing::info!(
+                            "Admin: recorder initialized from {}",
+                            recorder_config.database_path
+                        );
+                        Some(Arc::new(mockforge_recorder::Recorder::new(db)))
+                    }
+                    Err(e) => {
+                        tracing::warn!("Admin: failed to initialize recorder database: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+    // Create VBR engine with in-memory backend (lightweight, no disk side-effects)
+    let vbr_engine_for_admin: Option<Arc<mockforge_vbr::VbrEngine>> = {
+        let vbr_config = mockforge_vbr::VbrConfig::new()
+            .with_storage_backend(mockforge_vbr::StorageBackend::Memory);
+        match mockforge_vbr::VbrEngine::new(vbr_config).await {
+            Ok(engine) => {
+                tracing::info!("Admin: VBR engine initialized (in-memory)");
+                Some(Arc::new(engine))
+            }
+            Err(e) => {
+                tracing::warn!("Admin: failed to initialize VBR engine: {}", e);
+                None
+            }
+        }
+    };
+
+    // Create empty federation instance for admin dashboard
+    let federation_for_admin: Option<Arc<mockforge_federation::Federation>> =
+        Some(Arc::new(mockforge_federation::Federation::empty()));
+
     // Clone references for admin server
     let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
     let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
@@ -5727,6 +5779,9 @@ pub async fn handle_serve(
         let mockai_ref = mockai_for_admin.clone();
         let continuum_config = continuum_config_for_admin.clone();
         let time_travel_manager_clone = time_travel_manager_for_admin.clone();
+        let recorder_clone = recorder_for_admin.clone();
+        let federation_clone = federation_for_admin.clone();
+        let vbr_engine_clone = vbr_engine_for_admin.clone();
         Some(tokio::spawn(async move {
             println!("🎛️ Admin UI listening on http://{}:{}", admin_host, admin_port);
 
@@ -5791,6 +5846,9 @@ pub async fn handle_serve(
                     mockai_ref,
                     continuum_config,
                     virtual_clock_for_continuum,
+                    recorder_clone,
+                    federation_clone,
+                    vbr_engine_clone,
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))
                 }
@@ -6399,6 +6457,9 @@ async fn handle_admin(
         None, // mockai
         None, // continuum_config
         None, // virtual_clock
+        None, // recorder
+        None, // federation
+        None, // vbr_engine
     )
     .await?;
 

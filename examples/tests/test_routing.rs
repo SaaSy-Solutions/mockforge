@@ -4,7 +4,7 @@ use mockforge_ui::routes::create_admin_router;
 // Test that SPA routing is configured correctly
 #[tokio::test]
 async fn test_spa_routing_configuration() {
-    let router = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string());
+    let router = create_admin_router(None, None, None, None, true, 9080, "http://localhost:9090".to_string(), None, None, None, None, None, None, None, None);
 
     // Verify the router was created successfully and has structure
     let description = format!("{:?}", router);

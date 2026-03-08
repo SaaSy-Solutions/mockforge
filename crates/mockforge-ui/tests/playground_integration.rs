@@ -19,6 +19,9 @@ async fn test_list_playground_endpoints() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
 
     // Note: This test requires a running HTTP server, so it's more of an integration test
@@ -43,6 +46,9 @@ async fn test_code_snippet_generation_rest() {
         None,
         true,
         8080,
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -99,6 +105,9 @@ async fn test_code_snippet_generation_graphql() {
         Some("127.0.0.1:4000".parse().unwrap()),
         true,
         8080,
+        None,
+        None,
+        None,
         None,
         None,
         None,

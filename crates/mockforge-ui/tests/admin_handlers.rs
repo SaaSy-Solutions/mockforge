@@ -20,6 +20,9 @@ mod admin_handlers_tests {
             None, // mockai
             None, // continuum_config
             None, // virtual_clock
+            None, // recorder
+            None, // federation
+            None, // vbr_engine
         )
     }
 

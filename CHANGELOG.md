@@ -1,3 +1,26 @@
+## [0.3.76] - 2026-03-08
+
+### Fixed
+
+- **[UI/TUI]** Implement 11 missing admin API endpoints that caused "40 Errs" in the TUI dashboard (#79)
+  - The TUI polls `/__mockforge/chaos`, `/__mockforge/recorder/status`, `/__mockforge/world-state`, `/__mockforge/federation/peers`, and `/__mockforge/vbr/status` every 2-30 seconds
+  - These endpoints previously returned 404, incrementing the TUI error counter ~22 times/minute
+  - All 5 GET endpoints now return valid JSON with real data from live subsystem instances
+  - 6 POST/DELETE mutation endpoints (`chaos/toggle`, `recorder/start`, `recorder/stop`, `chaos/scenarios/{name}` start/stop) are auth-gated via RBAC
+  - Added 5 new handler modules: `chaos_api`, `recorder_api`, `world_state_proxy`, `federation_api`, `vbr_api`
+  - 26 E2E tests verified against a real running server (GET responses, auth rejection, auth acceptance, state mutations)
+- **[CLI]** Admin server now creates real subsystem instances instead of returning empty defaults (#79)
+  - Recorder: created from `--recorder-db` config when `--recorder` flag is passed
+  - VBR engine: created with in-memory storage backend (lightweight, no disk side-effects)
+  - Federation: empty instance created so the TUI shows a valid (but empty) federation state
+- **[TUI]** Error counter capped at 999 to prevent unbounded growth (#79)
+- **[CLI]** Fix pre-existing `clippy::print_literal` warning in cloud commands
+
+### Added
+
+- **[Federation]** `Federation::empty()` constructor for creating a default empty federation instance
+- **[CLI]** `mockforge-federation` added as a dependency for admin server integration
+
 ## [0.3.73] - 2026-03-05
 
 ### Fixed

@@ -28,6 +28,9 @@ async fn test_static_assets_mime_types() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
 
     // Test HTML serving
@@ -51,6 +54,9 @@ async fn test_static_assets_mime_types() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -82,6 +88,9 @@ async fn test_static_assets_mime_types() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
     let response_js = app3
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
@@ -107,6 +116,9 @@ async fn test_image_assets_mime_types() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -153,6 +165,9 @@ async fn test_image_assets_mime_types() {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         );
         let response = app_test
             .oneshot(Request::builder().uri(icon_path).body(Body::empty()).unwrap())
@@ -181,6 +196,9 @@ async fn test_static_assets_caching_headers() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -225,6 +243,9 @@ async fn test_static_assets_caching_headers() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
     let response_js = app2
         .oneshot(Request::builder().uri("/assets/index.js").body(Body::empty()).unwrap())
@@ -255,6 +276,9 @@ async fn test_static_assets_caching_headers() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -299,6 +323,9 @@ async fn test_static_assets_etags() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
 
     // Test HTML ETag
@@ -331,6 +358,9 @@ async fn test_static_assets_etags() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -372,6 +402,9 @@ async fn test_conditional_requests() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
 
     // First, get the ETag
@@ -395,6 +428,9 @@ async fn test_conditional_requests() {
             true,
             9080,
             "http://localhost:9090".to_string(),
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -451,6 +487,9 @@ async fn test_all_static_routes_accessible() {
             None,
             None,
             None,
+            None,
+            None,
+            None,
         );
         let response = app
             .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
@@ -478,6 +517,9 @@ async fn test_static_assets_content_length() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
+        None,
+        None,
         None,
         None,
         None,
@@ -529,6 +571,9 @@ async fn test_spa_fallback_routing() {
         None,
         None,
         None,
+        None,
+        None,
+        None,
     );
 
     // Test various client-side routes that should serve index.html
@@ -549,6 +594,9 @@ async fn test_spa_fallback_routing() {
             true,
             9080,
             "http://localhost:9090".to_string(),
+            None,
+            None,
+            None,
             None,
             None,
             None,
