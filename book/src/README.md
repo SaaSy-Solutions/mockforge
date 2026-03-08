@@ -1,8 +1,8 @@
 # MockForge
 
-[![Crates.io](https://img.shields.io/crates/v/mockforge.svg)](https://crates.io/crates/mockforge)
-[![Documentation](https://docs.rs/mockforge/badge.svg)](https://docs.rs/mockforge)
-[![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
+[![Crates.io](https://img.shields.io/crates/v/mockforge-cli.svg)](https://crates.io/crates/mockforge-cli)
+[![Documentation](https://docs.rs/mockforge-cli/badge.svg)](https://docs.rs/mockforge-cli)
+[![CI](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
 MockForge helps teams simulate realistic backend behavior so frontend, backend, and QA work can move in parallel without waiting on live services.

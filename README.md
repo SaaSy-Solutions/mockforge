@@ -1,10 +1,10 @@
 # MockForge
 
-[![Crates.io](https://img.shields.io/crates/v/mockforge.svg)](https://crates.io/crates/mockforge)
-[![Documentation](https://docs.rs/mockforge/badge.svg)](https://docs.rs/mockforge)
+[![Crates.io](https://img.shields.io/crates/v/mockforge-cli.svg)](https://crates.io/crates/mockforge-cli)
+[![Documentation](https://docs.rs/mockforge-cli/badge.svg)](https://docs.rs/mockforge-cli)
 [![Book](https://img.shields.io/badge/book-read%20online-blue.svg)](https://docs.mockforge.dev/)
-[![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
-[![Tests](https://github.com/SaaSy-Solutions/mockforge/workflows/Tests/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
+[![CI](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/ci.yml)
+[![Tests](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/test.yml/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/test.yml)
 [![Coverage](https://codecov.io/gh/SaaSy-Solutions/mockforge/branch/main/graph/badge.svg)](https://codecov.io/gh/SaaSy-Solutions/mockforge)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-criterion-blue)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
