@@ -122,7 +122,7 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch('/api/v1/deployments', {
+      const response = await fetch('/api/v1/hosted-mocks', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -133,7 +133,7 @@ export const HostedMocksPage: React.FC = () => {
       }
 
       const data = await response.json();
-      setDeployments(data.deployments || []);
+      setDeployments(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load deployments');
     } finally {
@@ -172,7 +172,7 @@ export const HostedMocksPage: React.FC = () => {
         openapi_spec_url: formData.openapi_spec_url || undefined,
       };
 
-      const response = await fetch('/api/v1/deployments', {
+      const response = await fetch('/api/v1/hosted-mocks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -214,7 +214,7 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`/api/v1/deployments/${id}`, {
+      const response = await fetch(`/api/v1/hosted-mocks/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -253,7 +253,7 @@ export const HostedMocksPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`/api/v1/deployments/${id}/logs`, {
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/logs`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -278,7 +278,7 @@ export const HostedMocksPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`/api/v1/deployments/${id}/metrics`, {
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/metrics`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

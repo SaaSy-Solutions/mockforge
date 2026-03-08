@@ -36,3 +36,4 @@ pub mod settings;
 pub mod template_reviews;
 pub mod templates;
 pub mod token_rotation;
+pub mod waitlist;

@@ -251,6 +251,43 @@ impl PluginStorage {
         Ok(())
     }
 
+    /// Upload an OpenAPI spec file for a hosted mock deployment
+    pub async fn upload_spec(
+        &self,
+        org_id: &str,
+        spec_name: &str,
+        data: Vec<u8>,
+    ) -> Result<String> {
+        let safe_org = Self::sanitize_key_component(org_id);
+        let safe_name = Self::sanitize_key_component(spec_name);
+
+        if safe_org.is_empty() {
+            anyhow::bail!("Org ID cannot be empty after sanitization");
+        }
+        if safe_name.is_empty() {
+            anyhow::bail!("Spec name cannot be empty after sanitization");
+        }
+
+        let key = format!("specs/{}/{}.json", safe_org, safe_name);
+
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(&key)
+            .body(data.into())
+            .content_type("application/json")
+            .send()
+            .await?;
+
+        let url = if let Ok(endpoint) = std::env::var("S3_ENDPOINT") {
+            format!("{}/{}/{}", endpoint, self.bucket, key)
+        } else {
+            format!("https://{}.s3.amazonaws.com/{}", self.bucket, key)
+        };
+
+        Ok(url)
+    }
+
     /// Health check - verify S3 connectivity by performing a HEAD bucket operation
     pub async fn health_check(&self) -> Result<()> {
         self.client

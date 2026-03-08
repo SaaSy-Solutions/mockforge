@@ -3,7 +3,7 @@
 //! Provides endpoints for deploying, managing, and monitoring cloud-hosted mock services
 
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     http::HeaderMap,
     Json,
 };
@@ -13,7 +13,9 @@ use uuid::Uuid;
 use crate::{
     deployment::flyio::FlyioClient,
     error::{ApiError, ApiResult},
-    middleware::{resolve_org_context, AuthUser},
+    middleware::{
+        permission_check::PermissionChecker, permissions::Permission, resolve_org_context, AuthUser,
+    },
     models::{
         feature_usage::{FeatureType, FeatureUsage},
         record_audit_event, AuditEventType, DeploymentLog, DeploymentMetrics, DeploymentStatus,
@@ -36,6 +38,12 @@ pub async fn create_deployment(
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Check permission
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
+        .await?;
 
     // Check plan limits
     let limits = &org_ctx.org.limits_json;
@@ -113,6 +121,7 @@ pub async fn create_deployment(
         request.description.as_deref(),
         request.config_json,
         request.openapi_spec_url.as_deref(),
+        request.region.as_deref(),
     )
     .await
     .map_err(ApiError::Database)?;
@@ -256,6 +265,12 @@ pub async fn update_deployment_status(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
+    // Check permission
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
+        .await?;
+
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
         .await
@@ -341,6 +356,12 @@ pub async fn delete_deployment(
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Check permission
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockDelete)
+        .await?;
 
     // Get deployment
     let deployment = HostedMock::find_by_id(pool, deployment_id)
@@ -554,6 +575,94 @@ pub async fn get_deployment_metrics(
     Ok(Json(MetricsResponse::from(metrics)))
 }
 
+/// Upload an OpenAPI spec file for use in a hosted mock deployment
+pub async fn upload_spec(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> ApiResult<Json<SpecUploadResponse>> {
+    // Resolve org context
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Check permission
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
+        .await?;
+
+    // Extract file from multipart
+    let mut file_data: Option<Vec<u8>> = None;
+    let mut file_name = String::from("spec");
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::InvalidRequest(format!("Failed to read multipart field: {}", e)))?
+    {
+        if field.name() == Some("file") || field.name() == Some("spec") {
+            if let Some(name) = field.file_name() {
+                file_name =
+                    name.to_string().replace(".yaml", "").replace(".yml", "").replace(".json", "");
+            }
+            let data = field.bytes().await.map_err(|e| {
+                ApiError::InvalidRequest(format!("Failed to read file data: {}", e))
+            })?;
+
+            // Validate it's valid JSON or YAML OpenAPI spec
+            let content = String::from_utf8(data.to_vec()).map_err(|_| {
+                ApiError::InvalidRequest("File must be valid UTF-8 text".to_string())
+            })?;
+
+            // Try to parse as JSON first, then YAML
+            let spec_value: serde_json::Value =
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                    v
+                } else if let Ok(v) = serde_yaml::from_str::<serde_json::Value>(&content) {
+                    v
+                } else {
+                    return Err(ApiError::InvalidRequest(
+                        "File must be a valid JSON or YAML OpenAPI specification".to_string(),
+                    ));
+                };
+
+            // Basic OpenAPI validation - check for required fields
+            if spec_value.get("openapi").is_none() && spec_value.get("swagger").is_none() {
+                return Err(ApiError::InvalidRequest(
+                    "File must contain an 'openapi' or 'swagger' field".to_string(),
+                ));
+            }
+
+            // Always store as JSON
+            let json_data = serde_json::to_vec_pretty(&spec_value).map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to serialize spec: {}", e))
+            })?;
+
+            file_data = Some(json_data);
+        }
+    }
+
+    let data = file_data.ok_or_else(|| {
+        ApiError::InvalidRequest("No 'file' or 'spec' field in upload".to_string())
+    })?;
+
+    // Upload to storage
+    let url = state
+        .storage
+        .upload_spec(&org_ctx.org_id.to_string(), &file_name, data)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to upload spec: {}", e)))?;
+
+    Ok(Json(SpecUploadResponse { url }))
+}
+
+#[derive(Debug, Serialize)]
+pub struct SpecUploadResponse {
+    pub url: String,
+}
+
 // Request/Response types
 
 #[derive(Debug, Deserialize)]
@@ -564,6 +673,7 @@ pub struct CreateDeploymentRequest {
     pub project_id: Option<Uuid>,
     pub config_json: serde_json::Value,
     pub openapi_spec_url: Option<String>,
+    pub region: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

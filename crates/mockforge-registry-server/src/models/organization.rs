@@ -357,7 +357,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_templates_published": 3,
             "max_scenarios_published": 1,
             "ai_tokens_per_month": 0, // BYOK only
-            "hosted_mocks": false
+            "hosted_mocks": false,
+            "max_hosted_mocks": 0
         }),
         Plan::Pro => serde_json::json!({
             "max_projects": 10,
@@ -369,7 +370,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_templates_published": 50,
             "max_scenarios_published": 20,
             "ai_tokens_per_month": 100000,
-            "hosted_mocks": true
+            "hosted_mocks": true,
+            "max_hosted_mocks": 3
         }),
         Plan::Team => serde_json::json!({
             "max_projects": -1, // unlimited
@@ -381,7 +383,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_templates_published": -1, // unlimited
             "max_scenarios_published": -1, // unlimited
             "ai_tokens_per_month": 1000000,
-            "hosted_mocks": true
+            "hosted_mocks": true,
+            "max_hosted_mocks": -1 // unlimited
         }),
     }
 }
@@ -669,6 +672,7 @@ mod tests {
         assert_eq!(limits["max_scenarios_published"], 1);
         assert_eq!(limits["ai_tokens_per_month"], 0);
         assert_eq!(limits["hosted_mocks"], false);
+        assert_eq!(limits["max_hosted_mocks"], 0);
     }
 
     #[test]
@@ -685,6 +689,7 @@ mod tests {
         assert_eq!(limits["max_scenarios_published"], 20);
         assert_eq!(limits["ai_tokens_per_month"], 100000);
         assert_eq!(limits["hosted_mocks"], true);
+        assert_eq!(limits["max_hosted_mocks"], 3);
     }
 
     #[test]
@@ -701,6 +706,7 @@ mod tests {
         assert_eq!(limits["max_scenarios_published"], -1); // unlimited
         assert_eq!(limits["ai_tokens_per_month"], 1000000);
         assert_eq!(limits["hosted_mocks"], true);
+        assert_eq!(limits["max_hosted_mocks"], -1); // unlimited
     }
 
     #[test]

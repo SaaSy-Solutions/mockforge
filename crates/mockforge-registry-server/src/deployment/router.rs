@@ -19,11 +19,11 @@ pub struct MultitenantRouter;
 
 impl MultitenantRouter {
     /// Create router for multitenant mock routing
-    pub fn create_router(state: AppState) -> Router {
+    /// Routes are nested under `/mocks/` to avoid conflicts with API routes
+    pub fn create_router() -> Router<AppState> {
         Router::new()
-            .route("/:org_id/:slug/*path", any(Self::route_request))
-            .route("/:org_id/:slug", any(Self::route_request))
-            .with_state(state)
+            .route("/mocks/{org_id}/{slug}/{*path}", any(Self::route_request))
+            .route("/mocks/{org_id}/{slug}", any(Self::route_request))
     }
 
     /// Route request to the appropriate mock service
@@ -58,10 +58,10 @@ impl MultitenantRouter {
         // Get deployment URL
         let base_url = deployment.deployment_url.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
 
-        // Extract path from URI
+        // Extract path from URI (strip /mocks/:org_id/:slug prefix)
         let path = uri.path();
         let path_after_slug =
-            path.strip_prefix(&format!("/{}/{}", org_id_str, slug)).unwrap_or("/");
+            path.strip_prefix(&format!("/mocks/{}/{}", org_id_str, slug)).unwrap_or("/");
 
         // Build target URL
         let mut target_url = format!("{}{}", base_url, path_after_slug);

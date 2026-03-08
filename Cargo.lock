@@ -8438,6 +8438,7 @@ dependencies = [
  "rustls-pemfile 2.2.0",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha1",
  "sha2",
  "sqlx",

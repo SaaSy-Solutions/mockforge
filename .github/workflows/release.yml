@@ -213,6 +213,23 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  deploy-registry:
+    name: Deploy Registry Server to Fly.io
+    needs: docker
+    runs-on: ubuntu-latest
+    if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Install flyctl
+      uses: superfly/flyctl-actions/setup-flyctl@master
+
+    - name: Deploy registry server
+      run: flyctl deploy --config fly.registry.toml --remote-only
+      env:
+        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
   helm:
     name: Package and Publish Helm Chart
     runs-on: ubuntu-latest

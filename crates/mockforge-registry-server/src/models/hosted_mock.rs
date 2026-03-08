@@ -124,14 +124,16 @@ impl HostedMock {
         description: Option<&str>,
         config_json: serde_json::Value,
         openapi_spec_url: Option<&str>,
+        region: Option<&str>,
     ) -> sqlx::Result<Self> {
+        let region = region.unwrap_or("iad");
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO hosted_mocks (
                 org_id, project_id, name, slug, description,
-                config_json, openapi_spec_url, status, health_status
+                config_json, openapi_spec_url, region, status, health_status
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'unknown')
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'unknown')
             RETURNING *
             "#,
         )
@@ -142,6 +144,7 @@ impl HostedMock {
         .bind(description)
         .bind(config_json)
         .bind(openapi_spec_url)
+        .bind(region)
         .fetch_one(pool)
         .await
     }

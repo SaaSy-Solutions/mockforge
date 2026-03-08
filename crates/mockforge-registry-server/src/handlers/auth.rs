@@ -10,6 +10,7 @@ use crate::{
         REFRESH_TOKEN_EXPIRY_DAYS,
     },
     error::{ApiError, ApiResult},
+    middleware::AuthUser,
     models::User,
     AppState,
 };
@@ -443,5 +444,69 @@ pub async fn confirm_password_reset(
         success: true,
         message: "Password has been reset successfully. You can now log in with your new password."
             .to_string(),
+    }))
+}
+
+/// Verify token response
+#[derive(Debug, Serialize)]
+pub struct VerifyTokenResponse {
+    pub valid: bool,
+    pub user_id: String,
+    pub username: String,
+    pub email: String,
+}
+
+/// Verify that the current JWT is valid (GET /api/v1/auth/verify)
+pub async fn verify_token(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> ApiResult<Json<VerifyTokenResponse>> {
+    let pool = state.db.pool();
+
+    let user = User::find_by_id(pool, user_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
+
+    Ok(Json(VerifyTokenResponse {
+        valid: true,
+        user_id: user.id.to_string(),
+        username: user.username,
+        email: user.email,
+    }))
+}
+
+/// User info response
+#[derive(Debug, Serialize)]
+pub struct MeResponse {
+    pub user_id: String,
+    pub username: String,
+    pub email: String,
+    pub is_verified: bool,
+    pub is_admin: bool,
+    pub two_factor_enabled: bool,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Get current user info (GET /api/v1/auth/me)
+pub async fn me(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> ApiResult<Json<MeResponse>> {
+    let pool = state.db.pool();
+
+    let user = User::find_by_id(pool, user_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
+
+    Ok(Json(MeResponse {
+        user_id: user.id.to_string(),
+        username: user.username,
+        email: user.email,
+        is_verified: user.is_verified,
+        is_admin: user.is_admin,
+        two_factor_enabled: user.two_factor_enabled,
+        created_at: user.created_at,
     }))
 }

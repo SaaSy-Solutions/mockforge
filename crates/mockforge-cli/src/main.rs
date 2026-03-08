@@ -1150,6 +1150,27 @@ enum Commands {
         cloud_command: cloud_commands::CloudCommands,
     },
 
+    /// Authenticate with MockForge Cloud (alias for 'cloud login')
+    ///
+    /// Examples:
+    ///   mockforge login
+    ///   mockforge login --token <api-token>
+    ///   mockforge login --provider github
+    #[command(verbatim_doc_comment)]
+    Login {
+        /// API token for authentication
+        #[arg(long)]
+        token: Option<String>,
+
+        /// OAuth provider (github, google)
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
+
     /// Expose local MockForge server via public URL (tunneling)
     ///
     /// Examples:
@@ -3051,6 +3072,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             cloud_commands::handle_cloud_command(cloud_command)
                 .await
                 .map_err(|e| anyhow::anyhow!("Cloud command failed: {}", e))?;
+        }
+
+        Commands::Login {
+            token,
+            provider,
+            service_url,
+        } => {
+            cloud_commands::handle_cloud_command(cloud_commands::CloudCommands::Login {
+                token,
+                provider,
+                service_url,
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Login failed: {}", e))?;
         }
 
         Commands::Tunnel { tunnel_command } => {

@@ -1,0 +1,54 @@
+# Fly.io configuration for MockForge Registry Server
+# Deploy: flyctl deploy --config fly.registry.toml
+
+app = "mockforge-registry"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.registry"
+
+[env]
+  PORT = "8080"
+  RUST_LOG = "mockforge_registry_server=info,tower_http=info"
+  SKIP_MIGRATIONS = "false"
+
+# Secrets to set via `flyctl secrets set`:
+#   DATABASE_URL          - PostgreSQL connection string (from `flyctl postgres attach`)
+#   JWT_SECRET            - Random 256-bit secret for JWT signing
+#   FLYIO_API_TOKEN       - Fly.io API token for deploying hosted mocks
+#   FLYIO_ORG_SLUG        - Fly.io organization slug
+#   CORS_ALLOWED_ORIGINS  - "https://app.mockforge.dev"
+#   REDIS_URL             - Optional: Redis connection string
+#   S3_BUCKET             - S3 bucket for plugin/spec storage
+#   S3_REGION             - S3 region
+#   AWS_ACCESS_KEY_ID     - S3 credentials
+#   AWS_SECRET_ACCESS_KEY - S3 credentials
+#   STRIPE_SECRET_KEY     - Stripe API key
+#   STRIPE_WEBHOOK_SECRET - Stripe webhook signing secret
+#   SMTP_HOST             - SMTP server for transactional email
+#   SMTP_USERNAME         - SMTP credentials
+#   SMTP_PASSWORD         - SMTP credentials
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/metrics/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

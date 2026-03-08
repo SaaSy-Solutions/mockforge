@@ -90,6 +90,63 @@ pub enum CloudCommands {
         #[arg(long, default_value = "20")]
         limit: u32,
     },
+
+    /// Deploy a mock service to MockForge Cloud
+    ///
+    /// Examples:
+    ///   mockforge cloud deploy --spec api.json --name "My API"
+    ///   mockforge cloud deploy --spec api.json --name "My API" --slug my-api --region iad --wait
+    #[command(verbatim_doc_comment)]
+    Deploy {
+        /// Path to OpenAPI spec file (JSON or YAML)
+        #[arg(long)]
+        spec: PathBuf,
+
+        /// Name for the deployment
+        #[arg(long)]
+        name: String,
+
+        /// URL-friendly slug (auto-generated from name if not provided)
+        #[arg(long)]
+        slug: Option<String>,
+
+        /// Deployment region (Fly.io region code, e.g., iad, lhr, sjc)
+        #[arg(long, default_value = "iad")]
+        region: String,
+
+        /// Wait for deployment to become active
+        #[arg(long)]
+        wait: bool,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
+
+    /// List all cloud deployments
+    ///
+    /// Examples:
+    ///   mockforge cloud deployments
+    #[command(verbatim_doc_comment)]
+    Deployments {
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
+
+    /// Check status of a specific deployment
+    ///
+    /// Examples:
+    ///   mockforge cloud deployment-status <id>
+    #[command(verbatim_doc_comment, name = "deployment-status")]
+    DeploymentStatus {
+        /// Deployment ID
+        id: String,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
 }
 
 /// Sync command subcommands
@@ -343,6 +400,18 @@ pub async fn handle_cloud_command(cmd: CloudCommands) -> Result<()> {
             service_url,
             limit,
         } => handle_activity(workspace, service_url, limit).await,
+        CloudCommands::Deploy {
+            spec,
+            name,
+            slug,
+            region,
+            wait,
+            service_url,
+        } => handle_deploy(spec, name, slug, region, wait, service_url).await,
+        CloudCommands::Deployments { service_url } => handle_deployments(service_url).await,
+        CloudCommands::DeploymentStatus { id, service_url } => {
+            handle_deployment_status(id, service_url).await
+        }
     }
 }
 
@@ -1234,6 +1303,256 @@ async fn handle_activity(workspace: Option<String>, service_url: String, limit: 
         println!("{}", serde_json::to_string_pretty(&activity)?);
     } else {
         println!("{}", "❌ Failed to fetch activity".red());
+    }
+
+    Ok(())
+}
+
+/// Handle deploy command
+async fn handle_deploy(
+    spec: PathBuf,
+    name: String,
+    slug: Option<String>,
+    region: String,
+    wait: bool,
+    service_url: String,
+) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    // Read spec file
+    let spec_content = std::fs::read_to_string(&spec).context("Failed to read spec file")?;
+
+    // Parse as JSON or YAML to validate
+    let spec_value: serde_json::Value =
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&spec_content) {
+            v
+        } else if let Ok(v) = serde_yaml::from_str::<serde_json::Value>(&spec_content) {
+            v
+        } else {
+            anyhow::bail!("Spec file must be valid JSON or YAML");
+        };
+
+    if spec_value.get("openapi").is_none() && spec_value.get("swagger").is_none() {
+        anyhow::bail!("Spec file must contain an 'openapi' or 'swagger' field");
+    }
+
+    println!("{}", "Uploading spec...".cyan());
+
+    // Upload spec via multipart
+    let file_name = spec.file_name().and_then(|n| n.to_str()).unwrap_or("spec.json").to_string();
+
+    let spec_json = serde_json::to_vec_pretty(&spec_value)?;
+    let form = reqwest::multipart::Form::new().part(
+        "file",
+        reqwest::multipart::Part::bytes(spec_json)
+            .file_name(file_name)
+            .mime_str("application/json")?,
+    );
+
+    let upload_response = client
+        .post(format!("{}/api/v1/hosted-mocks/specs/upload", service_url))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .multipart(form)
+        .send()
+        .await
+        .context("Failed to upload spec")?;
+
+    if !upload_response.status().is_success() {
+        let error_body = upload_response.text().await.unwrap_or_default();
+        anyhow::bail!("Failed to upload spec: {}", error_body);
+    }
+
+    let upload_result: serde_json::Value = upload_response.json().await?;
+    let spec_url = upload_result
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Upload response missing 'url' field"))?;
+
+    println!("{}", "Creating deployment...".cyan());
+
+    // Create deployment
+    let deploy_body = json!({
+        "name": name,
+        "slug": slug,
+        "config_json": spec_value,
+        "openapi_spec_url": spec_url,
+        "region": region,
+    });
+
+    let deploy_response = client
+        .post(format!("{}/api/v1/hosted-mocks", service_url))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&deploy_body)
+        .send()
+        .await
+        .context("Failed to create deployment")?;
+
+    if !deploy_response.status().is_success() {
+        let error_body = deploy_response.text().await.unwrap_or_default();
+        anyhow::bail!("Failed to create deployment: {}", error_body);
+    }
+
+    let deployment: serde_json::Value = deploy_response.json().await?;
+    let deployment_id = deployment.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    println!("{}", format!("Deployment created: {}", deployment_id).green());
+
+    if wait {
+        println!("{}", "Waiting for deployment to become active...".cyan());
+
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(300); // 5 minutes
+
+        loop {
+            if start.elapsed() > timeout {
+                anyhow::bail!("Deployment timed out after 5 minutes");
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+            let status_response = client
+                .get(format!("{}/api/v1/hosted-mocks/{}", service_url, deployment_id))
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send()
+                .await
+                .context("Failed to check deployment status")?;
+
+            if status_response.status().is_success() {
+                let status: serde_json::Value = status_response.json().await?;
+                let state = status.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+                match state {
+                    "active" => {
+                        let url = status
+                            .get("deployment_url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        println!("{}", format!("Deployment active! URL: {}", url).green().bold());
+                        return Ok(());
+                    }
+                    "failed" => {
+                        let error = status
+                            .get("error_message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Unknown error");
+                        anyhow::bail!("Deployment failed: {}", error);
+                    }
+                    _ => {
+                        print!(".");
+                    }
+                }
+            }
+        }
+    } else {
+        println!(
+            "{}",
+            format!("Check status with: mockforge cloud deployment-status {}", deployment_id)
+                .dimmed()
+        );
+    }
+
+    Ok(())
+}
+
+/// Handle list deployments command
+async fn handle_deployments(service_url: String) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(format!("{}/api/v1/hosted-mocks", service_url))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .context("Failed to fetch deployments")?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        anyhow::bail!("Failed to list deployments: {}", error_body);
+    }
+
+    let deployments: Vec<serde_json::Value> = response.json().await?;
+
+    if deployments.is_empty() {
+        println!("{}", "No deployments found.".dimmed());
+        println!(
+            "{}",
+            "Create one with: mockforge cloud deploy --spec api.json --name \"My API\"".dimmed()
+        );
+        return Ok(());
+    }
+
+    println!("{}", "Cloud Deployments".cyan().bold());
+    println!("{:<36}  {:<20}  {:<10}  {:<10}  {}", "ID", "NAME", "STATUS", "HEALTH", "URL");
+    println!("{}", "-".repeat(110));
+
+    for d in deployments {
+        let id = d.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+        let name = d.get("name").and_then(|v| v.as_str()).unwrap_or("-");
+        let status = d.get("status").and_then(|v| v.as_str()).unwrap_or("-");
+        let health = d.get("health_status").and_then(|v| v.as_str()).unwrap_or("-");
+        let url = d.get("deployment_url").and_then(|v| v.as_str()).unwrap_or("-");
+
+        let status_colored = match status {
+            "active" => status.green().to_string(),
+            "failed" => status.red().to_string(),
+            "deploying" | "pending" => status.yellow().to_string(),
+            _ => status.dimmed().to_string(),
+        };
+
+        println!("{:<36}  {:<20}  {:<10}  {:<10}  {}", id, name, status_colored, health, url);
+    }
+
+    Ok(())
+}
+
+/// Handle deployment status command
+async fn handle_deployment_status(id: String, service_url: String) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(format!("{}/api/v1/hosted-mocks/{}", service_url, id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .context("Failed to fetch deployment status")?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        anyhow::bail!("Failed to get deployment status: {}", error_body);
+    }
+
+    let deployment: serde_json::Value = response.json().await?;
+
+    println!("{}", "Deployment Details".cyan().bold());
+    println!("  ID:      {}", deployment.get("id").and_then(|v| v.as_str()).unwrap_or("-"));
+    println!("  Name:    {}", deployment.get("name").and_then(|v| v.as_str()).unwrap_or("-"));
+    println!(
+        "  Status:  {}",
+        deployment.get("status").and_then(|v| v.as_str()).unwrap_or("-")
+    );
+    println!(
+        "  Health:  {}",
+        deployment.get("health_status").and_then(|v| v.as_str()).unwrap_or("-")
+    );
+    println!(
+        "  URL:     {}",
+        deployment
+            .get("deployment_url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Not available")
+    );
+    println!(
+        "  Created: {}",
+        deployment.get("created_at").and_then(|v| v.as_str()).unwrap_or("-")
+    );
+
+    if let Some(error) = deployment.get("error_message").and_then(|v| v.as_str()) {
+        if !error.is_empty() {
+            println!("  Error:   {}", error.red());
+        }
     }
 
     Ok(())

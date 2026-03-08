@@ -23,6 +23,7 @@ pub mod template;
 pub mod template_review;
 pub mod user;
 pub mod verification_token;
+pub mod waitlist;
 
 pub use verification_token::VerificationToken;
 

@@ -41,6 +41,9 @@ pub fn create_router() -> Router<AppState> {
         .route("/api/v1/status", get(handlers::status::get_status))
         // Support contact (public, works with or without auth)
         .route("/api/v1/support/contact", post(handlers::support::submit_contact))
+        // Waitlist signup (public)
+        .route("/api/v1/waitlist/subscribe", post(handlers::waitlist::subscribe))
+        .route("/api/v1/waitlist/unsubscribe", get(handlers::waitlist::unsubscribe))
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))
@@ -64,6 +67,9 @@ pub fn create_router() -> Router<AppState> {
             "/api/v1/plugins/{name}/reviews/{review_id}/vote",
             post(handlers::reviews::vote_review),
         )
+        // Auth info routes
+        .route("/api/v1/auth/verify", get(handlers::auth::verify_token))
+        .route("/api/v1/auth/me", get(handlers::auth::me))
         // 2FA routes
         .route("/api/v1/auth/2fa/setup", get(handlers::two_factor::setup_2fa))
         .route("/api/v1/auth/2fa/verify-setup", post(handlers::two_factor::verify_2fa_setup_with_secret))
@@ -103,6 +109,7 @@ pub fn create_router() -> Router<AppState> {
         // Email verification (resend requires auth)
         .route("/api/v1/auth/verify-email/resend", post(handlers::verification::resend_verification))
         // Hosted mocks deployment routes
+        .route("/api/v1/hosted-mocks/specs/upload", post(handlers::hosted_mocks::upload_spec))
         .route("/api/v1/hosted-mocks", post(handlers::hosted_mocks::create_deployment))
         .route("/api/v1/hosted-mocks", get(handlers::hosted_mocks::list_deployments))
         .route("/api/v1/hosted-mocks/{deployment_id}", get(handlers::hosted_mocks::get_deployment))

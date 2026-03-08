@@ -298,7 +298,8 @@ impl DeploymentOrchestrator {
         let base_url = std::env::var("MOCKFORGE_BASE_URL")
             .unwrap_or_else(|_| "https://mocks.mockforge.dev".to_string());
 
-        let deployment_url = format!("{}/{}/{}", base_url, deployment.org_id, deployment.slug);
+        let deployment_url =
+            format!("{}/mocks/{}/{}", base_url, deployment.org_id, deployment.slug);
         let health_check_url = format!("{}/health/live", deployment_url);
 
         sqlx::query(

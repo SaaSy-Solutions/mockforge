@@ -1,0 +1,70 @@
+# Multi-stage Docker build for MockForge Registry Server
+# Builds only the registry server binary (not the full CLI)
+
+# Stage 1: Build
+FROM rust:1.90-slim AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    build-essential \
+    g++ \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+
+# Remove workspace members not needed for the registry server build
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
+
+COPY crates/ ./crates/
+COPY proto/ ./proto/
+
+# Create placeholder UI dist files (registry server doesn't serve the UI,
+# but mockforge-ui crate needs dist/ to compile)
+RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
+    echo '<!DOCTYPE html><html><body></body></html>' > crates/mockforge-ui/ui/dist/index.html && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.css && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.js && \
+    echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json && \
+    echo '' > crates/mockforge-ui/ui/dist/sw.js
+
+# Build only the registry server
+RUN cargo build --release --bin mockforge-registry-server
+
+# Stage 2: Runtime
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/mockforge-registry-server /usr/local/bin/mockforge-registry-server
+
+RUN mkdir -p data logs && chown -R mockforge:mockforge /app
+
+USER mockforge
+
+# Registry server port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/metrics/health || exit 1
+
+ENV PORT=8080
+ENV RUST_LOG=mockforge_registry_server=info,tower_http=info
+
+CMD ["/usr/local/bin/mockforge-registry-server"]

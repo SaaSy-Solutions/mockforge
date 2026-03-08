@@ -208,6 +208,18 @@ async fn main() -> Result<()> {
     let _orchestrator_handle = orchestrator.start();
     tracing::info!("Deployment orchestrator started");
 
+    // Start health check worker for deployed mocks
+    let health_checker =
+        Arc::new(deployment::health_check::HealthCheckWorker::new(Arc::new(db.pool().clone())));
+    let _health_check_handle = health_checker.start();
+    tracing::info!("Health check worker started");
+
+    // Start metrics collector for deployed mocks
+    let metrics_collector =
+        Arc::new(deployment::metrics::MetricsCollector::new(Arc::new(db.pool().clone())));
+    let _metrics_collector_handle = metrics_collector.start();
+    tracing::info!("Metrics collector started");
+
     // Build router
     let app = create_app(state, rate_limiter);
 
@@ -316,6 +328,7 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
 
     Router::new()
         .merge(routes::create_router())
+        .merge(deployment::router::MultitenantRouter::create_router())
         .merge(metrics_router)
         .layer(DefaultBodyLimit::max(max_body_size))
         .layer(cors)
