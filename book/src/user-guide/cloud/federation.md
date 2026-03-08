@@ -4,6 +4,8 @@
 
 Multi-Workspace Federation enables composing multiple mock workspaces into one federated "virtual system" for large organizations with microservices architectures.
 
+> Readiness note: treat this page as an architecture and design guide. Federation concepts and supporting code paths exist, but this page should not be read as a verified public CLI workflow unless you have confirmed the exact deployment surface in your environment.
+
 ## Overview
 
 Federation allows you to:
@@ -238,38 +240,15 @@ The router uses longest match for path matching:
 /api/v1                 → Default service
 ```
 
-## Usage
+## Current Surface
 
-### Create Federation
+The safest way to use this page today is as:
 
-```bash
-# Create federation from YAML
-mockforge federation create federation.yaml
+- A model for how to partition workspaces by service boundary
+- A planning document for composing larger multi-service test environments
+- A reference when evaluating whether your deployment should expose federation-aware routing or peer views
 
-# Or via API
-POST /api/v1/federations
-{
-  "name": "e-commerce-platform",
-  "services": [...]
-}
-```
-
-### Start Federated System
-
-```bash
-# Start all services in federation
-mockforge federation start e-commerce-platform
-
-# Start specific services
-mockforge federation start e-commerce-platform --services auth,payments
-```
-
-### Run System-Wide Scenario
-
-```bash
-# Run scenario across all services
-mockforge federation scenario run e-commerce-platform end-to-end-checkout
-```
+The codebase includes federation-oriented surfaces, including peer-oriented views in the TUI and related handlers, but the command examples that used to appear here were more productized than the currently verified public workflow.
 
 ## Real-World Example
 
@@ -321,4 +300,3 @@ federation:
 - [MockOps Pipelines](mockops-pipelines.md) - Pipeline automation
 - [Analytics Dashboard](analytics-dashboard.md) - Usage analytics
 - [Cloud Workspaces](cloud-workspaces.md) - Workspace management
-

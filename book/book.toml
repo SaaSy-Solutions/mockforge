@@ -1,6 +1,6 @@
 [book]
 title = "MockForge Documentation"
-author = "MockForge Contributors"
+authors = ["MockForge Contributors"]
 description = "A comprehensive mocking framework for APIs, gRPC, and WebSockets"
 language = "en"
 

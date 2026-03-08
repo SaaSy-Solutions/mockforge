@@ -9,12 +9,13 @@
 - [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Basic Concepts](getting-started/concepts.md)
-- [The Five Pillars](../../docs/PILLARS.md)
 
 ### Choose Your Path
 
-- [Reality-First Onboarding](getting-started/reality-first.md) - Start here if you care about realism
-- [Contracts-First Onboarding](getting-started/contracts-first.md) - Start here if you're a Platform/API team
+- [Open Source Builder](getting-started/devx-first.md) - Start here for local CLI workflows and fast setup
+- [Product Team](getting-started/reality-first.md) - Start here for realistic mocks across frontend, backend, and QA
+- [Platform / API Team](getting-started/contracts-first.md) - Start here for spec-driven and contract-heavy workflows
+- [Cloud / Enterprise](getting-started/cloud-first.md) - Start here for shared environments and managed rollout
 - [AI-First Onboarding](getting-started/ai-first.md) - Start here if you want natural-language-driven mocks
 
 ## Tutorials
@@ -29,22 +30,7 @@
 - [IDE Extension Guide](tutorials/ide-extension-guide.md) - VS Code extension walkthrough
 - [Add a Custom Plugin](tutorials/add-custom-plugin.md)
 
-## Protocols
-
-- [MQTT](protocols/mqtt/getting-started.md)
-  - [Configuration](protocols/mqtt/configuration.md)
-  - [Fixtures](protocols/mqtt/fixtures.md)
-  - [Examples](protocols/mqtt/examples.md)
-- [SMTP](protocols/smtp/getting-started.md)
-   - [Configuration](protocols/smtp/configuration.md)
-   - [Fixtures](protocols/smtp/fixtures.md)
-   - [Examples](protocols/smtp/examples.md)
-- [FTP](protocols/ftp/getting-started.md)
-   - [Configuration](protocols/ftp/configuration.md)
-   - [Fixtures](protocols/ftp/fixtures.md)
-   - [Examples](protocols/ftp/examples.md)
-
-## User Guide
+## Core Workflows
 
 - [HTTP Mocking](user-guide/http-mocking.md)
   - [OpenAPI Integration](user-guide/http-mocking/openapi.md)
@@ -64,6 +50,16 @@
 - [Directory Synchronization](user-guide/sync.md)
 - [Admin UI](user-guide/admin-ui.md)
 - [IDE Integration](user-guide/ide-integration.md)
+
+## Team and Cloud
+
+- [Cloud Workspaces](user-guide/cloud-workspaces.md)
+- [MockOps Pipelines](user-guide/cloud/mockops-pipelines.md)
+- [Multi-Workspace Federation](user-guide/cloud/federation.md)
+- [Analytics Dashboard](user-guide/cloud/analytics-dashboard.md)
+
+## Advanced and Labs
+
 - [Advanced Features](user-guide/advanced-features.md)
   - [VBR Engine](user-guide/vbr-engine.md)
   - [Temporal Simulation](user-guide/temporal-simulation.md)
@@ -78,7 +74,6 @@
   - [World State Engine](user-guide/advanced-features/world-state-engine.md)
   - [Performance Mode](user-guide/advanced-features/performance-mode.md)
   - [Drift Learning](user-guide/advanced-features/drift-learning.md)
-  - [Cloud Workspaces](user-guide/cloud-workspaces.md)
   - [Scenario Marketplace](user-guide/scenario-marketplace.md)
   - [ForgeConnect SDK](user-guide/forgeconnect-sdk.md)
   - [Deceptive Deploys](user-guide/deceptive-deploys.md)
@@ -91,12 +86,24 @@
   - [Zero-Config Mode](user-guide/devx/zero-config-mode.md)
   - [Mock-Oriented Development](user-guide/devx/mock-oriented-development.md)
   - [Snapshot Diff](user-guide/devx/snapshot-diff.md)
-  - [MockOps Pipelines](user-guide/cloud/mockops-pipelines.md)
-  - [Multi-Workspace Federation](user-guide/cloud/federation.md)
-  - [Analytics Dashboard](user-guide/cloud/analytics-dashboard.md)
   - [API Architecture Critique](user-guide/ai/api-architecture-critique.md)
   - [System Generation](user-guide/ai/system-generation.md)
   - [Behavioral Simulation](user-guide/ai/behavioral-simulation.md)
+
+## Additional Protocols
+
+- [SMTP](protocols/smtp/getting-started.md)
+  - [Configuration](protocols/smtp/configuration.md)
+  - [Fixtures](protocols/smtp/fixtures.md)
+  - [Examples](protocols/smtp/examples.md)
+- [MQTT](protocols/mqtt/getting-started.md)
+  - [Configuration](protocols/mqtt/configuration.md)
+  - [Fixtures](protocols/mqtt/fixtures.md)
+  - [Examples](protocols/mqtt/examples.md)
+- [FTP](protocols/ftp/getting-started.md)
+  - [Configuration](protocols/ftp/configuration.md)
+  - [Fixtures](protocols/ftp/fixtures.md)
+  - [Examples](protocols/ftp/examples.md)
 
 ## Configuration
 
@@ -132,6 +139,7 @@
 
 ## Reference
 
+- [The Five Pillars](../../docs/PILLARS.md)
 - [Configuration Schema](reference/config-schema.md)
 - [Configuration Validation](reference/config-validation.md)
 - [Supported Formats](reference/formats.md)

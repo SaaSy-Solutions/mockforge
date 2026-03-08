@@ -1,0 +1,56 @@
+name: Docs Check
+
+on:
+  pull_request:
+    paths:
+      - 'book/**'
+      - 'scripts/automated-tests/test-docs.sh'
+      - '.github/workflows/docs-check.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'book/**'
+      - 'scripts/automated-tests/test-docs.sh'
+      - '.github/workflows/docs-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: Verify mdBook Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.40'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache mdBook plugins
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: docs-mdbook-plugins-${{ runner.os }}
+          restore-keys: docs-mdbook-plugins-${{ runner.os }}
+
+      - name: Install mdBook plugins
+        run: |
+          if [ ! -f ~/.cargo/bin/mdbook-toc ]; then
+            cargo install mdbook-toc
+          fi
+          if [ ! -f ~/.cargo/bin/mdbook-mermaid ]; then
+            cargo install mdbook-mermaid
+          fi
+
+      - name: Run docs verification script
+        run: bash scripts/automated-tests/test-docs.sh

@@ -4,6 +4,8 @@
 
 The Analytics Dashboard provides leadership insight into coverage, risk, and usage. It shows which scenarios are used most, what personas are hit by CI, which endpoints are under-tested, which mocks have stale reality levels, and what percentage of mocks are drifting from real data.
 
+> Deployment note: the analytics routes documented here exist in the codebase, but they depend on the analytics database and the UI/router layer being enabled in your environment. Treat this as a real API surface with deployment prerequisites, not a guaranteed default on every MockForge install.
+
 ## Overview
 
 The Analytics Dashboard gives you:
@@ -218,4 +220,3 @@ analytics:
 - [MockOps Pipelines](mockops-pipelines.md) - Pipeline automation
 - [Federation](federation.md) - Multi-workspace federation
 - [Cloud Workspaces](cloud-workspaces.md) - Workspace management
-

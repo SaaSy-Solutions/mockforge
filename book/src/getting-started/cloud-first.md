@@ -16,7 +16,7 @@ Perfect for:
 
 ## Quick Start: 5 Minutes
 
-Let's set up MockForge Cloud for team collaboration:
+Use this path when you need a shared workspace, cloud sync, and basic team collaboration around mocks.
 
 ```bash
 # Install MockForge CLI
@@ -25,151 +25,105 @@ cargo install mockforge-cli
 # Login to MockForge Cloud
 mockforge cloud login
 
-# Create or join an organization
-mockforge cloud org create my-org
-# Or join an existing org
-mockforge cloud org join my-org
+# See which organizations are available to your account
+mockforge org list
+
+# Set the active organization context
+mockforge org use my-org
 ```
 
 ### Option 1: Create a Shared Workspace
 
 ```bash
-# Create a workspace in your organization
-mockforge cloud workspace create my-workspace --org my-org
+# Create a cloud workspace
+mockforge cloud workspace create my-workspace --name "Shared API Mocks"
 
-# Share the workspace with your team
-mockforge cloud workspace share my-workspace --user teammate@example.com
+# Inspect workspace details
+mockforge cloud workspace info my-workspace
 
-# Sync your local config to the cloud
-mockforge cloud sync --workspace my-workspace
+# Invite a teammate
+mockforge cloud team invite teammate@example.com --workspace my-workspace --role editor
+
+# Link a local directory to the cloud workspace
+mockforge cloud workspace link . my-workspace
+
+# Start sync
+mockforge cloud sync start --workspace my-workspace --watch
 ```
 
-### Option 2: Use Marketplace Scenarios
+### Option 2: Manage Team Access and Activity
 
 ```bash
-# Browse available scenarios
-mockforge marketplace list
+# List team members
+mockforge cloud team members --workspace my-workspace
 
-# Search for specific scenarios
-mockforge marketplace search "user management"
-
-# Install a scenario
-mockforge marketplace install ecommerce-api-scenario
-
-# Use the installed scenario
-mockforge serve --scenario ecommerce-api-scenario
+# Review recent activity
+mockforge cloud activity --workspace my-workspace
 ```
 
-### Option 3: Publish Your Own Scenario
+### Option 3: Check Sync Health
 
 ```bash
-# Create a scenario from your config
-mockforge scenario create my-scenario --from-config mockforge.yaml
+# Current sync status
+mockforge cloud sync status --workspace my-workspace
 
-# Publish to marketplace
-mockforge marketplace publish my-scenario --org my-org
+# Pending changes
+mockforge cloud sync pending --workspace my-workspace
 
-# Share with specific organizations
-mockforge marketplace share my-scenario --org partner-org
+# Sync history
+mockforge cloud sync history --workspace my-workspace
 ```
 
 ## Key Cloud Features
 
 ### 1. Organization Management
 
-- **Multi-tenant workspaces** - Isolate workspaces by organization
-- **Team collaboration** - Share workspaces and scenarios
-- **Access controls** - RBAC for fine-grained permissions
-- **Audit logging** - Track all changes and access
+- **Organization context** - Switch between org scopes with `mockforge org use`
+- **Shared workspaces** - Keep team mocks under a common cloud workspace
+- **Basic access control flows** - Invite collaborators and manage roles
+- **Activity visibility** - Review workspace-level team activity
 
-### 2. Scenario Marketplace
-
-- **Discover scenarios** - Browse pre-built mock scenarios
-- **Publish scenarios** - Share your scenarios with the community
-- **Version control** - Track scenario versions and updates
-- **Ratings and reviews** - Community feedback on scenarios
-
-### 3. Registry Server
-
-- **Centralized registry** - Single source of truth for mocks
-- **Distribution** - Easy sharing across teams
-- **Versioning** - Manage mock versions centrally
-- **Governance** - Control what gets published
-
-### 4. Cloud Workspaces
+### 2. Cloud Workspaces
 
 - **Synchronization** - Sync local and cloud workspaces
-- **Backup and restore** - Automatic backups of workspace configs
-- **Collaboration** - Real-time collaboration on workspace configs
-- **History** - Track changes over time
+- **Linking** - Connect a local project directory to a cloud workspace
+- **History** - Inspect sync history and pending changes
+- **Team collaboration** - Invite team members to a shared workspace
 
-### 5. Governance & Access Control
+### 3. Advanced Cloud Surfaces
 
-- **Role-based access** - Fine-grained permissions
-- **Organization policies** - Enforce standards across teams
-- **Audit trails** - Complete audit logging
-- **Compliance** - Meet regulatory requirements
+- **Federation** - Compose multi-workspace systems for larger environments
+- **Analytics** - Query usage and coverage signals across workspaces
+- **Pipelines** - Event-driven automation crate and integration surface
+- **Marketplace and governance** - Present in the broader platform, but verify current deployment and command surface before standardizing team workflows around them
 
 ## Example: Team Workflow
 
 ```bash
-# 1. Team lead creates organization
-mockforge cloud org create acme-corp
+# 1. Authenticate and set org context
+mockforge cloud login
+mockforge org use acme-corp
 
-# 2. Team lead creates workspace
-mockforge cloud workspace create api-mocks --org acme-corp
+# 2. Create a shared cloud workspace
+mockforge cloud workspace create api-mocks --name "API Mocks"
 
-# 3. Team members join organization
-mockforge cloud org join acme-corp
+# 3. Link the local repo to that workspace
+mockforge cloud workspace link . api-mocks
 
-# 4. Team members clone workspace
-mockforge cloud workspace clone api-mocks
+# 4. Invite teammates
+mockforge cloud team invite teammate@example.com --workspace api-mocks --role editor
 
-# 5. Team members work locally
-# ... make changes to mockforge.yaml ...
-
-# 6. Team members sync changes
-mockforge cloud sync --workspace api-mocks
-
-# 7. Team lead reviews and approves
-mockforge cloud workspace review api-mocks
-
-# 8. Changes are deployed
-mockforge cloud workspace deploy api-mocks
-```
-
-## Marketplace Examples
-
-### E-commerce API Scenario
-
-```bash
-# Install e-commerce scenario
-mockforge marketplace install ecommerce-api
-
-# Use in your tests
-mockforge serve --scenario ecommerce-api
-```
-
-### Payment Gateway Scenario
-
-```bash
-# Search for payment scenarios
-mockforge marketplace search "payment"
-
-# Install payment gateway scenario
-mockforge marketplace install stripe-mock
-
-# Use in integration tests
-mockforge serve --scenario stripe-mock --port 3000
+# 5. Start sync and keep changes flowing
+mockforge cloud sync start --workspace api-mocks --watch
 ```
 
 ## Next Steps
 
-1. **Set up your organization**: Create or join an organization
-2. **Create workspaces**: Set up shared workspaces for your teams
-3. **Explore marketplace**: Discover and use pre-built scenarios
-4. **Publish scenarios**: Share your scenarios with the community
-5. **Configure governance**: Set up access controls and policies
+1. **Set up your organization context**: Run `mockforge org list` and `mockforge org use`
+2. **Create a shared workspace**: Use `mockforge cloud workspace create`
+3. **Connect local work**: Use `mockforge cloud workspace link` and `mockforge cloud sync start`
+4. **Invite collaborators**: Use `mockforge cloud team invite`
+5. **Explore deeper cloud features carefully**: Federation, analytics, and pipelines exist in the docs and codebase, but should be validated against your deployed environment before they become standard operating workflow
 
 ## Cross-Pillar Exploration
 
@@ -182,8 +136,7 @@ Once you've mastered Cloud, explore these complementary pillars:
 
 ## Resources
 
-- [Cloud Documentation](../docs/cloud/GETTING_STARTED.md)
-- [Marketplace Guide](../docs/SCENARIOS_MARKETPLACE.md)
-- [Organization Management](../docs/cloud/API_REFERENCE.md)
-- [RBAC Guide](../docs/RBAC_GUIDE.md)
-
+- [Cloud Workspaces](../user-guide/cloud-workspaces.md)
+- [Multi-Workspace Federation](../user-guide/cloud/federation.md)
+- [Analytics Dashboard](../user-guide/cloud/analytics-dashboard.md)
+- [MockOps Pipelines](../user-guide/cloud/mockops-pipelines.md)

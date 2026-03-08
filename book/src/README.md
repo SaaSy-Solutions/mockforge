@@ -5,20 +5,25 @@
 [![CI](https://github.com/SaaSy-Solutions/mockforge/workflows/CI/badge.svg)](https://github.com/SaaSy-Solutions/mockforge/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/SaaSy-Solutions/mockforge/blob/main/LICENSE)
 
-MockForge is a comprehensive mocking framework for APIs, gRPC services, and WebSockets. It provides a unified interface for creating, managing, and deploying mock servers across different protocols.
+MockForge helps teams simulate realistic backend behavior so frontend, backend, and QA work can move in parallel without waiting on live services.
 
-## The Five Pillars
+Start with local open-source workflows, then add richer scenarios, protocol coverage, and team-facing tooling as your test surface grows.
 
-MockForge is built on five foundational pillars: **[Reality]**, **[Contracts]**, **[DevX]**, **[Cloud]**, and **[AI]**. These pillars guide every feature we build and help you understand how MockForge delivers value. See the [complete Pillars documentation](../../docs/PILLARS.md) for detailed information.
+## What MockForge Is Good At
 
-## Features
+- Turning OpenAPI specs into usable mock services quickly
+- Unblocking frontend and integration work with realistic responses
+- Testing retries, fallbacks, and edge cases with scenario-aware behavior
+- Simulating more than plain REST when your stack includes gRPC, GraphQL, WebSockets, or SMTP
+- Giving teams an admin surface and repeatable workflows instead of ad hoc fixture sprawl
 
-- **Multi-Protocol Support**: HTTP REST APIs, gRPC services, and WebSocket connections
-- **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
-- **Scenario Management**: Define complex interaction scenarios with state management
-- **CLI Tool**: Easy-to-use command-line interface for local development
-- **Admin UI**: Web-based interface for managing mock servers
-- **Extensible Architecture**: Plugin system for custom response generators
+## Start Here
+
+- New to MockForge: [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
+- Building a real workflow: [The Golden Path: Blueprint -> Dev-Setup -> Integration](tutorials/golden-path.md)
+- Evaluating fit for frontend and QA teams: [Reality-First Onboarding](getting-started/reality-first.md)
+- Evaluating fit for platform and API teams: [Contracts-First Onboarding](getting-started/contracts-first.md)
+- Planning hosted or multi-team rollout: [Cloud-First Onboarding](getting-started/cloud-first.md)
 
 ## Quick Start
 
@@ -46,26 +51,39 @@ cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --admin --
 cargo run -p mockforge-cli -- serve --config demo-config.yaml
 ```
 
-### Docker
+### Next Steps
 
-```bash
-docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 SaaSy-Solutions/mockforge
-```
+- [Mock a REST API from OpenAPI](tutorials/mock-openapi-spec.md)
+- [React + MockForge Workflow](tutorials/react-workflow.md)
+- [Vue + MockForge Workflow](tutorials/vue-workflow.md)
+- [Admin UI Walkthrough](tutorials/admin-ui-walkthrough.md)
 
-## Documentation Structure
+## Core Capabilities
 
-- [Getting Started](getting-started.md) - Installation and basic setup
-- [HTTP Mocking](http-mocking.md) - REST API mocking guide
-- [gRPC Mocking](grpc-mocking.md) - gRPC service mocking
-- [WebSocket Mocking](websocket-mocking.md) - WebSocket connection mocking
-- [Configuration](configuration.md) - Advanced configuration options
-- [API Reference](api-reference.md) - Complete API documentation
-- [Contributing](contributing.md) - How to contribute to MockForge
-- [FAQ](faq.md) - Frequently asked questions
+- **OpenAPI-first HTTP mocking** with custom responses and dynamic data
+- **Scenario-aware simulation** for stateful behavior, latency, and failure paths
+- **Multi-protocol coverage** across REST, gRPC, GraphQL, WebSockets, and additional protocols
+- **Admin UI and CLI workflows** for local development and team usage
+- **Extensibility** through plugins, templates, and deeper configuration
+
+## Documentation Map
+
+- [Getting Started](getting-started/getting-started.md) - Install MockForge and choose the right path
+- [Tutorials](tutorials/README.md) - Follow end-to-end implementation workflows
+- [Core Workflows](user-guide/http-mocking.md) - Learn the main mocking and simulation surfaces
+- [Team and Cloud](user-guide/cloud-workspaces.md) - Shared workspaces, sync, and collaboration flows
+- [Advanced and Labs](user-guide/advanced-features.md) - Explore deeper platform capabilities
+- [Configuration](configuration/environment.md) - Configure MockForge for local and team use
+- [API Reference](api/cli.md) - CLI, Admin API, and Rust API details
+- [Reference](reference/faq.md) - Troubleshooting, schema, formats, and FAQ
 
 ## Examples
 
 Check out the [`examples/`](../examples/) directory for sample configurations and use cases.
+
+## Product Model
+
+MockForge is organized around five product pillars: **Reality**, **Contracts**, **DevX**, **Cloud**, and **AI**. If you want the full internal model behind the docs structure, see [The Five Pillars](../../docs/PILLARS.md).
 
 ## Community
 

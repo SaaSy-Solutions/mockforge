@@ -2,7 +2,9 @@
 
 **Pillars:** [Cloud]
 
-MockOps Pipelines provide GitHub Actions-like automation for mock lifecycle management. Think GitHub Actions + mocks—event-driven automation that makes MockForge orchestration for mock environments.
+MockOps Pipelines are an advanced automation surface for event-driven mock lifecycle orchestration. The underlying pipeline crate and event model exist in the codebase, but this page should be read as an implementation and integration guide, not as a polished end-user CLI workflow.
+
+> Readiness note: this feature is better treated as an advanced platform capability than a default buyer path unless you have verified the surrounding deployment, persistence, and triggering model in your own environment.
 
 ## Overview
 
@@ -335,4 +337,3 @@ mockforge pipelines execution <execution-id>
 - [Federation](federation.md) - Multi-workspace federation
 - [Analytics Dashboard](analytics-dashboard.md) - Usage analytics
 - [Cloud Workspaces](cloud-workspaces.md) - Workspace management
-
