@@ -246,7 +246,7 @@ impl Screen for RoutesScreen {
     }
 
     fn status_hint(&self) -> &str {
-        "s:sort  /:filter  j/k:scroll  Enter:details"
+        "s:sort  /:filter  j/k:scroll  g/G:top/bottom  PgUp/PgDn  Enter:details"
     }
 }
 
