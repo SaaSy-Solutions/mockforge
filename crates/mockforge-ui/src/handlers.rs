@@ -1011,8 +1011,14 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
 /// Get routes by proxying to HTTP server
 pub async fn get_routes(State(state): State<AdminState>) -> impl IntoResponse {
     if let Some(http_addr) = state.http_server_addr {
-        // Try to fetch routes from the HTTP server
-        let url = format!("http://{}/__mockforge/routes", http_addr);
+        // When the HTTP server listens on 0.0.0.0, we can't connect to that address
+        // directly — use 127.0.0.1 (loopback) instead for the proxy request.
+        let proxy_ip = if http_addr.ip().is_unspecified() {
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        } else {
+            http_addr.ip()
+        };
+        let url = format!("http://{}:{}/__mockforge/routes", proxy_ip, http_addr.port());
         if let Ok(response) = reqwest::get(&url).await {
             if response.status().is_success() {
                 if let Ok(body) = response.text().await {

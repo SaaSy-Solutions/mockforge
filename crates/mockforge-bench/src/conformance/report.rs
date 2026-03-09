@@ -207,7 +207,7 @@ impl ConformanceReport {
                 println!();
                 println!(
                     "{}",
-                    "Tip: Use --conformance-all-operations to see which specific endpoints failed."
+                    "Tip: Use --conformance-all-operations (without --conformance-categories) to see which specific endpoints failed across all categories."
                         .yellow()
                 );
             }
@@ -225,53 +225,66 @@ impl ConformanceReport {
         println!("{}", "OWASP API Security Top 10 Coverage".bold());
         println!("{}", "=".repeat(64).bright_green());
 
-        // Collect which OWASP IDs are covered by tested features
-        let tested_check_names: HashSet<&str> = self
-            .check_results
-            .keys()
-            .filter_map(|name| {
-                // Map back to a feature check_name (handle path-qualified names)
-                ConformanceFeature::all()
-                    .iter()
-                    .find(|f| {
-                        name == f.check_name() || name.starts_with(&format!("{}:", f.check_name()))
-                    })
-                    .map(|f| f.check_name())
-            })
-            .collect();
+        // Build a map of feature check_name → passed/failed status
+        let mut feature_status: HashMap<&str, bool> = HashMap::new(); // true = all passed
+        for feature in ConformanceFeature::all() {
+            let check_name = feature.check_name();
 
-        let covered_owasp: HashSet<&str> = ConformanceFeature::all()
-            .iter()
-            .filter(|f| tested_check_names.contains(f.check_name()))
-            .flat_map(|f| f.related_owasp().iter().copied())
-            .collect();
+            // Exact match (reference mode)
+            if let Some((passes, fails)) = self.check_results.get(check_name) {
+                let passed = *fails == 0 && *passes > 0;
+                feature_status
+                    .entry(check_name)
+                    .and_modify(|prev| *prev = *prev && passed)
+                    .or_insert(passed);
+            } else {
+                // Prefix match (all-operations mode)
+                let prefix = format!("{}:", check_name);
+                for (name, (passes, fails)) in &self.check_results {
+                    if name.starts_with(&prefix) {
+                        let passed = *fails == 0 && *passes > 0;
+                        feature_status
+                            .entry(check_name)
+                            .and_modify(|prev| *prev = *prev && passed)
+                            .or_insert(passed);
+                    }
+                }
+            }
+        }
 
         for category in OwaspCategory::all() {
             let id = category.identifier();
             let name = category.short_name();
-            let covered = covered_owasp.contains(id);
 
-            let status = if covered {
-                "✓".green()
+            // Find features that map to this OWASP category and were tested
+            let mut tested = false;
+            let mut all_passed = true;
+            let mut via_categories: HashSet<&str> = HashSet::new();
+
+            for feature in ConformanceFeature::all() {
+                if !feature.related_owasp().contains(&id) {
+                    continue;
+                }
+                if let Some(&passed) = feature_status.get(feature.check_name()) {
+                    tested = true;
+                    if !passed {
+                        all_passed = false;
+                    }
+                    via_categories.insert(feature.category());
+                }
+            }
+
+            let (status, via) = if !tested {
+                ("-".bright_black(), String::new())
             } else {
-                "-".bright_black()
-            };
-
-            // Find which conformance categories provide coverage
-            let via = if covered {
-                let categories: HashSet<&str> = ConformanceFeature::all()
-                    .iter()
-                    .filter(|f| {
-                        tested_check_names.contains(f.check_name())
-                            && f.related_owasp().contains(&id)
-                    })
-                    .map(|f| f.category())
-                    .collect();
-                let mut cats: Vec<&str> = categories.into_iter().collect();
+                let mut cats: Vec<&str> = via_categories.into_iter().collect();
                 cats.sort();
-                format!(" (via {})", cats.join(", "))
-            } else {
-                String::new()
+                let via_str = format!(" (via {})", cats.join(", "));
+                if all_passed {
+                    ("✓".green(), via_str)
+                } else {
+                    ("⚠".yellow(), format!("{} — has failures", via_str))
+                }
             };
 
             println!("  {:<12} {:<40} {}{}", id, name, status, via);
@@ -327,5 +340,24 @@ mod tests {
         let json = r#"{ "checks": {} }"#;
         let report = ConformanceReport::from_json(json).unwrap();
         assert_eq!(report.overall_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_owasp_coverage_with_failures() {
+        // response:404 maps to API8 + API9, body:json maps to API4 + API8
+        // response:404 fails, so API8 and API9 should show as having failures
+        // body:json passes, so API4 should show as passing
+        let json = r#"{
+            "checks": {
+                "response:404": { "passes": 0, "fails": 1 },
+                "body:json": { "passes": 1, "fails": 0 },
+                "method:GET": { "passes": 1, "fails": 0 }
+            },
+            "overall": {}
+        }"#;
+
+        let report = ConformanceReport::from_json(json).unwrap();
+        // Print the report to verify visually (--nocapture)
+        report.print_report_with_options(false);
     }
 }
