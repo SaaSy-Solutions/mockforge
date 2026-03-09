@@ -13,21 +13,23 @@ primary_region = "iad"
   SKIP_MIGRATIONS = "false"
 
 # Secrets to set via `flyctl secrets set`:
-#   DATABASE_URL          - PostgreSQL connection string (from `flyctl postgres attach`)
+#   DATABASE_URL          - PostgreSQL connection string (Neon: postgresql://...?sslmode=require)
 #   JWT_SECRET            - Random 256-bit secret for JWT signing
 #   FLYIO_API_TOKEN       - Fly.io API token for deploying hosted mocks
 #   FLYIO_ORG_SLUG        - Fly.io organization slug
 #   CORS_ALLOWED_ORIGINS  - "https://app.mockforge.dev"
 #   REDIS_URL             - Optional: Redis connection string
-#   S3_BUCKET             - S3 bucket for plugin/spec storage
-#   S3_REGION             - S3 region
-#   AWS_ACCESS_KEY_ID     - S3 credentials
-#   AWS_SECRET_ACCESS_KEY - S3 credentials
+#   S3_BUCKET             - R2 bucket name (e.g. "mockforge-storage")
+#   S3_REGION             - "auto" for Cloudflare R2
+#   S3_ENDPOINT           - R2 endpoint (https://<ACCOUNT_ID>.r2.cloudflarestorage.com)
+#   AWS_ACCESS_KEY_ID     - R2 API token Access Key ID
+#   AWS_SECRET_ACCESS_KEY - R2 API token Secret Access Key
 #   STRIPE_SECRET_KEY     - Stripe API key
 #   STRIPE_WEBHOOK_SECRET - Stripe webhook signing secret
-#   SMTP_HOST             - SMTP server for transactional email
-#   SMTP_USERNAME         - SMTP credentials
-#   SMTP_PASSWORD         - SMTP credentials
+#   SMTP_HOST             - "smtp-relay.brevo.com"
+#   SMTP_PORT             - "587"
+#   SMTP_USERNAME         - Brevo login email
+#   SMTP_PASSWORD         - Brevo SMTP key
 
 [http_service]
   internal_port = 8080

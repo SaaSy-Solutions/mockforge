@@ -2,7 +2,7 @@
 # Builds only the registry server binary (not the full CLI)
 
 # Stage 1: Build
-FROM rust:1.90-slim AS builder
+FROM rust:1.91-slim AS builder
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
@@ -18,9 +18,12 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 
 # Remove workspace members not needed for the registry server build
+# (these directories aren't copied into the Docker context)
 RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
     sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
     sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/plugins\/response-graphql"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/test-integration"\s*,\?\s*$/d' Cargo.toml && \
     sed -i '/# Integration tests package/d' Cargo.toml
 
 COPY crates/ ./crates/

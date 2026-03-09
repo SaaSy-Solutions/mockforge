@@ -1534,6 +1534,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Start with basic router
     let mut app = Router::new();
     let mut include_default_health = true;
+    let mut captured_routes: Vec<RouteInfo> = Vec::new();
 
     // If an OpenAPI spec is provided, integrate it
     if let Some(ref spec) = spec_path {
@@ -1588,6 +1589,19 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 {
                     include_default_health = false;
                 }
+                // Capture route info for the /__mockforge/routes endpoint
+                captured_routes = registry
+                    .routes()
+                    .iter()
+                    .map(|r| RouteInfo {
+                        method: r.method.clone(),
+                        path: r.path.clone(),
+                        operation_id: r.operation.operation_id.clone(),
+                        summary: r.operation.summary.clone(),
+                        description: r.operation.description.clone(),
+                        parameters: r.parameters.clone(),
+                    })
+                    .collect();
                 // Use MockAI if available, otherwise use standard router
                 let spec_router = if let Some(ref mockai_instance) = _mockai {
                     tracing::debug!("Building router with MockAI support");
@@ -2819,6 +2833,18 @@ pub async fn build_router_with_chains_and_multi_tenant(
             debug!("Runtime daemon 404 detection middleware added");
         }
     }
+
+    // Add /__mockforge/routes endpoint so the admin UI can discover registered routes
+    {
+        let routes_state = HttpServerState::with_routes(captured_routes);
+        let routes_router = Router::new()
+            .route("/__mockforge/routes", axum::routing::get(get_routes_handler))
+            .with_state(routes_state);
+        app = app.merge(routes_router);
+    }
+
+    // Add request logging middleware to capture all requests for the admin dashboard
+    app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));
 
     // Add contract diff middleware for automatic request capture
     // This captures requests for contract diff analysis

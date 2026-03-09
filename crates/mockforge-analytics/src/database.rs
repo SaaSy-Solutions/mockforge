@@ -66,60 +66,66 @@ impl AnalyticsDatabase {
 
     /// Run database migrations
     ///
+    /// Migrations use `IF NOT EXISTS` guards so they are safe to re-run on
+    /// server restart against an existing database.
+    ///
     /// # Errors
     ///
-    /// Returns an error if any migration SQL fails to execute.
+    /// Returns an error if any migration SQL fails to execute (other than
+    /// benign "already exists" errors which are logged as warnings).
     pub async fn run_migrations(&self) -> Result<()> {
         info!("Running analytics database migrations");
 
-        // Run initial schema migration
-        let migration_sql = include_str!("../migrations/001_analytics_schema.sql");
-        let mut conn = self.pool.acquire().await?;
-        let mut stream = conn.execute_many(migration_sql);
-
-        while stream
-            .try_next()
-            .await
-            .map_err(|e| {
-                error!("Migration error: {}", e);
-                AnalyticsError::Migration(format!("Failed to execute migration: {e}"))
-            })?
-            .is_some()
-        {}
-
-        // Run coverage metrics migration
-        let coverage_migration_sql = include_str!("../migrations/003_coverage_metrics.sql");
-        let mut conn = self.pool.acquire().await?;
-        let mut stream = conn.execute_many(coverage_migration_sql);
-
-        while stream
-            .try_next()
-            .await
-            .map_err(|e| {
-                error!("Coverage metrics migration error: {}", e);
-                AnalyticsError::Migration(format!(
-                    "Failed to execute coverage metrics migration: {e}"
-                ))
-            })?
-            .is_some()
-        {}
-
-        // Run pillar usage migration
-        let pillar_usage_migration_sql = include_str!("../migrations/002_pillar_usage.sql");
-        let mut conn = self.pool.acquire().await?;
-        let mut stream = conn.execute_many(pillar_usage_migration_sql);
-
-        while stream
-            .try_next()
-            .await
-            .map_err(|e| {
-                error!("Pillar usage migration error: {}", e);
-                AnalyticsError::Migration(format!("Failed to execute pillar usage migration: {e}"))
-            })?
-            .is_some()
-        {}
+        Self::run_migration_file(
+            &self.pool,
+            "001_analytics_schema",
+            include_str!("../migrations/001_analytics_schema.sql"),
+        )
+        .await?;
+        Self::run_migration_file(
+            &self.pool,
+            "003_coverage_metrics",
+            include_str!("../migrations/003_coverage_metrics.sql"),
+        )
+        .await?;
+        Self::run_migration_file(
+            &self.pool,
+            "002_pillar_usage",
+            include_str!("../migrations/002_pillar_usage.sql"),
+        )
+        .await?;
 
         info!("Analytics database migrations completed successfully");
+        Ok(())
+    }
+
+    /// Execute a single migration file, treating "already exists" errors as
+    /// warnings rather than hard failures.  This provides defence-in-depth on
+    /// top of the `IF NOT EXISTS` guards in the SQL itself.
+    async fn run_migration_file(pool: &Pool<Sqlite>, name: &str, sql: &str) -> Result<()> {
+        debug!("Running migration: {}", name);
+        let mut conn = pool.acquire().await?;
+        let mut stream = conn.execute_many(sql);
+
+        while let Some(result) = stream.try_next().await.transpose() {
+            match result {
+                Ok(_) => {}
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("already exists") {
+                        debug!(
+                            "Migration {}: object already exists (safe to ignore): {}",
+                            name, msg
+                        );
+                    } else {
+                        error!("Migration {} error: {}", name, e);
+                        return Err(AnalyticsError::Migration(format!(
+                            "Failed to execute migration {name}: {e}"
+                        )));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

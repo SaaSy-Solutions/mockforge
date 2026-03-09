@@ -150,6 +150,13 @@ examples/test-integration/playwright/test-results/
 crates/mockforge-collab/*.db
 crates/mockforge-collab/*.db-shm
 crates/mockforge-collab/*.db-wal
+# Analytics SQLite databases (generated at runtime)
+analytics.db
+analytics.db-shm
+analytics.db-wal
+crates/mockforge-ui/analytics.db
+crates/mockforge-ui/analytics.db-shm
+crates/mockforge-ui/analytics.db-wal
 vscode-extension/out/
 vscode-extension/*.vsix
 

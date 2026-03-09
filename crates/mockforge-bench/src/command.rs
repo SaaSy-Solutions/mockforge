@@ -1833,6 +1833,12 @@ impl BenchCommand {
 
         TerminalReporter::print_progress("OpenAPI 3.0.0 Conformance Testing Mode");
 
+        // Conformance testing is a functional correctness check (1 VU, 1 iteration).
+        // --vus and -d flags are always ignored in this mode.
+        TerminalReporter::print_progress(
+            "Conformance mode runs 1 VU, 1 iteration per endpoint (--vus and -d are ignored)",
+        );
+
         // Parse category filter
         let categories = self.conformance_categories.as_ref().map(|cats_str| {
             cats_str

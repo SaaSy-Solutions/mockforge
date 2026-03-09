@@ -4,7 +4,7 @@
 -- ============================================================================
 -- 1. Minute-Level Aggregates (7-day retention)
 -- ============================================================================
-CREATE TABLE metrics_aggregates_minute (
+CREATE TABLE IF NOT EXISTS metrics_aggregates_minute (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     -- Time dimension
@@ -41,17 +41,17 @@ CREATE TABLE metrics_aggregates_minute (
 );
 
 -- Indexes for efficient querying
-CREATE INDEX idx_metrics_minute_timestamp ON metrics_aggregates_minute(timestamp DESC);
-CREATE INDEX idx_metrics_minute_protocol ON metrics_aggregates_minute(protocol);
-CREATE INDEX idx_metrics_minute_endpoint ON metrics_aggregates_minute(endpoint);
-CREATE INDEX idx_metrics_minute_workspace ON metrics_aggregates_minute(workspace_id);
-CREATE INDEX idx_metrics_minute_composite ON metrics_aggregates_minute(timestamp, protocol, endpoint);
-CREATE INDEX idx_metrics_minute_errors ON metrics_aggregates_minute(timestamp, error_count) WHERE error_count > 0;
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_timestamp ON metrics_aggregates_minute(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_protocol ON metrics_aggregates_minute(protocol);
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_endpoint ON metrics_aggregates_minute(endpoint);
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_workspace ON metrics_aggregates_minute(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_composite ON metrics_aggregates_minute(timestamp, protocol, endpoint);
+CREATE INDEX IF NOT EXISTS idx_metrics_minute_errors ON metrics_aggregates_minute(timestamp, error_count) WHERE error_count > 0;
 
 -- ============================================================================
 -- 2. Hour-Level Aggregates (30-day retention)
 -- ============================================================================
-CREATE TABLE metrics_aggregates_hour (
+CREATE TABLE IF NOT EXISTS metrics_aggregates_hour (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     -- Time dimension
@@ -86,16 +86,16 @@ CREATE TABLE metrics_aggregates_hour (
 );
 
 -- Indexes
-CREATE INDEX idx_metrics_hour_timestamp ON metrics_aggregates_hour(timestamp DESC);
-CREATE INDEX idx_metrics_hour_protocol ON metrics_aggregates_hour(protocol);
-CREATE INDEX idx_metrics_hour_endpoint ON metrics_aggregates_hour(endpoint);
-CREATE INDEX idx_metrics_hour_workspace ON metrics_aggregates_hour(workspace_id);
-CREATE INDEX idx_metrics_hour_composite ON metrics_aggregates_hour(timestamp, protocol, endpoint);
+CREATE INDEX IF NOT EXISTS idx_metrics_hour_timestamp ON metrics_aggregates_hour(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_hour_protocol ON metrics_aggregates_hour(protocol);
+CREATE INDEX IF NOT EXISTS idx_metrics_hour_endpoint ON metrics_aggregates_hour(endpoint);
+CREATE INDEX IF NOT EXISTS idx_metrics_hour_workspace ON metrics_aggregates_hour(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_hour_composite ON metrics_aggregates_hour(timestamp, protocol, endpoint);
 
 -- ============================================================================
 -- 3. Day-Level Aggregates (365-day retention)
 -- ============================================================================
-CREATE TABLE metrics_aggregates_day (
+CREATE TABLE IF NOT EXISTS metrics_aggregates_day (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     -- Time dimension
@@ -135,16 +135,16 @@ CREATE TABLE metrics_aggregates_day (
 );
 
 -- Indexes
-CREATE INDEX idx_metrics_day_date ON metrics_aggregates_day(date DESC);
-CREATE INDEX idx_metrics_day_timestamp ON metrics_aggregates_day(timestamp DESC);
-CREATE INDEX idx_metrics_day_protocol ON metrics_aggregates_day(protocol);
-CREATE INDEX idx_metrics_day_endpoint ON metrics_aggregates_day(endpoint);
-CREATE INDEX idx_metrics_day_workspace ON metrics_aggregates_day(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_day_date ON metrics_aggregates_day(date DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_day_timestamp ON metrics_aggregates_day(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_metrics_day_protocol ON metrics_aggregates_day(protocol);
+CREATE INDEX IF NOT EXISTS idx_metrics_day_endpoint ON metrics_aggregates_day(endpoint);
+CREATE INDEX IF NOT EXISTS idx_metrics_day_workspace ON metrics_aggregates_day(workspace_id);
 
 -- ============================================================================
 -- 4. Endpoint Statistics (Cumulative)
 -- ============================================================================
-CREATE TABLE endpoint_stats (
+CREATE TABLE IF NOT EXISTS endpoint_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     endpoint TEXT NOT NULL,
@@ -178,16 +178,16 @@ CREATE TABLE endpoint_stats (
 );
 
 -- Indexes
-CREATE UNIQUE INDEX idx_endpoint_unique ON endpoint_stats(endpoint, protocol, COALESCE(method, ''), COALESCE(workspace_id, ''), COALESCE(environment, ''));
-CREATE INDEX idx_endpoint_requests ON endpoint_stats(total_requests DESC);
-CREATE INDEX idx_endpoint_errors ON endpoint_stats(total_errors DESC);
-CREATE INDEX idx_endpoint_latency ON endpoint_stats(avg_latency_ms DESC);
-CREATE INDEX idx_endpoint_workspace ON endpoint_stats(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_endpoint_unique ON endpoint_stats(endpoint, protocol, COALESCE(method, ''), COALESCE(workspace_id, ''), COALESCE(environment, ''));
+CREATE INDEX IF NOT EXISTS idx_endpoint_requests ON endpoint_stats(total_requests DESC);
+CREATE INDEX IF NOT EXISTS idx_endpoint_errors ON endpoint_stats(total_errors DESC);
+CREATE INDEX IF NOT EXISTS idx_endpoint_latency ON endpoint_stats(avg_latency_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_endpoint_workspace ON endpoint_stats(workspace_id);
 
 -- ============================================================================
 -- 5. Error Events (7-day retention)
 -- ============================================================================
-CREATE TABLE error_events (
+CREATE TABLE IF NOT EXISTS error_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     timestamp INTEGER NOT NULL,
@@ -221,17 +221,17 @@ CREATE TABLE error_events (
 );
 
 -- Indexes
-CREATE INDEX idx_error_timestamp ON error_events(timestamp DESC);
-CREATE INDEX idx_error_type ON error_events(error_type);
-CREATE INDEX idx_error_endpoint ON error_events(endpoint);
-CREATE INDEX idx_error_category ON error_events(error_category);
-CREATE INDEX idx_error_trace ON error_events(trace_id) WHERE trace_id IS NOT NULL;
-CREATE INDEX idx_error_workspace ON error_events(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_error_timestamp ON error_events(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_error_type ON error_events(error_type);
+CREATE INDEX IF NOT EXISTS idx_error_endpoint ON error_events(endpoint);
+CREATE INDEX IF NOT EXISTS idx_error_category ON error_events(error_category);
+CREATE INDEX IF NOT EXISTS idx_error_trace ON error_events(trace_id) WHERE trace_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_error_workspace ON error_events(workspace_id);
 
 -- ============================================================================
 -- 6. Client Analytics (30-day retention)
 -- ============================================================================
-CREATE TABLE client_analytics (
+CREATE TABLE IF NOT EXISTS client_analytics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     -- Time dimension (hourly aggregation)
@@ -264,16 +264,16 @@ CREATE TABLE client_analytics (
 );
 
 -- Indexes
-CREATE INDEX idx_client_timestamp ON client_analytics(timestamp DESC);
-CREATE INDEX idx_client_ip ON client_analytics(client_ip);
-CREATE INDEX idx_client_agent ON client_analytics(user_agent_family);
-CREATE INDEX idx_client_workspace ON client_analytics(workspace_id);
-CREATE INDEX idx_client_requests ON client_analytics(request_count DESC);
+CREATE INDEX IF NOT EXISTS idx_client_timestamp ON client_analytics(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_client_ip ON client_analytics(client_ip);
+CREATE INDEX IF NOT EXISTS idx_client_agent ON client_analytics(user_agent_family);
+CREATE INDEX IF NOT EXISTS idx_client_workspace ON client_analytics(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_client_requests ON client_analytics(request_count DESC);
 
 -- ============================================================================
 -- 7. Traffic Patterns (90-day retention)
 -- ============================================================================
-CREATE TABLE traffic_patterns (
+CREATE TABLE IF NOT EXISTS traffic_patterns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     -- Time dimensions
@@ -296,16 +296,16 @@ CREATE TABLE traffic_patterns (
 );
 
 -- Indexes
-CREATE INDEX idx_pattern_date ON traffic_patterns(date DESC);
-CREATE INDEX idx_pattern_hour ON traffic_patterns(hour);
-CREATE INDEX idx_pattern_dow ON traffic_patterns(day_of_week);
-CREATE INDEX idx_pattern_workspace ON traffic_patterns(workspace_id);
-CREATE UNIQUE INDEX idx_pattern_unique ON traffic_patterns(date, hour, protocol, COALESCE(workspace_id, ''), COALESCE(environment, ''));
+CREATE INDEX IF NOT EXISTS idx_pattern_date ON traffic_patterns(date DESC);
+CREATE INDEX IF NOT EXISTS idx_pattern_hour ON traffic_patterns(hour);
+CREATE INDEX IF NOT EXISTS idx_pattern_dow ON traffic_patterns(day_of_week);
+CREATE INDEX IF NOT EXISTS idx_pattern_workspace ON traffic_patterns(workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pattern_unique ON traffic_patterns(date, hour, protocol, COALESCE(workspace_id, ''), COALESCE(environment, ''));
 
 -- ============================================================================
 -- 8. Analytics Snapshots (90-day retention)
 -- ============================================================================
-CREATE TABLE analytics_snapshots (
+CREATE TABLE IF NOT EXISTS analytics_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     timestamp INTEGER NOT NULL,
@@ -338,6 +338,6 @@ CREATE TABLE analytics_snapshots (
 );
 
 -- Indexes
-CREATE INDEX idx_snapshot_timestamp ON analytics_snapshots(timestamp DESC);
-CREATE INDEX idx_snapshot_type ON analytics_snapshots(snapshot_type);
-CREATE INDEX idx_snapshot_workspace ON analytics_snapshots(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_snapshot_timestamp ON analytics_snapshots(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_snapshot_type ON analytics_snapshots(snapshot_type);
+CREATE INDEX IF NOT EXISTS idx_snapshot_workspace ON analytics_snapshots(workspace_id);
