@@ -150,6 +150,8 @@ examples/test-integration/playwright/test-results/
 crates/mockforge-collab/*.db
 crates/mockforge-collab/*.db-shm
 crates/mockforge-collab/*.db-wal
+# Generated benchmark results
+bench-results/
 # Analytics SQLite databases (generated at runtime)
 analytics.db
 analytics.db-shm
