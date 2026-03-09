@@ -275,6 +275,67 @@ impl ConformanceFeature {
         ]
     }
 
+    /// Related OWASP API Security Top 10 (2023) categories
+    pub fn related_owasp(&self) -> &'static [&'static str] {
+        match self {
+            // Security features → Broken Authentication
+            Self::SecurityBearer | Self::SecurityApiKey | Self::SecurityBasic => &["API2:2023"],
+            // Path parameters → BOLA + Security Misconfiguration
+            Self::PathParamString | Self::PathParamInteger => &["API1:2023", "API8:2023"],
+            // Other parameters → Security Misconfiguration
+            Self::QueryParamString
+            | Self::QueryParamInteger
+            | Self::QueryParamArray
+            | Self::HeaderParam
+            | Self::CookieParam => &["API8:2023"],
+            // Request bodies → Resource Consumption + Security Misconfiguration
+            Self::BodyJson | Self::BodyFormUrlencoded | Self::BodyMultipart => {
+                &["API4:2023", "API8:2023"]
+            }
+            // Required/Optional constraints → Broken Object Property Auth + Misconfiguration
+            Self::ConstraintRequired | Self::ConstraintOptional => &["API3:2023", "API8:2023"],
+            // Validation constraints → Resource Consumption + Misconfiguration
+            Self::ConstraintMinMax | Self::ConstraintPattern | Self::ConstraintEnum => {
+                &["API4:2023", "API8:2023"]
+            }
+            // Schema types → Security Misconfiguration
+            Self::SchemaString
+            | Self::SchemaInteger
+            | Self::SchemaNumber
+            | Self::SchemaBoolean
+            | Self::SchemaArray
+            | Self::SchemaObject => &["API8:2023"],
+            // String formats → Security Misconfiguration
+            Self::FormatDate
+            | Self::FormatDateTime
+            | Self::FormatEmail
+            | Self::FormatUuid
+            | Self::FormatUri
+            | Self::FormatIpv4
+            | Self::FormatIpv6 => &["API8:2023"],
+            // Composition → Security Misconfiguration
+            Self::CompositionOneOf | Self::CompositionAnyOf | Self::CompositionAllOf => {
+                &["API8:2023"]
+            }
+            // Error response codes → Misconfiguration + Improper Inventory
+            Self::Response400 | Self::Response404 => &["API8:2023", "API9:2023"],
+            // Success response codes — no direct OWASP mapping
+            Self::Response200 | Self::Response201 | Self::Response204 => &[],
+            // HTTP methods → Broken Function Auth + Improper Inventory
+            Self::MethodGet
+            | Self::MethodPost
+            | Self::MethodPut
+            | Self::MethodPatch
+            | Self::MethodDelete
+            | Self::MethodHead
+            | Self::MethodOptions => &["API5:2023", "API9:2023"],
+            // Content negotiation → Security Misconfiguration
+            Self::ContentNegotiation => &["API8:2023"],
+            // Response validation → Misconfiguration + Unsafe Consumption
+            Self::ResponseValidation => &["API8:2023", "API10:2023"],
+        }
+    }
+
     /// Get the OpenAPI spec URL for this feature's category (used in SARIF reports)
     pub fn spec_url(&self) -> &'static str {
         match self.category() {
@@ -346,6 +407,28 @@ mod tests {
                 canonical
             );
         }
+    }
+
+    #[test]
+    fn test_related_owasp_valid_identifiers() {
+        let pattern = regex::Regex::new(r"^API\d+:2023$").unwrap();
+        for feature in ConformanceFeature::all() {
+            for owasp_id in feature.related_owasp() {
+                assert!(
+                    pattern.is_match(owasp_id),
+                    "Feature {:?} has invalid OWASP identifier: {}",
+                    feature,
+                    owasp_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_security_features_map_to_api2() {
+        assert!(ConformanceFeature::SecurityBearer.related_owasp().contains(&"API2:2023"));
+        assert!(ConformanceFeature::SecurityApiKey.related_owasp().contains(&"API2:2023"));
+        assert!(ConformanceFeature::SecurityBasic.related_owasp().contains(&"API2:2023"));
     }
 
     #[test]

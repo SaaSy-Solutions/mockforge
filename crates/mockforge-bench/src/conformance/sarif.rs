@@ -62,10 +62,21 @@ impl ConformanceSarifReport {
                         ),
                     },
                     help: SarifMessage {
-                        text: format!(
-                            "See the OpenAPI 3.0.0 specification: {}",
-                            feature.spec_url()
-                        ),
+                        text: {
+                            let owasp_refs = feature.related_owasp();
+                            if owasp_refs.is_empty() {
+                                format!(
+                                    "See the OpenAPI 3.0.0 specification: {}",
+                                    feature.spec_url()
+                                )
+                            } else {
+                                format!(
+                                    "See the OpenAPI 3.0.0 specification: {}\n\nRelated OWASP API Top 10: {}",
+                                    feature.spec_url(),
+                                    owasp_refs.join(", ")
+                                )
+                            }
+                        },
                     },
                     default_configuration: SarifConfiguration {
                         level: "note".to_string(),

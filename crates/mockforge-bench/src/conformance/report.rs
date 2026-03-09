@@ -2,8 +2,9 @@
 
 use super::spec::ConformanceFeature;
 use crate::error::{BenchError, Result};
+use crate::owasp_api::categories::OwaspCategory;
 use colored::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 /// Per-category conformance result
@@ -212,7 +213,69 @@ impl ConformanceReport {
             }
         }
 
+        // OWASP API Top 10 coverage section
+        self.print_owasp_coverage();
+
         println!();
+    }
+
+    /// Print OWASP API Security Top 10 coverage based on tested features
+    fn print_owasp_coverage(&self) {
+        println!();
+        println!("{}", "OWASP API Security Top 10 Coverage".bold());
+        println!("{}", "=".repeat(64).bright_green());
+
+        // Collect which OWASP IDs are covered by tested features
+        let tested_check_names: HashSet<&str> = self
+            .check_results
+            .keys()
+            .filter_map(|name| {
+                // Map back to a feature check_name (handle path-qualified names)
+                ConformanceFeature::all()
+                    .iter()
+                    .find(|f| {
+                        name == f.check_name() || name.starts_with(&format!("{}:", f.check_name()))
+                    })
+                    .map(|f| f.check_name())
+            })
+            .collect();
+
+        let covered_owasp: HashSet<&str> = ConformanceFeature::all()
+            .iter()
+            .filter(|f| tested_check_names.contains(f.check_name()))
+            .flat_map(|f| f.related_owasp().iter().copied())
+            .collect();
+
+        for category in OwaspCategory::all() {
+            let id = category.identifier();
+            let name = category.short_name();
+            let covered = covered_owasp.contains(id);
+
+            let status = if covered {
+                "✓".green()
+            } else {
+                "-".bright_black()
+            };
+
+            // Find which conformance categories provide coverage
+            let via = if covered {
+                let categories: HashSet<&str> = ConformanceFeature::all()
+                    .iter()
+                    .filter(|f| {
+                        tested_check_names.contains(f.check_name())
+                            && f.related_owasp().contains(&id)
+                    })
+                    .map(|f| f.category())
+                    .collect();
+                let mut cats: Vec<&str> = categories.into_iter().collect();
+                cats.sort();
+                format!(" (via {})", cats.join(", "))
+            } else {
+                String::new()
+            };
+
+            println!("  {:<12} {:<40} {}{}", id, name, status, via);
+        }
     }
 
     /// Get raw per-check results (for SARIF conversion)
