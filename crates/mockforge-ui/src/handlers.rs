@@ -1008,31 +1008,17 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
     Json(ApiResponse::success(dashboard))
 }
 
-/// Get routes by proxying to HTTP server
-pub async fn get_routes(State(state): State<AdminState>) -> impl IntoResponse {
-    if let Some(http_addr) = state.http_server_addr {
-        // When the HTTP server listens on 0.0.0.0, we can't connect to that address
-        // directly — use 127.0.0.1 (loopback) instead for the proxy request.
-        let proxy_ip = if http_addr.ip().is_unspecified() {
-            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-        } else {
-            http_addr.ip()
-        };
-        let url = format!("http://{}:{}/__mockforge/routes", proxy_ip, http_addr.port());
-        if let Ok(response) = reqwest::get(&url).await {
-            if response.status().is_success() {
-                if let Ok(body) = response.text().await {
-                    return (StatusCode::OK, [("content-type", "application/json")], body);
-                }
-            }
-        }
-    }
-
-    // Fallback: return empty routes
+/// Get routes from the global route store (populated by the HTTP server at startup)
+pub async fn get_routes() -> impl IntoResponse {
+    let routes = mockforge_core::request_logger::get_global_routes();
+    let json = serde_json::json!({
+        "routes": routes,
+        "total": routes.len()
+    });
     (
         StatusCode::OK,
         [("content-type", "application/json")],
-        r#"{"routes":[]}"#.to_string(),
+        serde_json::to_string(&json).unwrap_or_else(|_| r#"{"routes":[]}"#.to_string()),
     )
 }
 

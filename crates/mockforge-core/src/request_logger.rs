@@ -377,6 +377,49 @@ pub fn get_global_logger() -> Option<&'static CentralizedRequestLogger> {
     GLOBAL_LOGGER.get()
 }
 
+// ── Global Route Store ──────────────────────────────────────────────
+
+/// Route information stored in the global route store
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalRouteInfo {
+    /// HTTP method
+    pub method: String,
+    /// Path pattern
+    pub path: String,
+    /// OpenAPI operation ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    /// Operation summary
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Operation description
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Parameter names
+    #[serde(default)]
+    pub parameters: Vec<String>,
+}
+
+/// Global route store that the HTTP server populates and the admin server reads
+static GLOBAL_ROUTE_STORE: once_cell::sync::OnceCell<std::sync::RwLock<Vec<GlobalRouteInfo>>> =
+    once_cell::sync::OnceCell::new();
+
+fn route_store() -> &'static std::sync::RwLock<Vec<GlobalRouteInfo>> {
+    GLOBAL_ROUTE_STORE.get_or_init(|| std::sync::RwLock::new(Vec::new()))
+}
+
+/// Store routes in the global route store (called by HTTP server at startup)
+pub fn set_global_routes(routes: Vec<GlobalRouteInfo>) {
+    let mut store = route_store().write().expect("route store poisoned");
+    *store = routes;
+}
+
+/// Get routes from the global route store (called by admin server)
+pub fn get_global_routes() -> Vec<GlobalRouteInfo> {
+    let store = route_store().read().expect("route store poisoned");
+    store.clone()
+}
+
 /// Log a request to the global logger (convenience function)
 pub async fn log_request_global(entry: RequestLogEntry) {
     if let Some(logger) = get_global_logger() {

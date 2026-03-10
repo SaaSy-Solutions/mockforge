@@ -1602,6 +1602,26 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         parameters: r.parameters.clone(),
                     })
                     .collect();
+
+                // Store routes in the global route store so the admin server
+                // can serve them without proxying back to the HTTP server.
+                {
+                    let global_routes: Vec<mockforge_core::request_logger::GlobalRouteInfo> =
+                        captured_routes
+                            .iter()
+                            .map(|r| mockforge_core::request_logger::GlobalRouteInfo {
+                                method: r.method.clone(),
+                                path: r.path.clone(),
+                                operation_id: r.operation_id.clone(),
+                                summary: r.summary.clone(),
+                                description: r.description.clone(),
+                                parameters: r.parameters.clone(),
+                            })
+                            .collect();
+                    mockforge_core::request_logger::set_global_routes(global_routes);
+                    tracing::info!("Stored {} routes in global route store", captured_routes.len());
+                }
+
                 // Use MockAI if available, otherwise use standard router
                 let spec_router = if let Some(ref mockai_instance) = _mockai {
                     tracing::debug!("Building router with MockAI support");

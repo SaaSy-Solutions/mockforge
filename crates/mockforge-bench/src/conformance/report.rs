@@ -70,9 +70,8 @@ impl ConformanceReport {
         }
 
         // Map check results to features.
-        // In --conformance-all-operations mode, check names are path-qualified
-        // (e.g. "constraint:required:/users") so we match by prefix as well as
-        // exact name.
+        // Check names are path-qualified (e.g. "constraint:required:/users")
+        // so we match by prefix as well as exact name.
         for feature in ConformanceFeature::all() {
             let check_name = feature.check_name();
             let category = feature.category();
@@ -87,7 +86,7 @@ impl ConformanceReport {
                     entry.failed += 1;
                 }
             } else {
-                // Try prefix match (all-operations mode: "constraint:required:/path")
+                // Try prefix match (path-qualified: "constraint:required:/path")
                 let prefix = format!("{}:", check_name);
                 for (name, (passes, fails)) in &self.check_results {
                     if name.starts_with(&prefix) {
@@ -238,7 +237,7 @@ impl ConformanceReport {
                     .and_modify(|prev| *prev = *prev && passed)
                     .or_insert(passed);
             } else {
-                // Prefix match (all-operations mode)
+                // Prefix match (path-qualified check names)
                 let prefix = format!("{}:", check_name);
                 for (name, (passes, fails)) in &self.check_results {
                     if name.starts_with(&prefix) {

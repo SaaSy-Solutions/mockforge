@@ -675,11 +675,13 @@ impl SpecDrivenConformanceGenerator {
                     }
                 }
             } else {
-                // Default: one representative operation per feature check name
-                let mut emitted_checks: HashSet<&str> = HashSet::new();
+                // Default: one representative operation per feature, with path-qualified
+                // check names so failures identify which endpoint was tested.
+                let mut emitted_features: HashSet<&str> = HashSet::new();
                 for (op, feature) in ops {
-                    if emitted_checks.insert(feature.check_name()) {
-                        self.emit_check(&mut script, op, feature);
+                    if emitted_features.insert(feature.check_name()) {
+                        let qualified = format!("{}:{}", feature.check_name(), op.path);
+                        self.emit_check_named(&mut script, op, feature, &qualified);
                         total_checks += 1;
                     }
                 }
@@ -694,16 +696,6 @@ impl SpecDrivenConformanceGenerator {
         self.generate_handle_summary(&mut script);
 
         Ok((script, total_checks))
-    }
-
-    /// Emit a single k6 check for an operation + feature using the feature's default check name
-    fn emit_check(
-        &self,
-        script: &mut String,
-        op: &AnnotatedOperation,
-        feature: &ConformanceFeature,
-    ) {
-        self.emit_check_named(script, op, feature, feature.check_name());
     }
 
     /// Emit a single k6 check for an operation + feature with a custom check name
