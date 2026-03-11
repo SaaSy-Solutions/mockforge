@@ -1783,8 +1783,25 @@ impl OpenApiRouteRegistry {
                         );
                     }
 
+                    // Check for status code override header
+                    let status_override = headers
+                        .get("X-Mockforge-Response-Status")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.parse::<u16>().ok());
+
+                    // Check for scenario header
+                    let scenario = headers
+                        .get("X-Mockforge-Scenario")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string())
+                        .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+
                     // Fallback to standard response generation
-                    let (status, response) = route.mock_response_with_status();
+                    let (status, response) = route
+                        .mock_response_with_status_and_scenario_and_override(
+                            scenario.as_deref(),
+                            status_override,
+                        );
                     (
                         axum::http::StatusCode::from_u16(status)
                             .unwrap_or(axum::http::StatusCode::OK),

@@ -141,6 +141,28 @@ mod ref_resolver {
     }
 }
 
+/// Resolved security scheme details for an operation
+#[derive(Debug, Clone)]
+pub enum SecuritySchemeInfo {
+    /// HTTP Bearer token
+    Bearer,
+    /// HTTP Basic auth
+    Basic,
+    /// API Key in header, query, or cookie
+    ApiKey {
+        location: ApiKeyLocation,
+        name: String,
+    },
+}
+
+/// Where an API key is transmitted
+#[derive(Debug, Clone, PartialEq)]
+pub enum ApiKeyLocation {
+    Header,
+    Query,
+    Cookie,
+}
+
 /// An API operation annotated with the conformance features it exercises
 #[derive(Debug, Clone)]
 pub struct AnnotatedOperation {
@@ -154,6 +176,8 @@ pub struct AnnotatedOperation {
     pub path_params: Vec<(String, String)>,
     /// Response schema for validation (JSON string of the schema)
     pub response_schema: Option<Schema>,
+    /// Security scheme details resolved from the OpenAPI spec
+    pub security_schemes: Vec<SecuritySchemeInfo>,
 }
 
 /// Generates spec-driven conformance k6 scripts
@@ -283,8 +307,9 @@ impl SpecDrivenConformanceGenerator {
         // Detect content negotiation (response with multiple content types)
         Self::annotate_content_negotiation(&op.operation, spec, &mut features);
 
-        // Detect security features
-        Self::annotate_security(&op.operation, spec, &mut features);
+        // Detect security features and resolve scheme details
+        let mut security_schemes = Vec::new();
+        Self::annotate_security(&op.operation, spec, &mut features, &mut security_schemes);
 
         // Deduplicate features
         features.sort_by_key(|f| f.check_name());
@@ -300,6 +325,7 @@ impl SpecDrivenConformanceGenerator {
             header_params,
             path_params,
             response_schema,
+            security_schemes,
         }
     }
 
@@ -556,6 +582,7 @@ impl SpecDrivenConformanceGenerator {
         operation: &Operation,
         spec: &OpenAPI,
         features: &mut Vec<ConformanceFeature>,
+        security_schemes: &mut Vec<SecuritySchemeInfo>,
     ) {
         // Use operation-level security if present, otherwise fall back to global
         let security_reqs = operation.security.as_ref().or(spec.security.as_ref());
@@ -569,12 +596,23 @@ impl SpecDrivenConformanceGenerator {
                             SecurityScheme::HTTP { ref scheme, .. } => {
                                 if scheme.eq_ignore_ascii_case("bearer") {
                                     features.push(ConformanceFeature::SecurityBearer);
+                                    security_schemes.push(SecuritySchemeInfo::Bearer);
                                 } else if scheme.eq_ignore_ascii_case("basic") {
                                     features.push(ConformanceFeature::SecurityBasic);
+                                    security_schemes.push(SecuritySchemeInfo::Basic);
                                 }
                             }
-                            SecurityScheme::APIKey { .. } => {
+                            SecurityScheme::APIKey { location, name, .. } => {
                                 features.push(ConformanceFeature::SecurityApiKey);
+                                let loc = match location {
+                                    openapiv3::APIKeyLocation::Query => ApiKeyLocation::Query,
+                                    openapiv3::APIKeyLocation::Header => ApiKeyLocation::Header,
+                                    openapiv3::APIKeyLocation::Cookie => ApiKeyLocation::Cookie,
+                                };
+                                security_schemes.push(SecuritySchemeInfo::ApiKey {
+                                    location: loc,
+                                    name: name.clone(),
+                                });
                             }
                             // OAuth2 and OpenIDConnect don't map to our current feature set
                             _ => {}
@@ -584,10 +622,16 @@ impl SpecDrivenConformanceGenerator {
                         let name_lower = scheme_name.to_lowercase();
                         if name_lower.contains("bearer") || name_lower.contains("jwt") {
                             features.push(ConformanceFeature::SecurityBearer);
+                            security_schemes.push(SecuritySchemeInfo::Bearer);
                         } else if name_lower.contains("api") && name_lower.contains("key") {
                             features.push(ConformanceFeature::SecurityApiKey);
+                            security_schemes.push(SecuritySchemeInfo::ApiKey {
+                                location: ApiKeyLocation::Header,
+                                name: "X-API-Key".to_string(),
+                            });
                         } else if name_lower.contains("basic") {
                             features.push(ConformanceFeature::SecurityBasic);
+                            security_schemes.push(SecuritySchemeInfo::Basic);
                         }
                     }
                 }
@@ -771,6 +815,20 @@ impl SpecDrivenConformanceGenerator {
                 .push(("X-Mockforge-Response-Status".to_string(), expected_code.to_string()));
         }
 
+        // For security checks AND for all requests on endpoints with security requirements,
+        // inject auth credentials so the server doesn't reject with 401.
+        // Only inject if the user hasn't already provided the header via --custom-headers.
+        let needs_auth = matches!(
+            feature,
+            ConformanceFeature::SecurityBearer
+                | ConformanceFeature::SecurityBasic
+                | ConformanceFeature::SecurityApiKey
+        ) || !op.security_schemes.is_empty();
+
+        if needs_auth {
+            self.inject_security_headers(&op.security_schemes, &mut effective_headers);
+        }
+
         let has_headers = !effective_headers.is_empty();
         let headers_obj = if has_headers {
             Self::format_headers(&effective_headers)
@@ -867,10 +925,21 @@ impl SpecDrivenConformanceGenerator {
             if let Some(schema) = &op.response_schema {
                 let validation_js = SchemaValidatorGenerator::generate_validation(schema);
                 script.push_str(&format!(
-                    "      try {{ let body = res.json(); {{ let ok = check(res, {{ '{}': (r) => {{ {} }} }}); if (!ok) __captureFailure('{}', res, 'schema validation'); }} }} catch(e) {{ check(res, {{ '{}': () => false }}); __captureFailure('{}', res, 'JSON parse failed: ' + e.message); }}\n",
+                    "      try {{ let body = res.json(); {{ let ok = check(res, {{ '{}': (r) => ( {} ) }}); if (!ok) __captureFailure('{}', res, 'schema validation'); }} }} catch(e) {{ check(res, {{ '{}': () => false }}); __captureFailure('{}', res, 'JSON parse failed: ' + e.message); }}\n",
                     check_name, validation_js, check_name, check_name, check_name
                 ));
             }
+        } else if matches!(
+            feature,
+            ConformanceFeature::SecurityBearer
+                | ConformanceFeature::SecurityBasic
+                | ConformanceFeature::SecurityApiKey
+        ) {
+            // Security checks verify the server accepts the auth credentials (not 401/403)
+            script.push_str(&format!(
+                "      {{ let ok = check(res, {{ '{}': (r) => r.status >= 200 && r.status < 400 }}); if (!ok) __captureFailure('{}', res, 'status >= 200 && status < 400 (auth accepted)'); }}\n",
+                check_name, check_name
+            ));
         } else {
             script.push_str(&format!(
                 "      {{ let ok = check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }}); if (!ok) __captureFailure('{}', res, 'status >= 200 && status < 500'); }}\n",
@@ -879,7 +948,9 @@ impl SpecDrivenConformanceGenerator {
         }
 
         // Clear cookie jar after each request to prevent Set-Cookie leaking
-        if self.config.has_cookie_header() {
+        let has_cookie = self.config.has_cookie_header()
+            || effective_headers.iter().any(|(h, _)| h.eq_ignore_ascii_case("Cookie"));
+        if has_cookie {
             script.push_str("      http.cookieJar().clear(BASE_URL);\n");
         }
 
@@ -951,6 +1022,69 @@ impl SpecDrivenConformanceGenerator {
         }
 
         result
+    }
+
+    /// Inject security headers based on resolved security scheme details.
+    /// Respects user-provided custom headers (won't overwrite if already set).
+    fn inject_security_headers(
+        &self,
+        schemes: &[SecuritySchemeInfo],
+        headers: &mut Vec<(String, String)>,
+    ) {
+        let mut to_add: Vec<(String, String)> = Vec::new();
+
+        let has_header = |name: &str, headers: &[(String, String)]| {
+            headers.iter().any(|(h, _)| h.eq_ignore_ascii_case(name))
+                || self.config.custom_headers.iter().any(|(h, _)| h.eq_ignore_ascii_case(name))
+        };
+
+        for scheme in schemes {
+            match scheme {
+                SecuritySchemeInfo::Bearer => {
+                    if !has_header("Authorization", headers) {
+                        // MockForge mock server accepts any Bearer token
+                        to_add.push((
+                            "Authorization".to_string(),
+                            "Bearer mockforge-conformance-test-token".to_string(),
+                        ));
+                    }
+                }
+                SecuritySchemeInfo::Basic => {
+                    if !has_header("Authorization", headers) {
+                        let creds = self.config.basic_auth.as_deref().unwrap_or("test:test");
+                        use base64::Engine;
+                        let encoded =
+                            base64::engine::general_purpose::STANDARD.encode(creds.as_bytes());
+                        to_add.push(("Authorization".to_string(), format!("Basic {}", encoded)));
+                    }
+                }
+                SecuritySchemeInfo::ApiKey { location, name } => match location {
+                    ApiKeyLocation::Header => {
+                        if !has_header(name, headers) {
+                            let key = self
+                                .config
+                                .api_key
+                                .as_deref()
+                                .unwrap_or("mockforge-conformance-test-key");
+                            to_add.push((name.clone(), key.to_string()));
+                        }
+                    }
+                    ApiKeyLocation::Cookie => {
+                        if !has_header("Cookie", headers) {
+                            to_add.push((
+                                "Cookie".to_string(),
+                                format!("{}=mockforge-conformance-test-session", name),
+                            ));
+                        }
+                    }
+                    ApiKeyLocation::Query => {
+                        // Query params are handled via URL, not headers — skip here
+                    }
+                },
+            }
+        }
+
+        headers.extend(to_add);
     }
 
     /// Format header params as a JS object literal
@@ -1127,6 +1261,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "test-value".to_string())],
             response_schema: None,
+            security_schemes: vec![],
         }];
 
         let gen = SpecDrivenConformanceGenerator::new(config, operations);
@@ -1166,6 +1301,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "1".to_string())],
             response_schema: None,
+            security_schemes: vec![],
         }];
 
         let gen = SpecDrivenConformanceGenerator::new(config, operations);
@@ -1350,6 +1486,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            security_schemes: vec![],
         };
         let config = ConformanceConfig {
             target_url: "https://192.168.2.86/".to_string(),
@@ -1387,6 +1524,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            security_schemes: vec![],
         };
         let config = ConformanceConfig {
             target_url: "https://192.168.2.86/".to_string(),
