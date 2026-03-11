@@ -28,18 +28,104 @@ impl CategoryResult {
     }
 }
 
+/// Detail of a single conformance check failure
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FailureDetail {
+    /// Check name that failed
+    pub check: String,
+    /// Request information
+    pub request: FailureRequest,
+    /// Response information
+    pub response: FailureResponse,
+    /// What the check expected
+    pub expected: String,
+}
+
+/// Request details for a failed check
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FailureRequest {
+    /// HTTP method
+    #[serde(default)]
+    pub method: String,
+    /// Full URL
+    #[serde(default)]
+    pub url: String,
+    /// Request headers (k6 sends arrays per header, we flatten to first value)
+    #[serde(default, deserialize_with = "deserialize_headers")]
+    pub headers: HashMap<String, String>,
+    /// Request body (truncated)
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Response details for a failed check
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FailureResponse {
+    /// HTTP status code
+    #[serde(default)]
+    pub status: u16,
+    /// Response headers (k6 may send arrays or strings)
+    #[serde(default, deserialize_with = "deserialize_headers")]
+    pub headers: HashMap<String, String>,
+    /// Response body (truncated)
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Deserialize headers that may be `{key: "value"}` or `{key: ["value"]}` (k6 format)
+fn deserialize_headers<'de, D>(
+    deserializer: D,
+) -> std::result::Result<HashMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let map: HashMap<String, serde_json::Value> = HashMap::deserialize(deserializer)?;
+    Ok(map
+        .into_iter()
+        .map(|(k, v)| {
+            let val = match &v {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Array(arr) => {
+                    arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")
+                }
+                other => other.to_string(),
+            };
+            (k, val)
+        })
+        .collect())
+}
+
 /// Conformance test report
 pub struct ConformanceReport {
     /// Per-check results: check_name -> (passes, fails)
     check_results: HashMap<String, (u64, u64)>,
+    /// Detailed failure information
+    failure_details: Vec<FailureDetail>,
 }
 
 impl ConformanceReport {
     /// Parse a conformance report from k6's handleSummary JSON output
+    ///
+    /// Also loads failure details from `conformance-failure-details.json` in the same directory.
     pub fn from_file(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .map_err(|e| BenchError::Other(format!("Failed to read conformance report: {}", e)))?;
-        Self::from_json(&content)
+        let mut report = Self::from_json(&content)?;
+
+        // Load failure details from sibling file
+        if let Some(parent) = path.parent() {
+            let details_path = parent.join("conformance-failure-details.json");
+            if details_path.exists() {
+                if let Ok(details_json) = std::fs::read_to_string(&details_path) {
+                    if let Ok(details) = serde_json::from_str::<Vec<FailureDetail>>(&details_json) {
+                        report.failure_details = details;
+                    }
+                }
+            }
+        }
+
+        Ok(report)
     }
 
     /// Parse from JSON string
@@ -57,7 +143,10 @@ impl ConformanceReport {
             }
         }
 
-        Ok(Self { check_results })
+        Ok(Self {
+            check_results,
+            failure_details: Vec::new(),
+        })
     }
 
     /// Get results grouped by category
@@ -200,6 +289,31 @@ impl ConformanceReport {
                     passes.to_string().green(),
                     fails.to_string().red()
                 );
+
+                // Show failure details if available
+                for detail in &self.failure_details {
+                    if detail.check == *name {
+                        println!(
+                            "    {} {} {}",
+                            "→".bright_black(),
+                            detail.request.method.yellow(),
+                            detail.request.url.bright_black()
+                        );
+                        println!(
+                            "      Expected: {}  Actual status: {}",
+                            detail.expected.yellow(),
+                            detail.response.status.to_string().red()
+                        );
+                        if !detail.response.body.is_empty() {
+                            let body_preview = if detail.response.body.len() > 200 {
+                                format!("{}...", &detail.response.body[..200])
+                            } else {
+                                detail.response.body.clone()
+                            };
+                            println!("      Response body: {}", body_preview.bright_black());
+                        }
+                    }
+                }
             }
 
             if !all_operations {
@@ -208,6 +322,15 @@ impl ConformanceReport {
                     "{}",
                     "Tip: Use --conformance-all-operations (without --conformance-categories) to see which specific endpoints failed across all categories."
                         .yellow()
+                );
+            }
+
+            if !self.failure_details.is_empty() {
+                println!();
+                println!(
+                    "{}",
+                    "Full failure details saved to conformance-report.json (see failure_details array)."
+                        .bright_black()
                 );
             }
         }

@@ -4,8 +4,34 @@ use crate::error::{BenchError, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
+
+/// Extract `MOCKFORGE_FAILURE:` JSON payload from a k6 output line.
+///
+/// k6 may format console.log lines differently depending on output mode:
+/// - Raw: `MOCKFORGE_FAILURE:{...}`
+/// - Logfmt: `time="..." level=info msg="MOCKFORGE_FAILURE:{...}" source=console`
+fn extract_failure_json(line: &str) -> Option<String> {
+    let marker = "MOCKFORGE_FAILURE:";
+    let start = line.find(marker)?;
+    let json_start = start + marker.len();
+    let json_str = &line[json_start..];
+    // Trim trailing `" source=console` if present (k6 logfmt)
+    let json_str = json_str.strip_suffix("\" source=console").unwrap_or(json_str).trim();
+    if json_str.is_empty() {
+        return None;
+    }
+    // k6 logfmt wraps msg in quotes and escapes inner quotes as \" and
+    // backslashes as \\. Unescape in order: backslashes first, then quotes.
+    // Only unescape if the raw string doesn't parse as JSON (raw mode output).
+    if json_str.starts_with('{') && json_str.contains("\\\"") {
+        Some(json_str.replace("\\\\", "\\").replace("\\\"", "\""))
+    } else {
+        Some(json_str.to_string())
+    }
+}
 
 /// k6 executor
 pub struct K6Executor {
@@ -96,21 +122,37 @@ impl K6Executor {
         );
         spinner.set_message("Running load test...");
 
-        // Read output lines
-        tokio::spawn(async move {
+        // Collect failure details from k6's console.log output
+        // k6 may emit console.log to either stdout or stderr depending on version/config
+        let failure_details: Arc<tokio::sync::Mutex<Vec<String>>> =
+            Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let fd_stdout = Arc::clone(&failure_details);
+        let fd_stderr = Arc::clone(&failure_details);
+
+        // Read stdout lines, capturing MOCKFORGE_FAILURE markers
+        let stdout_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stdout_lines.next_line().await {
-                spinner.set_message(line.clone());
-                if !line.is_empty() && !line.contains("running") && !line.contains("default") {
-                    println!("{}", line);
+                if let Some(json_str) = extract_failure_json(&line) {
+                    fd_stdout.lock().await.push(json_str);
+                } else {
+                    spinner.set_message(line.clone());
+                    if !line.is_empty() && !line.contains("running") && !line.contains("default") {
+                        println!("{}", line);
+                    }
                 }
             }
             spinner.finish_and_clear();
         });
 
-        tokio::spawn(async move {
+        // Read stderr lines, capturing MOCKFORGE_FAILURE markers
+        let stderr_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stderr_lines.next_line().await {
                 if !line.is_empty() {
-                    eprintln!("{}", line);
+                    if let Some(json_str) = extract_failure_json(&line) {
+                        fd_stderr.lock().await.push(json_str);
+                    } else {
+                        eprintln!("{}", line);
+                    }
                 }
             }
         });
@@ -119,11 +161,28 @@ impl K6Executor {
         let status =
             child.wait().await.map_err(|e| BenchError::K6ExecutionFailed(e.to_string()))?;
 
+        // Wait for both reader tasks to finish processing all lines
+        let _ = stdout_handle.await;
+        let _ = stderr_handle.await;
+
         if !status.success() {
             return Err(BenchError::K6ExecutionFailed(format!(
                 "k6 exited with status: {}",
                 status
             )));
+        }
+
+        // Write failure details to file if any were captured
+        if let Some(dir) = output_dir {
+            let details = failure_details.lock().await;
+            if !details.is_empty() {
+                let failure_path = dir.join("conformance-failure-details.json");
+                let parsed: Vec<serde_json::Value> =
+                    details.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
+                if let Ok(json) = serde_json::to_string_pretty(&parsed) {
+                    let _ = std::fs::write(&failure_path, json);
+                }
+            }
         }
 
         // Parse results if output directory was specified
@@ -230,5 +289,27 @@ mod tests {
     fn test_k6_results_zero_requests() {
         let results = K6Results::default();
         assert_eq!(results.error_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_extract_failure_json_raw() {
+        let line = r#"MOCKFORGE_FAILURE:{"check":"test","expected":"status === 200"}"#;
+        let result = extract_failure_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["check"], "test");
+    }
+
+    #[test]
+    fn test_extract_failure_json_logfmt() {
+        let line = r#"time="2026-01-01T00:00:00Z" level=info msg="MOCKFORGE_FAILURE:{\"check\":\"test\",\"response\":{\"body\":\"{\\\"key\\\":\\\"val\\\"}\"}} " source=console"#;
+        let result = extract_failure_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["check"], "test");
+        assert_eq!(parsed["response"]["body"], r#"{"key":"val"}"#);
+    }
+
+    #[test]
+    fn test_extract_failure_json_no_marker() {
+        assert!(extract_failure_json("just a regular log line").is_none());
     }
 }

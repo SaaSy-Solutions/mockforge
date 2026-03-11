@@ -634,6 +634,34 @@ impl SpecDrivenConformanceGenerator {
         script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
+        // Failure detail collector — logs req/res info for failed checks via console.log
+        // (k6's handleSummary runs in a separate JS context, so we can't use module-level arrays)
+        script.push_str("function __captureFailure(checkName, res, expected) {\n");
+        script.push_str("  let bodyStr = '';\n");
+        script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+        script.push_str("  let reqHeaders = {};\n");
+        script.push_str(
+            "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
+        );
+        script.push_str("  let reqBody = '';\n");
+        script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+        script.push_str("  console.log('MOCKFORGE_FAILURE:' + JSON.stringify({\n");
+        script.push_str("    check: checkName,\n");
+        script.push_str("    request: {\n");
+        script.push_str("      method: res.request ? res.request.method : 'unknown',\n");
+        script.push_str("      url: res.request ? res.request.url : res.url || 'unknown',\n");
+        script.push_str("      headers: reqHeaders,\n");
+        script.push_str("      body: reqBody,\n");
+        script.push_str("    },\n");
+        script.push_str("    response: {\n");
+        script.push_str("      status: res.status,\n");
+        script.push_str("      headers: res.headers ? Object.fromEntries(Object.entries(res.headers).slice(0, 20)) : {},\n");
+        script.push_str("      body: bodyStr,\n");
+        script.push_str("    },\n");
+        script.push_str("    expected: expected,\n");
+        script.push_str("  }));\n");
+        script.push_str("}\n\n");
+
         // Default function
         script.push_str("export default function () {\n");
 
@@ -813,7 +841,7 @@ impl SpecDrivenConformanceGenerator {
             }
         }
 
-        // Check: emit assertion based on feature type
+        // Check: emit assertion based on feature type, with failure detail capture
         if matches!(
             feature,
             ConformanceFeature::Response200
@@ -831,22 +859,22 @@ impl SpecDrivenConformanceGenerator {
                 _ => 200,
             };
             script.push_str(&format!(
-                "      check(res, {{ '{}': (r) => r.status === {} }});\n",
-                check_name, expected_code
+                "      {{ let ok = check(res, {{ '{}': (r) => r.status === {} }}); if (!ok) __captureFailure('{}', res, 'status === {}'); }}\n",
+                check_name, expected_code, check_name, expected_code
             ));
         } else if matches!(feature, ConformanceFeature::ResponseValidation) {
             // Response schema validation — validate the response body against the schema
             if let Some(schema) = &op.response_schema {
                 let validation_js = SchemaValidatorGenerator::generate_validation(schema);
                 script.push_str(&format!(
-                    "      try {{ let body = res.json(); check(res, {{ '{}': (r) => {{ {} }} }}); }} catch(e) {{ check(res, {{ '{}': () => false }}); }}\n",
-                    check_name, validation_js, check_name
+                    "      try {{ let body = res.json(); {{ let ok = check(res, {{ '{}': (r) => {{ {} }} }}); if (!ok) __captureFailure('{}', res, 'schema validation'); }} }} catch(e) {{ check(res, {{ '{}': () => false }}); __captureFailure('{}', res, 'JSON parse failed: ' + e.message); }}\n",
+                    check_name, validation_js, check_name, check_name, check_name
                 ));
             }
         } else {
             script.push_str(&format!(
-                "      check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }});\n",
-                check_name
+                "      {{ let ok = check(res, {{ '{}': (r) => r.status >= 200 && r.status < 500 }}); if (!ok) __captureFailure('{}', res, 'status >= 200 && status < 500'); }}\n",
+                check_name, check_name
             ));
         }
 
