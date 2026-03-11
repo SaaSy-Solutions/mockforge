@@ -16,7 +16,7 @@ categories = ["development-tools", "web-programming"]
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["ws", "multipart", "macros"] }
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 

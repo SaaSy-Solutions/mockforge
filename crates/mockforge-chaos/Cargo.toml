@@ -83,5 +83,5 @@ default = []
 distributed = ["redis"]
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = "3.8"
