@@ -769,6 +769,11 @@ impl SpecDrivenConformanceGenerator {
             script.push_str("  });\n\n");
         }
 
+        // Custom checks from YAML file
+        if let Some(custom_group) = self.config.generate_custom_group()? {
+            script.push_str(&custom_group);
+        }
+
         script.push_str("}\n\n");
 
         // handleSummary
@@ -1253,6 +1258,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1293,6 +1299,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1364,6 +1371,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1505,6 +1513,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1547,6 +1556,7 @@ mod tests {
             ],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1587,6 +1597,7 @@ mod tests {
             ],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![]);
 

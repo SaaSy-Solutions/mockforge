@@ -3,6 +3,8 @@
 use crate::error::{BenchError, Result};
 use std::path::{Path, PathBuf};
 
+use super::custom::CustomConformanceConfig;
+
 /// Configuration for conformance test generation
 #[derive(Default)]
 pub struct ConformanceConfig {
@@ -29,6 +31,8 @@ pub struct ConformanceConfig {
     /// When true, test ALL operations for method/response/body categories
     /// instead of just one representative per feature check name.
     pub all_operations: bool,
+    /// Optional path to a YAML file with custom conformance checks
+    pub custom_checks_file: Option<PathBuf>,
 }
 
 impl ConformanceConfig {
@@ -60,6 +64,20 @@ impl ConformanceConfig {
             .map(|(k, v)| format!("'{}': '{}'", k, v.replace('\'', "\\'")))
             .collect();
         format!("{{ {} }}", entries.join(", "))
+    }
+
+    /// Generate a k6 group block for custom checks, if configured.
+    /// Returns `Ok(None)` if no custom checks file is configured.
+    pub fn generate_custom_group(&self) -> Result<Option<String>> {
+        let path = match &self.custom_checks_file {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        let config = CustomConformanceConfig::from_file(path)?;
+        if config.custom_checks.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(config.generate_k6_group("BASE_URL", &self.custom_headers)))
     }
 
     /// Returns the effective base URL with base_path appended.
@@ -163,6 +181,11 @@ impl ConformanceGenerator {
         }
         if self.config.should_include_category("Security") {
             self.generate_security_group(&mut script);
+        }
+
+        // Custom checks from YAML file
+        if let Some(custom_group) = self.config.generate_custom_group()? {
+            script.push_str(&custom_group);
         }
 
         script.push_str("}\n\n");
@@ -762,6 +785,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -802,6 +826,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -823,6 +848,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -841,6 +867,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -861,6 +888,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -884,6 +912,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -900,6 +929,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -916,6 +946,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -932,6 +963,7 @@ mod tests {
             custom_headers: vec![],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -956,6 +988,7 @@ mod tests {
             ],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -984,6 +1017,7 @@ mod tests {
             ],
             output_dir: None,
             all_operations: false,
+            custom_checks_file: None,
         };
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));

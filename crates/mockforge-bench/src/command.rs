@@ -143,6 +143,8 @@ pub struct BenchCommand {
     /// When true, test ALL operations for method/response/body categories
     /// instead of just one representative per feature check.
     pub conformance_all_operations: bool,
+    /// Optional YAML file with custom conformance checks
+    pub conformance_custom: Option<PathBuf>,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -545,6 +547,7 @@ impl BenchCommand {
                 conformance_report_format: "json".to_string(),
                 conformance_headers: vec![],
                 conformance_all_operations: false,
+                conformance_custom: None,
             },
             targets,
             max_concurrency,
@@ -1893,6 +1896,7 @@ impl BenchCommand {
             custom_headers,
             output_dir: Some(self.output.clone()),
             all_operations: self.conformance_all_operations,
+            custom_checks_file: self.conformance_custom.clone(),
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -2206,6 +2210,7 @@ mod tests {
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
             conformance_all_operations: false,
+            conformance_custom: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2275,6 +2280,7 @@ mod tests {
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
             conformance_all_operations: false,
+            conformance_custom: None,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2340,6 +2346,7 @@ mod tests {
             conformance_report_format: "json".to_string(),
             conformance_headers: vec![],
             conformance_all_operations: false,
+            conformance_custom: None,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

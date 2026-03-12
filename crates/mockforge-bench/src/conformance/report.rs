@@ -96,6 +96,19 @@ where
         .collect())
 }
 
+/// Extract the base name of a custom check.
+/// Custom sub-checks have format "custom:name:header:..." or "custom:name:body:..."
+/// The base name is just the primary check (e.g., "custom:pets-returns-200").
+fn extract_custom_base_name(check_name: &str) -> String {
+    // "custom:" prefix is 7 chars. Find the next colon after that.
+    let after_prefix = &check_name[7..];
+    if let Some(pos) = after_prefix.find(":header:").or(after_prefix.find(":body:")) {
+        check_name[..7 + pos].to_string()
+    } else {
+        check_name.to_string()
+    }
+}
+
 /// Conformance test report
 pub struct ConformanceReport {
     /// Per-check results: check_name -> (passes, fails)
@@ -149,7 +162,10 @@ impl ConformanceReport {
         })
     }
 
-    /// Get results grouped by category
+    /// Get results grouped by category.
+    ///
+    /// Includes all standard categories plus a synthetic "Custom" category
+    /// for any check names starting with "custom:".
     pub fn by_category(&self) -> HashMap<&'static str, CategoryResult> {
         let mut categories: HashMap<&'static str, CategoryResult> = HashMap::new();
 
@@ -190,6 +206,27 @@ impl ConformanceReport {
             }
         }
 
+        // Aggregate custom checks (check names starting with "custom:")
+        let custom_entry = categories.entry("Custom").or_default();
+        // Track which top-level custom check names we've already counted
+        let mut counted_custom: HashSet<String> = HashSet::new();
+        for (name, (passes, fails)) in &self.check_results {
+            if name.starts_with("custom:") {
+                // Only count the primary check (status), not sub-checks (header/body)
+                // Sub-checks have format "custom:name:header:..." or "custom:name:body:..."
+                // Primary checks are just "custom:something" with exactly one colon after "custom"
+                // We count each unique top-level custom check once
+                let base_name = extract_custom_base_name(name);
+                if counted_custom.insert(base_name) {
+                    if *fails == 0 && *passes > 0 {
+                        custom_entry.passed += 1;
+                    } else {
+                        custom_entry.failed += 1;
+                    }
+                }
+            }
+        }
+
         categories
     }
 
@@ -202,8 +239,27 @@ impl ConformanceReport {
     pub fn print_report_with_options(&self, all_operations: bool) {
         let categories = self.by_category();
 
+        // Count detected features and active categories
+        let total_possible = ConformanceFeature::all().len();
+        let active_cats: usize = ConformanceFeature::categories()
+            .iter()
+            .filter(|c| categories.get(*c).is_some_and(|r| r.total() > 0))
+            .count();
+        let detected: usize =
+            categories.iter().filter(|(k, _)| *k != &"Custom").map(|(_, v)| v.total()).sum();
+
         println!("\n{}", "OpenAPI 3.0.0 Conformance Report".bold());
         println!("{}", "=".repeat(64).bright_green());
+
+        println!(
+            "{}",
+            format!(
+                "Spec Analysis: {} of {} features detected across {} categories",
+                detected, total_possible, active_cats
+            )
+            .bright_cyan()
+        );
+        println!();
 
         println!(
             "{:<20} {:>8} {:>8} {:>8} {:>8}",
@@ -217,11 +273,31 @@ impl ConformanceReport {
 
         let mut total_passed = 0usize;
         let mut total_failed = 0usize;
+        let mut empty_categories: Vec<&str> = Vec::new();
 
-        for cat_name in ConformanceFeature::categories() {
+        // Build the list of categories to display (standard + Custom if present)
+        let all_cat_names: Vec<&str> = {
+            let mut cats: Vec<&str> = ConformanceFeature::categories().to_vec();
+            if categories.get("Custom").is_some_and(|r| r.total() > 0) {
+                cats.push("Custom");
+            }
+            cats
+        };
+
+        for cat_name in &all_cat_names {
             if let Some(result) = categories.get(cat_name) {
                 let total = result.total();
                 if total == 0 {
+                    // Show empty categories with dimmed "not in spec" indicator
+                    println!(
+                        "{:<20} {:>8} {:>8} {:>8} {:>8}",
+                        cat_name.bright_black(),
+                        "-".bright_black(),
+                        "-".bright_black(),
+                        "-".bright_black(),
+                        "not in spec".bright_black()
+                    );
+                    empty_categories.push(cat_name);
                     continue;
                 }
                 total_passed += result.passed;
@@ -337,6 +413,30 @@ impl ConformanceReport {
 
         // OWASP API Top 10 coverage section
         self.print_owasp_coverage();
+
+        // Coverage tips for empty categories
+        if !empty_categories.is_empty() {
+            println!();
+            println!("{}", "Coverage Tips".bold());
+            println!("{}", "-".repeat(64));
+            for cat in &empty_categories {
+                if *cat == "Custom" {
+                    continue;
+                }
+                println!(
+                    "  {} {}: {}",
+                    "->".bright_cyan(),
+                    cat,
+                    ConformanceFeature::category_hint(cat).bright_black()
+                );
+            }
+            println!();
+            println!(
+                "{}",
+                "Use --conformance-custom <file.yaml> to add custom checks for any category."
+                    .bright_black()
+            );
+        }
 
         println!();
     }

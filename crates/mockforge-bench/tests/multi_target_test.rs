@@ -181,6 +181,7 @@ async fn test_bench_command_parse_headers() {
         conformance_report_format: "json".to_string(),
         conformance_headers: vec![],
         conformance_all_operations: false,
+        conformance_custom: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -252,6 +253,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         conformance_report_format: "json".to_string(),
         conformance_headers: vec![],
         conformance_all_operations: false,
+        conformance_custom: None,
     };
 
     let result = cmd.parse_headers();

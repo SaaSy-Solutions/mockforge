@@ -1,0 +1,361 @@
+//! Custom conformance test authoring via YAML
+//!
+//! Allows users to define additional conformance checks beyond the built-in
+//! OpenAPI 3.0.0 feature set. Custom checks are grouped under a "Custom"
+//! category in the conformance report.
+
+use crate::error::{BenchError, Result};
+use serde::Deserialize;
+use std::path::Path;
+
+/// Top-level YAML configuration for custom conformance checks
+#[derive(Debug, Deserialize)]
+pub struct CustomConformanceConfig {
+    /// List of custom checks to run
+    pub custom_checks: Vec<CustomCheck>,
+}
+
+/// A single custom conformance check
+#[derive(Debug, Deserialize)]
+pub struct CustomCheck {
+    /// Check name (should start with "custom:" for report aggregation)
+    pub name: String,
+    /// Request path (e.g., "/api/users")
+    pub path: String,
+    /// HTTP method (GET, POST, PUT, DELETE, etc.)
+    pub method: String,
+    /// Expected HTTP status code
+    pub expected_status: u16,
+    /// Optional request body (JSON string)
+    #[serde(default)]
+    pub body: Option<String>,
+    /// Optional expected response headers (name -> regex pattern)
+    #[serde(default)]
+    pub expected_headers: std::collections::HashMap<String, String>,
+    /// Optional expected body fields with type validation
+    #[serde(default)]
+    pub expected_body_fields: Vec<ExpectedBodyField>,
+    /// Optional request headers
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+}
+
+/// Expected field in the response body with type checking
+#[derive(Debug, Deserialize)]
+pub struct ExpectedBodyField {
+    /// Field name in the JSON response
+    pub name: String,
+    /// Expected JSON type: "string", "integer", "number", "boolean", "array", "object"
+    #[serde(rename = "type")]
+    pub field_type: String,
+}
+
+impl CustomConformanceConfig {
+    /// Parse a custom conformance config from a YAML file
+    pub fn from_file(path: &Path) -> Result<Self> {
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            BenchError::Other(format!(
+                "Failed to read custom conformance file '{}': {}",
+                path.display(),
+                e
+            ))
+        })?;
+        serde_yaml::from_str(&content).map_err(|e| {
+            BenchError::Other(format!(
+                "Failed to parse custom conformance YAML '{}': {}",
+                path.display(),
+                e
+            ))
+        })
+    }
+
+    /// Generate a k6 `group('Custom', ...)` block for all custom checks.
+    ///
+    /// `base_url` is the JS expression for the base URL (e.g., `"BASE_URL"`).
+    /// `custom_headers` are additional headers to inject into every request.
+    pub fn generate_k6_group(&self, base_url: &str, custom_headers: &[(String, String)]) -> String {
+        let mut script = String::with_capacity(4096);
+        script.push_str("  group('Custom', function () {\n");
+
+        for check in &self.custom_checks {
+            script.push_str("    {\n");
+
+            // Build headers object
+            let mut all_headers: Vec<(String, String)> = Vec::new();
+            // Add check-specific headers
+            for (k, v) in &check.headers {
+                all_headers.push((k.clone(), v.clone()));
+            }
+            // Add global custom headers (check-specific take priority)
+            for (k, v) in custom_headers {
+                if !check.headers.contains_key(k) {
+                    all_headers.push((k.clone(), v.clone()));
+                }
+            }
+            // If posting JSON body, add Content-Type
+            if check.body.is_some()
+                && !all_headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            {
+                all_headers.push(("Content-Type".to_string(), "application/json".to_string()));
+            }
+
+            let headers_js = if all_headers.is_empty() {
+                "{}".to_string()
+            } else {
+                let entries: Vec<String> = all_headers
+                    .iter()
+                    .map(|(k, v)| format!("'{}': '{}'", k, v.replace('\'', "\\'")))
+                    .collect();
+                format!("{{ {} }}", entries.join(", "))
+            };
+
+            let method = check.method.to_uppercase();
+            let url = format!("${{{}}}{}", base_url, check.path);
+            let escaped_name = check.name.replace('\'', "\\'");
+
+            match method.as_str() {
+                "GET" | "HEAD" | "OPTIONS" | "DELETE" => {
+                    let k6_method = match method.as_str() {
+                        "DELETE" => "del",
+                        other => &other.to_lowercase(),
+                    };
+                    if all_headers.is_empty() {
+                        script
+                            .push_str(&format!("      let res = http.{}(`{}`);\n", k6_method, url));
+                    } else {
+                        script.push_str(&format!(
+                            "      let res = http.{}(`{}`, {{ headers: {} }});\n",
+                            k6_method, url, headers_js
+                        ));
+                    }
+                }
+                _ => {
+                    // POST, PUT, PATCH
+                    let k6_method = method.to_lowercase();
+                    let body_expr = match &check.body {
+                        Some(b) => format!("'{}'", b.replace('\'', "\\'")),
+                        None => "null".to_string(),
+                    };
+                    script.push_str(&format!(
+                        "      let res = http.{}(`{}`, {}, {{ headers: {} }});\n",
+                        k6_method, url, body_expr, headers_js
+                    ));
+                }
+            }
+
+            // Status check
+            script.push_str(&format!(
+                "      check(res, {{ '{}': (r) => r.status === {} }});\n",
+                escaped_name, check.expected_status
+            ));
+
+            // Header checks
+            for (header_name, pattern) in &check.expected_headers {
+                let header_check_name = format!("{}:header:{}", escaped_name, header_name);
+                let escaped_pattern = pattern.replace('\\', "\\\\").replace('\'', "\\'");
+                script.push_str(&format!(
+                    "      check(res, {{ '{}': (r) => new RegExp('{}').test(r.headers['{}'] || r.headers['{}'] || '') }});\n",
+                    header_check_name,
+                    escaped_pattern,
+                    header_name,
+                    header_name.to_lowercase()
+                ));
+            }
+
+            // Body field checks
+            for field in &check.expected_body_fields {
+                let field_check_name =
+                    format!("{}:body:{}:{}", escaped_name, field.name, field.field_type);
+                let type_check = match field.field_type.as_str() {
+                    "string" => format!(
+                        "typeof JSON.parse(r.body)['{}'] === 'string'",
+                        field.name
+                    ),
+                    "integer" => format!(
+                        "Number.isInteger(JSON.parse(r.body)['{}'])",
+                        field.name
+                    ),
+                    "number" => format!(
+                        "typeof JSON.parse(r.body)['{}'] === 'number'",
+                        field.name
+                    ),
+                    "boolean" => format!(
+                        "typeof JSON.parse(r.body)['{}'] === 'boolean'",
+                        field.name
+                    ),
+                    "array" => format!(
+                        "Array.isArray(JSON.parse(r.body)['{}'])",
+                        field.name
+                    ),
+                    "object" => format!(
+                        "typeof JSON.parse(r.body)['{}'] === 'object' && !Array.isArray(JSON.parse(r.body)['{}'])",
+                        field.name, field.name
+                    ),
+                    _ => format!(
+                        "JSON.parse(r.body)['{}'] !== undefined",
+                        field.name
+                    ),
+                };
+                script.push_str(&format!(
+                    "      check(res, {{ '{}': (r) => {{ try {{ return {}; }} catch(e) {{ return false; }} }} }});\n",
+                    field_check_name, type_check
+                ));
+            }
+
+            script.push_str("    }\n");
+        }
+
+        script.push_str("  });\n\n");
+        script
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_custom_yaml() {
+        let yaml = r#"
+custom_checks:
+  - name: "custom:pets-returns-200"
+    path: /pets
+    method: GET
+    expected_status: 200
+  - name: "custom:create-product"
+    path: /api/products
+    method: POST
+    expected_status: 201
+    body: '{"sku": "TEST-001", "name": "Test"}'
+    expected_body_fields:
+      - name: id
+        type: integer
+    expected_headers:
+      content-type: "application/json"
+"#;
+        let config: CustomConformanceConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.custom_checks.len(), 2);
+        assert_eq!(config.custom_checks[0].name, "custom:pets-returns-200");
+        assert_eq!(config.custom_checks[0].expected_status, 200);
+        assert_eq!(config.custom_checks[1].expected_body_fields.len(), 1);
+        assert_eq!(config.custom_checks[1].expected_body_fields[0].name, "id");
+        assert_eq!(config.custom_checks[1].expected_body_fields[0].field_type, "integer");
+    }
+
+    #[test]
+    fn test_generate_k6_group_get() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:test-get".to_string(),
+                path: "/api/test".to_string(),
+                method: "GET".to_string(),
+                expected_status: 200,
+                body: None,
+                expected_headers: std::collections::HashMap::new(),
+                expected_body_fields: vec![],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        assert!(script.contains("group('Custom'"));
+        assert!(script.contains("http.get(`${BASE_URL}/api/test`)"));
+        assert!(script.contains("'custom:test-get': (r) => r.status === 200"));
+    }
+
+    #[test]
+    fn test_generate_k6_group_post_with_body() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:create".to_string(),
+                path: "/api/items".to_string(),
+                method: "POST".to_string(),
+                expected_status: 201,
+                body: Some(r#"{"name": "test"}"#.to_string()),
+                expected_headers: std::collections::HashMap::new(),
+                expected_body_fields: vec![ExpectedBodyField {
+                    name: "id".to_string(),
+                    field_type: "integer".to_string(),
+                }],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        assert!(script.contains("http.post("));
+        assert!(script.contains("'custom:create': (r) => r.status === 201"));
+        assert!(script.contains("custom:create:body:id:integer"));
+        assert!(script.contains("Number.isInteger"));
+    }
+
+    #[test]
+    fn test_generate_k6_group_with_header_checks() {
+        let mut expected_headers = std::collections::HashMap::new();
+        expected_headers.insert("content-type".to_string(), "application/json".to_string());
+
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:header-check".to_string(),
+                path: "/api/test".to_string(),
+                method: "GET".to_string(),
+                expected_status: 200,
+                body: None,
+                expected_headers,
+                expected_body_fields: vec![],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        assert!(script.contains("custom:header-check:header:content-type"));
+        assert!(script.contains("new RegExp('application/json')"));
+    }
+
+    #[test]
+    fn test_generate_k6_group_with_custom_headers() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:auth-test".to_string(),
+                path: "/api/secure".to_string(),
+                method: "GET".to_string(),
+                expected_status: 200,
+                body: None,
+                expected_headers: std::collections::HashMap::new(),
+                expected_body_fields: vec![],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let custom_headers = vec![("Authorization".to_string(), "Bearer token123".to_string())];
+        let script = config.generate_k6_group("BASE_URL", &custom_headers);
+        assert!(script.contains("'Authorization': 'Bearer token123'"));
+    }
+
+    #[test]
+    fn test_from_file_nonexistent() {
+        let result = CustomConformanceConfig::from_file(Path::new("/nonexistent/file.yaml"));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Failed to read custom conformance file"));
+    }
+
+    #[test]
+    fn test_generate_k6_group_delete() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:delete-item".to_string(),
+                path: "/api/items/1".to_string(),
+                method: "DELETE".to_string(),
+                expected_status: 204,
+                body: None,
+                expected_headers: std::collections::HashMap::new(),
+                expected_body_fields: vec![],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        assert!(script.contains("http.del("));
+        assert!(script.contains("r.status === 204"));
+    }
+}

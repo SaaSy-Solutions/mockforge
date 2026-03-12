@@ -336,6 +336,30 @@ impl ConformanceFeature {
         }
     }
 
+    /// Get an actionable hint for expanding coverage in a category.
+    /// Used in the report when a category has 0 tests detected from the spec.
+    pub fn category_hint(category: &str) -> &'static str {
+        match category {
+            "Parameters" => "Add path, query, header, or cookie parameters to your operations",
+            "Request Bodies" => "Add requestBody with JSON, form, or multipart content to POST/PUT/PATCH operations",
+            "Schema Types" => "Use typed properties (string, integer, number, boolean, array, object) in your schemas",
+            "Composition" => "Use oneOf, anyOf, or allOf schema composition in your models",
+            "String Formats" => "Add format annotations (date, email, uuid, uri, ipv4, etc.) to string schemas",
+            "Constraints" => "Add required fields, min/max, pattern, or enum constraints to your schemas",
+            "Response Codes" => "Define explicit 200, 201, 204, 400, and 404 responses on your operations",
+            "HTTP Methods" => "Use GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS methods in your paths",
+            "Content Types" => "Serve multiple content types or add Accept header negotiation",
+            "Security" => "Define securitySchemes (bearer, apiKey, basic) in your components",
+            "Response Validation" => "Add response schemas so MockForge can validate response structure",
+            _ => "Expand your OpenAPI spec to cover this category",
+        }
+    }
+
+    /// Count the number of features in a given category
+    pub fn features_in_category(category: &str) -> usize {
+        Self::all().iter().filter(|f| f.category() == category).count()
+    }
+
     /// Get the OpenAPI spec URL for this feature's category (used in SARIF reports)
     pub fn spec_url(&self) -> &'static str {
         match self.category() {

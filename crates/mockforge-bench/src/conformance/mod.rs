@@ -3,6 +3,7 @@
 //! Generates k6 scripts that exercise all OpenAPI 3.0.0 features against a target,
 //! then reports per-feature pass/fail results.
 
+pub mod custom;
 pub mod generator;
 pub mod report;
 pub mod sarif;
@@ -10,6 +11,7 @@ pub mod schema_validator;
 pub mod spec;
 pub mod spec_driven;
 
+pub use custom::CustomConformanceConfig;
 pub use generator::{ConformanceConfig, ConformanceGenerator};
 pub use report::ConformanceReport;
 pub use sarif::ConformanceSarifReport;

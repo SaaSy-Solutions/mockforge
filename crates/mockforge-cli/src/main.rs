@@ -1952,6 +1952,15 @@ enum Commands {
         /// Example: --conformance-all-operations
         #[arg(long)]
         conformance_all_operations: bool,
+
+        /// Custom conformance checks YAML file
+        ///
+        /// Define additional conformance checks beyond the built-in OpenAPI 3.0.0 feature set.
+        /// Custom checks appear under a "Custom" category in the report.
+        ///
+        /// Example: --conformance-custom custom-checks.yaml
+        #[arg(long, value_name = "FILE")]
+        conformance_custom: Option<PathBuf>,
     },
 }
 
@@ -3301,6 +3310,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_report_format,
             conformance_headers,
             conformance_all_operations,
+            conformance_custom,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3384,6 +3394,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_report_format,
                 conformance_headers,
                 conformance_all_operations,
+                conformance_custom,
             };
 
             if let Err(e) = bench_cmd.execute().await {
