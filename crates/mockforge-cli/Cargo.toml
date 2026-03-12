@@ -93,7 +93,7 @@ stt-vosk = ["vosk", "cpal", "hound"]  # Offline STT using vosk-rs
 stt-all = ["stt-cloud", "stt-vosk"]
 # Studio packs feature (requires mockforge-scenarios with studio-packs feature)
 studio-packs = ["mockforge-scenarios/studio-packs"]
-http = ["mockforge-http"]
+http = ["mockforge-http", "mockforge-http/conformance"]
 mqtt = ["mockforge-mqtt", "mockforge-http/mqtt", "rumqttc"]
 ws = ["mockforge-ws"]
 grpc = ["mockforge-grpc"]

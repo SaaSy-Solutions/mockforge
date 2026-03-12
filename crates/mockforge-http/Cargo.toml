@@ -75,6 +75,7 @@ dashmap = { version = "6.1", optional = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
 mockforge-runtime-daemon = { version = "0.3.31", path = "../mockforge-runtime-daemon", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
+mockforge-bench = { version = "0.3.70", path = "../mockforge-bench", optional = true }
 
 [features]
 default = []
@@ -94,6 +95,8 @@ runtime-daemon = ["mockforge-runtime-daemon"]
 smtp = ["mockforge-smtp"]
 # Enable MQTT integration
 mqtt = ["mockforge-mqtt"]
+# Enable conformance testing API endpoints
+conformance = ["mockforge-bench", "dashmap"]
 # Enable Kafka integration (requires mockforge-kafka dependency when available)
 kafka = []
 # Enable chaos engineering API management (mockforge-chaos is always included)

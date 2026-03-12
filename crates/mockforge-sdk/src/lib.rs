@@ -54,6 +54,7 @@
 
 pub mod admin;
 pub mod builder;
+pub mod conformance;
 pub mod error;
 pub mod ffi;
 pub mod server;
@@ -66,6 +67,7 @@ pub use admin::{
     ServerStats,
 };
 pub use builder::MockServerBuilder;
+pub use conformance::{ConformanceClient, ConformanceRun, ConformanceRunRequest, RunStatus};
 pub use error::{Error, Result};
 pub use server::MockServer;
 pub use stub::{

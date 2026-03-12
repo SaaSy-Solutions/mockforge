@@ -61,6 +61,7 @@ const en: Dictionary = {
   'tab.testGenerator': 'Test Generator',
   'tab.testExecution': 'Test Execution',
   'tab.integrationTests': 'Integration Tests',
+  'tab.conformance': 'Conformance',
   'tab.timeTravel': 'Time Travel',
   'tab.chaosEngineering': 'Chaos Engineering',
   'tab.resilience': 'Resilience',

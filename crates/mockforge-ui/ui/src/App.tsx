@@ -57,6 +57,7 @@ const TracesPage = lazy(() => import('./pages/TracesPage').then(m => ({ default:
 const TestGeneratorPage = lazy(() => import('./pages/TestGeneratorPage'));
 const TestExecutionDashboard = lazy(() => import('./pages/TestExecutionDashboard'));
 const IntegrationTestBuilder = lazy(() => import('./pages/IntegrationTestBuilder'));
+const ConformancePage = lazy(() => import('./pages/ConformancePage').then(m => ({ default: m.ConformancePage })));
 
 // Chaos & Resilience
 const ChaosPage = lazy(() => import('./pages/ChaosPage').then(m => ({ default: m.ChaosPage })));
@@ -266,6 +267,8 @@ function App() {
         return <TestExecutionDashboard />;
       case 'integration-test-builder':
         return <IntegrationTestBuilder />;
+      case 'conformance':
+        return <ConformancePage />;
 
       // Chaos & Resilience
       case 'chaos':

@@ -118,6 +118,118 @@ pub struct ConformanceReport {
 }
 
 impl ConformanceReport {
+    /// Construct a report directly from check results and failure details.
+    /// Used by `NativeConformanceExecutor` to build a report without k6.
+    pub fn from_results(
+        check_results: HashMap<String, (u64, u64)>,
+        failure_details: Vec<FailureDetail>,
+    ) -> Self {
+        Self {
+            check_results,
+            failure_details,
+        }
+    }
+
+    /// Serialize the report to JSON.
+    ///
+    /// Includes both the raw `checks` map (for CLI/k6 compat) and structured
+    /// `summary`, `categories`, and `failures` fields (for UI consumption).
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut checks = serde_json::Map::new();
+        for (name, (passes, fails)) in &self.check_results {
+            checks.insert(
+                name.clone(),
+                serde_json::json!({
+                    "passes": passes,
+                    "fails": fails,
+                }),
+            );
+        }
+
+        // Compute structured category results for UI
+        let by_cat = self.by_category();
+        let mut categories_json = serde_json::Map::new();
+        for (cat_name, cat_result) in &by_cat {
+            categories_json.insert(
+                (*cat_name).to_string(),
+                serde_json::json!({
+                    "passed": cat_result.passed,
+                    "total": cat_result.total(),
+                    "rate": cat_result.rate(),
+                }),
+            );
+        }
+
+        // Compute summary
+        let total_passed: usize = by_cat.values().map(|r| r.passed).sum();
+        let total: usize = by_cat.values().map(|r| r.total()).sum();
+        let overall_rate = if total == 0 {
+            0.0
+        } else {
+            (total_passed as f64 / total as f64) * 100.0
+        };
+
+        // Transform failure details into UI-friendly format
+        let failures: Vec<serde_json::Value> = self
+            .failure_details
+            .iter()
+            .map(|d| {
+                let category = Self::category_for_check(&d.check);
+                serde_json::json!({
+                    "check_name": d.check,
+                    "category": category,
+                    "expected": d.expected,
+                    "actual": format!("status {}", d.response.status),
+                    "details": format!("{} {}", d.request.method, d.request.url),
+                })
+            })
+            .collect();
+
+        let mut result = serde_json::json!({
+            "checks": checks,
+            "summary": {
+                "total_checks": total,
+                "passed": total_passed,
+                "failed": total - total_passed,
+                "overall_rate": overall_rate,
+            },
+            "categories": categories_json,
+            "failures": failures,
+        });
+
+        // Keep raw failure_details for backward compat
+        if !self.failure_details.is_empty() {
+            result["failure_details"] = serde_json::to_value(&self.failure_details)
+                .unwrap_or(serde_json::Value::Array(Vec::new()));
+        }
+        result
+    }
+
+    /// Determine the category for a check name based on its prefix
+    fn category_for_check(check_name: &str) -> &'static str {
+        let prefix = check_name.split(':').next().unwrap_or("");
+        match prefix {
+            "param" => "Parameters",
+            "body" => "Request Bodies",
+            "response" => "Response Codes",
+            "schema" => "Schema Types",
+            "compose" => "Composition",
+            "format" => "String Formats",
+            "constraint" => "Constraints",
+            "security" => "Security",
+            "method" => "HTTP Methods",
+            "content" => "Content Types",
+            "validation" | "response_validation" => "Response Validation",
+            "custom" => "Custom",
+            _ => "Other",
+        }
+    }
+
+    /// Get the failure details
+    pub fn failure_details(&self) -> &[FailureDetail] {
+        &self.failure_details
+    }
+
     /// Parse a conformance report from k6's handleSummary JSON output
     ///
     /// Also loads failure details from `conformance-failure-details.json` in the same directory.

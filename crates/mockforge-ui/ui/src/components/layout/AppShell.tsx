@@ -127,6 +127,7 @@ const navSections = [
       { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
       { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
       { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
+      { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
       { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
     ]
   },

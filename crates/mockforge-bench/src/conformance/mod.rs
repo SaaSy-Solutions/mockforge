@@ -4,6 +4,7 @@
 //! then reports per-feature pass/fail results.
 
 pub mod custom;
+pub mod executor;
 pub mod generator;
 pub mod report;
 pub mod sarif;
@@ -12,6 +13,7 @@ pub mod spec;
 pub mod spec_driven;
 
 pub use custom::CustomConformanceConfig;
+pub use executor::{ConformanceProgress, NativeConformanceExecutor};
 pub use generator::{ConformanceConfig, ConformanceGenerator};
 pub use report::ConformanceReport;
 pub use sarif::ConformanceSarifReport;

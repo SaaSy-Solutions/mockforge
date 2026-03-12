@@ -8,6 +8,8 @@ pub mod auth_helpers;
 pub mod behavioral_cloning;
 pub mod change_management;
 pub mod compliance_dashboard;
+#[cfg(feature = "conformance")]
+pub mod conformance;
 pub mod consent;
 pub mod consistency;
 pub mod consumer_contracts;
@@ -52,6 +54,8 @@ pub use behavioral_cloning::{
 };
 pub use change_management::{change_management_router, ChangeManagementState};
 pub use compliance_dashboard::{compliance_dashboard_router, ComplianceDashboardState};
+#[cfg(feature = "conformance")]
+pub use conformance::{conformance_router, ConformanceState};
 pub use consistency::{consistency_router, ConsistencyState};
 pub use consumer_contracts::{consumer_contracts_router, ConsumerContractsState};
 pub use contract_health::{contract_health_router, ContractHealthState};

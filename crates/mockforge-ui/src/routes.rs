@@ -684,6 +684,14 @@ pub fn create_admin_router(
         tracing::info!("UI Builder mounted at /__mockforge/ui-builder");
     }
 
+    // Conformance testing API routes (uses its own ConformanceState)
+    {
+        use mockforge_http::handlers::conformance::{conformance_router, ConformanceState};
+        let conformance_state = ConformanceState::new();
+        router = router.nest_service("/api/conformance", conformance_router(conformance_state));
+        tracing::info!("Conformance testing API routes mounted at /api/conformance");
+    }
+
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes
     router = router.route("/{*path}", get(serve_admin_html));

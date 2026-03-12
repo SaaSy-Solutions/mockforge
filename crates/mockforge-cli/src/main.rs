@@ -1961,6 +1961,13 @@ enum Commands {
         /// Example: --conformance-custom custom-checks.yaml
         #[arg(long, value_name = "FILE")]
         conformance_custom: Option<PathBuf>,
+
+        /// Use k6 for conformance test execution instead of the native Rust executor
+        ///
+        /// By default, conformance tests run using a native Rust executor (no k6 required).
+        /// Use this flag to fall back to the k6-based execution path.
+        #[arg(long)]
+        use_k6: bool,
     },
 }
 
@@ -3311,6 +3318,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_headers,
             conformance_all_operations,
             conformance_custom,
+            use_k6,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3395,6 +3403,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_headers,
                 conformance_all_operations,
                 conformance_custom,
+                use_k6,
             };
 
             if let Err(e) = bench_cmd.execute().await {

@@ -739,6 +739,9 @@ pub struct ManagementState {
     pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
     /// Optional server configuration for profile application
     pub server_config: Option<Arc<RwLock<mockforge_core::config::ServerConfig>>>,
+    /// Conformance testing state
+    #[cfg(feature = "conformance")]
+    pub conformance_state: crate::handlers::conformance::ConformanceState,
 }
 
 impl ManagementState {
@@ -778,6 +781,8 @@ impl ManagementState {
             #[cfg(feature = "chaos")]
             chaos_api_state: None,
             server_config: None,
+            #[cfg(feature = "conformance")]
+            conformance_state: crate::handlers::conformance::ConformanceState::new(),
         }
     }
 
@@ -2513,6 +2518,15 @@ pub fn management_router(state: ManagementState) -> Router {
     // State machine API routes
     let router =
         router.nest("/state-machines", crate::state_machine_api::create_state_machine_routes());
+
+    // Conformance testing API routes
+    #[cfg(feature = "conformance")]
+    let router = router.nest_service(
+        "/conformance",
+        crate::handlers::conformance::conformance_router(state.conformance_state.clone()),
+    );
+    #[cfg(not(feature = "conformance"))]
+    let router = router;
 
     router.with_state(state)
 }

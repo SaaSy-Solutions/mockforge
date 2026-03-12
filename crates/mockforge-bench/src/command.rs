@@ -145,6 +145,8 @@ pub struct BenchCommand {
     pub conformance_all_operations: bool,
     /// Optional YAML file with custom conformance checks
     pub conformance_custom: Option<PathBuf>,
+    /// Use k6 for conformance test execution instead of the native Rust executor
+    pub use_k6: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -548,6 +550,7 @@ impl BenchCommand {
                 conformance_headers: vec![],
                 conformance_all_operations: false,
                 conformance_custom: None,
+                use_k6: false,
             },
             targets,
             max_concurrency,
@@ -1900,8 +1903,8 @@ impl BenchCommand {
         };
 
         // Branch: spec-driven mode vs reference mode
-        let script = if !self.spec.is_empty() {
-            // Spec-driven mode: analyze user's spec
+        // Annotate operations if spec is provided (used by both native and k6 paths)
+        let annotated_ops = if !self.spec.is_empty() {
             TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
             let parser = SpecParser::from_file(&self.spec[0]).await?;
             let operations = parser.get_operations();
@@ -1916,89 +1919,125 @@ impl BenchCommand {
                 operations.len(),
                 annotated.iter().map(|a| a.features.len()).sum::<usize>()
             ));
+            Some(annotated)
+        } else {
+            None
+        };
 
-            let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
-                config, annotated,
-            );
-            let op_count = gen.operation_count();
-            let (script, check_count) = gen.generate()?;
+        // If generate-only OR --use-k6, use the k6 script generation path
+        if self.generate_only || self.use_k6 {
+            let script = if let Some(annotated) = &annotated_ops {
+                let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
+                    config,
+                    annotated.clone(),
+                );
+                let op_count = gen.operation_count();
+                let (script, check_count) = gen.generate()?;
+                TerminalReporter::print_success(&format!(
+                    "Conformance: {} operations analyzed, {} unique checks generated",
+                    op_count, check_count
+                ));
+                script
+            } else {
+                let generator = ConformanceGenerator::new(config);
+                generator.generate()?
+            };
 
-            // Print coverage summary
+            let script_path = self.output.join("k6-conformance.js");
+            std::fs::write(&script_path, &script).map_err(|e| {
+                BenchError::Other(format!("Failed to write conformance script: {}", e))
+            })?;
             TerminalReporter::print_success(&format!(
-                "Conformance: {} operations analyzed, {} unique checks generated",
-                op_count, check_count
+                "Conformance script generated: {}",
+                script_path.display()
             ));
-            if !self.conformance_all_operations && check_count < op_count {
-                TerminalReporter::print_progress(
-                    "Tip: Use --conformance-all-operations to test every endpoint",
+
+            if self.generate_only {
+                println!("\nScript generated. Run with:");
+                println!("  k6 run {}", script_path.display());
+                return Ok(());
+            }
+
+            // --use-k6: execute via k6
+            if !K6Executor::is_k6_installed() {
+                TerminalReporter::print_error("k6 is not installed");
+                TerminalReporter::print_warning(
+                    "Install k6 from: https://k6.io/docs/get-started/installation/",
+                );
+                return Err(BenchError::K6NotFound);
+            }
+
+            TerminalReporter::print_progress("Running conformance tests via k6...");
+            let executor = K6Executor::new()?;
+            executor.execute(&script_path, Some(&self.output), self.verbose).await?;
+
+            let report_path = self.output.join("conformance-report.json");
+            if report_path.exists() {
+                let report = ConformanceReport::from_file(&report_path)?;
+                report.print_report_with_options(self.conformance_all_operations);
+                self.save_conformance_report(&report, &report_path)?;
+            } else {
+                TerminalReporter::print_warning(
+                    "Conformance report not generated (k6 handleSummary may not have run)",
                 );
             }
 
-            script
-        } else {
-            // Reference mode: uses /conformance/ endpoints
-            let generator = ConformanceGenerator::new(config);
-            generator.generate()?
-        };
-
-        // Write script
-        let script_path = self.output.join("k6-conformance.js");
-        std::fs::write(&script_path, &script)
-            .map_err(|e| BenchError::Other(format!("Failed to write conformance script: {}", e)))?;
-        TerminalReporter::print_success(&format!(
-            "Conformance script generated: {}",
-            script_path.display()
-        ));
-
-        // If generate-only, stop here
-        if self.generate_only {
-            println!("\nScript generated. Run with:");
-            println!("  k6 run {}", script_path.display());
             return Ok(());
         }
 
-        // Validate k6
-        if !K6Executor::is_k6_installed() {
-            TerminalReporter::print_error("k6 is not installed");
-            TerminalReporter::print_warning(
-                "Install k6 from: https://k6.io/docs/get-started/installation/",
-            );
-            return Err(BenchError::K6NotFound);
-        }
+        // Default: Native Rust executor (no k6 dependency)
+        TerminalReporter::print_progress("Running conformance tests (native executor)...");
 
-        // Execute
-        TerminalReporter::print_progress("Running conformance tests...");
-        let executor = K6Executor::new()?;
-        executor.execute(&script_path, Some(&self.output), self.verbose).await?;
+        let mut executor = crate::conformance::executor::NativeConformanceExecutor::new(config)?;
 
-        // Parse and display report
-        let report_path = self.output.join("conformance-report.json");
-        if report_path.exists() {
-            let report = ConformanceReport::from_file(&report_path)?;
-            report.print_report_with_options(self.conformance_all_operations);
-
-            // Output in requested format
-            if self.conformance_report_format == "sarif" {
-                use crate::conformance::sarif::ConformanceSarifReport;
-                ConformanceSarifReport::write(&report, &self.target, &self.conformance_report)?;
-                TerminalReporter::print_success(&format!(
-                    "SARIF report saved to: {}",
-                    self.conformance_report.display()
-                ));
-            } else if self.conformance_report != report_path {
-                // Copy JSON report to user-specified location
-                std::fs::copy(&report_path, &self.conformance_report)?;
-                TerminalReporter::print_success(&format!(
-                    "Report saved to: {}",
-                    self.conformance_report.display()
-                ));
-            }
+        executor = if let Some(annotated) = &annotated_ops {
+            executor.with_spec_driven_checks(annotated)
         } else {
-            TerminalReporter::print_warning(
-                "Conformance report not generated (k6 handleSummary may not have run)",
-            );
-        }
+            executor.with_reference_checks()
+        };
+        executor = executor.with_custom_checks()?;
 
+        TerminalReporter::print_success(&format!(
+            "Executing {} conformance checks...",
+            executor.check_count()
+        ));
+
+        let report = executor.execute().await?;
+        report.print_report_with_options(self.conformance_all_operations);
+
+        // Save report
+        let report_path = self.output.join("conformance-report.json");
+        let report_json = serde_json::to_string_pretty(&report.to_json())
+            .map_err(|e| BenchError::Other(format!("Failed to serialize report: {}", e)))?;
+        std::fs::write(&report_path, &report_json)
+            .map_err(|e| BenchError::Other(format!("Failed to write report: {}", e)))?;
+        TerminalReporter::print_success(&format!("Report saved to: {}", report_path.display()));
+
+        self.save_conformance_report(&report, &report_path)?;
+
+        Ok(())
+    }
+
+    /// Save conformance report in the requested format (SARIF or JSON copy)
+    fn save_conformance_report(
+        &self,
+        report: &crate::conformance::report::ConformanceReport,
+        report_path: &Path,
+    ) -> Result<()> {
+        if self.conformance_report_format == "sarif" {
+            use crate::conformance::sarif::ConformanceSarifReport;
+            ConformanceSarifReport::write(report, &self.target, &self.conformance_report)?;
+            TerminalReporter::print_success(&format!(
+                "SARIF report saved to: {}",
+                self.conformance_report.display()
+            ));
+        } else if self.conformance_report != *report_path {
+            std::fs::copy(report_path, &self.conformance_report)?;
+            TerminalReporter::print_success(&format!(
+                "Report saved to: {}",
+                self.conformance_report.display()
+            ));
+        }
         Ok(())
     }
 
@@ -2211,6 +2250,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            use_k6: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2281,6 +2321,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            use_k6: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2347,6 +2388,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            use_k6: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
