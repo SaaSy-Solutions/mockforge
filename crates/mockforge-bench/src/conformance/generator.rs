@@ -99,6 +99,13 @@ impl ConformanceGenerator {
         script.push_str("import http from 'k6/http';\n");
         script.push_str("import { check, group } from 'k6';\n\n");
 
+        // Tell k6 that all HTTP status codes are "expected" in conformance mode.
+        // Without this, k6 counts 4xx responses (e.g. intentional 404 tests) as
+        // http_req_failed errors, producing a misleading error rate percentage.
+        script.push_str(
+            "http.setResponseCallback(http.expectedStatuses({ min: 100, max: 599 }));\n\n",
+        );
+
         // Options: 1 VU, 1 iteration (functional test, not load test)
         script.push_str("export const options = {\n");
         script.push_str("  vus: 1,\n");
