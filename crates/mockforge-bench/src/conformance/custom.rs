@@ -143,22 +143,25 @@ impl CustomConformanceConfig {
                 }
             }
 
-            // Status check
+            // Status check with failure detail capture
             script.push_str(&format!(
-                "      check(res, {{ '{}': (r) => r.status === {} }});\n",
-                escaped_name, check.expected_status
+                "      {{ let ok = check(res, {{ '{}': (r) => r.status === {} }}); if (!ok) __captureFailure('{}', res, 'status === {}'); }}\n",
+                escaped_name, check.expected_status, escaped_name, check.expected_status
             ));
 
-            // Header checks
+            // Header checks with failure detail capture
             for (header_name, pattern) in &check.expected_headers {
                 let header_check_name = format!("{}:header:{}", escaped_name, header_name);
                 let escaped_pattern = pattern.replace('\\', "\\\\").replace('\'', "\\'");
                 script.push_str(&format!(
-                    "      check(res, {{ '{}': (r) => new RegExp('{}').test(r.headers['{}'] || r.headers['{}'] || '') }});\n",
+                    "      {{ let ok = check(res, {{ '{}': (r) => new RegExp('{}').test(r.headers['{}'] || r.headers['{}'] || '') }}); if (!ok) __captureFailure('{}', res, 'header {} matches /{}/ '); }}\n",
                     header_check_name,
                     escaped_pattern,
                     header_name,
-                    header_name.to_lowercase()
+                    header_name.to_lowercase(),
+                    header_check_name,
+                    header_name,
+                    escaped_pattern
                 ));
             }
 
@@ -197,8 +200,8 @@ impl CustomConformanceConfig {
                     ),
                 };
                 script.push_str(&format!(
-                    "      check(res, {{ '{}': (r) => {{ try {{ return {}; }} catch(e) {{ return false; }} }} }});\n",
-                    field_check_name, type_check
+                    "      {{ let ok = check(res, {{ '{}': (r) => {{ try {{ return {}; }} catch(e) {{ return false; }} }} }}); if (!ok) __captureFailure('{}', res, 'body field {} is {}'); }}\n",
+                    field_check_name, type_check, field_check_name, field.name, field.field_type
                 ));
             }
 
@@ -329,6 +332,46 @@ custom_checks:
         let custom_headers = vec![("Authorization".to_string(), "Bearer token123".to_string())];
         let script = config.generate_k6_group("BASE_URL", &custom_headers);
         assert!(script.contains("'Authorization': 'Bearer token123'"));
+    }
+
+    #[test]
+    fn test_failure_capture_emitted() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:capture-test".to_string(),
+                path: "/api/test".to_string(),
+                method: "GET".to_string(),
+                expected_status: 200,
+                body: None,
+                expected_headers: {
+                    let mut m = std::collections::HashMap::new();
+                    m.insert("X-Rate-Limit".to_string(), ".*".to_string());
+                    m
+                },
+                expected_body_fields: vec![ExpectedBodyField {
+                    name: "id".to_string(),
+                    field_type: "integer".to_string(),
+                }],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        // Status check should call __captureFailure on failure
+        assert!(
+            script.contains("__captureFailure('custom:capture-test', res, 'status === 200')"),
+            "Status check should emit __captureFailure"
+        );
+        // Header check should call __captureFailure on failure
+        assert!(
+            script.contains("__captureFailure('custom:capture-test:header:X-Rate-Limit'"),
+            "Header check should emit __captureFailure"
+        );
+        // Body field check should call __captureFailure on failure
+        assert!(
+            script.contains("__captureFailure('custom:capture-test:body:id:integer'"),
+            "Body field check should emit __captureFailure"
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Conformance testing API client
 //!
 //! Provides programmatic access to `MockForge`'s conformance testing API for
-//! starting, monitoring, and retrieving OpenAPI conformance test results.
+//! starting, monitoring, and retrieving `OpenAPI` conformance test results.
 #![allow(
     clippy::missing_errors_doc,
     clippy::must_use_candidate,
@@ -25,7 +25,7 @@ pub struct ConformanceClient {
 pub struct ConformanceRunRequest {
     /// Target URL to test against
     pub target_url: String,
-    /// Inline OpenAPI spec JSON/YAML (optional)
+    /// Inline `OpenAPI` spec JSON/YAML (optional)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec: Option<String>,
     /// Categories to test (optional filter)
