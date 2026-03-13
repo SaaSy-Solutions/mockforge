@@ -11,7 +11,7 @@ use super::spec::ConformanceFeature;
 use super::spec_driven::{AnnotatedOperation, ApiKeyLocation, SecuritySchemeInfo};
 use crate::error::{BenchError, Result};
 use reqwest::{Client, Method};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -463,8 +463,8 @@ impl NativeConformanceExecutor {
     /// Populate checks from annotated spec operations (spec-driven mode)
     #[must_use]
     pub fn with_spec_driven_checks(mut self, operations: &[AnnotatedOperation]) -> Self {
-        // Group operations by feature for representative selection
-        let mut feature_seen: HashMap<&'static str, bool> = HashMap::new();
+        // Track which features have been seen to deduplicate in default mode
+        let mut feature_seen: HashSet<&'static str> = HashSet::new();
 
         for op in operations {
             for feature in &op.features {
@@ -475,23 +475,19 @@ impl NativeConformanceExecutor {
 
                 let check_name_base = feature.check_name();
 
-                // In default mode, pick one representative per feature
-                // In all-operations mode, test every operation
-                let use_qualified =
-                    self.config.all_operations || feature_seen.contains_key(check_name_base);
-
-                let check_name = if use_qualified {
-                    format!("{}:{}", check_name_base, op.path)
+                if self.config.all_operations {
+                    // All-operations mode: test every operation with path-qualified names
+                    let check_name = format!("{}:{}", check_name_base, op.path);
+                    let check = self.build_spec_check(&check_name, op, feature);
+                    self.checks.push(check);
                 } else {
-                    check_name_base.to_string()
-                };
-
-                if !self.config.all_operations {
-                    feature_seen.insert(check_name_base, true);
+                    // Default mode: one representative operation per feature
+                    if feature_seen.insert(check_name_base) {
+                        let check_name = format!("{}:{}", check_name_base, op.path);
+                        let check = self.build_spec_check(&check_name, op, feature);
+                        self.checks.push(check);
+                    }
                 }
-
-                let check = self.build_spec_check(&check_name, op, feature);
-                self.checks.push(check);
             }
         }
 

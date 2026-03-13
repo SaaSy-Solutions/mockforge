@@ -2005,6 +2005,19 @@ impl BenchCommand {
         let report = executor.execute().await?;
         report.print_report_with_options(self.conformance_all_operations);
 
+        // Save failure details to a separate file for easy debugging
+        let failure_details = report.failure_details();
+        if !failure_details.is_empty() {
+            let details_path = self.output.join("conformance-failure-details.json");
+            if let Ok(json) = serde_json::to_string_pretty(&failure_details) {
+                let _ = std::fs::write(&details_path, json);
+                TerminalReporter::print_success(&format!(
+                    "Failure details saved to: {}",
+                    details_path.display()
+                ));
+            }
+        }
+
         // Save report
         let report_path = self.output.join("conformance-report.json");
         let report_json = serde_json::to_string_pretty(&report.to_json())
