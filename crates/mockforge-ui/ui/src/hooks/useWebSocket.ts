@@ -6,6 +6,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { logger } from '@/utils/logger';
 
+// Detect cloud mode — WebSocket connections don't work on Vercel
+const isCloud = (() => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+  return !!apiBase && apiBase !== '';
+})();
+
 interface UseWebSocketOptions {
   autoConnect?: boolean;
   reconnect?: {
@@ -42,8 +48,12 @@ export function useWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const shouldReconnectRef = useRef(true);
+  const mountedRef = useRef(true);
 
   const connect = useCallback(() => {
+    // In cloud mode, WebSocket endpoints don't exist — skip connection entirely
+    if (isCloud) return;
+
     shouldReconnectRef.current = true;
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -60,12 +70,12 @@ export function useWebSocket(
 
       ws.onopen = () => {
         logger.info('WebSocket connected', { url });
-        setConnected(true);
+        if (mountedRef.current) setConnected(true);
         reconnectAttemptsRef.current = 0;
       };
 
       ws.onmessage = (event) => {
-        setLastMessage(event);
+        if (mountedRef.current) setLastMessage(event);
       };
 
       ws.onerror = (error) => {
@@ -74,11 +84,13 @@ export function useWebSocket(
 
       ws.onclose = () => {
         logger.info('WebSocket disconnected', { url });
-        setConnected(false);
-        setLastMessage(null);
+        if (mountedRef.current) {
+          setConnected(false);
+          setLastMessage(null);
+        }
 
         // Attempt reconnection if enabled
-        if (reconnect.enabled && shouldReconnectRef.current) {
+        if (reconnect.enabled && shouldReconnectRef.current && mountedRef.current) {
           const maxAttempts = reconnect.maxAttempts || 5;
           const delay = reconnect.delay || 2000;
 
@@ -98,7 +110,7 @@ export function useWebSocket(
       wsRef.current = ws;
     } catch (error) {
       logger.error('Failed to create WebSocket connection', error);
-      setConnected(false);
+      if (mountedRef.current) setConnected(false);
     }
   }, [url, reconnect]);
 
@@ -129,11 +141,14 @@ export function useWebSocket(
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     if (autoConnect) {
       connect();
     }
 
     return () => {
+      mountedRef.current = false;
       disconnect();
     };
   }, [autoConnect, connect, disconnect]);

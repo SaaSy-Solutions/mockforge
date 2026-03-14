@@ -50,9 +50,15 @@ export interface UseAnalyticsStreamOptions {
   reconnectMaxRetries?: number;
 }
 
+// Detect cloud mode: WebSocket streaming is not available when running against a remote API
+const isCloudMode = (() => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+  return !!apiBase && apiBase !== '';
+})();
+
 export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const {
-    enabled = true,
+    enabled: userEnabled = true,
     config,
     onMessage,
     onError,
@@ -62,6 +68,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     reconnectMaxDelay = 30000,
     reconnectMaxRetries = 10,
   } = options;
+
+  // Disable WebSocket in cloud mode — the WS endpoint is not available on the remote host
+  const enabled = userEnabled && !isCloudMode;
 
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<MetricsUpdate | null>(null);

@@ -602,8 +602,7 @@ export function IncidentDashboardPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Incident Dashboard"
-        description="Monitor and manage contract drift incidents"
-        icon={AlertTriangle}
+        subtitle="Monitor and manage contract drift incidents"
       />
 
       {/* Statistics Cards */}
@@ -719,7 +718,7 @@ export function IncidentDashboardPage() {
           </Alert>
         ) : incidents.length === 0 ? (
           <EmptyState
-            icon={CheckCircle2}
+            icon={<CheckCircle2 className="w-6 h-6" />}
             title="No Incidents Found"
             description={
               searchTerm || statusFilter !== 'all' || severityFilter !== 'all' || typeFilter !== 'all' || endpointFilter || protocolFilter !== 'all'

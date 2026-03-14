@@ -259,6 +259,15 @@ const LOCAL_ONLY_API_PREFIXES = [
   '/api/observability/',
   '/api/resilience/',
   '/api/recorder/',
+  '/api/conformance/',
+  '/api/performance/',
+  '/api/world-state/',
+  '/api/v1/consistency/',
+  '/api/v1/drift/',
+  '/api/v1/plugins/',
+  '/api/v1/scenario-studio/',
+  '/api/v1/snapshots',
+  '/api/v2/analytics/',
 ];
 
 function isLocalOnlyApi(url: string): boolean {
@@ -307,7 +316,52 @@ function createLocalApiStubResponse(url: string): Response {
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  return new Response(JSON.stringify([]),
+  if (path.includes('/conformance/')) {
+    return new Response(JSON.stringify({ runs: [], total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/performance/')) {
+    return new Response(JSON.stringify({ status: 'idle', profiles: [], results: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/world-state/')) {
+    return new Response(JSON.stringify({ layers: [], graph: { nodes: [], edges: [] }, entities: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/consistency/')) {
+    return new Response(JSON.stringify({ entities: [], total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/drift/')) {
+    return new Response(JSON.stringify({ incidents: [], stats: { total: 0, open: 0, resolved: 0 }, total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/scenario-studio/')) {
+    return new Response(JSON.stringify({ flows: [], total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/snapshots')) {
+    return new Response(JSON.stringify({ snapshots: [], total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/analytics/')) {
+    return new Response(JSON.stringify({ data: [], overview: { total_requests: 0, error_rate: 0, avg_latency: 0 }, traffic_patterns: [], requests: [], errors: [], latency: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/plugins/')) {
+    return new Response(JSON.stringify({ plugins: [], total: 0 }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({}),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 

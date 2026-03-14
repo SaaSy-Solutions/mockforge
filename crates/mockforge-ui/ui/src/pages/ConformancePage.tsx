@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  Shield, Play, CheckCircle, XCircle, Clock, RefreshCw, Trash2,
+  Play, CheckCircle, XCircle, Clock, RefreshCw, Trash2,
   ChevronDown, ChevronRight, Download, AlertTriangle,
 } from 'lucide-react';
 import {
@@ -209,8 +209,7 @@ export function ConformancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Conformance Testing"
-        description="Run OpenAPI 3.0 conformance tests against your mock server"
-        icon={Shield}
+        subtitle="Run OpenAPI 3.0 conformance tests against your mock server"
       />
 
       {error && (

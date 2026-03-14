@@ -157,7 +157,9 @@ export function ScenarioStudioPage() {
       const response = await fetch('/api/v1/scenario-studio/flows');
       if (response.ok) {
         const data = await response.json();
-        setFlows(data);
+        // API may return an array directly or { flows: [...], total: N }
+        const flowList = Array.isArray(data) ? data : Array.isArray(data?.flows) ? data.flows : [];
+        setFlows(flowList);
       }
     } catch (error) {
       console.error('Failed to load flows:', error);
@@ -541,7 +543,7 @@ export function ScenarioStudioPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {flows.map((flow) => (
+              {(Array.isArray(flows) ? flows : []).map((flow) => (
                 <div
                   key={flow.id}
                   className={`p-3 border rounded-lg cursor-pointer hover:bg-accent ${
