@@ -198,7 +198,7 @@ The `vercel.json` in `crates/mockforge-ui/ui/` proxies `/api/*` requests to `htt
 # Create webhook endpoint via Stripe CLI
 stripe webhook_endpoints create \
   --url https://api.mockforge.dev/api/v1/billing/webhook \
-  --events checkout.session.completed,customer.subscription.updated,customer.subscription.deleted,invoice.payment_succeeded,invoice.payment_failed
+  --enabled-events checkout.session.completed,customer.subscription.updated,customer.subscription.deleted,invoice.payment_succeeded,invoice.payment_failed
 ```
 
 Set the webhook secret and price IDs:
@@ -246,7 +246,7 @@ curl -X POST https://api.mockforge.dev/api/v1/auth/register \
 # 3. Login
 curl -X POST https://api.mockforge.dev/api/v1/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"test","password":"SecurePass123!"}'
+  -d '{"email":"test@example.com","password":"SecurePass123!"}'
 
 # 4. CLI login
 mockforge login --service-url https://api.mockforge.dev

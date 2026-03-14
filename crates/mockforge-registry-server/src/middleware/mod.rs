@@ -11,7 +11,7 @@ pub mod scope_check;
 pub mod trusted_proxy;
 
 use axum::{
-    extract::{FromRequestParts, Request},
+    extract::{FromRequestParts, Request, State},
     http::{request::Parts, HeaderMap, StatusCode},
     middleware::Next,
     response::Response,
@@ -72,16 +72,11 @@ where
 
 /// Extract and verify JWT token or API token from Authorization header
 pub async fn auth_middleware(
+    State(state): State<AppState>,
     headers: HeaderMap,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let state = request
-        .extensions()
-        .get::<AppState>()
-        .cloned()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
     let auth_header = headers
         .get("Authorization")
         .and_then(|h| h.to_str().ok())

@@ -1,8 +1,8 @@
 // Service Worker for MockForge Admin UI
 // Provides offline functionality and caching
 
-const CACHE_NAME = 'mockforge-admin-v3';
-const RUNTIME_CACHE = 'mockforge-runtime-v3';
+const CACHE_NAME = 'mockforge-admin-v4';
+const RUNTIME_CACHE = 'mockforge-runtime-v4';
 
 // Assets to cache immediately on install
 const PRECACHE_ASSETS = [
@@ -103,7 +103,31 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets: cache first, fallback to network
+  // For JS/CSS assets: network first so deploys take effect immediately
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(request).then((cachedResponse) => {
+            if (cachedResponse) return cachedResponse;
+            if (request.destination === 'document') return caches.match('/');
+            return new Response('Offline', { status: 503 });
+          });
+        })
+    );
+    return;
+  }
+
+  // For other static assets (images, fonts): cache first, fallback to network
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -112,7 +136,6 @@ self.addEventListener('fetch', (event) => {
 
       return fetch(request)
         .then((response) => {
-          // Don't cache if not a valid response
           if (!response || response.status !== 200 || response.type !== 'basic') {
             return response;
           }
@@ -125,10 +148,6 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // If both cache and network fail, return offline page
-          if (request.destination === 'document') {
-            return caches.match('/');
-          }
           return new Response('Offline', { status: 503 });
         });
     })

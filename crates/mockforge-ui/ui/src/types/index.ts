@@ -21,7 +21,7 @@ export interface AuthActions {
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshTokenAction: () => Promise<void>;
-  setAuthenticated: (user: User, token: string) => void;
+  setAuthenticated: (user: User, token: string, refreshToken?: string) => void;
   updateProfile: (userData: User) => Promise<void>;
 }
 

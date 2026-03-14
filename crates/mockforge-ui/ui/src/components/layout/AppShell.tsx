@@ -285,8 +285,8 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
 
       <div className="flex">
         {/* Desktop Sidebar - Always visible on md and larger screens */}
-        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:z-50">
-          <div className="flex flex-col flex-grow bg-bg-primary border-r border-border">
+        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:z-50 overflow-hidden">
+          <div className="flex flex-col flex-grow overflow-hidden bg-bg-primary border-r border-border">
             <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
               <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>

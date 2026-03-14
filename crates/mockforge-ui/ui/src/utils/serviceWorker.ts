@@ -14,7 +14,7 @@ type Config = {
   onUpdate?: (registration: ServiceWorkerRegistration) => void;
 };
 
-const SW_VERSION = 'v3';
+const SW_VERSION = 'v4';
 
 export function registerServiceWorker(config?: Config) {
   if (!('serviceWorker' in navigator)) return;

@@ -185,7 +185,8 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
       if (!response.ok) {
         throw new Error(`Failed to fetch routes: ${response.statusText}`);
       }
-      const routes = await response.json();
+      const json = await response.json();
+      const routes = Array.isArray(json) ? json : (json.data || []);
 
       // Transform routes into services grouped by base path or tag
       const serviceMap = new Map<string, ServiceInfo>();

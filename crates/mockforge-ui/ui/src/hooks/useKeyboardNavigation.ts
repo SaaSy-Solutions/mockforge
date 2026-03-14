@@ -45,6 +45,7 @@ export function useKeyboardNavigation({
     );
 
     for (const shortcut of activeShortcuts) {
+      if (!shortcut.key) continue;
       const isMatch =
         keyboardEvent.key.toLowerCase() === shortcut.key.toLowerCase() &&
         !!keyboardEvent.ctrlKey === !!shortcut.ctrl &&

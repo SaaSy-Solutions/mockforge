@@ -51,7 +51,7 @@ export function UserProfile() {
       >
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground text-sm font-medium">
-            {user.username.charAt(0).toUpperCase()}
+            {(user.username || user.email || 'U').charAt(0).toUpperCase()}
           </div>
           <div className="text-left">
             <div className="text-sm font-medium">{user.username}</div>
@@ -79,7 +79,7 @@ export function UserProfile() {
             <div className="p-4 border-b">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground font-medium">
-                  {user.username.charAt(0).toUpperCase()}
+                  {(user.username || user.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="font-medium">{user.username}</div>

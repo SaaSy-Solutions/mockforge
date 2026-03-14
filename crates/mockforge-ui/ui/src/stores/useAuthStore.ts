@@ -25,12 +25,12 @@ const parseToken = (token: string): { user: User | null; expiresAt: number | nul
       return { user: null, expiresAt: null };
     }
 
-    // Extract user data from token
+    // Extract what we can from the token (registry JWT may only have sub)
     const user: User = {
       id: payload.sub,
-      username: payload.username,
+      username: payload.username || '',
       email: payload.email || '',
-      role: payload.role,
+      role: payload.role || 'user',
     };
 
     return { user, expiresAt };
@@ -135,7 +135,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkAuth: async () => {
-        const { token, refreshToken } = get();
+        const { token, refreshToken, user: existingUser } = get();
         if (!token) {
           set({ isAuthenticated: false, isLoading: false });
           return;
@@ -145,10 +145,12 @@ export const useAuthStore = create<AuthStore>()(
 
         try {
           // Parse token to check validity
-          const { user, expiresAt } = parseToken(token);
+          const { user: parsedUser, expiresAt } = parseToken(token);
 
-          if (user && expiresAt && expiresAt > Date.now()) {
-            // Token is valid
+          if (parsedUser && expiresAt && expiresAt > Date.now()) {
+            // Token is valid — keep existing user data if available (login response has
+            // full user info; JWT may only have sub/id with no username/email)
+            const user = existingUser && existingUser.username ? existingUser : parsedUser;
             set({
               user,
               isAuthenticated: true,

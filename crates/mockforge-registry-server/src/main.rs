@@ -327,7 +327,7 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
         .route("/metrics/health", axum::routing::get(|| async { "OK" }));
 
     Router::new()
-        .merge(routes::create_router())
+        .merge(routes::create_router(state.clone()))
         .merge(deployment::router::MultitenantRouter::create_router())
         .merge(metrics_router)
         .layer(DefaultBodyLimit::max(max_body_size))
