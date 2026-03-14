@@ -65,7 +65,7 @@ export const LearningHubPage: React.FC = () => {
     { value: 'tutorial', label: 'Tutorials', icon: <GuideIcon /> },
     { value: 'example', label: 'Examples', icon: <CodeIcon /> },
     { value: 'video', label: 'Videos', icon: <VideoIcon /> },
-    { value: 'guide', label: 'Guides', icon: <MenuBook /> },
+    { value: 'guide', label: 'Guides', icon: <GuideIcon /> },
   ];
 
   const difficulties = [

@@ -1,4 +1,5 @@
 import { logger } from '@/utils/logger';
+import { authenticatedFetch } from '@/utils/apiClient';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MoreHorizontal,
@@ -50,7 +51,7 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
       if (filterType) params.append('type', filterType);
       if (filterStatus) params.append('status', filterStatus);
 
-      const response = await fetch(`/__mockforge/plugins?${params}`);
+      const response = await authenticatedFetch(`/__mockforge/plugins?${params}`);
       const data = await response.json();
 
       if (data.success) {

@@ -1,4 +1,5 @@
 import { logger } from '@/utils/logger';
+import '@/utils/apiClient'; // Initialize cloud mode fetch override early
 import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'

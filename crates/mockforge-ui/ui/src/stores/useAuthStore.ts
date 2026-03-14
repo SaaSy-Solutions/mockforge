@@ -258,3 +258,12 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 );
+
+// Sync token to localStorage so pages using localStorage.getItem('auth_token') work
+useAuthStore.subscribe((state) => {
+  if (state.token) {
+    localStorage.setItem('auth_token', state.token);
+  } else {
+    localStorage.removeItem('auth_token');
+  }
+});

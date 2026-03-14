@@ -177,3 +177,15 @@ export function createAuthenticatedFetch() {
 
 // Export a fetch function that can be used throughout the app
 export const authenticatedFetch = createAuthenticatedFetch();
+
+// In cloud mode, override global fetch to intercept /__mockforge/ calls everywhere.
+// This catches components that use raw fetch() instead of authenticatedFetch.
+if (isCloud) {
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+    if (url.includes('/__mockforge/')) {
+      return createCloudStubResponse(url);
+    }
+    return originalFetch(input, init);
+  };
+}

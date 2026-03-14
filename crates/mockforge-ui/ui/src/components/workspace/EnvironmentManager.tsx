@@ -359,7 +359,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {environments?.environments
+        {(environments?.environments || [])
           .sort((a: unknown, b: unknown) => {
             // Global environment always first
             if (a.is_global && !b.is_global) return -1;

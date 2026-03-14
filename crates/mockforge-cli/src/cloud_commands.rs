@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use colored::*;
-use dialoguer::Password;
+use dialoguer::{Input, Password};
 use mockforge_core::workspace::sync::{SyncConfig, SyncDirection, SyncProvider};
 use mockforge_core::SyncService;
 use serde_json::json;
@@ -466,22 +466,48 @@ async fn handle_login(
     if let Some(token) = api_token {
         verify_and_save_token(&service_url, &token).await?;
     } else {
-        let prompted = Password::new()
-            .with_prompt("MockForge Cloud API token")
+        // Interactive login with username/password
+        println!("{}", "Log in to MockForge Cloud".bright_blue());
+        println!();
+
+        let username: String = Input::new()
+            .with_prompt("Username or email")
+            .interact_text()
+            .context("Failed to read username")?;
+
+        let password = Password::new()
+            .with_prompt("Password")
             .allow_empty_password(false)
             .interact()
-            .ok()
-            .filter(|s| !s.trim().is_empty());
+            .context("Failed to read password")?;
 
-        if let Some(token) = prompted {
-            verify_and_save_token(&service_url, &token).await?;
-            return Ok(());
+        // Exchange credentials for a token
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/api/v1/auth/login", service_url))
+            .json(&json!({
+                "username": username,
+                "password": password,
+            }))
+            .send()
+            .await
+            .context("Failed to connect to MockForge Cloud")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("Login failed ({}): {}", status, body));
         }
 
-        println!("{}", "❌ No token provided".red());
-        println!("Provide one of:");
-        println!("  mockforge cloud login --token <your-token>");
-        println!("  MOCKFORGE_API_KEY=<your-token>");
+        let body: serde_json::Value =
+            response.json().await.context("Failed to parse login response")?;
+
+        let token = body
+            .get("token")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("No token in login response"))?;
+
+        verify_and_save_token(&service_url, token).await?;
     }
 
     Ok(())
