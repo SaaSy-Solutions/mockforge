@@ -486,7 +486,7 @@ async fn handle_login(
         let response = client
             .post(format!("{}/api/v1/auth/login", service_url))
             .json(&json!({
-                "username": username,
+                "email": username,
                 "password": password,
             }))
             .send()
