@@ -503,7 +503,7 @@ async fn handle_login(
             response.json().await.context("Failed to parse login response")?;
 
         let token = body
-            .get("token")
+            .get("access_token")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("No token in login response"))?;
 
