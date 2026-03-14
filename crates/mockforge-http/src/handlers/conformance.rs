@@ -89,6 +89,9 @@ pub struct ConformanceRunRequest {
     /// Test all operations (not just representative samples)
     #[serde(default)]
     pub all_operations: Option<bool>,
+    /// Delay in milliseconds between consecutive requests
+    #[serde(default)]
+    pub request_delay_ms: Option<u64>,
     /// Inline YAML custom checks
     #[serde(default)]
     pub custom_checks_yaml: Option<String>,
@@ -174,6 +177,7 @@ async fn start_run(
             output_dir: None,
             all_operations: req.all_operations.unwrap_or(false),
             custom_checks_file: None,
+            request_delay_ms: req.request_delay_ms.unwrap_or(0),
         };
 
         // Build executor

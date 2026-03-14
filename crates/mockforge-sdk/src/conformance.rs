@@ -49,6 +49,9 @@ pub struct ConformanceRunRequest {
     /// Test all operations (not just representative samples)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_operations: Option<bool>,
+    /// Delay in milliseconds between consecutive requests (for rate-limited APIs)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_delay_ms: Option<u64>,
     /// Inline YAML custom checks
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_checks_yaml: Option<String>,

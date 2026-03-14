@@ -145,6 +145,9 @@ pub struct BenchCommand {
     pub conformance_all_operations: bool,
     /// Optional YAML file with custom conformance checks
     pub conformance_custom: Option<PathBuf>,
+    /// Delay in milliseconds between consecutive conformance requests.
+    /// Useful when testing against rate-limited APIs.
+    pub conformance_delay_ms: u64,
     /// Use k6 for conformance test execution instead of the native Rust executor
     pub use_k6: bool,
 
@@ -550,6 +553,7 @@ impl BenchCommand {
                 conformance_headers: vec![],
                 conformance_all_operations: false,
                 conformance_custom: None,
+                conformance_delay_ms: 0,
                 use_k6: false,
             },
             targets,
@@ -1886,6 +1890,13 @@ impl BenchCommand {
             ));
         }
 
+        if self.conformance_delay_ms > 0 {
+            TerminalReporter::print_progress(&format!(
+                "Using {}ms delay between conformance requests",
+                self.conformance_delay_ms
+            ));
+        }
+
         // Ensure output dir exists so canonicalize works for the report path
         std::fs::create_dir_all(&self.output)?;
 
@@ -1900,6 +1911,7 @@ impl BenchCommand {
             output_dir: Some(self.output.clone()),
             all_operations: self.conformance_all_operations,
             custom_checks_file: self.conformance_custom.clone(),
+            request_delay_ms: self.conformance_delay_ms,
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -2263,6 +2275,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            conformance_delay_ms: 0,
             use_k6: false,
         };
 
@@ -2334,6 +2347,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            conformance_delay_ms: 0,
             use_k6: false,
         };
 
@@ -2401,6 +2415,7 @@ mod tests {
             conformance_headers: vec![],
             conformance_all_operations: false,
             conformance_custom: None,
+            conformance_delay_ms: 0,
             use_k6: false,
         };
 

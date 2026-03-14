@@ -182,6 +182,7 @@ async fn test_bench_command_parse_headers() {
         conformance_headers: vec![],
         conformance_all_operations: false,
         conformance_custom: None,
+        conformance_delay_ms: 0,
         use_k6: false,
     };
 
@@ -255,6 +256,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         conformance_headers: vec![],
         conformance_all_operations: false,
         conformance_custom: None,
+        conformance_delay_ms: 0,
         use_k6: false,
     };
 

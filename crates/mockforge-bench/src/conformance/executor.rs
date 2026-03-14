@@ -515,8 +515,12 @@ impl NativeConformanceExecutor {
     /// Execute all checks and return a `ConformanceReport`
     pub async fn execute(&self) -> Result<ConformanceReport> {
         let mut results = Vec::with_capacity(self.checks.len());
+        let delay = self.config.request_delay_ms;
 
-        for check in &self.checks {
+        for (i, check) in self.checks.iter().enumerate() {
+            if delay > 0 && i > 0 {
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
             let result = self.execute_check(check).await;
             results.push(result);
         }
@@ -530,6 +534,7 @@ impl NativeConformanceExecutor {
         tx: mpsc::Sender<ConformanceProgress>,
     ) -> Result<ConformanceReport> {
         let total = self.checks.len();
+        let delay = self.config.request_delay_ms;
         let _ = tx
             .send(ConformanceProgress::Started {
                 total_checks: total,
@@ -539,6 +544,9 @@ impl NativeConformanceExecutor {
         let mut results = Vec::with_capacity(total);
 
         for (i, check) in self.checks.iter().enumerate() {
+            if delay > 0 && i > 0 {
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
             let result = self.execute_check(check).await;
             let passed = result.passed;
             let name = result.name.clone();

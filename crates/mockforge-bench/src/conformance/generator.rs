@@ -33,6 +33,9 @@ pub struct ConformanceConfig {
     pub all_operations: bool,
     /// Optional path to a YAML file with custom conformance checks
     pub custom_checks_file: Option<PathBuf>,
+    /// Delay in milliseconds between consecutive conformance requests.
+    /// Useful when testing against rate-limited APIs. Default: 0 (no delay).
+    pub request_delay_ms: u64,
 }
 
 impl ConformanceConfig {
@@ -813,6 +816,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -854,6 +858,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -876,6 +881,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -895,6 +901,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -916,6 +923,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -940,6 +948,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -957,6 +966,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -974,6 +984,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -991,6 +1002,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1016,6 +1028,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1045,6 +1058,7 @@ mod tests {
             output_dir: None,
             all_operations: false,
             custom_checks_file: None,
+            request_delay_ms: 0,
         };
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));

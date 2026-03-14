@@ -129,9 +129,16 @@ impl K6Executor {
         let fd_stdout = Arc::clone(&failure_details);
         let fd_stderr = Arc::clone(&failure_details);
 
+        // Collect all k6 output for saving to a log file
+        let log_lines: Arc<tokio::sync::Mutex<Vec<String>>> =
+            Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let log_stdout = Arc::clone(&log_lines);
+        let log_stderr = Arc::clone(&log_lines);
+
         // Read stdout lines, capturing MOCKFORGE_FAILURE markers
         let stdout_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stdout_lines.next_line().await {
+                log_stdout.lock().await.push(format!("[stdout] {}", line));
                 if let Some(json_str) = extract_failure_json(&line) {
                     fd_stdout.lock().await.push(json_str);
                 } else {
@@ -148,6 +155,7 @@ impl K6Executor {
         let stderr_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stderr_lines.next_line().await {
                 if !line.is_empty() {
+                    log_stderr.lock().await.push(format!("[stderr] {}", line));
                     if let Some(json_str) = extract_failure_json(&line) {
                         fd_stderr.lock().await.push(json_str);
                     } else {
@@ -182,6 +190,14 @@ impl K6Executor {
                 if let Ok(json) = serde_json::to_string_pretty(&parsed) {
                     let _ = std::fs::write(&failure_path, json);
                 }
+            }
+
+            // Save full k6 output to a log file for debugging
+            let lines = log_lines.lock().await;
+            if !lines.is_empty() {
+                let log_path = dir.join("k6-output.log");
+                let _ = std::fs::write(&log_path, lines.join("\n"));
+                println!("k6 output log saved to: {}", log_path.display());
             }
         }
 

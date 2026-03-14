@@ -1962,6 +1962,13 @@ enum Commands {
         #[arg(long, value_name = "FILE")]
         conformance_custom: Option<PathBuf>,
 
+        /// Delay in milliseconds between consecutive conformance requests.
+        ///
+        /// Useful when testing against rate-limited APIs to avoid 429 responses.
+        /// Default: 0 (no delay). Example: --conformance-delay 100 for 100ms between requests.
+        #[arg(long, value_name = "MS", default_value = "0")]
+        conformance_delay: u64,
+
         /// Use k6 for conformance test execution instead of the native Rust executor
         ///
         /// By default, conformance tests run using a native Rust executor (no k6 required).
@@ -3318,6 +3325,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_headers,
             conformance_all_operations,
             conformance_custom,
+            conformance_delay,
             use_k6,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
@@ -3403,6 +3411,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_headers,
                 conformance_all_operations,
                 conformance_custom,
+                conformance_delay_ms: conformance_delay,
                 use_k6,
             };
 

@@ -12,6 +12,7 @@ export interface ConformanceRunRequest {
   skip_tls_verify?: boolean;
   base_path?: string;
   all_operations?: boolean;
+  request_delay_ms?: number;
   custom_checks_yaml?: string;
 }
 
