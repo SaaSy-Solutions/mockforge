@@ -225,7 +225,7 @@ export const useAuthStore = create<AuthStore>()(
 
           if (isAuthenticated && token && refresh) {
             try {
-              const payload = JSON.parse(atob(token.split('.')[2]));
+              const payload = JSON.parse(atob(token.split('.')[1]));
               const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
 
               // Refresh if token expires in less than 5 minutes

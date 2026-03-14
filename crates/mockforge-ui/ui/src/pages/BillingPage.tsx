@@ -107,11 +107,7 @@ export function BillingPage() {
       window.location.href = data.checkout_url;
     },
     onError: (error: Error) => {
-      showToast({
-        title: 'Error',
-        description: error.message || 'Failed to create checkout session',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', error.message || 'Failed to create checkout session');
     },
   });
 

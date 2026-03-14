@@ -134,11 +134,7 @@ export function ApiTokensPage() {
       setExpiresDays(undefined);
     },
     onError: (error: Error) => {
-      showToast({
-        title: 'Error',
-        description: error.message || 'Failed to create token',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', error.message || 'Failed to create token');
     },
   });
 
@@ -147,35 +143,20 @@ export function ApiTokensPage() {
     mutationFn: deleteToken,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-tokens'] });
-      showToast({
-        title: 'Success',
-        description: 'Token deleted successfully',
-      });
+      showToast('success', 'Success', 'Token deleted successfully');
     },
     onError: (error: Error) => {
-      showToast({
-        title: 'Error',
-        description: error.message || 'Failed to delete token',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', error.message || 'Failed to delete token');
     },
   });
 
   const handleCreateToken = () => {
     if (!newTokenName.trim()) {
-      showToast({
-        title: 'Error',
-        description: 'Token name is required',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', 'Token name is required');
       return;
     }
     if (selectedScopes.length === 0) {
-      showToast({
-        title: 'Error',
-        description: 'At least one scope is required',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', 'At least one scope is required');
       return;
     }
     createTokenMutation.mutate({
@@ -187,10 +168,7 @@ export function ApiTokensPage() {
 
   const handleCopyToken = (token: string) => {
     navigator.clipboard.writeText(token);
-    showToast({
-      title: 'Copied',
-      description: 'Token copied to clipboard',
-    });
+    showToast('success', 'Copied', 'Token copied to clipboard');
   };
 
   const toggleScope = (scope: string) => {

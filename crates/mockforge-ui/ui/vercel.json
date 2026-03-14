@@ -5,6 +5,10 @@
     {
       "source": "/api/:path*",
       "destination": "https://api.mockforge.dev/api/:path*"
+    },
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [

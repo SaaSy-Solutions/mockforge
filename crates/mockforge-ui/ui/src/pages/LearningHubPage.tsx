@@ -90,7 +90,7 @@ export const LearningHubPage: React.FC = () => {
         difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined,
         limit: 50,
       });
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setResources(response.data);
       }
     } catch (error) {
@@ -103,7 +103,7 @@ export const LearningHubPage: React.FC = () => {
   const loadCategories = async () => {
     try {
       const response = await communityApi.getLearningCategories();
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setCategories(response.data);
       }
     } catch (error) {

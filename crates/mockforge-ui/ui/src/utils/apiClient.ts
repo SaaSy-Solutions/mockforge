@@ -115,8 +115,82 @@ function createCloudStubResponse(url: string): Response {
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Generic fallback: return empty data object (not null, to avoid crashes from .property access)
-  return new Response(JSON.stringify({ success: true, data: {} }),
+  if (path.startsWith('/__mockforge/community/')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.startsWith('/__mockforge/environments')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.startsWith('/__mockforge/data-explorer')) {
+    return new Response(JSON.stringify({ success: true, data: { tables: [], queries: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.startsWith('/__mockforge/testing')) {
+    return new Response(JSON.stringify({ success: true, data: { suites: [], results: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Generic fallback: return empty array (most endpoints return lists in cloud mode)
+  return new Response(JSON.stringify({ success: true, data: [] }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+// Local-only API paths that don't exist on the registry server.
+// In cloud mode, return stubs instead of letting them 404.
+const LOCAL_ONLY_API_PREFIXES = [
+  '/api/chaos/',
+  '/api/observability/',
+  '/api/resilience/',
+  '/api/recorder/',
+];
+
+function isLocalOnlyApi(url: string): boolean {
+  const path = new URL(url, window.location.origin).pathname;
+  return LOCAL_ONLY_API_PREFIXES.some(prefix => path.startsWith(prefix));
+}
+
+function createLocalApiStubResponse(url: string): Response {
+  const path = new URL(url, window.location.origin).pathname;
+
+  if (path.includes('/chaos/config')) {
+    return new Response(JSON.stringify({
+      latency: { enabled: false, fixed_delay_ms: 0, probability: 0 },
+      fault_injection: { enabled: false, http_errors: [], http_error_probability: 0 },
+      traffic_shaping: { enabled: false, bandwidth_limit_kbps: 0, packet_loss_rate: 0, corruption_rate: 0, corruption_type: 'none' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/chaos/status')) {
+    return new Response(JSON.stringify({ active: false, scenarios: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/chaos/scenarios')) {
+    return new Response(JSON.stringify({ scenarios: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/observability/')) {
+    return new Response(JSON.stringify({ data: [], stats: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/resilience/')) {
+    return new Response(JSON.stringify([]),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (path.includes('/recorder/')) {
+    return new Response(JSON.stringify({ recordings: [], status: 'idle' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({}),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
@@ -125,9 +199,12 @@ export function createAuthenticatedFetch() {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 
-    // In cloud mode, intercept /__mockforge/ calls with stub responses
+    // In cloud mode, intercept local-only endpoints with stub responses
     if (isCloud && url.includes('/__mockforge/')) {
       return createCloudStubResponse(url);
+    }
+    if (isCloud && isLocalOnlyApi(url)) {
+      return createLocalApiStubResponse(url);
     }
 
     const state = useAuthStore.getState();
@@ -185,6 +262,9 @@ if (isCloud) {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
     if (url.includes('/__mockforge/')) {
       return createCloudStubResponse(url);
+    }
+    if (isLocalOnlyApi(url)) {
+      return createLocalApiStubResponse(url);
     }
     return originalFetch(input, init);
   };

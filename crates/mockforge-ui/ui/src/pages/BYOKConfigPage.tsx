@@ -130,27 +130,16 @@ export function BYOKConfigPage() {
     mutationFn: saveBYOKConfig,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['byok-config'] });
-      showToast({
-        title: 'Success',
-        description: 'BYOK configuration saved successfully',
-      });
+      showToast('success', 'Success', 'BYOK configuration saved successfully');
     },
     onError: (error: Error) => {
-      showToast({
-        title: 'Error',
-        description: error.message || 'Failed to save configuration',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', error.message || 'Failed to save configuration');
     },
   });
 
   const handleSave = () => {
     if (!config.api_key.trim() && config.enabled) {
-      showToast({
-        title: 'Error',
-        description: 'API key is required when BYOK is enabled',
-        variant: 'destructive',
-      });
+      showToast('error', 'Error', 'API key is required when BYOK is enabled');
       return;
     }
     saveMutation.mutate(config);
