@@ -82,8 +82,9 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
     );
   }
 
-  const builtinProfiles = profiles?.filter((p) => p.builtin) || [];
-  const customProfiles = profiles?.filter((p) => !p.builtin) || [];
+  const profileList = Array.isArray(profiles) ? profiles : [];
+  const builtinProfiles = profileList.filter((p) => p.builtin);
+  const customProfiles = profileList.filter((p) => !p.builtin);
 
   return (
     <Section

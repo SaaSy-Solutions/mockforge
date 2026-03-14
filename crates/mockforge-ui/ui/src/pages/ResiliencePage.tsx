@@ -53,7 +53,7 @@ export const ResiliencePage: React.FC = () => {
     try {
       const response = await fetch('/api/resilience/circuit-breakers');
       const data = await response.json();
-      setCircuitBreakers(data);
+      setCircuitBreakers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch circuit breakers:', error);
     }
@@ -63,7 +63,7 @@ export const ResiliencePage: React.FC = () => {
     try {
       const response = await fetch('/api/resilience/bulkheads');
       const data = await response.json();
-      setBulkheads(data);
+      setBulkheads(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch bulkheads:', error);
     }
@@ -73,7 +73,7 @@ export const ResiliencePage: React.FC = () => {
     try {
       const response = await fetch('/api/resilience/dashboard/summary');
       const data = await response.json();
-      setSummary(data);
+      setSummary(data && typeof data === 'object' && !Array.isArray(data) ? data : null);
     } catch (error) {
       console.error('Failed to fetch summary:', error);
     }
@@ -172,19 +172,19 @@ export const ResiliencePage: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total:</span>
-                <span className="font-semibold">{summary.circuit_breakers.total}</span>
+                <span className="font-semibold">{summary.circuit_breakers?.total ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Closed:</span>
-                <span className="font-semibold text-green-600">{summary.circuit_breakers.closed}</span>
+                <span className="font-semibold text-green-600">{summary.circuit_breakers?.closed ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Half-Open:</span>
-                <span className="font-semibold text-yellow-600">{summary.circuit_breakers.half_open}</span>
+                <span className="font-semibold text-yellow-600">{summary.circuit_breakers?.half_open ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Open:</span>
-                <span className="font-semibold text-red-600">{summary.circuit_breakers.open}</span>
+                <span className="font-semibold text-red-600">{summary.circuit_breakers?.open ?? 0}</span>
               </div>
             </div>
           </div>
@@ -194,15 +194,15 @@ export const ResiliencePage: React.FC = () => {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Services:</span>
-                <span className="font-semibold">{summary.bulkheads.total}</span>
+                <span className="font-semibold">{summary.bulkheads?.total ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Active Requests:</span>
-                <span className="font-semibold text-blue-600">{summary.bulkheads.active_requests}</span>
+                <span className="font-semibold text-blue-600">{summary.bulkheads?.active_requests ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Queued Requests:</span>
-                <span className="font-semibold text-yellow-600">{summary.bulkheads.queued_requests}</span>
+                <span className="font-semibold text-yellow-600">{summary.bulkheads?.queued_requests ?? 0}</span>
               </div>
             </div>
           </div>
@@ -268,24 +268,24 @@ export const ResiliencePage: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <div className="text-sm text-gray-600">Total Requests</div>
-                    <div className="text-2xl font-semibold">{cb.stats.total_requests}</div>
+                    <div className="text-2xl font-semibold">{cb.stats?.total_requests ?? 0}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Success Rate</div>
                     <div className="text-2xl font-semibold text-green-600">
-                      {cb.stats.success_rate.toFixed(1)}%
+                      {(cb.stats?.success_rate ?? 0).toFixed(1)}%
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Failure Rate</div>
                     <div className="text-2xl font-semibold text-red-600">
-                      {cb.stats.failure_rate.toFixed(1)}%
+                      {(cb.stats?.failure_rate ?? 0).toFixed(1)}%
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Rejected</div>
                     <div className="text-2xl font-semibold text-orange-600">
-                      {cb.stats.rejected_requests}
+                      {cb.stats?.rejected_requests ?? 0}
                     </div>
                   </div>
                 </div>
@@ -293,19 +293,19 @@ export const ResiliencePage: React.FC = () => {
                 <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Successful:</span>
-                    <span className="font-medium">{cb.stats.successful_requests}</span>
+                    <span className="font-medium">{cb.stats?.successful_requests ?? 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Failed:</span>
-                    <span className="font-medium">{cb.stats.failed_requests}</span>
+                    <span className="font-medium">{cb.stats?.failed_requests ?? 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Consecutive Failures:</span>
-                    <span className="font-medium">{cb.stats.consecutive_failures}</span>
+                    <span className="font-medium">{cb.stats?.consecutive_failures ?? 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Consecutive Successes:</span>
-                    <span className="font-medium">{cb.stats.consecutive_successes}</span>
+                    <span className="font-medium">{cb.stats?.consecutive_successes ?? 0}</span>
                   </div>
                 </div>
               </div>
@@ -338,12 +338,12 @@ export const ResiliencePage: React.FC = () => {
                 <div className="mb-4">
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-gray-600">Utilization</span>
-                    <span className="font-medium">{bh.stats.utilization_percent.toFixed(1)}%</span>
+                    <span className="font-medium">{(bh.stats?.utilization_percent ?? 0).toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3">
                     <div
-                      className={`h-3 rounded-full transition-all ${getUtilizationColor(bh.stats.utilization_percent)}`}
-                      style={{ width: `${Math.min(bh.stats.utilization_percent, 100)}%` }}
+                      className={`h-3 rounded-full transition-all ${getUtilizationColor(bh.stats?.utilization_percent ?? 0)}`}
+                      style={{ width: `${Math.min(bh.stats?.utilization_percent ?? 0, 100)}%` }}
                     />
                   </div>
                 </div>
@@ -352,29 +352,29 @@ export const ResiliencePage: React.FC = () => {
                   <div>
                     <div className="text-sm text-gray-600">Active</div>
                     <div className="text-2xl font-semibold text-blue-600">
-                      {bh.stats.active_requests}
+                      {bh.stats?.active_requests ?? 0}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Queued</div>
                     <div className="text-2xl font-semibold text-yellow-600">
-                      {bh.stats.queued_requests}
+                      {bh.stats?.queued_requests ?? 0}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Total</div>
-                    <div className="text-2xl font-semibold">{bh.stats.total_requests}</div>
+                    <div className="text-2xl font-semibold">{bh.stats?.total_requests ?? 0}</div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Rejected</div>
                     <div className="text-2xl font-semibold text-red-600">
-                      {bh.stats.rejected_requests}
+                      {bh.stats?.rejected_requests ?? 0}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600">Timeouts</div>
                     <div className="text-2xl font-semibold text-orange-600">
-                      {bh.stats.timeout_requests}
+                      {bh.stats?.timeout_requests ?? 0}
                     </div>
                   </div>
                 </div>

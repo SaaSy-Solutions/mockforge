@@ -467,7 +467,7 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
     const functionResults: Map<string, { passed: number; failed: number; total: number }> = new Map();
 
     incidents.forEach((incident) => {
-      if (incident.fitness_test_results && incident.fitness_test_results.length > 0) {
+      if (Array.isArray(incident.fitness_test_results) && incident.fitness_test_results.length > 0) {
         const endpointKey = `${incident.method} ${incident.endpoint}`;
 
         incident.fitness_test_results.forEach((result) => {
@@ -521,7 +521,7 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
   if (summary.totalTests === 0) {
     return (
       <EmptyState
-        icon={Activity}
+        icon={<Activity className="w-6 h-6" />}
         title="No Fitness Test Results"
         description="Fitness test results will appear here once contract drift is detected"
       />
@@ -772,7 +772,7 @@ export function FitnessFunctionsPage() {
       <PageHeader
         title="Fitness Functions"
         description="Register custom tests that run against each new contract version to enforce constraints"
-        icon={Activity}
+        icon={<Activity className="w-6 h-6" />}
       />
 
       <div className="flex justify-between items-center">
@@ -806,13 +806,13 @@ export function FitnessFunctionsPage() {
           <div className="p-4 text-center text-gray-500">Loading...</div>
         ) : functions.length === 0 ? (
           <EmptyState
-            icon={Activity}
+            icon={<Activity className="w-6 h-6" />}
             title="No Fitness Functions"
             description="Create your first fitness function to start enforcing contract constraints"
           />
         ) : (
           <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
-            {functions.map((func) => (
+            {(Array.isArray(functions) ? functions : []).map((func) => (
               <FitnessFunctionRow
                 key={func.id}
                 function={func}
@@ -884,7 +884,7 @@ export function FitnessFunctionsPage() {
                       <XCircle className="w-5 h-5 text-red-500" />
                     )}
                   </div>
-                  {Object.keys(result.metrics).length > 0 && (
+                  {result.metrics && typeof result.metrics === 'object' && Object.keys(result.metrics).length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                       <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
                         Metrics:
@@ -893,7 +893,7 @@ export function FitnessFunctionsPage() {
                         {Object.entries(result.metrics).map(([key, value]) => (
                           <div key={key} className="text-xs">
                             <span className="text-gray-500 dark:text-gray-400">{key}:</span>{' '}
-                            <span className="font-mono font-semibold">{value.toFixed(2)}</span>
+                            <span className="font-mono font-semibold">{typeof value === 'number' ? value.toFixed(2) : String(value ?? '')}</span>
                           </div>
                         ))}
                       </div>
@@ -904,7 +904,7 @@ export function FitnessFunctionsPage() {
             </div>
           ) : (
             <EmptyState
-              icon={Activity}
+              icon={<Activity className="w-6 h-6" />}
               title="No Test Results"
               description="No results available"
             />

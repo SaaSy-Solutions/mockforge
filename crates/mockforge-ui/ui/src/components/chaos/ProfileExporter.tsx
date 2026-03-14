@@ -265,7 +265,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
           </div>
 
           {/* Export Specific Profile */}
-          {profiles && profiles.length > 0 && (
+          {Array.isArray(profiles) && profiles.length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-3">Export Profile</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">

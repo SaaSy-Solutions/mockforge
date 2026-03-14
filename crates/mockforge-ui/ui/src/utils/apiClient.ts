@@ -135,8 +135,120 @@ function createCloudStubResponse(url: string): Response {
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Generic fallback: return empty array (most endpoints return lists in cloud mode)
-  return new Response(JSON.stringify({ success: true, data: [] }),
+  // State machines
+  if (path.startsWith('/__mockforge/api/state-machines/instances')) {
+    return new Response(JSON.stringify({ success: true, data: { instances: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (path.startsWith('/__mockforge/api/state-machines/export')) {
+    return new Response(JSON.stringify({ success: true, data: { state_machines: [], visual_layouts: {} } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (path.startsWith('/__mockforge/api/state-machines')) {
+    return new Response(JSON.stringify({ success: true, data: { state_machines: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Proxy inspector
+  if (path.startsWith('/__mockforge/api/proxy/rules')) {
+    return new Response(JSON.stringify({ success: true, data: { rules: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (path.startsWith('/__mockforge/api/proxy/inspect')) {
+    return new Response(JSON.stringify({ success: true, data: { message: 'Not available in cloud mode', requests: [], responses: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // MockAI
+  if (path.startsWith('/__mockforge/api/mockai/rules')) {
+    return new Response(JSON.stringify({ success: true, data: { rules: [], explanations: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+  if (path.startsWith('/__mockforge/api/mockai')) {
+    return new Response(JSON.stringify({ success: true, data: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Playground
+  if (path.startsWith('/__mockforge/playground')) {
+    return new Response(JSON.stringify({ success: true, data: { endpoints: [], schemas: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Time travel
+  if (path.startsWith('/__mockforge/time-travel')) {
+    return new Response(JSON.stringify({ success: true, data: { enabled: false, current_time: new Date().toISOString(), scale: 1.0, mutations: [], cron_jobs: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Reality presets
+  if (path.startsWith('/__mockforge/reality/presets')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Verification
+  if (path.startsWith('/__mockforge/verification')) {
+    return new Response(JSON.stringify({ success: true, data: { verified: true, results: [], count: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Contract diff
+  if (path.startsWith('/__mockforge/contract-diff')) {
+    return new Response(JSON.stringify({ success: true, data: { statistics: { total_captures: 0, endpoints: [], method_distribution: {}, status_distribution: {} }, diffs: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Plugins status
+  if (path.startsWith('/__mockforge/plugins')) {
+    return new Response(JSON.stringify({ success: true, data: { plugins: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Smoke tests
+  if (path.startsWith('/__mockforge/smoke')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Import
+  if (path.startsWith('/__mockforge/import')) {
+    return new Response(JSON.stringify({ success: true, data: { imports: [], total: 0 } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Files
+  if (path.startsWith('/__mockforge/files')) {
+    return new Response(JSON.stringify({ success: true, data: { content: '', files: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Env
+  if (path === '/__mockforge/env') {
+    return new Response(JSON.stringify({ success: true, data: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Fixtures bulk
+  if (path.startsWith('/__mockforge/fixtures')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Config sub-paths
+  if (path.startsWith('/__mockforge/config/')) {
+    return new Response(JSON.stringify({ success: true, data: {} }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Servers
+  if (path.startsWith('/__mockforge/servers')) {
+    return new Response(JSON.stringify({ success: true, data: { status: 'cloud', servers: [] } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Generic fallback: return empty object (safer than array — pages using .property get undefined instead of crash)
+  return new Response(JSON.stringify({ success: true, data: {} }),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 
@@ -175,6 +287,11 @@ function createLocalApiStubResponse(url: string): Response {
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
+  if (path.includes('/chaos/profiles')) {
+    return new Response(JSON.stringify([]),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
   if (path.includes('/observability/')) {
     return new Response(JSON.stringify({ data: [], stats: {} }),
       { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -190,7 +307,7 @@ function createLocalApiStubResponse(url: string): Response {
       { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  return new Response(JSON.stringify({}),
+  return new Response(JSON.stringify([]),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
 

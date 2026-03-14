@@ -73,7 +73,7 @@ export const ShowcasePage: React.FC = () => {
         featured: showFeaturedOnly || undefined,
         limit: 50,
       });
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setProjects(response.data);
       }
     } catch (error) {
@@ -89,7 +89,7 @@ export const ShowcasePage: React.FC = () => {
         featured: true,
         limit: 10,
       });
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setStories(response.data);
       }
     } catch (error) {
@@ -100,7 +100,7 @@ export const ShowcasePage: React.FC = () => {
   const loadCategories = async () => {
     try {
       const response = await communityApi.getShowcaseCategories();
-      if (response.success && response.data) {
+      if (response.success && Array.isArray(response.data)) {
         setCategories(response.data);
       }
     } catch (error) {

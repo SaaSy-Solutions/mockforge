@@ -26,6 +26,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
@@ -41,7 +42,6 @@ import { AIStudioNav } from '../components/ai/AIStudioNav';
 import { ApiCritique } from '../components/ai/ApiCritique';
 import { SystemGenerator } from '../components/ai/SystemGenerator';
 import { BehavioralSimulator } from '../components/ai/BehavioralSimulator';
-import { Link } from 'react-router-dom';
 
 type TabType = 'chat' | 'generate' | 'debug' | 'personas' | 'budget' | 'contract-diff' | 'api-critique' | 'system-generator' | 'behavioral-simulation';
 
@@ -683,12 +683,12 @@ export function AIStudioPage() {
                                 </div>
                                 <div className="text-xs bg-white p-2 rounded border border-blue-200">
                                   <div className="mb-1">
-                                    <span className="font-medium">Operation:</span> {suggestion.patch.op}
+                                    <span className="font-medium">Operation:</span> {suggestion.patch?.op}
                                   </div>
                                   <div className="mb-1">
-                                    <span className="font-medium">Path:</span> <code>{suggestion.patch.path}</code>
+                                    <span className="font-medium">Path:</span> <code>{suggestion.patch?.path}</code>
                                   </div>
-                                  {suggestion.patch.value && (
+                                  {suggestion.patch?.value && (
                                     <div>
                                       <span className="font-medium">Value:</span>
                                       <pre className="mt-1 text-xs overflow-x-auto">
@@ -974,7 +974,7 @@ export function AIStudioPage() {
                               const url = URL.createObjectURL(blob);
                               const a = document.createElement('a');
                               a.href = url;
-                              a.download = `persona-${msg.data.persona.name || 'generated'}.json`;
+                              a.download = `persona-${msg.data?.persona?.name || 'generated'}.json`;
                               a.click();
                               URL.revokeObjectURL(url);
                             }}
@@ -1001,7 +1001,7 @@ export function AIStudioPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Captures</p>
-                    <p className="text-2xl font-bold">{statsData.statistics.total_captures}</p>
+                    <p className="text-2xl font-bold">{statsData.statistics.total_captures ?? 0}</p>
                   </div>
                   <FileText className="w-8 h-8 text-blue-500" />
                 </div>
@@ -1010,7 +1010,7 @@ export function AIStudioPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Analyzed</p>
-                    <p className="text-2xl font-bold">{statsData.statistics.analyzed_captures}</p>
+                    <p className="text-2xl font-bold">{statsData.statistics.analyzed_captures ?? 0}</p>
                   </div>
                   <CheckCircle2 className="w-8 h-8 text-green-500" />
                 </div>
@@ -1019,7 +1019,7 @@ export function AIStudioPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Sources</p>
-                    <p className="text-2xl font-bold">{Object.keys(statsData.statistics.sources).length}</p>
+                    <p className="text-2xl font-bold">{Object.keys(statsData.statistics.sources && typeof statsData.statistics.sources === 'object' && !Array.isArray(statsData.statistics.sources) ? statsData.statistics.sources : {}).length}</p>
                   </div>
                   <TrendingUp className="w-8 h-8 text-purple-500" />
                 </div>
@@ -1028,7 +1028,7 @@ export function AIStudioPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Methods</p>
-                    <p className="text-2xl font-bold">{Object.keys(statsData.statistics.methods).length}</p>
+                    <p className="text-2xl font-bold">{Object.keys(statsData.statistics.methods && typeof statsData.statistics.methods === 'object' && !Array.isArray(statsData.statistics.methods) ? statsData.statistics.methods : {}).length}</p>
                   </div>
                   <Filter className="w-8 h-8 text-orange-500" />
                 </div>
@@ -1197,7 +1197,7 @@ export function AIStudioPage() {
                           {analysisResult.matches ? 'Contract Matches' : 'Contract Mismatches Detected'}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {analysisResult.mismatches.length} mismatch(es) found
+                          {analysisResult.mismatches?.length ?? 0} mismatch(es) found
                         </p>
                       </div>
                     </div>
@@ -1211,7 +1211,7 @@ export function AIStudioPage() {
                   </div>
 
                   {/* Mismatches Table */}
-                  {analysisResult.mismatches.length > 0 && (
+                  {analysisResult.mismatches?.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-3">Mismatches</h3>
                       <div className="overflow-x-auto">
@@ -1235,7 +1235,7 @@ export function AIStudioPage() {
                                         mismatch.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
                                           'bg-blue-100 text-blue-800'
                                     }`}>
-                                    {mismatch.severity.toUpperCase()}
+                                    {(mismatch.severity ?? 'unknown').toUpperCase()}
                                   </span>
                                 </td>
                                 <td className="p-3 text-sm text-gray-700">{mismatch.description}</td>
@@ -1248,7 +1248,7 @@ export function AIStudioPage() {
                   )}
 
                   {/* Recommendations */}
-                  {analysisResult.recommendations.length > 0 && (
+                  {analysisResult.recommendations?.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-3">AI Recommendations</h3>
                       <div className="space-y-3">
@@ -1279,7 +1279,7 @@ export function AIStudioPage() {
                   )}
 
                   {/* Correction Proposals */}
-                  {analysisResult.corrections.length > 0 && (
+                  {analysisResult.corrections?.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-3">Correction Proposals</h3>
                       <div className="space-y-3">

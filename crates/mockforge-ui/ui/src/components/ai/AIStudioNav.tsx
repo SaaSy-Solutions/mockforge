@@ -2,9 +2,9 @@
 //!
 //! Provides breadcrumb navigation and quick links to specialized AI tools.
 //! This component ties together AI Studio (front door) with deep-linked specialized pages.
+//! Uses plain DOM navigation instead of React Router to work in non-Router contexts.
 
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight, Brain, Code2, Mic, GitCompare, Home } from 'lucide-react';
 
 interface BreadcrumbItem {
@@ -27,10 +27,10 @@ interface AIStudioNavProps {
 }
 
 export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNavProps) {
-  const location = useLocation();
+  const pathname = window.location.pathname;
 
   // Build breadcrumbs based on current path
-  const breadcrumbs = buildBreadcrumbs(location.pathname, currentPage);
+  const breadcrumbs = buildBreadcrumbs(pathname, currentPage);
 
   // Quick links to specialized tools
   const quickLinks: QuickLink[] = [
@@ -58,23 +58,23 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
     <div className="space-y-4">
       {/* Breadcrumb Navigation */}
       <nav className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-        <Link
-          to="/ai-studio"
+        <a
+          href="/ai-studio"
           className="flex items-center hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         >
           <Home className="w-4 h-4 mr-1" />
           AI Studio
-        </Link>
+        </a>
         {breadcrumbs.map((item, index) => (
           <React.Fragment key={index}>
             <ChevronRight className="w-4 h-4 text-gray-400" />
             {item.path ? (
-              <Link
-                to={item.path}
+              <a
+                href={item.path}
                 className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
                 {item.label}
-              </Link>
+              </a>
             ) : (
               <span className="text-gray-900 dark:text-gray-100 font-medium">
                 {item.label}
@@ -95,9 +95,9 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {quickLinks.map((link) => (
-              <Link
+              <a
                 key={link.path}
-                to={link.path}
+                href={link.path}
                 className="flex items-start space-x-3 p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700"
               >
                 <div className="text-blue-600 dark:text-blue-400 mt-0.5">
@@ -111,7 +111,7 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
                     {link.description}
                   </div>
                 </div>
-              </Link>
+              </a>
             ))}
           </div>
         </div>
@@ -154,12 +154,12 @@ function buildBreadcrumbs(pathname: string, currentPage?: string): BreadcrumbIte
  */
 export function BackToAIStudio() {
   return (
-    <Link
-      to="/ai-studio"
+    <a
+      href="/ai-studio"
       className="inline-flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
     >
       <ChevronRight className="w-4 h-4 rotate-180" />
       <span>Back to AI Studio</span>
-    </Link>
+    </a>
   );
 }

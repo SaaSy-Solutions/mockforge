@@ -41,7 +41,7 @@ export function StatePreviewPanel({ resourceType, onClose }: StatePreviewPanelPr
       setLoading(true);
       setError(null);
       const response = await apiService.getStateInstances();
-      const filtered = response.instances.filter(
+      const filtered = (Array.isArray(response?.instances) ? response.instances : []).filter(
         (inst) => inst.resource_type === resourceType
       );
       setInstances(filtered);

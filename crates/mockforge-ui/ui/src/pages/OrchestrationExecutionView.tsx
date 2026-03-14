@@ -84,35 +84,41 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
     failedSteps: [],
   });
 
-  const { messages, sendMessage, isConnected } = useWebSocket(
+  const { lastMessage, sendMessage, connected: isConnected } = useWebSocket(
     `/api/chaos/orchestration/${orchestrationId}/ws`
   );
 
   // Handle WebSocket messages
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-      handleExecutionUpdate(latestMessage);
+    if (lastMessage) {
+      try {
+        const data = JSON.parse(lastMessage.data);
+        handleExecutionUpdate(data);
+      } catch {
+        // ignore parse errors
+      }
     }
-  }, [messages]);
+  }, [lastMessage]);
 
   const handleExecutionUpdate = useCallback((message: any) => {
     if (message.type === 'status_update') {
       setExecutionState((prev) => ({
         ...prev,
         ...message.data,
+        steps: message.data?.steps ?? prev.steps ?? [],
+        failedSteps: message.data?.failedSteps ?? prev.failedSteps ?? [],
       }));
     } else if (message.type === 'step_update') {
       setExecutionState((prev) => ({
         ...prev,
-        steps: prev.steps.map((step) =>
+        steps: (prev.steps ?? []).map((step) =>
           step.id === message.data.stepId ? { ...step, ...message.data } : step
         ),
       }));
     } else if (message.type === 'metrics_update') {
       setExecutionState((prev) => ({
         ...prev,
-        steps: prev.steps.map((step) =>
+        steps: (prev.steps ?? []).map((step) =>
           step.id === message.data.stepId
             ? { ...step, metrics: message.data.metrics }
             : step
@@ -249,7 +255,7 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
       </Card>
 
       {/* Failed Steps Alert */}
-      {executionState.failedSteps.length > 0 && (
+      {executionState.failedSteps?.length > 0 && (
         <Alert severity="error" sx={{ mb: 3 }}>
           Failed Steps: {executionState.failedSteps.join(', ')}
         </Alert>
@@ -263,7 +269,7 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
           </Typography>
 
           <Stepper activeStep={executionState.currentStep} orientation="vertical">
-            {executionState.steps.map((step, index) => (
+            {(executionState.steps ?? []).map((step, index) => (
               <Step key={step.id} completed={step.status === 'completed'}>
                 <StepLabel
                   icon={getStepIcon(step.status)}

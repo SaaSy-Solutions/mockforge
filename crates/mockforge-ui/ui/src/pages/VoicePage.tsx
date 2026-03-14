@@ -247,8 +247,8 @@ export function VoicePage() {
                           <div className="text-sm text-red-600">{item.error}</div>
                         ) : item.scenario ? (
                           <div className="text-sm text-muted-foreground">
-                            {item.scenario.name} • {item.scenario.config_summary.endpoint_count}{' '}
-                            endpoints • {item.scenario.config_summary.chaos_characteristic_count}{' '}
+                            {item.scenario?.name} • {item.scenario?.config_summary?.endpoint_count ?? 0}{' '}
+                            endpoints • {item.scenario?.config_summary?.chaos_characteristic_count ?? 0}{' '}
                             chaos characteristics
                           </div>
                         ) : null}
@@ -298,7 +298,7 @@ export function VoicePage() {
       )}
 
       {/* Command History */}
-      {history.length > 0 && (
+      {Array.isArray(history) && history.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-xl font-semibold">Recent Commands</h2>
           <div className="space-y-2">
@@ -308,12 +308,12 @@ export function VoicePage() {
                   <div className="flex-1">
                     <div className="font-medium mb-1">{item.command}</div>
                     <div className="text-sm text-muted-foreground">
-                      {item.parsed.apiType} • {item.parsed.endpoints} endpoints • {item.parsed.models} models
+                      {item.parsed?.apiType} • {item.parsed?.endpoints ?? 0} endpoints • {item.parsed?.models ?? 0} models
                     </div>
                   </div>
                   {item.spec && (
                     <div className="text-xs text-muted-foreground">
-                      {item.spec.title} v{item.spec.version}
+                      {item.spec?.title} v{item.spec?.version}
                     </div>
                   )}
                 </div>

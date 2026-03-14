@@ -359,7 +359,7 @@ export function ProxyInspector() {
               </div>
             ) : filteredRules.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
-                {rulesData?.rules.length === 0
+                {!rulesData?.rules?.length
                   ? 'No proxy replacement rules configured. Create one to get started.'
                   : 'No rules match your filters.'}
               </div>
@@ -418,11 +418,11 @@ export function ProxyInspector() {
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Intercepted Requests</h3>
-                    {inspectData?.requests.length === 0 ? (
+                    {!inspectData?.requests?.length ? (
                       <p className="text-sm text-gray-500">No requests intercepted yet.</p>
                     ) : (
                       <div className="space-y-2">
-                        {inspectData?.requests.map((req) => (
+                        {inspectData.requests.map((req) => (
                           <div
                             key={req.id}
                             className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
@@ -444,11 +444,11 @@ export function ProxyInspector() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Intercepted Responses</h3>
-                    {inspectData?.responses.length === 0 ? (
+                    {!inspectData?.responses?.length ? (
                       <p className="text-sm text-gray-500">No responses intercepted yet.</p>
                     ) : (
                       <div className="space-y-2">
-                        {inspectData?.responses.map((res) => (
+                        {inspectData.responses.map((res) => (
                           <div
                             key={res.id}
                             className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"

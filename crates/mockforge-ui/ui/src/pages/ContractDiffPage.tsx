@@ -71,7 +71,7 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
   if (mismatches.length === 0) {
     return (
       <EmptyState
-        icon={CheckCircle2}
+        icon={<CheckCircle2 className="w-6 h-6" />}
         title="No Mismatches"
         description="All requests match the contract specification"
       />
@@ -237,7 +237,7 @@ function RecommendationsList({ recommendations }: { recommendations: ContractDif
   if (recommendations.length === 0) {
     return (
       <EmptyState
-        icon={FileText}
+        icon={<FileText className="w-6 h-6" />}
         title="No Recommendations"
         description="No AI recommendations available"
       />
@@ -271,7 +271,7 @@ function CorrectionProposals({ corrections }: { corrections: ContractDiffResult[
   if (corrections.length === 0) {
     return (
       <EmptyState
-        icon={FileCode}
+        icon={<FileCode className="w-6 h-6" />}
         title="No Corrections"
         description="No correction proposals available"
       />
@@ -395,8 +395,8 @@ export function ContractDiffPage() {
   const statistics = statsData?.statistics;
 
   // Get unique sources and methods for filters
-  const sources = Array.from(new Set(captures.map(c => c.source))).filter(Boolean);
-  const methods = Array.from(new Set(captures.map(c => c.method))).filter(Boolean);
+  const sources = Array.isArray(captures) ? Array.from(new Set(captures.map(c => c.source))).filter(Boolean) : [];
+  const methods = Array.isArray(captures) ? Array.from(new Set(captures.map(c => c.method))).filter(Boolean) : [];
 
   return (
     <div className="space-y-6 p-6">
@@ -405,7 +405,7 @@ export function ContractDiffPage() {
         <PageHeader
           title="Contract Diff Analysis"
           description="Analyze front-end requests against backend contract specifications"
-          icon={FileText}
+          icon={<FileText className="w-6 h-6" />}
         />
         <div className="flex items-center gap-4">
           <Select value={selectedProtocol} onValueChange={(value) => setSelectedProtocol(value as 'http' | ProtocolType)}>
@@ -445,15 +445,15 @@ export function ContractDiffPage() {
       {/* Protocol-specific content */}
       {selectedProtocol !== 'http' && (
         <Section title={`${selectedProtocol.toUpperCase()} Contracts`}>
-          {protocolContractsData?.contracts.length === 0 ? (
+          {!protocolContractsData?.contracts?.length ? (
             <EmptyState
-              icon={Network}
+              icon={<Network className="w-6 h-6" />}
               title="No Contracts"
               description={`No ${selectedProtocol.toUpperCase()} contracts found. Create one to get started.`}
             />
           ) : (
             <div className="space-y-4">
-              {protocolContractsData?.contracts.map((contract) => (
+              {protocolContractsData?.contracts?.map((contract) => (
                 <ModernCard key={contract.contract_id} className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -479,7 +479,7 @@ export function ContractDiffPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Total Captures</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.total_captures}</p>
+                <p className="text-2xl font-bold text-gray-900">{statistics.total_captures ?? 0}</p>
               </div>
               <FileText className="w-8 h-8 text-blue-500" />
             </div>
@@ -488,7 +488,7 @@ export function ContractDiffPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Analyzed</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.analyzed_captures}</p>
+                <p className="text-2xl font-bold text-gray-900">{statistics.analyzed_captures ?? 0}</p>
               </div>
               <CheckCircle2 className="w-8 h-8 text-green-500" />
             </div>
@@ -497,7 +497,7 @@ export function ContractDiffPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Sources</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.sources).length}</p>
+                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.sources && typeof statistics.sources === 'object' && !Array.isArray(statistics.sources) ? statistics.sources : {}).length}</p>
               </div>
               <TrendingUp className="w-8 h-8 text-purple-500" />
             </div>
@@ -506,7 +506,7 @@ export function ContractDiffPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Methods</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.methods).length}</p>
+                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.methods && typeof statistics.methods === 'object' && !Array.isArray(statistics.methods) ? statistics.methods : {}).length}</p>
               </div>
               <Filter className="w-8 h-8 text-orange-500" />
             </div>
@@ -642,7 +642,7 @@ export function ContractDiffPage() {
                       {analysisResult.matches ? 'Contract Matches' : 'Contract Mismatches Detected'}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {analysisResult.mismatches.length} mismatch(es) found
+                      {(analysisResult.mismatches ?? []).length} mismatch(es) found
                     </p>
                     {/* Show protocol and schema format info if available */}
                     {(analysisResult.metadata?.contract_format || selectedProtocol !== 'http') && (
@@ -662,28 +662,28 @@ export function ContractDiffPage() {
                     )}
                   </div>
                 </div>
-                <ConfidenceIndicator confidence={analysisResult.confidence} />
+                <ConfidenceIndicator confidence={analysisResult.confidence ?? 0} />
               </div>
 
               {/* Mismatches Table */}
               <div>
                 <h3 className="text-lg font-semibold mb-3">Mismatches</h3>
-                <MismatchTable mismatches={analysisResult.mismatches} />
+                <MismatchTable mismatches={analysisResult.mismatches ?? []} />
               </div>
 
               {/* Recommendations */}
-              {analysisResult.recommendations.length > 0 && (
+              {(analysisResult.recommendations ?? []).length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">AI Recommendations</h3>
-                  <RecommendationsList recommendations={analysisResult.recommendations} />
+                  <RecommendationsList recommendations={analysisResult.recommendations ?? []} />
                 </div>
               )}
 
               {/* Correction Proposals */}
-              {analysisResult.corrections.length > 0 && (
+              {(analysisResult.corrections ?? []).length > 0 && (
                 <div>
                   <h3 className="text-lg font-semibold mb-3">Correction Proposals</h3>
-                  <CorrectionProposals corrections={analysisResult.corrections} />
+                  <CorrectionProposals corrections={analysisResult.corrections ?? []} />
                   <div className="mt-4">
                     <Button
                       variant="outline"

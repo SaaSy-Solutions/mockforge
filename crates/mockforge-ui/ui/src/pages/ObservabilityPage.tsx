@@ -86,12 +86,16 @@ export function ObservabilityPage() {
   useEffect(() => {
     fetch('/api/observability/stats')
       .then(res => res.json())
-      .then(data => setStats(data))
+      .then(data => {
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          setStats(data);
+        }
+      })
       .catch(console.error);
 
     fetch('/api/observability/alerts')
       .then(res => res.json())
-      .then(data => setAlerts(data))
+      .then(data => setAlerts(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 
@@ -115,22 +119,22 @@ export function ObservabilityPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="Events (Last Hour)"
-            value={stats?.events_last_hour.toLocaleString() || '0'}
+            value={stats?.events_last_hour?.toLocaleString() || '0'}
             subtitle="chaos events"
             icon={<Activity className="h-6 w-6" />}
           />
           <MetricCard
             title="Avg Latency"
-            value={`${stats?.avg_latency_ms.toFixed(0) || 0}ms`}
+            value={`${stats?.avg_latency_ms?.toFixed(0) || 0}ms`}
             subtitle="response time"
             icon={<Clock className="h-6 w-6" />}
           />
           <MetricCard
             title="Active Alerts"
-            value={stats?.active_alerts.toString() || '0'}
+            value={stats?.active_alerts?.toString() || '0'}
             subtitle="current issues"
             icon={<AlertCircle className="h-6 w-6" />}
-            variant={stats && stats.active_alerts > 0 ? 'warning' : 'default'}
+            variant={stats && (stats.active_alerts ?? 0) > 0 ? 'warning' : 'default'}
           />
           <MetricCard
             title="Impact Score"
@@ -138,8 +142,8 @@ export function ObservabilityPage() {
             subtitle="system impact"
             icon={<TrendingUp className="h-6 w-6" />}
             variant={
-              stats && stats.current_impact_score > 0.7 ? 'error' :
-              stats && stats.current_impact_score > 0.3 ? 'warning' : 'default'
+              stats && (stats.current_impact_score ?? 0) > 0.7 ? 'error' :
+              stats && (stats.current_impact_score ?? 0) > 0.3 ? 'warning' : 'default'
             }
           />
         </div>
@@ -200,7 +204,7 @@ export function ObservabilityPage() {
                           {new Date(bucket.timestamp).toLocaleTimeString()}
                         </td>
                         <td className="py-3 px-4 text-right">{bucket.total_events}</td>
-                        <td className="py-3 px-4 text-right">{bucket.avg_latency_ms.toFixed(0)}</td>
+                        <td className="py-3 px-4 text-right">{(bucket.avg_latency_ms ?? 0).toFixed(0)}</td>
                         <td className="py-3 px-4 text-right">
                           <ModernBadge variant={bucket.total_faults > 0 ? 'error' : 'success'} size="sm">
                             {bucket.total_faults}
@@ -222,7 +226,7 @@ export function ObservabilityPage() {
       </Section>
 
       {/* Top Affected Endpoints */}
-      {stats && stats.top_endpoints.length > 0 && (
+      {stats && Array.isArray(stats.top_endpoints) && stats.top_endpoints.length > 0 && (
         <Section
           title="Top Affected Endpoints"
           subtitle="Endpoints experiencing the most chaos events"
@@ -248,19 +252,19 @@ export function ObservabilityPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MetricCard
             title="Scheduled Scenarios"
-            value={stats?.scheduled_scenarios.toString() || '0'}
+            value={stats?.scheduled_scenarios?.toString() || '0'}
             subtitle="upcoming"
             icon={<Layers className="h-6 w-6" />}
           />
           <MetricCard
             title="Active Orchestrations"
-            value={stats?.active_orchestrations.toString() || '0'}
+            value={stats?.active_orchestrations?.toString() || '0'}
             subtitle="running"
             icon={<Activity className="h-6 w-6" />}
           />
           <MetricCard
             title="Active Replays"
-            value={stats?.active_replays.toString() || '0'}
+            value={stats?.active_replays?.toString() || '0'}
             subtitle="in progress"
             icon={<Zap className="h-6 w-6" />}
           />

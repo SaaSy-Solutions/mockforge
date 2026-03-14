@@ -88,7 +88,7 @@ export function MockAIPage() {
         const hasGeneratedSpec = localStorage.getItem('mockai-openapi-generated') === 'true';
 
         setStats({
-          rulesCount: rulesResponse.total,
+          rulesCount: rulesResponse?.total ?? 0,
           openApiGenerated: hasGeneratedSpec,
           lastGenerated: localStorage.getItem('mockai-openapi-last-generated') || undefined,
         });
@@ -162,7 +162,7 @@ export function MockAIPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
-                {stats.rulesCount}
+                {stats?.rulesCount ?? 0}
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 Generated Rules
@@ -170,7 +170,7 @@ export function MockAIPage() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
-                {stats.openApiGenerated ? 'Yes' : 'No'}
+                {stats?.openApiGenerated ? 'Yes' : 'No'}
               </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 OpenAPI Specs Generated
