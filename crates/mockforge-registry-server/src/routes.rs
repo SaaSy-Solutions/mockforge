@@ -200,16 +200,6 @@ pub fn create_router(state: AppState) -> Router<AppState> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    // Helper to count routes in a router
-    fn count_routes_in_description(description: &str) -> usize {
-        description.matches("/api/").count() + description.matches("/health").count()
-    }
-
-    // Note: Router structural tests removed — create_router() now requires AppState,
-    // and these tests only checked debug output which provides no real value.
-
     #[test]
     fn test_public_route_paths() {
         // Verify public route paths are correctly defined

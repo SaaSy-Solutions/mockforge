@@ -11,7 +11,10 @@ use crate::{
     },
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::User,
+    models::{
+        organization::{Organization, Plan},
+        User,
+    },
     AppState,
 };
 
@@ -87,6 +90,20 @@ pub async fn register(
     let user = User::create(pool, &request.username, &request.email, &password_hash)
         .await
         .map_err(ApiError::Database)?;
+
+    // Auto-create a personal organization for the user
+    let org_slug = format!("{}-personal", request.username.to_lowercase().replace(' ', "-"));
+    if let Err(e) = Organization::create(
+        pool,
+        &format!("{}'s Org", request.username),
+        &org_slug,
+        user.id,
+        Plan::Free,
+    )
+    .await
+    {
+        tracing::warn!("Failed to create personal org for user {}: {}", user.id, e);
+    }
 
     // Generate token pair (access + refresh)
     let (token_pair, jti) = create_token_pair(&user.id.to_string(), &state.config.jwt_secret)
