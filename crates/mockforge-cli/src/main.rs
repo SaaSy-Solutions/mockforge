@@ -4085,6 +4085,68 @@ pub async fn handle_serve(
         }
     };
 
+    // If no spec files provided, check MOCKFORGE_CONFIG env var (inline spec content)
+    // or MOCKFORGE_OPENAPI_SPEC_URL env var (URL or local path to spec)
+    let spec = if spec.is_empty() {
+        if let Ok(config_json) = std::env::var("MOCKFORGE_CONFIG") {
+            // MOCKFORGE_CONFIG contains the OpenAPI spec as JSON
+            let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+            let _ = tokio::fs::create_dir_all(spec_dir).await;
+            let spec_path = spec_dir.join("spec.json");
+            match tokio::fs::write(&spec_path, config_json.as_bytes()).await {
+                Ok(()) => {
+                    tracing::info!("Loaded spec from MOCKFORGE_CONFIG env var");
+                    vec![spec_path]
+                }
+                Err(e) => {
+                    tracing::error!("Failed to write spec from MOCKFORGE_CONFIG: {}", e);
+                    vec![]
+                }
+            }
+        } else if let Ok(spec_url) = std::env::var("MOCKFORGE_OPENAPI_SPEC_URL") {
+            if spec_url.starts_with("http://") || spec_url.starts_with("https://") {
+                tracing::info!("Downloading spec from URL: {}", spec_url);
+                match reqwest::get(&spec_url).await {
+                    Ok(response) if response.status().is_success() => {
+                        let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+                        let _ = tokio::fs::create_dir_all(spec_dir).await;
+                        let spec_path = spec_dir.join("spec.json");
+                        match response.bytes().await {
+                            Ok(bytes) => match tokio::fs::write(&spec_path, &bytes).await {
+                                Ok(()) => {
+                                    tracing::info!("Spec downloaded to {}", spec_path.display());
+                                    vec![spec_path]
+                                }
+                                Err(e) => {
+                                    tracing::error!("Failed to write spec file: {}", e);
+                                    vec![]
+                                }
+                            },
+                            Err(e) => {
+                                tracing::error!("Failed to read spec response: {}", e);
+                                vec![]
+                            }
+                        }
+                    }
+                    Ok(response) => {
+                        tracing::error!("Failed to download spec: HTTP {}", response.status());
+                        vec![]
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to download spec: {}", e);
+                        vec![]
+                    }
+                }
+            } else {
+                vec![PathBuf::from(spec_url)]
+            }
+        } else {
+            vec![]
+        }
+    } else {
+        spec
+    };
+
     let serve_args = ServeArgs {
         config_path: effective_config_path.clone(),
         profile,
