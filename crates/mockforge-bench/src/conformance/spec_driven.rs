@@ -660,7 +660,11 @@ impl SpecDrivenConformanceGenerator {
 
         // Imports
         script.push_str("import http from 'k6/http';\n");
-        script.push_str("import { check, group } from 'k6';\n\n");
+        script.push_str("import { check, group } from 'k6';\n");
+        if self.config.request_delay_ms > 0 {
+            script.push_str("import { sleep } from 'k6';\n");
+        }
+        script.push('\n');
 
         // Tell k6 that all HTTP status codes are "expected" in conformance mode.
         // Without this, k6 counts 4xx responses (e.g. intentional 404 tests) as
@@ -967,6 +971,14 @@ impl SpecDrivenConformanceGenerator {
         }
 
         script.push_str("    }\n");
+
+        // Rate-limit delay between checks (to avoid 429 from target API)
+        if self.config.request_delay_ms > 0 {
+            script.push_str(&format!(
+                "    sleep({:.3});\n",
+                self.config.request_delay_ms as f64 / 1000.0
+            ));
+        }
     }
 
     /// Emit an HTTP request with a body

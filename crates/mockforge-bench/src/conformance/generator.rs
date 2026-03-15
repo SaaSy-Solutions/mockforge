@@ -118,7 +118,11 @@ impl ConformanceGenerator {
 
         // Imports
         script.push_str("import http from 'k6/http';\n");
-        script.push_str("import { check, group } from 'k6';\n\n");
+        script.push_str("import { check, group } from 'k6';\n");
+        if self.config.request_delay_ms > 0 {
+            script.push_str("import { sleep } from 'k6';\n");
+        }
+        script.push('\n');
 
         // Tell k6 that all HTTP status codes are "expected" in conformance mode.
         // Without this, k6 counts 4xx responses (e.g. intentional 404 tests) as
@@ -141,6 +145,14 @@ impl ConformanceGenerator {
 
         // Base URL (includes base_path if configured)
         script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
+
+        // Delay between requests (seconds) to avoid rate limiting
+        if self.config.request_delay_ms > 0 {
+            script.push_str(&format!(
+                "const REQUEST_DELAY = {:.3};\n\n",
+                self.config.request_delay_ms as f64 / 1000.0
+            ));
+        }
 
         // Helper: JSON headers
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
@@ -182,32 +194,48 @@ impl ConformanceGenerator {
             script.push_str("  http.cookieJar().clear(BASE_URL);\n\n");
         }
 
+        // Helper to insert a delay between groups when --conformance-delay is set
+        let delay_between = if self.config.request_delay_ms > 0 {
+            "  sleep(REQUEST_DELAY);\n".to_string()
+        } else {
+            String::new()
+        };
+
         if self.config.should_include_category("Parameters") {
             self.generate_parameters_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Request Bodies") {
             self.generate_request_bodies_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Schema Types") {
             self.generate_schema_types_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Composition") {
             self.generate_composition_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("String Formats") {
             self.generate_string_formats_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Constraints") {
             self.generate_constraints_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Response Codes") {
             self.generate_response_codes_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("HTTP Methods") {
             self.generate_http_methods_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Content Types") {
             self.generate_content_negotiation_group(&mut script);
+            script.push_str(&delay_between);
         }
         if self.config.should_include_category("Security") {
             self.generate_security_group(&mut script);

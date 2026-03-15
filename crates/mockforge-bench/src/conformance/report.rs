@@ -521,6 +521,45 @@ impl ConformanceReport {
                         .bright_black()
                 );
             }
+
+            // Check for 429 rate limiting in failure details
+            let rate_limited_count =
+                self.failure_details.iter().filter(|d| d.response.status == 429).count();
+            if rate_limited_count > 0 {
+                println!();
+                println!(
+                    "{}",
+                    format!(
+                        "Warning: {} check(s) received HTTP 429 (Too Many Requests) from the target API.",
+                        rate_limited_count
+                    )
+                    .yellow()
+                    .bold()
+                );
+                println!(
+                    "{}",
+                    "The target server is rate-limiting requests. Use --conformance-delay <ms> to add a pause"
+                        .yellow()
+                );
+                println!(
+                    "{}",
+                    "between requests (e.g., --conformance-delay 200 for 200ms between each check)."
+                        .yellow()
+                );
+            }
+
+            // Explain what "Failed" means
+            println!();
+            println!(
+                "{}",
+                "Note: \"Failed\" = the API response did not match the expected conformance check"
+                    .bright_black()
+            );
+            println!(
+                "{}",
+                "(e.g., wrong status code, missing field). These are NOT infrastructure errors."
+                    .bright_black()
+            );
         }
 
         // OWASP API Top 10 coverage section
