@@ -13,17 +13,23 @@ pub struct FlyioClient {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FlyioApp {
     pub id: String,
-    pub name: String,
-    pub hostname: String,
-    pub organization: FlyioOrganization,
-    pub status: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub hostname: Option<String>,
+    #[serde(default)]
+    pub organization: Option<FlyioOrganization>,
+    #[serde(default)]
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FlyioOrganization {
     pub id: String,
-    pub name: String,
-    pub slug: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub slug: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,6 +58,14 @@ pub struct FlyioMachineConfig {
     pub checks: Option<HashMap<String, FlyioCheck>>,
 }
 
+/// Registry authentication for pulling private Docker images
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FlyioRegistryAuth {
+    pub server: String,
+    pub username: String,
+    pub password: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FlyioService {
     pub protocol: String,
@@ -67,6 +81,9 @@ pub struct FlyioPort {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FlyioCheck {
+    #[serde(rename = "type")]
+    pub check_type: String,
+    pub port: u16,
     pub grace_period: String,
     pub interval: String,
     pub method: String,
@@ -119,14 +136,19 @@ impl FlyioClient {
         app_name: &str,
         config: FlyioMachineConfig,
         region: &str,
+        registry_auth: Option<FlyioRegistryAuth>,
     ) -> Result<FlyioMachine> {
         let client = reqwest::Client::new();
         let url = format!("{}/v1/apps/{}/machines", self.base_url, app_name);
 
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "config": config,
             "region": region,
         });
+        if let Some(auth) = registry_auth {
+            payload["config"]["image_registry_auth"] =
+                serde_json::to_value(auth).context("Failed to serialize registry auth")?;
+        }
 
         let response = client
             .post(&url)
@@ -189,6 +211,62 @@ impl FlyioClient {
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Failed to delete Fly.io machine: {} - {}", status, error_text);
+        }
+
+        Ok(())
+    }
+
+    /// Allocate a shared IPv4 and a dedicated IPv6 address for an app
+    pub async fn allocate_ips(&self, app_name: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let graphql_url = "https://api.fly.io/graphql";
+
+        // Allocate shared IPv4
+        let ipv4_query = serde_json::json!({
+            "query": "mutation($input: AllocateIPAddressInput!) { allocateIpAddress(input: $input) { ipAddress { id address type } } }",
+            "variables": {
+                "input": {
+                    "appId": app_name,
+                    "type": "shared_v4"
+                }
+            }
+        });
+
+        let response = client
+            .post(graphql_url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .json(&ipv4_query)
+            .send()
+            .await
+            .context("Failed to allocate shared IPv4")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to allocate shared IPv4: {}", error_text);
+        }
+
+        // Allocate IPv6
+        let ipv6_query = serde_json::json!({
+            "query": "mutation($input: AllocateIPAddressInput!) { allocateIpAddress(input: $input) { ipAddress { id address type } } }",
+            "variables": {
+                "input": {
+                    "appId": app_name,
+                    "type": "v6"
+                }
+            }
+        });
+
+        let response = client
+            .post(graphql_url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .json(&ipv6_query)
+            .send()
+            .await
+            .context("Failed to allocate IPv6")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to allocate IPv6: {}", error_text);
         }
 
         Ok(())

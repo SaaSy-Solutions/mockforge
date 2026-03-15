@@ -81,6 +81,7 @@ export interface AnalyticsStore {
 }
 
 const BASE_URL = '__mockforge/analytics';
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
 
 export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   // Initial state
@@ -102,6 +103,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchSummary: async (range: TimeRange) => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/summary?range=${range}`);
@@ -124,6 +126,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchRequests: async (range: TimeRange) => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/requests?range=${range}`);
@@ -146,6 +149,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchEndpoints: async (limit = 10) => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/endpoints?limit=${limit}`);
@@ -168,6 +172,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchWebSocket: async () => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/websocket`);
@@ -190,6 +195,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchSmtp: async () => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/smtp`);
@@ -212,6 +218,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchSystem: async () => {
+    if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
       const response = await fetch(`/${BASE_URL}/system`);
@@ -234,6 +241,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   },
 
   fetchAll: async (range?: TimeRange) => {
+    if (isCloud) { set({ isLoading: false }); return; }
     const timeRange = range || get().timeRange;
     set({ isLoading: true, error: null });
 
@@ -259,7 +267,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
 const shouldAutoRefresh = typeof window !== 'undefined' && !import.meta.env.TEST;
 
 // Auto-refresh analytics every 10 seconds in runtime, but avoid leaking timers in tests.
-if (shouldAutoRefresh) {
+if (shouldAutoRefresh && !isCloud) {
   setInterval(() => {
     const store = useAnalyticsStore.getState();
     if (!store.isLoading && !store.error) {

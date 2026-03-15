@@ -117,25 +117,27 @@ export function ConformancePage() {
           getConformanceRun(id).then(setActiveRun).catch(() => {});
         },
         () => {
-          getConformanceRun(id).then(run => {
-            setActiveRun(run);
-            if (run.status === 'completed' || run.status === 'failed') {
-              es.close();
-              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-              listConformanceRuns().then(setRuns).catch(() => {});
-            }
-          }).catch(() => {});
+          if (es) {
+            getConformanceRun(id).then(run => {
+              setActiveRun(run);
+              if (run.status === 'completed' || run.status === 'failed') {
+                es.close();
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                listConformanceRuns().then(setRuns).catch(() => {});
+              }
+            }).catch(() => {});
+          }
         }
       );
       eventSourceRef.current = es;
 
-      // Polling fallback (SSE may fail due to auth)
+      // Polling fallback (SSE may fail due to auth, or is null in cloud mode)
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = setInterval(() => {
         getConformanceRun(id).then(run => {
           setActiveRun(run);
           if (run.status === 'completed' || run.status === 'failed') {
-            es.close();
+            es?.close();
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             listConformanceRuns().then(setRuns).catch(() => {});
           }

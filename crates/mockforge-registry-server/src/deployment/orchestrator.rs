@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::deployment::flyio::{
-    FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioService,
+    FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioRegistryAuth, FlyioService,
 };
 use crate::models::{DeploymentLog, DeploymentStatus, HostedMock};
 
@@ -72,14 +72,16 @@ impl DeploymentOrchestrator {
 
         for deployment in deployments {
             if let Err(e) = self.deploy(&deployment).await {
-                error!("Failed to deploy {}: {}", deployment.id, e);
+                // Log the full error chain for debugging
+                let error_msg = format!("{:#}", e);
+                error!("Failed to deploy {}: {}", deployment.id, error_msg);
 
                 // Update status to failed
                 let _ = HostedMock::update_status(
                     pool,
                     deployment.id,
                     DeploymentStatus::Failed,
-                    Some(&format!("Deployment failed: {}", e)),
+                    Some(&format!("Deployment failed: {}", error_msg)),
                 )
                 .await;
 
@@ -88,7 +90,7 @@ impl DeploymentOrchestrator {
                     pool,
                     deployment.id,
                     "error",
-                    &format!("Deployment failed: {}", e),
+                    &format!("Deployment failed: {}", error_msg),
                     None,
                 )
                 .await;
@@ -172,6 +174,7 @@ impl DeploymentOrchestrator {
         .await?;
 
         // Create or get app
+        let is_new_app;
         let _app = match client.get_app(&app_name).await {
             Ok(app) => {
                 DeploymentLog::create(
@@ -182,19 +185,33 @@ impl DeploymentOrchestrator {
                     None,
                 )
                 .await?;
+                is_new_app = false;
                 app
             }
-            Err(_) => client
-                .create_app(&app_name, org_slug)
-                .await
-                .context("Failed to create Fly.io app")?,
+            Err(_) => {
+                let app = client
+                    .create_app(&app_name, org_slug)
+                    .await
+                    .context("Failed to create Fly.io app")?;
+                is_new_app = true;
+                app
+            }
         };
+
+        // Allocate public IPs for new apps so they're accessible via DNS
+        if is_new_app {
+            client.allocate_ips(&app_name).await.context("Failed to allocate public IPs")?;
+
+            DeploymentLog::create(pool, deployment.id, "info", "Allocated public IPs", None)
+                .await?;
+        }
 
         // Build machine config
         let mut env = HashMap::new();
         env.insert("MOCKFORGE_DEPLOYMENT_ID".to_string(), deployment.id.to_string());
         env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
         env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
+        env.insert("PORT".to_string(), "3000".to_string());
 
         if let Some(ref spec_url) = deployment.openapi_spec_url {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
@@ -223,6 +240,8 @@ impl DeploymentOrchestrator {
         checks.insert(
             "alive".to_string(),
             FlyioCheck {
+                check_type: "http".to_string(),
+                port: 3000,
                 grace_period: "10s".to_string(),
                 interval: "15s".to_string(),
                 method: "GET".to_string(),
@@ -241,9 +260,24 @@ impl DeploymentOrchestrator {
 
         DeploymentLog::create(pool, deployment.id, "info", "Creating Fly.io machine", None).await?;
 
+        // Build registry auth if configured (for private Docker images)
+        let registry_auth = if let (Ok(server), Ok(username), Ok(password)) = (
+            std::env::var("DOCKER_REGISTRY_SERVER"),
+            std::env::var("DOCKER_REGISTRY_USERNAME"),
+            std::env::var("DOCKER_REGISTRY_PASSWORD"),
+        ) {
+            Some(FlyioRegistryAuth {
+                server,
+                username,
+                password,
+            })
+        } else {
+            None
+        };
+
         // Create machine
         let machine = client
-            .create_machine(&app_name, machine_config, &deployment.region)
+            .create_machine(&app_name, machine_config, &deployment.region, registry_auth)
             .await
             .context("Failed to create Fly.io machine")?;
 

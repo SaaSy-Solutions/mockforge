@@ -107,3 +107,4 @@ chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 base64 = { version = "0.21", features = ["default"] }
 sha2 = "0.10"
+tempfile = "3"

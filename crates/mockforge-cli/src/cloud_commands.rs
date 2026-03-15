@@ -423,22 +423,10 @@ async fn handle_login(
 ) -> Result<()> {
     info!("Authenticating with MockForge Cloud at {}", service_url);
 
-    // Get API token from various sources
-    let api_token = token.or_else(|| std::env::var("MOCKFORGE_API_KEY").ok()).or_else(|| {
-        // Try to read from config file
-        let config_path = dirs::home_dir()
-            .map(|p| p.join(".mockforge").join("cloud.json"))
-            .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
-
-        if config_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_path) {
-                if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-                    return config.get("api_key").and_then(|v| v.as_str()).map(|s| s.to_string());
-                }
-            }
-        }
-        None
-    });
+    // Get API token from explicit sources only (--token flag or env var).
+    // Do NOT reuse the stored token from cloud.json — if the user is running
+    // `login`, they want a fresh session (the old token may be expired).
+    let api_token = token.or_else(|| std::env::var("MOCKFORGE_API_KEY").ok());
 
     let api_token = if let Some(provider_name) = provider {
         println!(
@@ -1385,8 +1373,21 @@ async fn handle_deploy(
         .context("Failed to upload spec")?;
 
     if !upload_response.status().is_success() {
+        let status = upload_response.status();
         let error_body = upload_response.text().await.unwrap_or_default();
-        anyhow::bail!("Failed to upload spec: {}", error_body);
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            anyhow::bail!(
+                "Authentication failed (401). Your session may have expired.\n\
+                 Run 'mockforge cloud login' to re-authenticate.\n\
+                 Server response: {}",
+                if error_body.is_empty() {
+                    "No details provided".to_string()
+                } else {
+                    error_body
+                }
+            );
+        }
+        anyhow::bail!("Failed to upload spec ({}): {}", status, error_body);
     }
 
     let upload_result: serde_json::Value = upload_response.json().await?;
@@ -1415,8 +1416,15 @@ async fn handle_deploy(
         .context("Failed to create deployment")?;
 
     if !deploy_response.status().is_success() {
+        let status = deploy_response.status();
         let error_body = deploy_response.text().await.unwrap_or_default();
-        anyhow::bail!("Failed to create deployment: {}", error_body);
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            anyhow::bail!(
+                "Authentication failed (401). Your session may have expired.\n\
+                 Run 'mockforge cloud login' to re-authenticate."
+            );
+        }
+        anyhow::bail!("Failed to create deployment ({}): {}", status, error_body);
     }
 
     let deployment: serde_json::Value = deploy_response.json().await?;

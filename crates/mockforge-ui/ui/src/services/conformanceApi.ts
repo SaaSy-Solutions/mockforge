@@ -58,7 +58,10 @@ export function streamConformanceProgress(
   id: string,
   onEvent: (event: ConformanceProgress) => void,
   onError?: (error: Event) => void
-): EventSource {
+): EventSource | null {
+  const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+  if (isCloud) return null;
+
   // EventSource doesn't support Authorization headers natively.
   // The SSE endpoint is best-effort — we also poll via getConformanceRun.
   const eventSource = new EventSource(`${BASE_URL}/run/${id}/stream`);

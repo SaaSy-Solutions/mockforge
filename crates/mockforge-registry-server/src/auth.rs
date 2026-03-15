@@ -61,8 +61,8 @@ pub enum TokenType {
     Refresh,
 }
 
-/// Access token expiration: 1 hour
-pub const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
+/// Access token expiration: 24 hours
+pub const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 24;
 
 /// Refresh token expiration: 7 days
 pub const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 7;
@@ -273,11 +273,11 @@ mod tests {
         assert_eq!(claims.sub, user_id);
         assert!(claims.exp > claims.iat);
 
-        // Token should be valid for approximately 1 hour (access token)
+        // Token should be valid for approximately 24 hours (access token)
         let duration = claims.exp - claims.iat;
-        // Should be approximately 1 hour in seconds (with some tolerance)
-        assert!(duration >= 59 * 60, "Token should be valid for at least 59 minutes");
-        assert!(duration <= 61 * 60, "Token should be valid for at most 61 minutes");
+        let expected_secs = ACCESS_TOKEN_EXPIRY_HOURS as usize * 3600;
+        assert!(duration >= expected_secs - 60, "Token should be valid for at least 23h59m");
+        assert!(duration <= expected_secs + 60, "Token should be valid for at most 24h1m");
 
         // Token should be an access token
         assert_eq!(claims.token_type, TokenType::Access);

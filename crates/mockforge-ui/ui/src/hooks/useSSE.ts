@@ -5,6 +5,11 @@ import { logger } from '@/utils/logger';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
+const isCloud = (() => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+  return !!apiBase && apiBase !== '';
+})();
+
 export interface SSEHookOptions {
   /**
    * Whether to automatically connect when the hook is mounted
@@ -89,6 +94,9 @@ export function useSSE<T = unknown>(
   }, [url]);
 
   const connect = useCallback(() => {
+    // Skip SSE connections in cloud mode — these endpoints don't exist
+    if (isCloud) return;
+
     // Prevent multiple connections
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {
       if (import.meta.env.DEV) {
