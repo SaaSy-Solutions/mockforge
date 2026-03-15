@@ -271,6 +271,13 @@ impl DeploymentOrchestrator {
                 username,
                 password,
             })
+        } else if machine_config.image.starts_with("registry.fly.io/") {
+            // Auto-detect Fly.io registry images and use the Fly.io API token
+            Some(FlyioRegistryAuth {
+                server: "registry.fly.io".to_string(),
+                username: "x".to_string(),
+                password: client.api_token().to_string(),
+            })
         } else {
             None
         };

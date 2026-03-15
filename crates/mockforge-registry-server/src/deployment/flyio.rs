@@ -100,6 +100,11 @@ impl FlyioClient {
         }
     }
 
+    /// Get the API token (used for Fly.io registry auth)
+    pub fn api_token(&self) -> &str {
+        &self.api_token
+    }
+
     /// Create a new Fly.io app
     pub async fn create_app(&self, app_name: &str, org_slug: &str) -> Result<FlyioApp> {
         let client = reqwest::Client::new();

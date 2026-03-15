@@ -48,3 +48,33 @@ __pycache__/
 # Tools and scripts not needed in container
 tools/
 scripts/
+
+# Large directories not needed in build
+mutants.out/
+coverage/
+bench-results/
+desktop-app/
+tests/
+test_openapi_demo/
+helm/
+k8s/
+vscode-extension/
+jetbrains-plugin/
+browser-extension/
+ui-builder/
+social-posts-*
+*.md
+!README.md
+compliance/
+blueprints/
+guides/
+demos/
+deploy/
+overrides/
+fixtures/
+beta-program/
+cloud-service/
+sdk/
+oss-fuzz/
+templates/
+benchmarks/
