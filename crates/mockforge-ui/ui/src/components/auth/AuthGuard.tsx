@@ -1,5 +1,4 @@
-import { logger } from '@/utils/logger';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { LoginForm } from './LoginForm';
 
@@ -10,14 +9,15 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
-    checkAuth();
+    checkAuth().finally(() => setHasCheckedAuth(true));
   }, [checkAuth]);
 
-  // Show loading spinner while checking authentication
-  if (isLoading) {
+  // Show loading spinner until initial auth check completes
+  if (!hasCheckedAuth || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">

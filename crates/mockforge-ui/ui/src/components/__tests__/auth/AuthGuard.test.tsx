@@ -18,7 +18,7 @@ describe('AuthGuard', () => {
     vi.clearAllMocks();
   });
 
-  it('renders children when user is authenticated', () => {
+  it('renders children when user is authenticated', async () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: true,
       user: { id: '1', username: 'admin', email: 'test@example.com', role: 'admin' },
@@ -27,7 +27,7 @@ describe('AuthGuard', () => {
       refreshToken: 'mock-refresh-token',
       login: vi.fn(),
       logout: vi.fn(),
-      checkAuth: vi.fn(),
+      checkAuth: vi.fn().mockResolvedValue(undefined),
       refreshTokenAction: vi.fn(),
       updateProfile: vi.fn(),
       checkTokenExpiry: vi.fn(),
@@ -42,10 +42,12 @@ describe('AuthGuard', () => {
       </AuthGuard>
     );
 
-    expect(screen.getByTestId('protected-content')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument();
+    });
   });
 
-  it('renders login prompt when user is not authenticated', () => {
+  it('renders login prompt when user is not authenticated', async () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       user: null,
@@ -54,7 +56,7 @@ describe('AuthGuard', () => {
       refreshToken: null,
       login: vi.fn(),
       logout: vi.fn(),
-      checkAuth: vi.fn(),
+      checkAuth: vi.fn().mockResolvedValue(undefined),
       refreshTokenAction: vi.fn(),
       updateProfile: vi.fn(),
       checkTokenExpiry: vi.fn(),
@@ -69,8 +71,12 @@ describe('AuthGuard', () => {
       </AuthGuard>
     );
 
-    expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
-    expect(screen.getByText(/sign in to access the admin dashboard/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
+      // LoginForm renders "Sign in to manage your mock APIs" (cloud) or
+      // "Sign in to access the admin dashboard" (local) depending on VITE_API_BASE_URL
+      expect(screen.getByText(/sign in to/i)).toBeInTheDocument();
+    });
   });
 
   it('renders loading state while authentication is being checked', () => {
@@ -82,7 +88,7 @@ describe('AuthGuard', () => {
       refreshToken: null,
       login: vi.fn(),
       logout: vi.fn(),
-      checkAuth: vi.fn(),
+      checkAuth: vi.fn().mockResolvedValue(undefined),
       refreshTokenAction: vi.fn(),
       updateProfile: vi.fn(),
       checkTokenExpiry: vi.fn(),
@@ -102,7 +108,7 @@ describe('AuthGuard', () => {
   });
 
   it('checks authentication on mount', async () => {
-    const mockCheckAuth = vi.fn();
+    const mockCheckAuth = vi.fn().mockResolvedValue(undefined);
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       user: null,
@@ -131,7 +137,7 @@ describe('AuthGuard', () => {
     });
   });
 
-  it('handles authentication errors gracefully', () => {
+  it('handles authentication errors gracefully', async () => {
     mockUseAuthStore.mockReturnValue({
       isAuthenticated: false,
       user: null,
@@ -140,7 +146,7 @@ describe('AuthGuard', () => {
       refreshToken: null,
       login: vi.fn(),
       logout: vi.fn(),
-      checkAuth: vi.fn(),
+      checkAuth: vi.fn().mockResolvedValue(undefined),
       refreshTokenAction: vi.fn(),
       updateProfile: vi.fn(),
       checkTokenExpiry: vi.fn(),
@@ -156,7 +162,9 @@ describe('AuthGuard', () => {
     );
 
     // AuthGuard may not display error messages - just check it doesn't crash
-    expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument();
+    });
   });
 
 });

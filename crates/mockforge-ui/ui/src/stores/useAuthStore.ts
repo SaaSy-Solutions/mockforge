@@ -253,7 +253,8 @@ export const useAuthStore = create<AuthStore>()(
         token: state.token,
         refreshToken: state.refreshToken,
         user: state.user,
-        isAuthenticated: state.isAuthenticated,
+        // Do NOT persist isAuthenticated — derive it from token via checkAuth()
+        // to prevent stale auth state from showing the dashboard before validation
       }),
     }
   )

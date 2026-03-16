@@ -185,6 +185,31 @@ const navSections = [
   }
 ];
 
+// Cloud mode: only show functional nav items when running on the cloud app
+const isCloudMode = !!import.meta.env.VITE_API_BASE_URL;
+
+const cloudNavItemIds = new Set([
+  'dashboard',
+  'workspaces',
+  'services',
+  'fixtures',
+  'hosted-mocks',
+  'config',
+  'organization',
+  'billing',
+  'api-tokens',
+  'usage',
+]);
+
+const effectiveNavSections = isCloudMode
+  ? navSections
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => cloudNavItemIds.has(item.id)),
+      }))
+      .filter(section => section.items.length > 0)
+  : navSections;
+
 // Flattened items for title lookup
 const allNavItems = navSections.flatMap(section => section.items);
 
@@ -245,7 +270,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
               </Button>
             </div>
             <nav className="p-6 space-y-6 overflow-y-auto h-[calc(100%-88px)]">
-              {navSections.map((section, sectionIndex) => (
+              {effectiveNavSections.map((section, sectionIndex) => (
                 <div key={section.titleKey} className="space-y-2">
                   <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {t(section.titleKey)}
@@ -292,7 +317,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
               <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
             </div>
             <nav id="main-navigation" className="flex-1 px-4 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
-              {navSections.map((section) => (
+              {effectiveNavSections.map((section) => (
                 <div key={section.titleKey} className="space-y-2">
                   <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {t(section.titleKey)}
