@@ -1341,7 +1341,14 @@ pub async fn serve_router_with_tls(
         )
     })?;
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    // Wrap the Router with OData URI rewrite.
+    // Router::layer() only applies to matched routes, so we must wrap at the service level
+    // to rewrite URIs BEFORE route matching occurs.
+    let odata_app = tower::ServiceBuilder::new()
+        .layer(mockforge_core::odata_rewrite::ODataRewriteLayer)
+        .service(app);
+    let make_svc = axum::ServiceExt::<axum::http::Request<axum::body::Body>>::into_make_service_with_connect_info::<SocketAddr>(odata_app);
+    axum::serve(listener, make_svc).await?;
     Ok(())
 }
 
@@ -2862,6 +2869,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
             .with_state(routes_state);
         app = app.merge(routes_router);
     }
+
+    // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
+    // because Router::layer() only applies to matched routes, not unmatched ones.
 
     // Add request logging middleware to capture all requests for the admin dashboard
     app = app.layer(axum::middleware::from_fn(request_logging::log_http_requests));

@@ -219,10 +219,17 @@ impl OpenApiRoute {
         // Axum v0.7+ uses {param} format, same as OpenAPI
         let path = self.path.split('?').next().unwrap_or(&self.path);
 
+        // Handle empty function call parens: functionName() → functionName
+        if path.contains("()") {
+            let path = path.replace("()", "");
+            return path;
+        }
+
         // Handle OData function call syntax: functionName(key='{param}',key2={param2})
+        // Also handles Microsoft Graph style: functionName(key='{param}') where quotes wrap braces
         // Convert to: functionName/{param}/{param2}
         // This prevents Axum from panicking on multiple params per segment or invalid chars
-        if path.contains("(") && path.contains("={") {
+        if path.contains('(') && path.contains('=') {
             let mut result = String::with_capacity(path.len());
             let mut chars = path.chars().peekable();
 
@@ -260,6 +267,10 @@ impl OpenApiRoute {
     /// multiple params per segment after conversion) are considered invalid.
     pub fn is_valid_axum_path(&self) -> bool {
         let path = self.axum_path();
+        // If parentheses survived conversion, the path is invalid for Axum
+        if path.contains('(') || path.contains(')') {
+            return false;
+        }
         // Each segment may contain at most one `{param}` capture
         for segment in path.split('/') {
             let brace_count = segment.matches('{').count();

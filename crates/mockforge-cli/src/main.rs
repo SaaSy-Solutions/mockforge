@@ -5287,6 +5287,8 @@ pub async fn handle_serve(
         println!("✅ Chaos middleware integrated - latency recording enabled");
     }
 
+    // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
+
     println!(
         "✅ HTTP server configured with health checks at http://localhost:{}/health (live, ready, startup)",
         config.http.port

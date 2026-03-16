@@ -34,7 +34,7 @@ use chrono::Utc;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use tracing;
 
@@ -233,10 +233,30 @@ impl OpenApiRouteRegistry {
         &self.spec
     }
 
+    /// Normalize an Axum path for route dedup by replacing all `{param}` with `{_}`.
+    /// This ensures paths like `/func/{period}` and `/func/{date}` are treated as duplicates,
+    /// since Axum treats all path parameters as equivalent for routing.
+    fn normalize_path_for_dedup(path: &str) -> String {
+        let mut result = String::with_capacity(path.len());
+        let mut in_brace = false;
+        for ch in path.chars() {
+            if ch == '{' {
+                in_brace = true;
+                result.push_str("{_}");
+            } else if ch == '}' {
+                in_brace = false;
+            } else if !in_brace {
+                result.push(ch);
+            }
+        }
+        result
+    }
+
     /// Build an Axum router from the OpenAPI spec (simplified)
     pub fn build_router(self) -> Router {
         let mut router = Router::new();
         tracing::debug!("Building router from {} routes", self.routes.len());
+        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
 
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
@@ -248,8 +268,20 @@ impl OpenApiRouteRegistry {
                 );
                 continue;
             }
-            tracing::debug!("Adding route: {} {}", route.method, route.path);
             let axum_path = route.axum_path();
+            // Skip duplicate routes (e.g., OData functions with different param names
+            // that collapse to the same Axum path pattern)
+            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            if !registered_routes.insert(route_key) {
+                tracing::debug!(
+                    "Skipping duplicate route: {} {} (axum path: {})",
+                    route.method,
+                    route.path,
+                    axum_path
+                );
+                continue;
+            }
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
             let operation = route.operation.clone();
             let method = route.method.clone();
             let path_template = route.path.clone();
@@ -692,6 +724,7 @@ impl OpenApiRouteRegistry {
         overrides_enabled: bool,
     ) -> Router {
         let mut router = Router::new();
+        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
 
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
@@ -705,6 +738,16 @@ impl OpenApiRouteRegistry {
                 continue;
             }
             let axum_path = route.axum_path();
+            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            if !registered_routes.insert(route_key) {
+                tracing::debug!(
+                    "Skipping duplicate route: {} {} (axum path: {})",
+                    route.method,
+                    route.path,
+                    axum_path
+                );
+                continue;
+            }
             let operation = route.operation.clone();
             let method = route.method.clone();
             let method_str = method.clone();
@@ -1458,6 +1501,7 @@ impl OpenApiRouteRegistry {
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
+        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
 
         for route in &self.routes {
@@ -1466,6 +1510,17 @@ impl OpenApiRouteRegistry {
                     "Skipping route with unsupported path syntax: {} {}",
                     route.method,
                     route.path
+                );
+                continue;
+            }
+            let axum_path = route.axum_path();
+            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            if !registered_routes.insert(route_key) {
+                tracing::debug!(
+                    "Skipping duplicate route: {} {} (axum path: {})",
+                    route.method,
+                    route.path,
+                    axum_path
                 );
                 continue;
             }
@@ -1520,7 +1575,6 @@ impl OpenApiRouteRegistry {
                 }
             };
 
-            let axum_path = route.axum_path();
             match route.method.as_str() {
                 "GET" => {
                     router = router.route(&axum_path, get(handler));
@@ -1563,6 +1617,7 @@ impl OpenApiRouteRegistry {
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
+        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
         tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
 
         // Get custom fixture loader for fixture checking
@@ -1574,6 +1629,17 @@ impl OpenApiRouteRegistry {
                     "Skipping route with unsupported path syntax: {} {}",
                     route.method,
                     route.path
+                );
+                continue;
+            }
+            let axum_path = route.axum_path();
+            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            if !registered_routes.insert(route_key) {
+                tracing::debug!(
+                    "Skipping duplicate route: {} {} (axum path: {})",
+                    route.method,
+                    route.path,
+                    axum_path
                 );
                 continue;
             }
@@ -1842,7 +1908,6 @@ impl OpenApiRouteRegistry {
                 }
             };
 
-            let axum_path = route.axum_path();
             match route.method.as_str() {
                 "GET" => {
                     router = router.route(&axum_path, get(handler));

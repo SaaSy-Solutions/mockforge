@@ -254,6 +254,8 @@ pub mod latency;
 pub mod lifecycle;
 pub mod multi_tenant;
 pub mod network_profiles;
+/// OData function call URI rewrite middleware
+pub mod odata_rewrite;
 pub mod openapi;
 pub mod openapi_routes;
 pub mod output_control;
