@@ -288,10 +288,42 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create Fly.io machine")?;
 
-        // Update deployment with URLs
-        let deployment_url = format!("https://{}.fly.dev", app_name);
+        // Add custom domain certificate if MOCKFORGE_MOCKS_DOMAIN is configured
+        // This enables pretty URLs like https://<slug>.mocks.mockforge.dev
+        // Requires wildcard DNS: *.mocks.mockforge.dev CNAME → <any-app>.fly.dev
+        let custom_hostname = std::env::var("MOCKFORGE_MOCKS_DOMAIN")
+            .ok()
+            .map(|domain| format!("{}.{}", deployment.slug, domain));
+
+        if let Some(ref hostname) = custom_hostname {
+            match client.add_certificate(&app_name, hostname).await {
+                Ok(()) => {
+                    DeploymentLog::create(
+                        pool,
+                        deployment.id,
+                        "info",
+                        &format!("Added TLS certificate for {}", hostname),
+                        None,
+                    )
+                    .await?;
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to add certificate for {}: {}. Falling back to fly.dev URL",
+                        hostname, e
+                    );
+                }
+            }
+        }
+
+        // Use custom domain URL if certificate was requested, otherwise fall back to fly.dev
+        let deployment_url = if let Some(ref hostname) = custom_hostname {
+            format!("https://{}", hostname)
+        } else {
+            format!("https://{}.fly.dev", app_name)
+        };
         let internal_url = format!("http://{}.internal:3000", app_name);
-        let health_check_url = format!("{}/health/live", deployment_url);
+        let health_check_url = format!("https://{}.fly.dev/health/live", app_name);
 
         sqlx::query(
             r#"
@@ -398,6 +430,23 @@ impl DeploymentOrchestrator {
                         .or_else(|| deployment_url.strip_prefix("http://"))
                         .and_then(|s| s.strip_suffix(".fly.dev"))
                     {
+                        // Remove custom domain certificate if configured
+                        if let Some(ref deployment_url_full) = deployment.deployment_url {
+                            if let Ok(mocks_domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+                                if deployment_url_full.contains(&mocks_domain) {
+                                    let hostname = format!("{}.{}", deployment.slug, mocks_domain);
+                                    if let Err(e) =
+                                        flyio_client.delete_certificate(app_name, &hostname).await
+                                    {
+                                        warn!(
+                                            "Failed to delete certificate for {}: {}",
+                                            hostname, e
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
                         if let Err(e) = flyio_client.delete_machine(app_name, machine_id).await {
                             warn!("Failed to delete Fly.io machine: {}", e);
                         }

@@ -1178,6 +1178,25 @@ async fn get_config(State(state): State<ManagementState>) -> Json<ServerConfig> 
     })
 }
 
+/// Serve the loaded OpenAPI spec as JSON
+async fn get_openapi_spec(
+    State(state): State<ManagementState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    match &state.spec {
+        Some(spec) => match &spec.raw_document {
+            Some(doc) => Ok(Json(doc.clone())),
+            None => {
+                // Fall back to serializing the parsed spec
+                match serde_json::to_value(&spec.spec) {
+                    Ok(val) => Ok(Json(val)),
+                    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+                }
+            }
+        },
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
 /// Health check endpoint
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({
@@ -2432,7 +2451,8 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/mocks/{id}", put(update_mock))
         .route("/mocks/{id}", delete(delete_mock))
         .route("/export", get(export_mocks))
-        .route("/import", post(import_mocks));
+        .route("/import", post(import_mocks))
+        .route("/spec", get(get_openapi_spec));
 
     #[cfg(feature = "smtp")]
     let router = router

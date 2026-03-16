@@ -399,6 +399,11 @@ async fn get_routes_handler(State(state): State<HttpServerState>) -> Json<serde_
     }))
 }
 
+/// Handler to serve the Scalar API docs page
+async fn get_docs_handler() -> axum::response::Html<&'static str> {
+    axum::response::Html(include_str!("../static/docs.html"))
+}
+
 /// Build the base HTTP router, optionally from an OpenAPI spec.
 pub async fn build_router(
     spec_path: Option<String>,
@@ -805,6 +810,9 @@ pub async fn build_router_with_multi_tenant(
 
     // Merge the routes router with the main app
     app = app.merge(routes_router);
+
+    // Add API docs page (Scalar-powered interactive explorer)
+    app = app.route("/__mockforge/docs", axum::routing::get(get_docs_handler));
 
     // Add static coverage UI
     // Determine the path to the coverage.html file
@@ -2869,6 +2877,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
             .with_state(routes_state);
         app = app.merge(routes_router);
     }
+
+    // Add API docs page (Scalar-powered interactive explorer)
+    app = app.route("/__mockforge/docs", axum::routing::get(get_docs_handler));
 
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
     // because Router::layer() only applies to matched routes, not unmatched ones.

@@ -321,6 +321,78 @@ impl FlyioClient {
         Ok(app)
     }
 
+    /// Add a custom domain certificate to an app
+    ///
+    /// This tells Fly.io to provision a Let's Encrypt TLS certificate for the
+    /// given hostname and route traffic for that hostname to this app via SNI.
+    pub async fn add_certificate(&self, app_name: &str, hostname: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let graphql_url = "https://api.fly.io/graphql";
+
+        let query = serde_json::json!({
+            "query": "mutation($appId: ID!, $hostname: String!) { addCertificate(appId: $appId, hostname: $hostname) { certificate { id hostname } } }",
+            "variables": {
+                "appId": app_name,
+                "hostname": hostname
+            }
+        });
+
+        let response = client
+            .post(graphql_url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .json(&query)
+            .send()
+            .await
+            .context("Failed to add certificate")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to add certificate for {}: {}", hostname, error_text);
+        }
+
+        // Check for GraphQL-level errors
+        let body: serde_json::Value =
+            response.json().await.context("Failed to parse certificate response")?;
+        if let Some(errors) = body.get("errors") {
+            // "already exists" is fine — idempotent
+            let err_str = errors.to_string();
+            if !err_str.contains("already exists") {
+                anyhow::bail!("Failed to add certificate for {}: {}", hostname, err_str);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Remove a custom domain certificate from an app
+    pub async fn delete_certificate(&self, app_name: &str, hostname: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let graphql_url = "https://api.fly.io/graphql";
+
+        let query = serde_json::json!({
+            "query": "mutation($appId: ID!, $hostname: String!) { deleteCertificate(appId: $appId, hostname: $hostname) { app { name } } }",
+            "variables": {
+                "appId": app_name,
+                "hostname": hostname
+            }
+        });
+
+        let response = client
+            .post(graphql_url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .json(&query)
+            .send()
+            .await
+            .context("Failed to delete certificate")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to delete certificate for {}: {}", hostname, error_text);
+        }
+
+        Ok(())
+    }
+
     /// List machines for an app
     pub async fn list_machines(&self, app_name: &str) -> Result<Vec<FlyioMachine>> {
         let client = reqwest::Client::new();
