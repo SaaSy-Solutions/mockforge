@@ -36,6 +36,7 @@ const en: Dictionary = {
   'tab.virtualBackends': 'Virtual Backends',
   'tab.fixtures': 'Fixtures',
   'tab.hostedMocks': 'Hosted Mocks',
+  'tab.apiExplorer': 'API Explorer',
   'tab.tunnels': 'Tunnels',
   'tab.proxyInspector': 'Proxy Inspector',
   'tab.chains': 'Chains',

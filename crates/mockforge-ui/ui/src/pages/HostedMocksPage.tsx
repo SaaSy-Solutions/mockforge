@@ -62,6 +62,7 @@ interface Deployment {
   description?: string;
   status: 'pending' | 'deploying' | 'active' | 'stopped' | 'failed' | 'deleting';
   deployment_url?: string;
+  openapi_spec_url?: string;
   health_status: 'healthy' | 'unhealthy' | 'unknown';
   error_message?: string;
   created_at: string;
@@ -85,6 +86,19 @@ interface DeploymentMetrics {
   avg_response_time_ms: number;
   period_start: string;
 }
+
+const navigateToExplorer = (deployment: Deployment) => {
+  if (!deployment.deployment_url) return;
+  // Store deployment context for the ApiExplorerPage
+  window.__mockforge_explorer_deployment = {
+    id: deployment.id,
+    name: deployment.name,
+    deployment_url: deployment.deployment_url,
+    status: deployment.status,
+    openapi_spec_url: deployment.openapi_spec_url,
+  };
+  window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'api-explorer' } }));
+};
 
 export const HostedMocksPage: React.FC = () => {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -430,12 +444,10 @@ export const HostedMocksPage: React.FC = () => {
                       {deployment.deployment_url ? (
                         <Button
                           size="small"
-                          startIcon={<OpenInNewIcon />}
-                          href={deployment.deployment_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          startIcon={<CodeIcon />}
+                          onClick={() => navigateToExplorer(deployment)}
                         >
-                          Open
+                          Explore
                         </Button>
                       ) : (
                         <Typography variant="caption" color="text.secondary">
@@ -778,15 +790,26 @@ export const HostedMocksPage: React.FC = () => {
             <DialogActions>
               <Button onClick={() => setDetailsOpen(false)}>Close</Button>
               {selectedDeployment.deployment_url && (
-                <Button
-                  variant="contained"
-                  startIcon={<OpenInNewIcon />}
-                  href={selectedDeployment.deployment_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open Deployment
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    startIcon={<CodeIcon />}
+                    onClick={() => {
+                      setDetailsOpen(false);
+                      navigateToExplorer(selectedDeployment);
+                    }}
+                  >
+                    Explore API
+                  </Button>
+                  <Button
+                    startIcon={<OpenInNewIcon />}
+                    href={`${selectedDeployment.deployment_url}/__mockforge/docs`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open in new tab
+                  </Button>
+                </>
               )}
             </DialogActions>
           </>

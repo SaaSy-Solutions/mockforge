@@ -210,8 +210,11 @@ const effectiveNavSections = isCloudMode
       .filter(section => section.items.length > 0)
   : navSections;
 
-// Flattened items for title lookup
-const allNavItems = navSections.flatMap(section => section.items);
+// Flattened items for title lookup (includes non-sidebar pages for breadcrumb resolution)
+const allNavItems = [
+  ...navSections.flatMap(section => section.items),
+  { id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 },
+];
 
 export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShellProps) {
   const { t, locale, supportedLocales, setLocale } = useI18n();

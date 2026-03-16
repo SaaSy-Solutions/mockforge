@@ -48,6 +48,7 @@ const ScenarioStudioPage = lazy(() => import('./pages/ScenarioStudioPage').then(
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 const PillarAnalyticsPage = lazy(() => import('./pages/PillarAnalyticsPage').then(m => ({ default: m.PillarAnalyticsPage })));
 const HostedMocksPage = lazy(() => import('./pages/HostedMocksPage').then(m => ({ default: m.HostedMocksPage })));
+const ApiExplorerPage = lazy(() => import('./pages/ApiExplorerPage').then(m => ({ default: m.ApiExplorerPage })));
 
 // Observability & Monitoring
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage').then(m => ({ default: m.ObservabilityPage })));
@@ -209,6 +210,19 @@ function App() {
         return <FixturesPage />;
       case 'hosted-mocks':
         return <HostedMocksPage />;
+      case 'api-explorer': {
+        const dep = window.__mockforge_explorer_deployment;
+        if (!dep) {
+          setActiveTab('hosted-mocks');
+          return null;
+        }
+        return (
+          <ApiExplorerPage
+            deployment={dep}
+            onBack={() => setActiveTab('hosted-mocks')}
+          />
+        );
+      }
       case 'tunnels':
         return <TunnelsPage />;
 
