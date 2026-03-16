@@ -241,6 +241,13 @@ impl OpenApiRouteRegistry {
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
         for route in &self.routes {
+            if !route.is_valid_axum_path() {
+                tracing::warn!(
+                    "Skipping route with unsupported path syntax: {} {} (OData function calls or multi-param segments are converted but may still be incompatible)",
+                    route.method, route.path
+                );
+                continue;
+            }
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let axum_path = route.axum_path();
             let operation = route.operation.clone();
@@ -689,6 +696,14 @@ impl OpenApiRouteRegistry {
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
         for route in &self.routes {
+            if !route.is_valid_axum_path() {
+                tracing::warn!(
+                    "Skipping route with unsupported path syntax: {} {}",
+                    route.method,
+                    route.path
+                );
+                continue;
+            }
             let axum_path = route.axum_path();
             let operation = route.operation.clone();
             let method = route.method.clone();
@@ -1446,6 +1461,14 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
 
         for route in &self.routes {
+            if !route.is_valid_axum_path() {
+                tracing::warn!(
+                    "Skipping route with unsupported path syntax: {} {}",
+                    route.method,
+                    route.path
+                );
+                continue;
+            }
             tracing::debug!("Adding AI-enabled route: {} {}", route.method, route.path);
 
             let route_clone = route.clone();
@@ -1497,21 +1520,22 @@ impl OpenApiRouteRegistry {
                 }
             };
 
+            let axum_path = route.axum_path();
             match route.method.as_str() {
                 "GET" => {
-                    router = router.route(&route.path, get(handler));
+                    router = router.route(&axum_path, get(handler));
                 }
                 "POST" => {
-                    router = router.route(&route.path, post(handler));
+                    router = router.route(&axum_path, post(handler));
                 }
                 "PUT" => {
-                    router = router.route(&route.path, put(handler));
+                    router = router.route(&axum_path, put(handler));
                 }
                 "DELETE" => {
-                    router = router.route(&route.path, delete(handler));
+                    router = router.route(&axum_path, delete(handler));
                 }
                 "PATCH" => {
-                    router = router.route(&route.path, patch(handler));
+                    router = router.route(&axum_path, patch(handler));
                 }
                 _ => tracing::warn!("Unsupported HTTP method for AI: {}", route.method),
             }
@@ -1545,6 +1569,14 @@ impl OpenApiRouteRegistry {
         let custom_loader = self.custom_fixture_loader.clone();
 
         for route in &self.routes {
+            if !route.is_valid_axum_path() {
+                tracing::warn!(
+                    "Skipping route with unsupported path syntax: {} {}",
+                    route.method,
+                    route.path
+                );
+                continue;
+            }
             tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
 
             let route_clone = route.clone();
@@ -1810,21 +1842,22 @@ impl OpenApiRouteRegistry {
                 }
             };
 
+            let axum_path = route.axum_path();
             match route.method.as_str() {
                 "GET" => {
-                    router = router.route(&route.path, get(handler));
+                    router = router.route(&axum_path, get(handler));
                 }
                 "POST" => {
-                    router = router.route(&route.path, post(handler));
+                    router = router.route(&axum_path, post(handler));
                 }
                 "PUT" => {
-                    router = router.route(&route.path, put(handler));
+                    router = router.route(&axum_path, put(handler));
                 }
                 "DELETE" => {
-                    router = router.route(&route.path, delete(handler));
+                    router = router.route(&axum_path, delete(handler));
                 }
                 "PATCH" => {
-                    router = router.route(&route.path, patch(handler));
+                    router = router.route(&axum_path, patch(handler));
                 }
                 _ => tracing::warn!("Unsupported HTTP method for MockAI: {}", route.method),
             }

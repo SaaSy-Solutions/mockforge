@@ -217,7 +217,74 @@ impl OpenApiRoute {
     pub fn axum_path(&self) -> String {
         // Strip query string if present (some non-standard OpenAPI specs embed query params in path)
         // Axum v0.7+ uses {param} format, same as OpenAPI
-        self.path.split('?').next().unwrap_or(&self.path).to_string()
+        let path = self.path.split('?').next().unwrap_or(&self.path);
+
+        // Handle OData function call syntax: functionName(key='{param}',key2={param2})
+        // Convert to: functionName/{param}/{param2}
+        // This prevents Axum from panicking on multiple params per segment or invalid chars
+        if path.contains("(") && path.contains("={") {
+            let mut result = String::with_capacity(path.len());
+            let mut chars = path.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                if ch == '(' {
+                    // Extract params from inside parentheses
+                    let mut paren_content = String::new();
+                    for c in chars.by_ref() {
+                        if c == ')' {
+                            break;
+                        }
+                        paren_content.push(c);
+                    }
+                    // Parse key='{value}' or key={value} pairs
+                    for part in paren_content.split(',') {
+                        if let Some((_key, value)) = part.split_once('=') {
+                            let param = value.trim_matches(|c| c == '\'' || c == '"');
+                            result.push('/');
+                            result.push_str(param);
+                        }
+                    }
+                } else {
+                    result.push(ch);
+                }
+            }
+            return result;
+        }
+
+        path.to_string()
+    }
+
+    /// Returns true if this route's path can be registered with Axum's router.
+    ///
+    /// Paths that contain characters Axum can't handle (e.g., unmatched braces,
+    /// multiple params per segment after conversion) are considered invalid.
+    pub fn is_valid_axum_path(&self) -> bool {
+        let path = self.axum_path();
+        // Each segment may contain at most one `{param}` capture
+        for segment in path.split('/') {
+            let brace_count = segment.matches('{').count();
+            if brace_count > 1 {
+                return false;
+            }
+            // A segment with a param must be ONLY the param (e.g. `{id}` not `prefix{id}suffix`)
+            // unless it's a wildcard. Axum allows `{*rest}` as a catch-all.
+            if brace_count == 1
+                && segment
+                    != format!(
+                        "{{{}}}",
+                        segment
+                            .trim_matches(|c: char| c != '{' && c != '}')
+                            .trim_matches(|c| c == '{' || c == '}')
+                    )
+            {
+                // Segment has a param mixed with literal text — check if it's truly invalid
+                // Axum 0.8 allows `{param}` as full segment only
+                if !segment.starts_with('{') || !segment.ends_with('}') {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     /// Add metadata to the route
