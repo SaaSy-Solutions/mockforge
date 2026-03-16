@@ -438,11 +438,7 @@ pub async fn delete_deployment(
                         None,
                     )
                     .await
-                    .ok(); // Log but don't fail on log error
-
-                    // Check if there are other machines for this app
-                    // If not, we could delete the app, but for now we'll leave it
-                    // (apps can be reused for future deployments)
+                    .ok();
                 }
                 Err(e) => {
                     warn!("Failed to delete Fly.io machine {}: {}", machine_id, e);
@@ -455,7 +451,7 @@ pub async fn delete_deployment(
                     )
                     .await
                     .ok();
-                    // Continue with database deletion even if Fly.io deletion fails
+                    // Continue with app deletion and database deletion
                 }
             }
         } else {
@@ -484,8 +480,26 @@ pub async fn delete_deployment(
                 }
                 Err(e) => {
                     warn!("Failed to list Fly.io machines for app {}: {}", app_name, e);
-                    // Continue with database deletion
+                    // Continue with app deletion and database deletion
                 }
+            }
+        }
+
+        // Delete the Fly.io app itself to avoid empty apps piling up
+        match flyio_client.delete_app(&app_name).await {
+            Ok(_) => {
+                DeploymentLog::create(
+                    pool,
+                    deployment_id,
+                    "info",
+                    &format!("Deleted Fly.io app: {}", app_name),
+                    None,
+                )
+                .await
+                .ok();
+            }
+            Err(e) => {
+                warn!("Failed to delete Fly.io app {}: {}", app_name, e);
             }
         }
     }

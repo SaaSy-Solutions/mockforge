@@ -221,6 +221,27 @@ impl FlyioClient {
         Ok(())
     }
 
+    /// Delete a Fly.io app
+    pub async fn delete_app(&self, app_name: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}", self.base_url, app_name);
+
+        let response = client
+            .delete(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .send()
+            .await
+            .context("Failed to delete Fly.io app")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Failed to delete Fly.io app: {} - {}", status, error_text);
+        }
+
+        Ok(())
+    }
+
     /// Allocate a shared IPv4 and a dedicated IPv6 address for an app
     pub async fn allocate_ips(&self, app_name: &str) -> Result<()> {
         let client = reqwest::Client::new();

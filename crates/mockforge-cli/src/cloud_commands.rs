@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use colored::*;
-use dialoguer::{Input, Password};
+use dialoguer::{Confirm, Input, Password};
 use mockforge_core::workspace::sync::{SyncConfig, SyncDirection, SyncProvider};
 use mockforge_core::SyncService;
 use serde_json::json;
@@ -146,6 +146,26 @@ pub enum CloudCommands {
         /// Cloud service URL
         #[arg(long, default_value = "https://api.mockforge.dev")]
         service_url: String,
+    },
+
+    /// Delete a cloud deployment
+    ///
+    /// Examples:
+    ///   mockforge cloud delete <deployment-id>
+    ///   mockforge cloud delete my-api-slug
+    ///   mockforge cloud delete <deployment-id> --yes
+    #[command(verbatim_doc_comment)]
+    Delete {
+        /// Deployment ID or slug
+        id: String,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+
+        /// Skip confirmation prompt
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -412,6 +432,11 @@ pub async fn handle_cloud_command(cmd: CloudCommands) -> Result<()> {
         CloudCommands::DeploymentStatus { id, service_url } => {
             handle_deployment_status(id, service_url).await
         }
+        CloudCommands::Delete {
+            id,
+            service_url,
+            yes,
+        } => handle_delete(id, service_url, yes).await,
     }
 }
 
@@ -1592,6 +1617,96 @@ async fn handle_deployment_status(id: String, service_url: String) -> Result<()>
     Ok(())
 }
 
+/// Handle delete command
+async fn handle_delete(id: String, service_url: String, yes: bool) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    // Try to resolve deployment — first try as UUID, then search by slug
+    let deployment_id = if uuid::Uuid::parse_str(&id).is_ok() {
+        id.clone()
+    } else {
+        // Search deployments by slug
+        let response = client
+            .get(format!("{}/api/v1/hosted-mocks", service_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+            .context("Failed to fetch deployments")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Failed to list deployments to resolve slug");
+        }
+
+        let deployments: Vec<serde_json::Value> = response.json().await?;
+        let matched =
+            deployments.iter().find(|d| d.get("slug").and_then(|v| v.as_str()) == Some(&id));
+
+        match matched {
+            Some(d) => d
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Deployment has no ID"))?
+                .to_string(),
+            None => anyhow::bail!("No deployment found with ID or slug '{}'", id),
+        }
+    };
+
+    // Fetch deployment details for confirmation
+    let response = client
+        .get(format!("{}/api/v1/hosted-mocks/{}", service_url, deployment_id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .context("Failed to fetch deployment details")?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        anyhow::bail!("Deployment not found: {}", error_body);
+    }
+
+    let deployment: serde_json::Value = response.json().await?;
+    let name = deployment.get("name").and_then(|v| v.as_str()).unwrap_or("-");
+    let slug = deployment.get("slug").and_then(|v| v.as_str()).unwrap_or("-");
+    let url = deployment.get("deployment_url").and_then(|v| v.as_str()).unwrap_or("N/A");
+
+    if !yes {
+        println!("{}", "About to delete deployment:".yellow().bold());
+        println!("  Name: {}", name);
+        println!("  Slug: {}", slug);
+        println!("  URL:  {}", url);
+        println!();
+
+        let confirmed = Confirm::new()
+            .with_prompt("Are you sure you want to delete this deployment?")
+            .default(false)
+            .interact()
+            .context("Failed to read confirmation")?;
+
+        if !confirmed {
+            println!("{}", "Deletion cancelled.".dimmed());
+            return Ok(());
+        }
+    }
+
+    // Delete the deployment
+    let response = client
+        .delete(format!("{}/api/v1/hosted-mocks/{}", service_url, deployment_id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .context("Failed to delete deployment")?;
+
+    if !response.status().is_success() {
+        let error_body = response.text().await.unwrap_or_default();
+        anyhow::bail!("Failed to delete deployment: {}", error_body);
+    }
+
+    println!("{}", format!("Deployment '{}' ({}) deleted successfully.", name, slug).green());
+
+    Ok(())
+}
+
 /// Get API key from config or environment
 fn get_api_key() -> Result<String> {
     // Try environment variable first
@@ -1820,10 +1935,18 @@ mod tests {
         // Make sure env var is not set
         std::env::remove_var("MOCKFORGE_API_KEY");
 
-        // Use a temp dir to ensure no config file exists
-        let _temp_dir = TempDir::new().unwrap();
+        // Override HOME so get_api_key() won't find a real ~/.mockforge/cloud.json
+        let temp_dir = TempDir::new().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", temp_dir.path());
 
         let result = get_api_key();
+
+        // Restore HOME
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("No API key found"));
@@ -1845,6 +1968,24 @@ mod tests {
             workspace: None,
             service_url: "https://api.mockforge.dev".to_string(),
             limit: 50,
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_delete_variant() {
+        let _cmd = CloudCommands::Delete {
+            id: "test-deployment-id".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+            yes: false,
+        };
+    }
+
+    #[test]
+    fn test_cloud_commands_delete_with_yes() {
+        let _cmd = CloudCommands::Delete {
+            id: "my-api-slug".to_string(),
+            service_url: "https://api.mockforge.dev".to_string(),
+            yes: true,
         };
     }
 

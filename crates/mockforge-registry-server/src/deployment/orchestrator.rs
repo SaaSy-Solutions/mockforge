@@ -393,9 +393,17 @@ impl DeploymentOrchestrator {
             {
                 // Extract app name from deployment URL
                 if let Some(ref deployment_url) = deployment.deployment_url {
-                    if let Some(app_name) = deployment_url.strip_suffix(".fly.dev") {
+                    if let Some(app_name) = deployment_url
+                        .strip_prefix("https://")
+                        .or_else(|| deployment_url.strip_prefix("http://"))
+                        .and_then(|s| s.strip_suffix(".fly.dev"))
+                    {
                         if let Err(e) = flyio_client.delete_machine(app_name, machine_id).await {
                             warn!("Failed to delete Fly.io machine: {}", e);
+                        }
+                        // Delete the Fly.io app after removing the machine
+                        if let Err(e) = flyio_client.delete_app(app_name).await {
+                            warn!("Failed to delete Fly.io app {}: {}", app_name, e);
                         }
                     }
                 }

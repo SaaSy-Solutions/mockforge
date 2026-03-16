@@ -220,6 +220,16 @@ async fn main() -> Result<()> {
     let _metrics_collector_handle = metrics_collector.start();
     tracing::info!("Metrics collector started");
 
+    // Start deployment cleanup worker
+    let cleanup_flyio_client =
+        std::env::var("FLYIO_API_TOKEN").ok().map(deployment::flyio::FlyioClient::new);
+    let cleanup_worker = Arc::new(deployment::cleanup::DeploymentCleanup::new(
+        Arc::new(db.pool().clone()),
+        cleanup_flyio_client,
+    ));
+    let _cleanup_handle = cleanup_worker.start();
+    tracing::info!("Deployment cleanup worker started");
+
     // Build router
     let app = create_app(state, rate_limiter);
 
