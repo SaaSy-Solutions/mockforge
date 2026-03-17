@@ -846,7 +846,12 @@ pub async fn build_router_with_multi_tenant(
     } else {
         None
     };
-    let management_state = ManagementState::new(mgmt_spec, spec_path_for_mgmt, 3000);
+    let mgmt_port = std::env::var("PORT")
+        .or_else(|_| std::env::var("MOCKFORGE_HTTP_PORT"))
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
+    let management_state = ManagementState::new(mgmt_spec, spec_path_for_mgmt, mgmt_port);
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -1910,7 +1915,12 @@ pub async fn build_router_with_chains_and_multi_tenant(
         None
     };
     let spec_path_clone = spec_path.clone();
-    let management_state = ManagementState::new(mgmt_spec, spec_path_clone, 3000);
+    let mgmt_port = std::env::var("PORT")
+        .or_else(|_| std::env::var("MOCKFORGE_HTTP_PORT"))
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
+    let management_state = ManagementState::new(mgmt_spec, spec_path_clone, mgmt_port);
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
