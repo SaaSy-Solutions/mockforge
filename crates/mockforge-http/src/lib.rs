@@ -834,7 +834,19 @@ pub async fn build_router_with_multi_tenant(
     }
 
     // Add management API endpoints
-    let management_state = ManagementState::new(None, spec_path_for_mgmt, 3000); // Port will be updated when we know the actual port
+    // Load spec for ManagementState so /__mockforge/api/spec can serve it
+    let mgmt_spec = if let Some(ref sp) = spec_path_for_mgmt {
+        match OpenApiSpec::from_file(sp).await {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                debug!("Failed to load OpenAPI spec for management API: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let management_state = ManagementState::new(mgmt_spec, spec_path_for_mgmt, 3000);
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
@@ -1885,8 +1897,20 @@ pub async fn build_router_with_chains_and_multi_tenant(
     app = app.merge(file_server::file_serving_router());
 
     // Add management API endpoints
+    // Load spec for ManagementState so /__mockforge/api/spec can serve it
+    let mgmt_spec = if let Some(ref sp) = spec_path {
+        match OpenApiSpec::from_file(sp).await {
+            Ok(s) => Some(Arc::new(s)),
+            Err(e) => {
+                debug!("Failed to load OpenAPI spec for management API: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
     let spec_path_clone = spec_path.clone();
-    let management_state = ManagementState::new(None, spec_path_clone, 3000); // Port will be updated when we know the actual port
+    let management_state = ManagementState::new(mgmt_spec, spec_path_clone, 3000);
 
     // Create WebSocket state and connect it to management state
     use std::sync::Arc;
