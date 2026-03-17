@@ -85,20 +85,23 @@ impl ConformanceConfig {
 
     /// Returns the effective base URL with base_path appended.
     /// Handles trailing/leading slash normalization to avoid double slashes.
+    /// Always trims trailing slashes from the result so that `${BASE_URL}/path`
+    /// never produces `//path`.
     pub fn effective_base_url(&self) -> String {
-        match &self.base_path {
-            None => self.target_url.clone(),
-            Some(bp) if bp.is_empty() => self.target_url.clone(),
+        let base = match &self.base_path {
+            None => self.target_url.trim_end_matches('/').to_string(),
+            Some(bp) if bp.is_empty() => self.target_url.trim_end_matches('/').to_string(),
             Some(bp) => {
                 let url = self.target_url.trim_end_matches('/');
                 let path = if bp.starts_with('/') {
                     bp.as_str()
                 } else {
-                    return format!("{}/{}", url, bp);
+                    return format!("{}/{}", url, bp).trim_end_matches('/').to_string();
                 };
-                format!("{}{}", url, path)
+                format!("{}{}", url, path).trim_end_matches('/').to_string()
             }
-        }
+        };
+        base
     }
 }
 
@@ -1015,6 +1018,26 @@ mod tests {
             request_delay_ms: 0,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
+    }
+
+    #[test]
+    fn test_effective_base_url_trailing_slash_no_base_path() {
+        // Regression: --target https://192.168.2.86/ without --base-path
+        // must not produce double slashes when combined with /path
+        let config = ConformanceConfig {
+            target_url: "https://192.168.2.86/".to_string(),
+            api_key: None,
+            basic_auth: None,
+            skip_tls_verify: false,
+            categories: None,
+            base_path: None,
+            custom_headers: vec![],
+            output_dir: None,
+            all_operations: false,
+            custom_checks_file: None,
+            request_delay_ms: 0,
+        };
+        assert_eq!(config.effective_base_url(), "https://192.168.2.86");
     }
 
     #[test]

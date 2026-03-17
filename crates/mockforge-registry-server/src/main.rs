@@ -340,6 +340,7 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
         .merge(routes::create_router(state.clone()))
         .merge(deployment::router::MultitenantRouter::create_router())
         .merge(metrics_router)
+        .fallback(deployment::router::custom_domain_fallback)
         .layer(DefaultBodyLimit::max(max_body_size))
         .layer(cors)
         .layer(TraceLayer::new_for_http())

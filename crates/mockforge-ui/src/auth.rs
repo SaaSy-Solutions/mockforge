@@ -94,8 +94,8 @@ fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
     }
 
     // Fallback: auto-generate a secret so `--admin` works out of the box
-    tracing::warn!(
-        "Using auto-generated JWT secret for in-memory auth. Set JWT_SECRET for production use."
+    tracing::info!(
+        "Using auto-generated JWT secret for admin UI. Set JWT_SECRET for production use."
     );
     Ok("mockforge-auto-jwt-secret-for-admin-ui-1234".as_bytes().to_vec())
 }
@@ -103,10 +103,10 @@ fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
 pub fn validate_auth_config_on_startup() -> Result<(), String> {
     if !is_development_environment() && !is_truthy_env("MOCKFORGE_ALLOW_INMEMORY_AUTH") {
         // Auto-allow in-memory auth for mock server usage, but warn
-        tracing::warn!(
-            "No production auth backend configured. Using in-memory auth. \
-             Set ENVIRONMENT=production and configure a real auth backend for production use, \
-             or suppress this warning with MOCKFORGE_ALLOW_INMEMORY_AUTH=true"
+        tracing::info!(
+            "Admin UI using in-memory auth (default for mock servers). \
+             Set MOCKFORGE_ALLOW_INMEMORY_AUTH=true to suppress, or configure a \
+             real auth backend for production use."
         );
     }
 

@@ -172,6 +172,20 @@ impl HostedMock {
         .await
     }
 
+    /// Find an active deployment by slug (across all orgs).
+    /// Used for custom domain routing where only the slug is known from the hostname.
+    pub async fn find_active_by_slug(
+        pool: &sqlx::PgPool,
+        slug: &str,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM hosted_mocks WHERE slug = $1 AND status = 'active' AND deleted_at IS NULL LIMIT 1",
+        )
+        .bind(slug)
+        .fetch_optional(pool)
+        .await
+    }
+
     /// Find all mocks for an organization
     pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(

@@ -1403,9 +1403,17 @@ async fn serve_with_tls(
 
     info!("Starting HTTPS server on {}", addr);
 
+    // Wrap the Router with OData URI rewrite (same as the non-TLS path).
+    // Router::layer() only applies to matched routes, so we must wrap at the service level
+    // to rewrite URIs BEFORE route matching occurs.
+    let odata_app = tower::ServiceBuilder::new()
+        .layer(mockforge_core::odata_rewrite::ODataRewriteLayer)
+        .service(app);
+    let make_svc = axum::ServiceExt::<axum::http::Request<axum::body::Body>>::into_make_service_with_connect_info::<SocketAddr>(odata_app);
+
     // Serve with TLS using axum-server
     axum_server::bind_rustls(addr, rustls_config)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+        .serve(make_svc)
         .await
         .map_err(|e| format!("HTTPS server error: {}", e).into())
 }

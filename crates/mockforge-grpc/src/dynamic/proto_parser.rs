@@ -85,9 +85,8 @@ impl ProtoParser {
 
         let proto_path = Path::new(proto_dir);
         if !proto_path.exists() {
-            warn!(
-                "Proto directory does not exist: {}. gRPC server will start with no services. \
-                This is normal when using only OpenAPI/HTTP.",
+            info!(
+                "No proto directory found at {}. gRPC server will start with built-in services only.",
                 proto_dir
             );
             return Ok(());

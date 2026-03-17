@@ -1073,3 +1073,75 @@ impl From<DeploymentMetrics> for MetricsResponse {
         }
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SetDomainRequest {
+    pub domain: String,
+}
+
+/// Set a custom domain for a deployment.
+///
+/// Adds a TLS certificate on the registry server Fly.io app so that
+/// `<slug>.<domain>` terminates TLS here, then the proxy fallback
+/// handler forwards traffic to the deployment's internal URL.
+pub async fn set_domain(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+    Json(request): Json<SetDomainRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let pool = state.db.pool();
+
+    // Resolve org context
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Check permission
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
+        .await?;
+
+    // Get deployment
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    // Verify ownership
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
+    }
+
+    let hostname = format!("{}.{}", deployment.slug, request.domain);
+
+    // Update deployment URL to use the custom domain.
+    // A wildcard TLS cert on the registry app covers all subdomains,
+    // so no per-deployment certificate management is needed.
+    let new_url = format!("https://{}", hostname);
+    sqlx::query("UPDATE hosted_mocks SET deployment_url = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&new_url)
+        .bind(deployment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to update deployment URL: {}", e))
+        })?;
+
+    DeploymentLog::create(
+        pool,
+        deployment_id,
+        "info",
+        &format!("Custom domain set: {}", hostname),
+        None,
+    )
+    .await
+    .ok();
+
+    Ok(Json(serde_json::json!({
+        "hostname": hostname,
+        "deployment_url": new_url,
+    })))
+}

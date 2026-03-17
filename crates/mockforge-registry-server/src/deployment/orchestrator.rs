@@ -291,41 +291,17 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create Fly.io machine")?;
 
-        // Add custom domain certificate if MOCKFORGE_MOCKS_DOMAIN is configured
-        // This enables pretty URLs like https://<slug>.mocks.mockforge.dev
-        // Requires wildcard DNS: *.mocks.mockforge.dev CNAME → <any-app>.fly.dev
-        let custom_hostname = std::env::var("MOCKFORGE_MOCKS_DOMAIN")
-            .ok()
-            .map(|domain| format!("{}.{}", deployment.slug, domain));
-
-        if let Some(ref hostname) = custom_hostname {
-            match client.add_certificate(&app_name, hostname).await {
-                Ok(()) => {
-                    DeploymentLog::create(
-                        pool,
-                        deployment.id,
-                        "info",
-                        &format!("Added TLS certificate for {}", hostname),
-                        None,
-                    )
-                    .await?;
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to add certificate for {}: {}. Falling back to fly.dev URL",
-                        hostname, e
-                    );
-                }
-            }
-        }
-
-        // Use custom domain URL if certificate was requested, otherwise fall back to fly.dev
-        let deployment_url = if let Some(ref hostname) = custom_hostname {
-            format!("https://{}", hostname)
+        // If MOCKFORGE_MOCKS_DOMAIN is set, use <slug>.<domain> as the public URL.
+        // A wildcard TLS cert on the registry app covers all subdomains, so no
+        // per-deployment certificate management is needed.
+        let deployment_url = if let Ok(domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+            format!("https://{}.{}", deployment.slug, domain)
         } else {
             format!("https://{}.fly.dev", app_name)
         };
-        let internal_url = format!("http://{}.internal:3000", app_name);
+        // Use the public fly.dev URL for proxying — .internal DNS doesn't
+        // reliably resolve cross-app in all Fly.io configurations.
+        let internal_url = format!("https://{}.fly.dev", app_name);
         let health_check_url = format!("https://{}.fly.dev/health/live", app_name);
 
         sqlx::query(
@@ -586,38 +562,25 @@ impl DeploymentOrchestrator {
             if let Some(machine_id) =
                 deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
             {
-                // Extract app name from deployment URL
-                if let Some(ref deployment_url) = deployment.deployment_url {
-                    if let Some(app_name) = deployment_url
-                        .strip_prefix("https://")
-                        .or_else(|| deployment_url.strip_prefix("http://"))
-                        .and_then(|s| s.strip_suffix(".fly.dev"))
-                    {
-                        // Remove custom domain certificate if configured
-                        if let Some(ref deployment_url_full) = deployment.deployment_url {
-                            if let Ok(mocks_domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
-                                if deployment_url_full.contains(&mocks_domain) {
-                                    let hostname = format!("{}.{}", deployment.slug, mocks_domain);
-                                    if let Err(e) =
-                                        flyio_client.delete_certificate(app_name, &hostname).await
-                                    {
-                                        warn!(
-                                            "Failed to delete certificate for {}: {}",
-                                            hostname, e
-                                        );
-                                    }
-                                }
-                            }
-                        }
+                // Reconstruct app name from org_id + slug (same logic as deploy)
+                let app_name = format!(
+                    "mockforge-{}-{}",
+                    deployment
+                        .org_id
+                        .to_string()
+                        .replace('-', "")
+                        .chars()
+                        .take(8)
+                        .collect::<String>(),
+                    deployment.slug
+                );
 
-                        if let Err(e) = flyio_client.delete_machine(app_name, machine_id).await {
-                            warn!("Failed to delete Fly.io machine: {}", e);
-                        }
-                        // Delete the Fly.io app after removing the machine
-                        if let Err(e) = flyio_client.delete_app(app_name).await {
-                            warn!("Failed to delete Fly.io app {}: {}", app_name, e);
-                        }
-                    }
+                if let Err(e) = flyio_client.delete_machine(&app_name, machine_id).await {
+                    warn!("Failed to delete Fly.io machine: {}", e);
+                }
+                // Delete the Fly.io app after removing the machine
+                if let Err(e) = flyio_client.delete_app(&app_name).await {
+                    warn!("Failed to delete Fly.io app {}: {}", app_name, e);
                 }
             }
         }

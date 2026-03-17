@@ -4826,7 +4826,7 @@ pub async fn handle_serve(
         use mockforge_core::intelligent_behavior::MockAI;
         use std::sync::Arc;
         use tokio::sync::RwLock;
-        use tracing::{info, warn};
+        use tracing::{debug, info};
 
         let behavior_config = config.mockai.intelligent_behavior.clone();
         let spec_path = config.http.openapi_spec.clone();
@@ -4849,13 +4849,16 @@ pub async fn handle_serve(
                                 info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
                             }
                             Err(e) => {
-                                warn!("Failed to upgrade MockAI from OpenAPI spec: {}", e);
+                                debug!(
+                                    "MockAI not available (no OpenAI API key configured): {}",
+                                    e
+                                );
                                 // Keep default instance
                             }
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to load OpenAPI spec for MockAI: {}", e);
+                        debug!("Failed to load OpenAPI spec for MockAI: {}", e);
                         // Keep default instance
                     }
                 }

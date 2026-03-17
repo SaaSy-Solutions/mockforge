@@ -194,6 +194,29 @@ pub enum CloudCommands {
         #[arg(long, default_value = "https://api.mockforge.dev")]
         service_url: String,
     },
+
+    /// Set a custom domain for an existing deployment
+    ///
+    /// Adds a TLS certificate to the registry server app so that
+    /// <slug>.<domain> routes to the deployment. Requires a wildcard
+    /// DNS CNAME pointing *.<domain> to the registry server.
+    ///
+    /// Examples:
+    ///   mockforge cloud set-domain <deployment-id> --domain mocks.mockforge.dev
+    ///   mockforge cloud set-domain my-api-slug --domain mocks.mockforge.dev
+    #[command(verbatim_doc_comment, name = "set-domain")]
+    SetDomain {
+        /// Deployment ID or slug
+        id: String,
+
+        /// The base domain (e.g., mocks.mockforge.dev)
+        #[arg(long)]
+        domain: String,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
 }
 
 /// Sync command subcommands
@@ -470,6 +493,11 @@ pub async fn handle_cloud_command(cmd: CloudCommands) -> Result<()> {
             wait,
             service_url,
         } => handle_redeploy(id, spec, wait, service_url).await,
+        CloudCommands::SetDomain {
+            id,
+            domain,
+            service_url,
+        } => handle_set_domain(id, domain, service_url).await,
     }
 }
 
@@ -1784,6 +1812,83 @@ async fn handle_deployment_status(id: String, service_url: String) -> Result<()>
             println!("  Error:   {}", error.red());
         }
     }
+
+    Ok(())
+}
+
+/// Handle set-domain command
+async fn handle_set_domain(id: String, domain: String, service_url: String) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    // Resolve deployment ID (accept UUID or slug)
+    let deployment_id = if uuid::Uuid::parse_str(&id).is_ok() {
+        id.clone()
+    } else {
+        let response = client
+            .get(format!("{}/api/v1/hosted-mocks", service_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+            .context("Failed to fetch deployments")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Failed to list deployments to resolve slug");
+        }
+
+        let deployments: Vec<serde_json::Value> = response.json().await?;
+        let matched =
+            deployments.iter().find(|d| d.get("slug").and_then(|v| v.as_str()) == Some(&id));
+
+        match matched {
+            Some(d) => d
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Deployment has no ID"))?
+                .to_string(),
+            None => anyhow::bail!("No deployment found with ID or slug '{}'", id),
+        }
+    };
+
+    // Fetch deployment details
+    let response = client
+        .get(format!("{}/api/v1/hosted-mocks/{}", service_url, deployment_id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .send()
+        .await
+        .context("Failed to fetch deployment details")?;
+
+    if !response.status().is_success() {
+        anyhow::bail!("Deployment not found");
+    }
+
+    let deployment: serde_json::Value = response.json().await?;
+    let slug = deployment
+        .get("slug")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Missing deployment slug"))?;
+
+    let hostname = format!("{}.{}", slug, domain);
+    println!("Setting custom domain: {}", hostname.bold());
+
+    let response = client
+        .post(format!("{}/api/v1/hosted-mocks/{}/set-domain", service_url, deployment_id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({ "domain": domain }))
+        .send()
+        .await
+        .context("Failed to set custom domain")?;
+
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        anyhow::bail!("Failed to set custom domain: {}", error_text);
+    }
+
+    println!("{}", format!("Custom domain configured: https://{}", hostname).green().bold());
+    println!(
+        "{}",
+        format!("Ensure DNS is configured: *.{} CNAME → your registry server", domain).dimmed()
+    );
 
     Ok(())
 }
