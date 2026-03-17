@@ -167,6 +167,33 @@ pub enum CloudCommands {
         #[arg(long)]
         yes: bool,
     },
+
+    /// Redeploy an existing cloud deployment
+    ///
+    /// Updates the deployment to use the latest MockForge image.
+    /// Optionally updates the OpenAPI spec.
+    ///
+    /// Examples:
+    ///   mockforge cloud redeploy <deployment-id>
+    ///   mockforge cloud redeploy <deployment-id> --spec updated-api.json
+    ///   mockforge cloud redeploy <deployment-id> --wait
+    #[command(verbatim_doc_comment)]
+    Redeploy {
+        /// Deployment ID
+        id: String,
+
+        /// Path to updated OpenAPI spec file (optional)
+        #[arg(long)]
+        spec: Option<PathBuf>,
+
+        /// Wait for redeployment to complete
+        #[arg(long)]
+        wait: bool,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
 }
 
 /// Sync command subcommands
@@ -437,6 +464,12 @@ pub async fn handle_cloud_command(cmd: CloudCommands) -> Result<()> {
             service_url,
             yes,
         } => handle_delete(id, service_url, yes).await,
+        CloudCommands::Redeploy {
+            id,
+            spec,
+            wait,
+            service_url,
+        } => handle_redeploy(id, spec, wait, service_url).await,
     }
 }
 
@@ -1509,6 +1542,144 @@ async fn handle_deploy(
             format!("Check status with: mockforge cloud deployment-status {}", deployment_id)
                 .dimmed()
         );
+    }
+
+    Ok(())
+}
+
+/// Handle redeploy command
+async fn handle_redeploy(
+    id: String,
+    spec: Option<PathBuf>,
+    wait: bool,
+    service_url: String,
+) -> Result<()> {
+    let api_key = get_api_key()?;
+    let client = reqwest::Client::new();
+
+    let mut body = serde_json::json!({});
+
+    // If spec provided, upload it and include in redeploy request
+    if let Some(spec_path) = spec {
+        let spec_content =
+            std::fs::read_to_string(&spec_path).context("Failed to read spec file")?;
+
+        let spec_value: serde_json::Value =
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&spec_content) {
+                v
+            } else if let Ok(v) = serde_yaml::from_str::<serde_json::Value>(&spec_content) {
+                v
+            } else {
+                anyhow::bail!("Spec file must be valid JSON or YAML");
+            };
+
+        println!("{}", "Uploading updated spec...".cyan());
+
+        let file_name = spec_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("spec.json")
+            .to_string();
+
+        let spec_json = serde_json::to_vec_pretty(&spec_value)?;
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(spec_json)
+                .file_name(file_name)
+                .mime_str("application/json")?,
+        );
+
+        let upload_response = client
+            .post(format!("{}/api/v1/hosted-mocks/specs/upload", service_url))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to upload spec")?;
+
+        if !upload_response.status().is_success() {
+            let status = upload_response.status();
+            let error_body = upload_response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to upload spec ({}): {}", status, error_body);
+        }
+
+        let upload_result: serde_json::Value = upload_response.json().await?;
+        let spec_url = upload_result
+            .get("url")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Upload response missing 'url' field"))?;
+
+        body["config_json"] = spec_value;
+        body["openapi_spec_url"] = serde_json::Value::String(spec_url.to_string());
+    }
+
+    println!("{}", "Initiating redeployment...".cyan());
+
+    let response = client
+        .post(format!("{}/api/v1/hosted-mocks/{}/redeploy", service_url, id))
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .context("Failed to initiate redeployment")?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let error_body = response.text().await.unwrap_or_default();
+        anyhow::bail!("Redeployment failed ({}): {}", status, error_body);
+    }
+
+    println!("{}", "Redeployment initiated".green());
+
+    if wait {
+        println!("{}", "Waiting for redeployment to complete...".cyan());
+
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(300);
+
+        loop {
+            if start.elapsed() > timeout {
+                anyhow::bail!("Redeployment timed out after 5 minutes");
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+            let status_response = client
+                .get(format!("{}/api/v1/hosted-mocks/{}", service_url, id))
+                .header("Authorization", format!("Bearer {}", api_key))
+                .send()
+                .await
+                .context("Failed to check deployment status")?;
+
+            if status_response.status().is_success() {
+                let status: serde_json::Value = status_response.json().await?;
+                let state = status.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+                match state {
+                    "active" => {
+                        let url = status
+                            .get("deployment_url")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        println!(
+                            "{}",
+                            format!("Redeployment complete! URL: {}", url).green().bold()
+                        );
+                        return Ok(());
+                    }
+                    "failed" => {
+                        let error = status
+                            .get("error_message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("Unknown error");
+                        anyhow::bail!("Redeployment failed: {}", error);
+                    }
+                    _ => {
+                        print!(".");
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

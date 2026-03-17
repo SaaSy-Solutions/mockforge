@@ -362,6 +362,166 @@ impl DeploymentOrchestrator {
         Ok(())
     }
 
+    /// Get a reference to the database pool
+    pub fn db(&self) -> &PgPool {
+        &self.db
+    }
+
+    /// Redeploy an existing deployment with updated image/config
+    pub async fn redeploy(&self, deployment: &HostedMock) -> Result<()> {
+        info!("Redeploying mock service: {} ({})", deployment.name, deployment.id);
+
+        let pool = self.db.as_ref();
+
+        HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
+            .await
+            .context("Failed to update deployment status")?;
+
+        DeploymentLog::create(pool, deployment.id, "info", "Starting redeployment", None)
+            .await
+            .context("Failed to create deployment log")?;
+
+        if let Some(ref flyio_client) = self.flyio_client {
+            self.redeploy_to_flyio(flyio_client, deployment).await?;
+        } else {
+            // For multitenant router, just restart
+            self.deploy_to_multitenant_router(deployment).await?;
+        }
+
+        HostedMock::update_status(pool, deployment.id, DeploymentStatus::Active, None)
+            .await
+            .context("Failed to update deployment status")?;
+
+        DeploymentLog::create(
+            pool,
+            deployment.id,
+            "info",
+            "Redeployment completed successfully",
+            None,
+        )
+        .await
+        .context("Failed to create deployment log")?;
+
+        info!("Successfully redeployed mock service: {}", deployment.id);
+
+        Ok(())
+    }
+
+    /// Redeploy to Fly.io by updating the machine config
+    async fn redeploy_to_flyio(&self, client: &FlyioClient, deployment: &HostedMock) -> Result<()> {
+        let pool = self.db.as_ref();
+
+        // Extract machine ID from metadata
+        let machine_id = deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("No Fly.io machine ID found in deployment metadata"))?;
+
+        let app_name = format!(
+            "mockforge-{}-{}",
+            deployment
+                .org_id
+                .to_string()
+                .replace('-', "")
+                .chars()
+                .take(8)
+                .collect::<String>(),
+            deployment.slug
+        );
+
+        DeploymentLog::create(
+            pool,
+            deployment.id,
+            "info",
+            &format!("Updating Fly.io machine {} in app {}", machine_id, app_name),
+            None,
+        )
+        .await?;
+
+        // Build updated machine config (same structure as deploy)
+        let mut env = HashMap::new();
+        env.insert("MOCKFORGE_DEPLOYMENT_ID".to_string(), deployment.id.to_string());
+        env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
+        env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
+        env.insert("PORT".to_string(), "3000".to_string());
+
+        if let Some(ref spec_url) = deployment.openapi_spec_url {
+            env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
+        }
+
+        let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
+            .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());
+
+        let services = vec![FlyioService {
+            protocol: "tcp".to_string(),
+            internal_port: 3000,
+            ports: vec![
+                FlyioPort {
+                    port: 80,
+                    handlers: vec!["http".to_string()],
+                },
+                FlyioPort {
+                    port: 443,
+                    handlers: vec!["tls".to_string(), "http".to_string()],
+                },
+            ],
+        }];
+
+        let mut checks = HashMap::new();
+        checks.insert(
+            "alive".to_string(),
+            FlyioCheck {
+                check_type: "http".to_string(),
+                port: 3000,
+                grace_period: "10s".to_string(),
+                interval: "15s".to_string(),
+                method: "GET".to_string(),
+                timeout: "2s".to_string(),
+                tls_skip_verify: false,
+                path: Some("/health/live".to_string()),
+            },
+        );
+
+        let machine_config = FlyioMachineConfig {
+            image,
+            env,
+            services,
+            checks: Some(checks),
+        };
+
+        // Build registry auth
+        let registry_auth = if let (Ok(server), Ok(username), Ok(password)) = (
+            std::env::var("DOCKER_REGISTRY_SERVER"),
+            std::env::var("DOCKER_REGISTRY_USERNAME"),
+            std::env::var("DOCKER_REGISTRY_PASSWORD"),
+        ) {
+            Some(FlyioRegistryAuth {
+                server,
+                username,
+                password,
+            })
+        } else if machine_config.image.starts_with("registry.fly.io/") {
+            Some(FlyioRegistryAuth {
+                server: "registry.fly.io".to_string(),
+                username: "x".to_string(),
+                password: client.api_token().to_string(),
+            })
+        } else {
+            None
+        };
+
+        client
+            .update_machine(&app_name, machine_id, machine_config, registry_auth)
+            .await
+            .context("Failed to update Fly.io machine")?;
+
+        DeploymentLog::create(pool, deployment.id, "info", "Machine updated and restarting", None)
+            .await?;
+
+        Ok(())
+    }
+
     /// Deploy to multitenant router (single process routing)
     async fn deploy_to_multitenant_router(&self, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();

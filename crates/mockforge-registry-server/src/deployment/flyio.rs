@@ -176,6 +176,46 @@ impl FlyioClient {
         Ok(machine)
     }
 
+    /// Update a machine's configuration (image, env vars, etc.)
+    pub async fn update_machine(
+        &self,
+        app_name: &str,
+        machine_id: &str,
+        config: FlyioMachineConfig,
+        registry_auth: Option<FlyioRegistryAuth>,
+    ) -> Result<FlyioMachine> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}/machines/{}", self.base_url, app_name, machine_id);
+
+        let mut payload = serde_json::json!({
+            "config": config,
+        });
+        if let Some(auth) = registry_auth {
+            payload["config"]["image_registry_auth"] =
+                serde_json::to_value(auth).context("Failed to serialize registry auth")?;
+        }
+
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to update Fly.io machine")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Failed to update Fly.io machine: {} - {}", status, error_text);
+        }
+
+        let machine: FlyioMachine =
+            response.json().await.context("Failed to parse Fly.io machine response")?;
+
+        Ok(machine)
+    }
+
     /// Get machine status
     pub async fn get_machine(&self, app_name: &str, machine_id: &str) -> Result<FlyioMachine> {
         let client = reqwest::Client::new();
