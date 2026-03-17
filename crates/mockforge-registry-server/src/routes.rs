@@ -115,6 +115,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}", get(handlers::hosted_mocks::get_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/status", patch(handlers::hosted_mocks::update_deployment_status))
         .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
+        .route("/api/v1/hosted-mocks/{deployment_id}/redeploy", post(handlers::hosted_mocks::redeploy_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/logs", get(handlers::hosted_mocks::get_deployment_logs))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         // API token management routes
