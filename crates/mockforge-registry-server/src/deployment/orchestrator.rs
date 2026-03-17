@@ -56,11 +56,14 @@ impl DeploymentOrchestrator {
     async fn process_pending_deployments(&self) -> Result<()> {
         let pool = self.db.as_ref();
 
-        // Find all pending or deploying deployments
+        // Find new deployments (pending/deploying that haven't been deployed yet).
+        // Exclude deployments that already have a deployment_url — those are
+        // redeployments handled directly by the redeploy handler.
         let deployments = sqlx::query_as::<_, HostedMock>(
             r#"
             SELECT * FROM hosted_mocks
             WHERE status IN ('pending', 'deploying')
+            AND deployment_url IS NULL
             AND deleted_at IS NULL
             ORDER BY created_at ASC
             LIMIT 10
