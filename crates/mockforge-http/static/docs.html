@@ -23,29 +23,23 @@
       <p><a href="/__mockforge/routes">View registered routes</a></p>
     </div>
   </div>
-  <div id="api-reference"></div>
+  <script id="api-reference" style="display: none;"></script>
   <script>
-    // Check if spec is available before loading Scalar
+    // Check if spec is available, then configure and load Scalar
     fetch('/__mockforge/api/spec')
       .then(function(r) {
         if (!r.ok) throw new Error('No spec');
-        return r.json();
+        return r.text();
       })
-      .then(function() {
-        // Spec exists - load Scalar and configure via script element
-        var configScript = document.createElement('script');
-        configScript.id = 'api-reference-script';
-        configScript.type = 'application/json';
-        configScript.textContent = JSON.stringify({
-          url: '/__mockforge/api/spec',
-          theme: 'default',
-          hideDownloadButton: false,
-        });
-        document.getElementById('api-reference').appendChild(configScript);
+      .then(function(specContent) {
+        var ref = document.getElementById('api-reference');
+        ref.removeAttribute('style');
+        ref.setAttribute('data-url', '/__mockforge/api/spec');
+        ref.setAttribute('data-proxy-url', '');
 
         var script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
-        document.head.appendChild(script);
+        document.body.appendChild(script);
       })
       .catch(function() {
         document.getElementById('no-spec').style.display = 'flex';
