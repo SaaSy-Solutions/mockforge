@@ -1,7 +1,7 @@
 import { logger } from '@/utils/logger';
 import React, { useMemo, useState, useEffect } from 'react';
 import { cn } from '../../utils/cn';
-import { FileText, Clock, Globe, Filter } from 'lucide-react';
+import { FileText, Clock, Globe, Filter, Server } from 'lucide-react';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
@@ -21,6 +21,8 @@ interface LogEntry {
   path: string;
   status_code: number;
   response_time_ms?: number;
+  client_ip?: string;
+  headers?: Record<string, string>;
   error_message?: string;
   fixture_id?: string;
   matched_rule?: string;
@@ -180,6 +182,23 @@ export function RequestLog() {
         </div>
       ),
       width: '120px'
+    },
+    {
+      key: 'headers',
+      label: 'Host',
+      priority: 'low',
+      hideOnMobile: true,
+      render: (value: unknown) => {
+        const headers = value as Record<string, string> | undefined;
+        const host = headers?.['host'] || headers?.['Host'] || '—';
+        return (
+          <div className="flex items-center gap-1">
+            <Server className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+            <span className="font-mono text-sm truncate" title={host}>{host}</span>
+          </div>
+        );
+      },
+      width: '150px'
     }
   ];
 
