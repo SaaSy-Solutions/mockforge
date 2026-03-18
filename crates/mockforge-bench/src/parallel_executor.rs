@@ -580,9 +580,13 @@ impl ParallelExecutor {
         let script_path = output_dir.join("k6-script.js");
         std::fs::write(&script_path, script)?;
 
-        // Execute k6
+        // Execute k6 with a unique API server port per target to avoid port conflicts.
+        // k6 defaults to localhost:6565 for its REST API; parallel instances collide.
+        let api_port = 6565 + (target_index as u16) + 1; // 6566, 6567, ...
         let executor = K6Executor::new()?;
-        let results = executor.execute(&script_path, Some(&output_dir), verbose).await;
+        let results = executor
+            .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))
+            .await;
 
         match results {
             Ok(k6_results) => Ok(TargetResult {

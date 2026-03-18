@@ -69,17 +69,39 @@ impl K6Executor {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
-    /// Execute a k6 script
+    /// Execute a k6 script.
+    ///
+    /// `api_port` — when set, overrides k6's default API server address (`localhost:6565`)
+    /// to `localhost:<api_port>`. This prevents "address already in use" errors when
+    /// running multiple k6 instances in parallel (e.g., multi-target bench).
+    /// Pass `None` for single-target runs (uses k6's default).
     pub async fn execute(
         &self,
         script_path: &Path,
         output_dir: Option<&Path>,
         verbose: bool,
     ) -> Result<K6Results> {
+        self.execute_with_port(script_path, output_dir, verbose, None).await
+    }
+
+    /// Execute a k6 script with an optional custom API server port.
+    pub async fn execute_with_port(
+        &self,
+        script_path: &Path,
+        output_dir: Option<&Path>,
+        verbose: bool,
+        api_port: Option<u16>,
+    ) -> Result<K6Results> {
         println!("Starting load test...\n");
 
         let mut cmd = TokioCommand::new(&self.k6_path);
         cmd.arg("run");
+
+        // When running multiple k6 instances in parallel, each needs its own API server port
+        // to avoid "bind: address already in use" on the default port 6565.
+        if let Some(port) = api_port {
+            cmd.arg("--address").arg(format!("localhost:{}", port));
+        }
 
         // Add output options
         if let Some(dir) = output_dir {
@@ -173,11 +195,17 @@ impl K6Executor {
         let _ = stdout_handle.await;
         let _ = stderr_handle.await;
 
-        if !status.success() {
+        // k6 exit code 99 = thresholds crossed. The test DID run and summary.json
+        // should still be present. Only treat non-99 failures as hard errors.
+        let exit_code = status.code().unwrap_or(-1);
+        if !status.success() && exit_code != 99 {
             return Err(BenchError::K6ExecutionFailed(format!(
                 "k6 exited with status: {}",
                 status
             )));
+        }
+        if exit_code == 99 {
+            tracing::warn!("k6 thresholds crossed (exit code 99) — results will still be parsed");
         }
 
         // Write failure details to file if any were captured
@@ -229,7 +257,7 @@ impl K6Executor {
 
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
-            failed_requests: json["metrics"]["http_req_failed"]["values"]["passes"]
+            failed_requests: json["metrics"]["http_req_failed"]["values"]["fails"]
                 .as_u64()
                 .unwrap_or(0),
             avg_duration_ms: duration_values["avg"].as_f64().unwrap_or(0.0),
