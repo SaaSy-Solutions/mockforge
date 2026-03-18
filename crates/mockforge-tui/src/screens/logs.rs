@@ -258,13 +258,17 @@ impl Screen for LogsScreen {
         // Bulk load from REST endpoint.
         if let Ok(logs) = serde_json::from_str::<Vec<crate::api::models::RequestLog>>(payload) {
             for log in logs {
+                let client_ip = log.client_ip.as_deref().unwrap_or("-");
+                let host = log.headers.get("host").map(|s| s.as_str()).unwrap_or("-");
                 let line = format!(
-                    "{} {:>6} {:<30} {} {:>5}ms",
+                    "{} {:>6} {:<30} {} {:>5}ms  {:<15} {}",
                     log.timestamp.format("%H:%M:%S"),
                     log.method,
                     truncate_path(&log.path, 30),
                     log.status_code,
                     log.response_time_ms,
+                    client_ip,
+                    host,
                 );
                 self.lines.push_back(line);
             }

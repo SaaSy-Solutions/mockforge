@@ -38,7 +38,7 @@ export default defineConfig({
   build: {
     manifest: true,
     chunkSizeWarningLimit: 600,
-    minify: false, // Disable minification to see actual React errors
+    minify: true,
     sourcemap: true, // Enable source maps to help debug React errors
     rollupOptions: {
       output: {
@@ -57,10 +57,10 @@ export default defineConfig({
         manualChunks: (id) => {
           // Core React libraries - MUST be in the same chunk to avoid duplicate React instances
           // Include MUI, Emotion, Zustand, and React Query with React since they have tight coupling
-          if (id.includes('node_modules/react/') || 
-              id.includes('node_modules/react-dom/') || 
+          if (id.includes('node_modules/react/') ||
+              id.includes('node_modules/react-dom/') ||
               id.includes('node_modules/react-router-dom') ||
-              id.includes('node_modules/@mui') || 
+              id.includes('node_modules/@mui') ||
               id.includes('node_modules/@emotion') ||
               id.includes('node_modules/zustand') ||
               id.includes('node_modules/@tanstack/react-query')) {

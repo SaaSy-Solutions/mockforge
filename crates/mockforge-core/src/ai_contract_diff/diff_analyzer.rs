@@ -441,7 +441,7 @@ impl DiffAnalyzer {
                         if let Some(resolved_schema) = spec.resolve_schema_ref(reference) {
                             self.openapi_schema_to_json_from_schema(&resolved_schema, spec)
                         } else {
-                            tracing::warn!(
+                            tracing::debug!(
                                 "Could not resolve property reference for '{}': {}",
                                 name,
                                 reference

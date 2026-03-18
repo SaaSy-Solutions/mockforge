@@ -115,6 +115,13 @@ impl K6Executor {
         }
 
         cmd.arg(script_path);
+
+        // Set working directory to output dir so handleSummary's relative
+        // "summary.json" path lands next to the script.
+        if let Some(dir) = output_dir {
+            cmd.current_dir(dir);
+        }
+
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 

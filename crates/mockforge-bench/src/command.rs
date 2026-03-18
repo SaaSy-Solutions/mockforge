@@ -233,6 +233,13 @@ impl BenchCommand {
     pub async fn execute(&self) -> Result<()> {
         // Check if we're in multi-target mode
         if let Some(targets_file) = &self.targets_file {
+            if self.conformance {
+                TerminalReporter::print_warning(
+                    "--conformance is not yet supported with --targets-file (multi-target mode). \
+                     Running load test instead. To run conformance tests against multiple targets, \
+                     run separate `mockforge bench --conformance --target <url>` commands for each target.",
+                );
+            }
             return self.execute_multi_target(targets_file).await;
         }
 

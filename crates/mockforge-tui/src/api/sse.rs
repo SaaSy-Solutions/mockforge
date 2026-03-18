@@ -79,14 +79,17 @@ async fn connect_sse(
                 // Try to parse as RequestLog JSON; if it fails, send raw.
                 match serde_json::from_str::<RequestLog>(&data) {
                     Ok(log) => {
+                        let client_ip = log.client_ip.as_deref().unwrap_or("-");
+                        let host = log.headers.get("host").map(|s| s.as_str()).unwrap_or("-");
                         let line = format!(
-                            "{} {:>6} {:<30} {} {:>5}ms {:>6}",
+                            "{} {:>6} {:<30} {} {:>5}ms  {:<15} {}",
                             log.timestamp.format("%H:%M:%S"),
                             log.method,
                             truncate(&log.path, 30),
                             log.status_code,
                             log.response_time_ms,
-                            format_bytes(log.response_size_bytes),
+                            client_ip,
+                            host,
                         );
                         if tx.send(Event::LogLine(line)).is_err() {
                             return Ok(());

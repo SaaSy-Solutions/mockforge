@@ -1045,4 +1045,218 @@ mod tests {
         assert!(expanded.contains("GET"));
         assert!(expanded.contains("{{method}"));
     }
+
+    // ==================== HTML/JSON Injection Tests ====================
+
+    #[test]
+    fn test_html_entities_in_values_are_not_escaped() {
+        let body = json!({
+            "content": "<script>alert('xss')</script>"
+        });
+        let context =
+            RequestContext::new("POST".to_string(), "/submit".to_string()).with_body(body);
+
+        let template = "Content: {{body.content}}";
+        let expanded = expand_prompt_template(template, &context);
+        // Template expansion does raw replacement -- no HTML escaping
+        assert_eq!(expanded, "Content: <script>alert('xss')</script>");
+    }
+
+    #[test]
+    fn test_json_injection_in_values() {
+        let body = json!({
+            "name": "test\", \"injected\": \"true"
+        });
+        let context = RequestContext::new("POST".to_string(), "/api".to_string()).with_body(body);
+
+        let template = "Name: {{body.name}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "Name: test\", \"injected\": \"true");
+    }
+
+    #[test]
+    fn test_template_syntax_in_values_gets_reexpanded() {
+        // If a value itself contains {{method}}, it WILL be expanded because
+        // expand_prompt_template uses sequential string::replace() calls.
+        // The query replacement happens first, inserting "{{method}}" into the result,
+        // but {{method}} was already replaced earlier in the sequence.
+        // However, since method replacement happens BEFORE query replacement in the code,
+        // the injected {{method}} will NOT be expanded (it's inserted after method expansion).
+        let mut query_params = HashMap::new();
+        query_params.insert("val".to_string(), json!("{{method}}"));
+
+        let context = RequestContext::new("GET".to_string(), "/test".to_string())
+            .with_query_params(query_params);
+
+        let template = "Val: {{query.val}}";
+        let expanded = expand_prompt_template(template, &context);
+        // method replacement happens first (line 128), query replacement happens later (line 142).
+        // So when {{query.val}} is replaced with "{{method}}", the {{method}} token was
+        // already processed. The result keeps the literal "{{method}}" string.
+        assert_eq!(expanded, "Val: {{method}}");
+    }
+
+    // ==================== Multipart Files Tests ====================
+
+    #[test]
+    fn test_multipart_files_not_expanded_in_prompt_template() {
+        // multipart_files uses HashMap<String, String> not HashMap<String, Value>,
+        // so it is NOT expanded by expand_map_variables. This test documents that.
+        let mut files = HashMap::new();
+        files.insert("avatar".to_string(), "/tmp/avatar.png".to_string());
+
+        let context = RequestContext::new("POST".to_string(), "/upload".to_string())
+            .with_multipart_files(files);
+
+        // There is no "files" prefix handler, so this stays unexpanded
+        let template = "File: {{files.avatar}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "File: {{files.avatar}}");
+    }
+
+    #[test]
+    fn test_multipart_fields_and_files_coexist() {
+        let mut fields = HashMap::new();
+        fields.insert("description".to_string(), json!("My avatar"));
+
+        let mut files = HashMap::new();
+        files.insert("avatar".to_string(), "/tmp/avatar.png".to_string());
+
+        let context = RequestContext::new("POST".to_string(), "/upload".to_string())
+            .with_multipart_fields(fields)
+            .with_multipart_files(files);
+
+        let template = "Desc: {{multipart.description}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "Desc: My avatar");
+        // Files are stored but not expanded via template
+        assert_eq!(context.multipart_files.get("avatar"), Some(&"/tmp/avatar.png".to_string()));
+    }
+
+    // ==================== expand_templates_in_json Edge Cases ====================
+
+    #[test]
+    fn test_expand_templates_in_json_with_all_request_prefixes_and_values() {
+        let mut query_params = HashMap::new();
+        query_params.insert("q".to_string(), json!("rust"));
+
+        let mut headers = HashMap::new();
+        headers.insert("accept".to_string(), json!("application/json"));
+
+        let context = RequestContext::new("GET".to_string(), "/search".to_string())
+            .with_query_params(query_params)
+            .with_headers(headers);
+
+        // Mix of request-prefixed and non-prefixed variables
+        let value = json!({
+            "a": "{{request.method}}",
+            "b": "{{method}}",
+            "c": "{{request.query.q}}",
+            "d": "{{query.q}}",
+            "e": "{{request.headers.accept}}",
+            "f": "{{headers.accept}}"
+        });
+
+        let expanded = expand_templates_in_json(value, &context);
+        // Both prefixed and non-prefixed should produce same results
+        assert_eq!(expanded["a"], expanded["b"]);
+        assert_eq!(expanded["c"], expanded["d"]);
+        assert_eq!(expanded["e"], expanded["f"]);
+        assert_eq!(expanded["a"], "GET");
+        assert_eq!(expanded["c"], "rust");
+        assert_eq!(expanded["e"], "application/json");
+    }
+
+    #[test]
+    fn test_expand_templates_in_json_no_double_expansion() {
+        // Verify that expand_templates_in_json handles normalization + expansion correctly
+        let context = RequestContext::new("DELETE".to_string(), "/resource".to_string());
+
+        let value = json!("{{request.method}} {{request.path}}");
+        let expanded = expand_templates_in_json(value, &context);
+        assert_eq!(expanded, "DELETE /resource");
+    }
+
+    #[test]
+    fn test_expand_body_with_empty_object() {
+        let context =
+            RequestContext::new("POST".to_string(), "/api".to_string()).with_body(json!({}));
+
+        let template = "Body field: {{body.missing}}";
+        let expanded = expand_prompt_template(template, &context);
+        // Body is an empty object, so named fields remain unexpanded
+        assert_eq!(expanded, "Body field: {{body.missing}}");
+    }
+
+    #[test]
+    fn test_expand_all_map_prefixes_simultaneously() {
+        let mut path_params = HashMap::new();
+        path_params.insert("id".to_string(), json!("42"));
+
+        let mut query_params = HashMap::new();
+        query_params.insert("format".to_string(), json!("xml"));
+
+        let mut headers = HashMap::new();
+        headers.insert("x-trace".to_string(), json!("abc123"));
+
+        let mut multipart = HashMap::new();
+        multipart.insert("field".to_string(), json!("value"));
+
+        let body = json!({"key": "data"});
+
+        let context = RequestContext::new("PATCH".to_string(), "/items/42".to_string())
+            .with_path_params(path_params)
+            .with_query_params(query_params)
+            .with_headers(headers)
+            .with_multipart_fields(multipart)
+            .with_body(body);
+
+        let template = "{{method}} {{path}} id={{path.id}} fmt={{query.format}} trace={{headers.x-trace}} mp={{multipart.field}} key={{body.key}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "PATCH /items/42 id=42 fmt=xml trace=abc123 mp=value key=data");
+    }
+
+    #[test]
+    fn test_expand_body_with_deeply_nested_json() {
+        // expand_json_variables only handles top-level object keys
+        let body = json!({
+            "level1": {
+                "level2": {
+                    "value": "deep"
+                }
+            }
+        });
+        let context = RequestContext::new("POST".to_string(), "/api".to_string()).with_body(body);
+
+        // Only {{body.level1}} works (top-level); {{body.level1.level2}} does NOT
+        let template = "Nested: {{body.level1}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, r#"Nested: {"level2":{"value":"deep"}}"#);
+
+        // Dot-separated deep access is not supported
+        let template2 = "Deep: {{body.level1.level2.value}}";
+        let expanded2 = expand_prompt_template(template2, &context);
+        assert_eq!(expanded2, "Deep: {{body.level1.level2.value}}");
+    }
+
+    #[test]
+    fn test_expand_json_with_very_long_string() {
+        let long_value = "x".repeat(10_000);
+        let body = json!({"data": long_value});
+        let context = RequestContext::new("POST".to_string(), "/api".to_string()).with_body(body);
+
+        let template = "Data: {{body.data}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded.len(), 6 + 10_000); // "Data: " + 10000 x's
+    }
+
+    #[test]
+    fn test_expand_with_newlines_in_values() {
+        let body = json!({"msg": "line1\nline2\nline3"});
+        let context = RequestContext::new("POST".to_string(), "/api".to_string()).with_body(body);
+
+        let template = "Message: {{body.msg}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "Message: line1\nline2\nline3");
+    }
 }
