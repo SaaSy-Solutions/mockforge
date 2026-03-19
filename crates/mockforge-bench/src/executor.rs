@@ -114,7 +114,10 @@ impl K6Executor {
             cmd.arg("--verbose");
         }
 
-        cmd.arg(script_path);
+        // Use absolute path for the script so it's found regardless of CWD.
+        let abs_script =
+            std::fs::canonicalize(script_path).unwrap_or_else(|_| script_path.to_path_buf());
+        cmd.arg(&abs_script);
 
         // Set working directory to output dir so handleSummary's relative
         // "summary.json" path lands next to the script.
