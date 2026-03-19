@@ -7646,6 +7646,7 @@ dependencies = [
  "hound",
  "hyper 1.8.1",
  "indicatif",
+ "jsonschema",
  "lapin",
  "mockforge-amqp",
  "mockforge-bench",
@@ -7665,7 +7666,7 @@ dependencies = [
  "mockforge-plugin-loader",
  "mockforge-recorder",
  "mockforge-scenarios",
- "mockforge-schema",
+ "mockforge-security-core",
  "mockforge-smtp",
  "mockforge-tcp",
  "mockforge-tracing",
@@ -7681,6 +7682,7 @@ dependencies = [
  "reqwest 0.12.28",
  "ring",
  "rumqttc",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -7722,6 +7724,7 @@ dependencies = [
  "jsonwebtoken",
  "mockforge-core",
  "mockforge-pipelines",
+ "mockforge-security-core",
  "parking_lot",
  "reqwest 0.12.28",
  "serde",
@@ -7739,6 +7742,16 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "mockforge-config"
+version = "0.3.95"
+dependencies = [
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -7769,7 +7782,9 @@ dependencies = [
  "jsonptr 0.7.1",
  "jsonschema",
  "jsonwebtoken",
+ "mockforge-config",
  "mockforge-data",
+ "mockforge-security-core",
  "mockforge-template-expansion",
  "notify 8.2.0",
  "once_cell",
@@ -7874,7 +7889,6 @@ dependencies = [
 name = "mockforge-federation"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "futures",
@@ -7897,7 +7911,6 @@ dependencies = [
 name = "mockforge-ftp"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "clap",
@@ -7955,6 +7968,7 @@ dependencies = [
 name = "mockforge-grpc"
 version = "0.3.95"
 dependencies = [
+ "async-trait",
  "axum 0.8.8",
  "base64 0.22.1",
  "chrono",
@@ -8140,7 +8154,6 @@ dependencies = [
 name = "mockforge-mqtt"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "criterion",
  "futures",
@@ -8201,7 +8214,6 @@ dependencies = [
 name = "mockforge-pipelines"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "futures",
@@ -8380,7 +8392,6 @@ dependencies = [
 name = "mockforge-recorder"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "axum 0.8.8",
  "base64 0.22.1",
@@ -8553,17 +8564,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mockforge-schema"
-version = "0.3.95"
-dependencies = [
- "jsonschema",
- "mockforge-core",
- "schemars 0.8.22",
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
 name = "mockforge-sdk"
 version = "0.3.95"
 dependencies = [
@@ -8585,6 +8585,36 @@ dependencies = [
  "tokio-test",
  "tower 0.5.3",
  "tower-http 0.6.8",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "mockforge-security-core"
+version = "0.3.95"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "base64 0.22.1",
+ "blake3 1.8.3",
+ "chacha20poly1305",
+ "chrono",
+ "futures",
+ "hmac",
+ "jsonwebtoken",
+ "once_cell",
+ "pbkdf2",
+ "rand 0.9.2",
+ "regex",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "uuid",
 ]
@@ -8836,7 +8866,6 @@ dependencies = [
 name = "mockforge-world-state"
 version = "0.3.95"
 dependencies = [
- "anyhow",
  "async-trait",
  "chrono",
  "mockforge-core",

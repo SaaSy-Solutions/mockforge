@@ -308,6 +308,8 @@ impl DashboardScreen {
             .rev()
             .take(area.height.saturating_sub(2) as usize)
             .map(|log| {
+                let client_ip = log.client_ip.as_deref().unwrap_or("-");
+                let host = log.headers.get("host").map(|s| s.as_str()).unwrap_or("-");
                 Line::from(vec![
                     Span::styled(format!("{} ", log.timestamp.format("%H:%M:%S")), Theme::dim()),
                     Span::styled(format!("{:>6} ", log.method), Theme::http_method(&log.method)),
@@ -318,6 +320,8 @@ impl DashboardScreen {
                         Theme::status_code(log.status_code),
                     ),
                     Span::styled(format!(" {:>4}ms", log.response_time_ms), Theme::dim()),
+                    Span::styled(format!("  {:<15}", client_ip), Theme::dim()),
+                    Span::styled(truncate_str(host, 20), Theme::dim()),
                 ])
             })
             .collect();

@@ -1,6 +1,8 @@
 [workspace]
 members = [
     # Core foundation crates
+    "crates/mockforge-config",
+    "crates/mockforge-security-core",
     "crates/mockforge-core",
     "crates/mockforge-data",
     "crates/mockforge-template-expansion",
@@ -39,7 +41,6 @@ members = [
     "crates/mockforge-pipelines",
     "crates/mockforge-recorder",
     "crates/mockforge-route-chaos",
-    "crates/mockforge-schema",
 
     # SDK
     "crates/mockforge-sdk",
@@ -104,9 +105,21 @@ unused_imports = "allow"
 private_interfaces = "allow"
 
 [workspace.lints.clippy]
-# Enable pedantic lints for high code quality
-pedantic = { level = "warn", priority = -1 }
-nursery = { level = "warn", priority = -1 }
+# Useful pedantic lints (selected instead of blanket pedantic/nursery groups)
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+manual_let_else = "warn"
+cloned_instead_of_copied = "warn"
+explicit_iter_loop = "warn"
+implicit_clone = "warn"
+map_unwrap_or = "warn"
+unnested_or_patterns = "warn"
+semicolon_if_nothing_returned = "warn"
+doc_markdown = "warn"
+# Useful nursery lints
+use_self = "warn"
+redundant_pub_crate = "warn"
+# Cargo lints
 cargo = { level = "warn", priority = -1 }
 # Allow multiple crate versions — transitive deps cause unavoidable duplicates
 multiple_crate_versions = "allow"

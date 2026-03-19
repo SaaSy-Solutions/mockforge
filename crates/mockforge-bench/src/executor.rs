@@ -103,9 +103,10 @@ impl K6Executor {
             cmd.arg("--address").arg(format!("localhost:{}", port));
         }
 
-        // Add output options
+        // Add output options — use absolute path since we set CWD to output_dir below.
         if let Some(dir) = output_dir {
-            let summary_path = dir.join("summary.json");
+            let abs_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+            let summary_path = abs_dir.join("summary.json");
             cmd.arg("--summary-export").arg(summary_path);
         }
 
@@ -267,7 +268,10 @@ impl K6Executor {
 
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
-            failed_requests: json["metrics"]["http_req_failed"]["values"]["fails"]
+            // k6 Rate metric: `passes` = count of non-zero values.
+            // For http_req_failed, non-zero means the request failed.
+            // So `passes` = failed request count, `fails` = successful request count.
+            failed_requests: json["metrics"]["http_req_failed"]["values"]["passes"]
                 .as_u64()
                 .unwrap_or(0),
             avg_duration_ms: duration_values["avg"].as_f64().unwrap_or(0.0),
