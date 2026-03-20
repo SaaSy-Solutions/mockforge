@@ -1,0 +1,50 @@
+[package]
+name = "mockforge-chaos-orchestration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Chaos engineering orchestration - scenarios, scheduling, distributed coordination, experiment management"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+async-trait = "0.1"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Utilities
+chrono = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+parking_lot = { workspace = true }
+sha2 = "0.10"
+
+# Cron scheduling
+cron = "0.15"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+
+# Tracing
+mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
+
+# Recorder
+mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
+
+[dev-dependencies]
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
+tempfile = "3.8"
