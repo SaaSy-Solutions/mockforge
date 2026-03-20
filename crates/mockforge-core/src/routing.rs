@@ -1,4 +1,6 @@
 //! Route registry and routing logic for MockForge
+//!
+//! Uses [`matchit`] for O(path-length) route matching instead of linear scan.
 
 use crate::Result;
 use std::collections::HashMap;
@@ -60,11 +62,93 @@ impl Route {
     }
 }
 
-/// Route registry for managing routes across different protocols
+/// Convert a route pattern with `*` wildcards to matchit's `:param` syntax.
+///
+/// Each `*` segment becomes `:__wild_N` where N is the segment index,
+/// ensuring unique parameter names within the same path.
+fn to_matchit_pattern(pattern: &str) -> String {
+    if !pattern.contains('*') {
+        return pattern.to_string();
+    }
+
+    pattern
+        .split('/')
+        .enumerate()
+        .map(|(i, seg)| {
+            if seg == "*" {
+                format!("{{w{i}}}")
+            } else {
+                seg.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Per-method route index backed by [`matchit::Router`].
+///
+/// Each path maps to a list of route indices (to handle overlapping
+/// patterns that matchit would reject, e.g. exact + wildcard on same path).
+#[derive(Clone)]
+struct MethodIndex {
+    /// Fast trie-based router: path → indices into `routes`
+    router: matchit::Router<Vec<usize>>,
+    /// All routes for this method (preserves insertion order)
+    routes: Vec<Route>,
+}
+
+impl std::fmt::Debug for MethodIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MethodIndex").field("routes", &self.routes).finish()
+    }
+}
+
+impl MethodIndex {
+    fn new() -> Self {
+        Self {
+            router: matchit::Router::new(),
+            routes: Vec::new(),
+        }
+    }
+
+    fn insert(&mut self, route: Route) {
+        let idx = self.routes.len();
+        let matchit_path = to_matchit_pattern(&route.path);
+        self.routes.push(route);
+
+        // Try to insert into the trie. If the pattern conflicts with an
+        // existing entry (e.g. duplicate path), append to its index list.
+        match self.router.insert(matchit_path.clone(), vec![idx]) {
+            Ok(()) => {}
+            Err(_) => {
+                // Pattern already registered — append index to existing entry
+                if let Ok(matched) = self.router.at_mut(&matchit_path) {
+                    matched.value.push(idx);
+                }
+            }
+        }
+    }
+
+    fn find(&self, path: &str) -> Vec<&Route> {
+        match self.router.at(path) {
+            Ok(matched) => matched.value.iter().map(|&i| &self.routes[i]).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn all(&self) -> Vec<&Route> {
+        self.routes.iter().collect()
+    }
+}
+
+/// Route registry for managing routes across different protocols.
+///
+/// Uses [`matchit`] for O(path-length) HTTP route matching. WebSocket and
+/// gRPC routes fall back to linear scan (typically few routes).
 #[derive(Debug, Clone)]
 pub struct RouteRegistry {
-    /// HTTP routes indexed by method and path pattern
-    http_routes: HashMap<HttpMethod, Vec<Route>>,
+    /// HTTP routes indexed by method with trie-based matching
+    http_routes: HashMap<HttpMethod, MethodIndex>,
     /// WebSocket routes
     ws_routes: Vec<Route>,
     /// gRPC service routes
@@ -83,7 +167,10 @@ impl RouteRegistry {
 
     /// Add an HTTP route
     pub fn add_http_route(&mut self, route: Route) -> Result<()> {
-        self.http_routes.entry(route.method.clone()).or_default().push(route);
+        self.http_routes
+            .entry(route.method.clone())
+            .or_insert_with(MethodIndex::new)
+            .insert(route);
         Ok(())
     }
 
@@ -111,14 +198,9 @@ impl RouteRegistry {
         Ok(())
     }
 
-    /// Find matching HTTP routes
+    /// Find matching HTTP routes (O(path-length) via matchit trie)
     pub fn find_http_routes(&self, method: &HttpMethod, path: &str) -> Vec<&Route> {
-        self.http_routes
-            .get(method)
-            .map(|routes| {
-                routes.iter().filter(|route| self.matches_path(&route.path, path)).collect()
-            })
-            .unwrap_or_default()
+        self.http_routes.get(method).map(|index| index.find(path)).unwrap_or_default()
     }
 
     /// Find matching WebSocket routes
@@ -139,7 +221,7 @@ impl RouteRegistry {
             .unwrap_or_default()
     }
 
-    /// Check if a path matches a route pattern
+    /// Check if a path matches a route pattern (used for WS/gRPC linear scan)
     fn matches_path(&self, pattern: &str, path: &str) -> bool {
         if pattern == path {
             return true;
@@ -167,10 +249,7 @@ impl RouteRegistry {
 
     /// Get all HTTP routes for a method
     pub fn get_http_routes(&self, method: &HttpMethod) -> Vec<&Route> {
-        self.http_routes
-            .get(method)
-            .map(|routes| routes.iter().collect())
-            .unwrap_or_default()
+        self.http_routes.get(method).map(|index| index.all()).unwrap_or_default()
     }
 
     /// Get all WebSocket routes
@@ -405,8 +484,6 @@ mod tests {
     #[test]
     fn test_find_grpc_routes_wildcard() {
         let mut registry = RouteRegistry::new();
-        // Wildcard pattern matching requires exact segment count
-        // For gRPC method names, we'd typically use exact matches
         registry
             .add_grpc_route(
                 "UserService".to_string(),
@@ -478,5 +555,34 @@ mod tests {
 
         let method: HttpMethod = serde_json::from_str(r#""post""#).unwrap();
         assert_eq!(method, HttpMethod::POST);
+    }
+
+    #[test]
+    fn test_to_matchit_pattern() {
+        assert_eq!(to_matchit_pattern("/api/users"), "/api/users");
+        assert_eq!(to_matchit_pattern("/api/*/details"), "/api/{w2}/details");
+        assert_eq!(to_matchit_pattern("/api/*/*"), "/api/{w2}/{w3}");
+        assert_eq!(to_matchit_pattern("/*"), "/{w1}");
+    }
+
+    #[test]
+    fn test_matchit_many_routes_performance() {
+        let mut registry = RouteRegistry::new();
+
+        // Add 200 distinct routes
+        for i in 0..200 {
+            registry
+                .add_http_route(Route::new(HttpMethod::GET, format!("/api/v1/resource{i}")))
+                .unwrap();
+        }
+
+        // Matching the last route should still be fast (trie, not linear)
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/v1/resource199");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "/api/v1/resource199");
+
+        // Non-existent route
+        let found = registry.find_http_routes(&HttpMethod::GET, "/api/v1/resource999");
+        assert_eq!(found.len(), 0);
     }
 }

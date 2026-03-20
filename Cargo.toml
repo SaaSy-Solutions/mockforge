@@ -134,6 +134,9 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 toml = "0.8"
 
+# Route matching
+matchit = "0.8"
+
 # Async runtime
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
 futures = "0.3"
