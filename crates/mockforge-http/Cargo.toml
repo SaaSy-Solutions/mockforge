@@ -56,15 +56,15 @@ mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
-mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios" }
+mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios", optional = true }
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 mockforge-mqtt = { version = "0.3.70", path = "../mockforge-mqtt", optional = true }
-mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
-mockforge-performance = { version = "0.3.70", path = "../mockforge-performance" }
-mockforge-world-state = { version = "0.3.31", path = "../mockforge-world-state" }
+mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos", optional = true }
+mockforge-performance = { version = "0.3.70", path = "../mockforge-performance", optional = true }
+mockforge-world-state = { version = "0.3.95", path = "../mockforge-world-state", optional = true }
 mockforge-template-expansion = { version = "0.3.70", path = "../mockforge-template-expansion" }
-mockforge-route-chaos = { version = "0.3.70", path = "../mockforge-route-chaos" }
+mockforge-route-chaos = { version = "0.3.70", path = "../mockforge-route-chaos", optional = true }
 futures-util = "0.3"
 rustls = "0.23"
 rustls-pemfile = "2.0"
@@ -73,12 +73,22 @@ axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate"], optional = true }
 dashmap = { version = "6.1", optional = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
-mockforge-runtime-daemon = { version = "0.3.31", path = "../mockforge-runtime-daemon", optional = true }
+mockforge-runtime-daemon = { version = "0.3.95", path = "../mockforge-runtime-daemon", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
 mockforge-bench = { version = "0.3.70", path = "../mockforge-bench", optional = true }
 
 [features]
-default = []
+default = ["chaos-engine", "performance-profiling", "world-state", "route-chaos", "scenario-engine"]
+# Chaos engineering handlers and middleware
+chaos-engine = ["mockforge-chaos"]
+# Performance profiling handlers
+performance-profiling = ["mockforge-performance"]
+# World state graph engine
+world-state = ["mockforge-world-state"]
+# Per-route chaos injection
+route-chaos = ["mockforge-route-chaos"]
+# Scenario/state machine engine
+scenario-engine = ["mockforge-scenarios"]
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
 # Database-backed analytics/forecasting handlers

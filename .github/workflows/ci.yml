@@ -9,6 +9,10 @@ on:
     types: [published]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -117,26 +121,78 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: crates/mockforge-ui/ui/package-lock.json
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
       - name: Install dependencies
         working-directory: crates/mockforge-ui/ui
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        working-directory: crates/mockforge-ui/ui
+        run: pnpm type-check
+
+      - name: Lint
+        working-directory: crates/mockforge-ui/ui
+        run: pnpm lint
 
       - name: Build UI
         working-directory: crates/mockforge-ui/ui
-        run: npm run build
+        run: pnpm build
 
       - name: Run tests
         working-directory: crates/mockforge-ui/ui
-        run: npm test
+        run: pnpm test
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           directory: crates/mockforge-ui/ui/coverage
           flags: ui-tests
+
+  cross-platform-test:
+    name: Cross-Platform Tests
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install protoc (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install protoc -y
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+
+      - name: Run tests
+        run: |
+          EXCLUDES="--exclude mockforge-desktop"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            EXCLUDES="$EXCLUDES --exclude mockforge-kafka"
+          fi
+          cargo nextest run --workspace $EXCLUDES
+        shell: bash
 
   warning-gate:
     name: Incremental Warning Gate

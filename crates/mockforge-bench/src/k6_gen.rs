@@ -5,8 +5,84 @@ use crate::error::{BenchError, Result};
 use crate::request_gen::RequestTemplate;
 use crate::scenarios::LoadScenario;
 use handlebars::Handlebars;
-use serde_json::{json, Value};
+use serde::Serialize;
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+
+/// Typed template data for `k6_script.hbs`.
+///
+/// Every field referenced by `{{variable}}` or `{{#if flag}}` in the template
+/// is a required field here, so the compiler prevents the Issue-#79 class of
+/// bugs (template rendered with missing data).
+#[derive(Debug, Clone, Serialize)]
+pub struct K6ScriptTemplateData {
+    pub base_url: String,
+    pub stages: Vec<K6StageData>,
+    pub operations: Vec<K6OperationData>,
+    pub threshold_percentile: String,
+    pub threshold_ms: u64,
+    pub max_error_rate: f64,
+    pub scenario_name: String,
+    pub skip_tls_verify: bool,
+    pub has_dynamic_values: bool,
+    pub dynamic_imports: Vec<String>,
+    pub dynamic_globals: Vec<String>,
+    pub security_testing_enabled: bool,
+    pub has_custom_headers: bool,
+}
+
+/// Typed template data for `k6_crud_flow.hbs`.
+#[derive(Debug, Clone, Serialize)]
+pub struct K6CrudFlowTemplateData {
+    pub base_url: String,
+    pub flows: Vec<Value>,
+    pub extract_fields: Vec<String>,
+    pub duration_secs: u64,
+    pub max_vus: u32,
+    pub auth_header: Option<String>,
+    pub custom_headers: HashMap<String, String>,
+    pub skip_tls_verify: bool,
+    pub stages: Vec<K6StageData>,
+    pub threshold_percentile: String,
+    pub threshold_ms: u64,
+    pub max_error_rate: f64,
+    /// Raw JSON string for embedding in k6 script (rendered unescaped via `{{{headers}}}`)
+    pub headers: String,
+    pub dynamic_imports: Vec<String>,
+    pub dynamic_globals: Vec<String>,
+    pub extracted_values_output_path: String,
+    pub error_injection_enabled: bool,
+    pub error_rate: f64,
+    pub error_types: Vec<String>,
+    pub security_testing_enabled: bool,
+    pub has_custom_headers: bool,
+}
+
+/// A k6 load stage for template rendering.
+#[derive(Debug, Clone, Serialize)]
+pub struct K6StageData {
+    pub duration: String,
+    pub target: u32,
+}
+
+/// Per-operation data for the `k6_script.hbs` template.
+#[derive(Debug, Clone, Serialize)]
+pub struct K6OperationData {
+    pub index: usize,
+    pub name: String,
+    pub metric_name: String,
+    pub display_name: String,
+    pub method: String,
+    pub path: Value,
+    pub path_is_dynamic: bool,
+    pub headers: Value,
+    pub body: Option<Value>,
+    pub body_is_dynamic: bool,
+    pub has_body: bool,
+    pub is_get_or_head: bool,
+}
 
 /// Configuration for k6 script generation
 pub struct K6Config {
@@ -46,8 +122,11 @@ impl K6ScriptGenerator {
 
         let data = self.build_template_data()?;
 
+        let value = serde_json::to_value(&data)
+            .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))?;
+
         handlebars
-            .render_template(template, &data)
+            .render_template(template, &value)
             .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))
     }
 
@@ -94,8 +173,8 @@ impl K6ScriptGenerator {
         result
     }
 
-    /// Build the template data for rendering
-    fn build_template_data(&self) -> Result<Value> {
+    /// Build the typed template data for rendering.
+    fn build_template_data(&self) -> Result<K6ScriptTemplateData> {
         let stages = self
             .config
             .scenario
@@ -146,46 +225,63 @@ impl K6ScriptGenerator {
                     (None, false)
                 };
 
-                json!({
-                    "index": idx,
-                    "name": sanitized_name,  // Use sanitized name for variable names
-                    "metric_name": metric_name,  // Use sanitized name for metric name strings (k6 validation)
-                    "display_name": display_name,  // Keep original for comments/display
-                    "method": k6_method,  // k6 uses lowercase methods (http.get, http.post, http.del)
-                    "path": if processed_path.is_dynamic { processed_path.value } else { full_path },
-                    "path_is_dynamic": processed_path.is_dynamic,
-                    "headers": self.build_headers_json(template),  // Returns JSON string for template
-                    "body": body_value,
-                    "body_is_dynamic": body_is_dynamic,
-                    "has_body": template.body.is_some(),
-                    "is_get_or_head": is_get_or_head,  // For correct k6 function signature
-                })
+                let path_value = if processed_path.is_dynamic {
+                    processed_path.value
+                } else {
+                    full_path
+                };
+
+                K6OperationData {
+                    index: idx,
+                    name: sanitized_name,
+                    metric_name,
+                    display_name,
+                    method: k6_method,
+                    path: Value::String(path_value),
+                    path_is_dynamic: processed_path.is_dynamic,
+                    headers: Value::String(self.build_headers_json(template)),
+                    body: body_value.map(Value::String),
+                    body_is_dynamic,
+                    has_body: template.body.is_some(),
+                    is_get_or_head,
+                }
             })
             .collect::<Vec<_>>();
 
         // Get required imports and global initializations based on placeholders used
-        let required_imports = DynamicParamProcessor::get_required_imports(&all_placeholders);
-        let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
+        let required_imports: Vec<String> =
+            DynamicParamProcessor::get_required_imports(&all_placeholders)
+                .into_iter()
+                .map(String::from)
+                .collect();
+        let required_globals: Vec<String> =
+            DynamicParamProcessor::get_required_globals(&all_placeholders)
+                .into_iter()
+                .map(String::from)
+                .collect();
         let has_dynamic_values = !all_placeholders.is_empty();
 
-        Ok(json!({
-            "base_url": self.config.target_url,
-            "stages": stages.iter().map(|s| json!({
-                "duration": s.duration,
-                "target": s.target,
-            })).collect::<Vec<_>>(),
-            "operations": operations,
-            "threshold_percentile": self.config.threshold_percentile,
-            "threshold_ms": self.config.threshold_ms,
-            "max_error_rate": self.config.max_error_rate,
-            "scenario_name": format!("{:?}", self.config.scenario).to_lowercase(),
-            "skip_tls_verify": self.config.skip_tls_verify,
-            "has_dynamic_values": has_dynamic_values,
-            "dynamic_imports": required_imports,
-            "dynamic_globals": required_globals,
-            "security_testing_enabled": self.config.security_testing_enabled,
-            "has_custom_headers": !self.config.custom_headers.is_empty(),
-        }))
+        Ok(K6ScriptTemplateData {
+            base_url: self.config.target_url.clone(),
+            stages: stages
+                .iter()
+                .map(|s| K6StageData {
+                    duration: s.duration.clone(),
+                    target: s.target,
+                })
+                .collect(),
+            operations,
+            threshold_percentile: self.config.threshold_percentile.clone(),
+            threshold_ms: self.config.threshold_ms,
+            max_error_rate: self.config.max_error_rate,
+            scenario_name: format!("{:?}", self.config.scenario).to_lowercase(),
+            skip_tls_verify: self.config.skip_tls_verify,
+            has_dynamic_values,
+            dynamic_imports: required_imports,
+            dynamic_globals: required_globals,
+            security_testing_enabled: self.config.security_testing_enabled,
+            has_custom_headers: !self.config.custom_headers.is_empty(),
+        })
     }
 
     /// Build headers for a request template as a JSON string for k6 script

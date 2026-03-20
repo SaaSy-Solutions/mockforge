@@ -1,0 +1,25 @@
+[package]
+name = "mockforge-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Configuration types for MockForge"
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme = "README.md"
+keywords = ["mock", "api", "config"]
+categories = ["development-tools"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = "0.9"
+schemars = { version = "0.8", features = ["derive"], optional = true }
+
+[features]
+schema = ["schemars"]
+
+[lints]
+workspace = true

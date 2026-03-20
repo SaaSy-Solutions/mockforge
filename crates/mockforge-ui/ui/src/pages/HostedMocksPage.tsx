@@ -4,7 +4,8 @@
  * Manage cloud-hosted mock service deployments
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -87,20 +88,21 @@ interface DeploymentMetrics {
   period_start: string;
 }
 
-const navigateToExplorer = (deployment: Deployment) => {
-  if (!deployment.deployment_url) return;
-  // Store deployment context for the ApiExplorerPage
-  window.__mockforge_explorer_deployment = {
-    id: deployment.id,
-    name: deployment.name,
-    deployment_url: deployment.deployment_url,
-    status: deployment.status,
-    openapi_spec_url: deployment.openapi_spec_url,
-  };
-  window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'api-explorer' } }));
-};
-
 export const HostedMocksPage: React.FC = () => {
+  const routerNavigate = useNavigate();
+
+  const navigateToExplorer = useCallback((deployment: Deployment) => {
+    if (!deployment.deployment_url) return;
+    // Store deployment context for the ApiExplorerPage
+    window.__mockforge_explorer_deployment = {
+      id: deployment.id,
+      name: deployment.name,
+      deployment_url: deployment.deployment_url,
+      status: deployment.status,
+      openapi_spec_url: deployment.openapi_spec_url,
+    };
+    routerNavigate('/api-explorer');
+  }, [routerNavigate]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

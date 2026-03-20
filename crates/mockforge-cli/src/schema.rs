@@ -1,6 +1,6 @@
 //! JSON Schema generation for MockForge configuration files
 //!
-//! This crate provides functionality to generate JSON Schema definitions
+//! Provides functionality to generate JSON Schema definitions
 //! from MockForge's configuration structs, enabling IDE autocomplete and
 //! validation for `mockforge.yaml`, `mockforge.toml`, persona files, and blueprint files.
 
