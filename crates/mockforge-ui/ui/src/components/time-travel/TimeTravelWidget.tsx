@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User, ArrowRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
@@ -38,6 +39,7 @@ interface TimeTravelWidgetProps {
 }
 
 export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProps) {
+  const navigate = useNavigate();
   const { data: status, isLoading } = useTimeTravelStatus();
   const enableMutation = useEnableTimeTravel();
   const disableMutation = useDisableTimeTravel();
@@ -425,9 +427,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
                 size="sm"
                 className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
                 onClick={() => {
-                  // Dispatch navigation event to change active tab
-                  // This prevents full page refresh and uses client-side navigation
-                  window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'time-travel' } }));
+                  navigate('/time-travel');
                 }}
               >
                 Open Full Time Travel Page

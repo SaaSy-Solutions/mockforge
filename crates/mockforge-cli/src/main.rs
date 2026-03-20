@@ -59,6 +59,7 @@ mod progress;
 #[allow(dead_code)]
 mod recorder_commands;
 mod scenario_commands;
+mod schema;
 #[cfg(feature = "smtp")]
 #[allow(dead_code)]
 mod smtp_commands;
@@ -7303,7 +7304,7 @@ enum SchemaCommands {
 async fn handle_schema(
     schema_command: Option<SchemaCommands>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use mockforge_schema::generate_all_schemas;
+    use crate::schema::generate_all_schemas;
     use std::fs;
     use std::path::Path;
 
@@ -7419,9 +7420,7 @@ async fn handle_schema(
             schema_dir,
             strict,
         } => {
-            use mockforge_schema::{
-                detect_schema_type, generate_all_schemas, validate_config_file,
-            };
+            use crate::schema::{detect_schema_type, generate_all_schemas, validate_config_file};
             use std::fs;
 
             let schemas = generate_all_schemas();

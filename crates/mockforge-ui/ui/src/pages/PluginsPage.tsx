@@ -1,5 +1,6 @@
 import { logger } from '@/utils/logger';
 import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Puzzle,
   Plus,
@@ -32,6 +33,7 @@ import { useI18n } from '../i18n/I18nProvider';
 
 export function PluginsPage() {
   const { t } = useI18n();
+  const routerNavigate = useNavigate();
   const [activeTab, setActiveTab] = useState('installed');
   const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null);
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -62,8 +64,8 @@ export function PluginsPage() {
   }, []);
 
   const handleBrowseMarketplace = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('navigate-tab', { detail: { tab: 'plugin-registry' } }));
-  }, []);
+    routerNavigate('/plugin-registry');
+  }, [routerNavigate]);
 
   return (
     <div className="space-y-6">

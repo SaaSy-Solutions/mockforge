@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
 import { SimpleThemeToggle } from '../ui/ThemeToggle';
@@ -66,8 +67,6 @@ import { GlobalConnectionStatus } from './ConnectionStatus';
 
 interface AppShellProps {
   children: React.ReactNode;
-  activeTab: string;
-  onTabChange: (tab: string) => void;
   onRefresh: () => void;
 }
 
@@ -216,8 +215,11 @@ const allNavItems = [
   { id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 },
 ];
 
-export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShellProps) {
+export function AppShell({ children, onRefresh }: AppShellProps) {
   const { t, locale, supportedLocales, setLocale } = useI18n();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeTab = location.pathname.replace(/^\//, '') || 'dashboard';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { setFilter: setLogFilter } = useLogStore();
   const { setGlobalSearch } = useServiceStore();
@@ -294,7 +296,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                           )}
                           style={{ animationDelay: `${(sectionIndex * 5 + itemIndex) * 20}ms` }}
                           onClick={() => {
-                            onTabChange(item.id);
+                            navigate('/' + item.id);
                             setSidebarOpen(false);
                           }}
                         >
@@ -338,7 +340,7 @@ export function AppShell({ children, activeTab, onTabChange, onRefresh }: AppShe
                               ? 'bg-brand-600 text-white shadow-lg ring-1 ring-brand-200/60 dark:ring-brand-600/70 hover:bg-brand-700'
                               : 'text-foreground/80 dark:text-gray-200 hover:text-foreground dark:hover:text-white hover:bg-muted/50 dark:hover:bg-white/5'
                           )}
-                          onClick={() => onTabChange(item.id)}
+                          onClick={() => navigate('/' + item.id)}
                         >
                           <Icon className="h-4 w-4" />
                           {t(item.labelKey)}

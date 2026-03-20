@@ -25,7 +25,7 @@ tokio-util = "0.7"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
-mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.70", path = "../mockforge-core", features = ["schema"] }
 mockforge-http = { version = "0.3.70", path = "../mockforge-http", optional = true }
 mockforge-ws = { version = "0.3.70", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.70", path = "../mockforge-grpc", optional = true }
@@ -50,7 +50,8 @@ mockforge-plugin-core = { version = "0.3.70", path = "../mockforge-plugin-core" 
 mockforge-plugin-loader = { version = "0.3.70", path = "../mockforge-plugin-loader" }
 mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios", features = ["studio-packs"] }
 mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
-mockforge-schema = { version = "0.3.70", path = "../mockforge-schema" }
+schemars = { version = "0.8", features = ["derive"] }
+jsonschema = { workspace = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
