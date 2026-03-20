@@ -7572,6 +7572,7 @@ dependencies = [
  "mockforge-recorder",
  "mockito",
  "openapiv3",
+ "proptest",
  "regex",
  "reqwest 0.12.28",
  "serde",

@@ -34,6 +34,30 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+/// Parse a comma-separated header string into a `HashMap`.
+///
+/// Format: `Key:Value,Key2:Value2`
+///
+/// **Known limitation**: Header values containing commas will be incorrectly
+/// split. Cookie headers with semicolons work fine, but Cookie values with
+/// commas (e.g. `expires=Thu, 01 Jan 2099`) will break.
+pub fn parse_header_string(input: &str) -> Result<HashMap<String, String>> {
+    let mut headers = HashMap::new();
+
+    for pair in input.split(',') {
+        let parts: Vec<&str> = pair.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(BenchError::Other(format!(
+                "Invalid header format: '{}'. Expected 'Key:Value'",
+                pair
+            )));
+        }
+        headers.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
+    }
+
+    Ok(headers)
+}
+
 /// Bench command configuration
 pub struct BenchCommand {
     /// OpenAPI spec file(s) - can specify multiple
@@ -666,22 +690,10 @@ impl BenchCommand {
 
     /// Parse headers from command line format (Key:Value,Key2:Value2)
     pub fn parse_headers(&self) -> Result<HashMap<String, String>> {
-        let mut headers = HashMap::new();
-
-        if let Some(header_str) = &self.headers {
-            for pair in header_str.split(',') {
-                let parts: Vec<&str> = pair.splitn(2, ':').collect();
-                if parts.len() != 2 {
-                    return Err(BenchError::Other(format!(
-                        "Invalid header format: '{}'. Expected 'Key:Value'",
-                        pair
-                    )));
-                }
-                headers.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
-            }
+        match &self.headers {
+            Some(s) => parse_header_string(s),
+            None => Ok(HashMap::new()),
         }
-
-        Ok(headers)
     }
 
     fn parse_extracted_values(output_dir: &Path) -> Result<ExtractedValues> {

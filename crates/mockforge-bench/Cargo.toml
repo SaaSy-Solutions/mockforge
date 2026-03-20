@@ -72,6 +72,7 @@ jsonschema = { workspace = true }
 
 [dev-dependencies]
 mockito = "1.5"
+proptest = "1.8"
 tempfile = "3.14"
 
 [features]
