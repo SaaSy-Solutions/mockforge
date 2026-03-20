@@ -125,13 +125,18 @@ mod tests {
 
         // Test loading (this would normally fail due to WASM complexity, but tests the API)
         let result = loader.load_plugin(&plugin_id).await;
-        // We expect this to fail in a test environment, but the API should work
-        assert!(result.is_err() || result.is_ok()); // Either is acceptable for this test
+        // Loading a synthetic WASM module is expected to fail in tests
+        assert!(
+            result.is_err(),
+            "expected plugin load to fail in test environment, but got: {result:?}"
+        );
 
-        // Test unloading
+        // Unloading a plugin that was never loaded returns NotFound
         let unload_result = loader.unload_plugin(&plugin_id).await;
-        // Should succeed even if plugin wasn't loaded
-        assert!(unload_result.is_ok() || unload_result.is_err()); // API should work
+        assert!(
+            unload_result.is_err(),
+            "expected NotFound error when unloading a plugin that was never loaded"
+        );
     }
 
     #[tokio::test]

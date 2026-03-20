@@ -31,8 +31,9 @@ mod malformed_input_tests {
 
         for path in malformed_paths {
             let result = evaluate_condition(path, &context);
-            // Should return an error, not panic
-            assert!(result.is_err() || result.is_ok());
+            // Should not panic on malformed paths — any Result variant is acceptable
+            // but the real test is that we reach this line without a panic
+            let _ = result;
         }
     }
 
@@ -47,8 +48,8 @@ mod malformed_input_tests {
 
         for condition in malformed {
             let result = evaluate_condition(condition, &context);
-            // Should handle gracefully
-            assert!(result.is_err() || result.is_ok());
+            // Should not panic on malformed conditions
+            let _ = result;
         }
     }
 

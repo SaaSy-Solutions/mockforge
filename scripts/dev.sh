@@ -102,7 +102,7 @@ start_backend() {
     echo -e "${BLUE}🎛️ Admin API on port $ADMIN_PORT${NC}"
     echo ""
 
-    RUST_LOG=debug cargo run -p mockforge-cli -- serve \
+    RUST_LOG=debug cargo run -p mockforge-cli --features all-protocols -- serve \
         --spec "$SPEC_FILE" \
         --http-port $HTTP_PORT \
         --ws-port $WS_PORT \

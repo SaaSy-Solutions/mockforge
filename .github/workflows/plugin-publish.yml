@@ -40,7 +40,7 @@ jobs:
 
       - name: Build MockForge CLI
         run: |
-          cargo build --release --package mockforge-cli
+          cargo build --release --package mockforge-cli --features all-protocols
 
       - name: Read plugin manifest
         id: manifest
@@ -163,7 +163,7 @@ jobs:
 
       - name: Build MockForge CLI
         run: |
-          cargo build --release --package mockforge-cli
+          cargo build --release --package mockforge-cli --features all-protocols
 
       - name: Download artifacts
         uses: actions/download-artifact@v5
@@ -217,7 +217,7 @@ jobs:
 
       - name: Build MockForge CLI
         run: |
-          cargo build --release --package mockforge-cli
+          cargo build --release --package mockforge-cli --features all-protocols
 
       - name: Dry run publish
         run: |

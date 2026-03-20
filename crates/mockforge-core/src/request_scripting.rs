@@ -838,9 +838,9 @@ mod tests {
         let script = r#"throw new Error("Intentional test error");"#;
 
         let result = engine.execute_script(script, &script_context, 1000).await;
-        // For now, JavaScript errors are not being caught properly
-        // In a complete implementation, we would handle errors and return them in ScriptResult.errors
-        assert!(result.is_err() || result.is_ok()); // Accept either for now
+        // JavaScript errors may propagate as Err or be captured in ScriptResult.errors
+        // Either outcome is valid — the key requirement is no panic
+        assert!(result.is_ok(), "script execution should not panic; error: {result:?}");
     }
 
     #[tokio::test]

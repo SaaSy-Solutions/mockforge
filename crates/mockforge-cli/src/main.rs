@@ -5407,45 +5407,73 @@ pub async fn handle_serve(
     });
 
     // Start WebSocket server
-    let ws_port = config.websocket.port;
-    let ws_host = config.websocket.host.clone();
-    let ws_shutdown = shutdown_token.clone();
-    let ws_handle = tokio::spawn(async move {
-        println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
-        tokio::select! {
-            result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
-                result.map_err(|e| format!("WebSocket server error: {}", e))
-            }
-            _ = ws_shutdown.cancelled() => {
-                Ok(())
-            }
+    let ws_handle: tokio::task::JoinHandle<Result<(), String>> = {
+        #[cfg(feature = "ws")]
+        {
+            let ws_port = config.websocket.port;
+            let ws_host = config.websocket.host.clone();
+            let ws_shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
+                tokio::select! {
+                    result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
+                        result.map_err(|e| format!("WebSocket server error: {}", e))
+                    }
+                    _ = ws_shutdown.cancelled() => {
+                        Ok(())
+                    }
+                }
+            })
         }
-    });
+        #[cfg(not(feature = "ws"))]
+        {
+            let shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                shutdown.cancelled().await;
+                Ok(())
+            })
+        }
+    };
 
     // Start gRPC server (only if enabled and port is not 0)
-    let grpc_port = config.grpc.port;
-    let grpc_enabled = config.grpc.enabled;
-    let grpc_shutdown = shutdown_token.clone();
-    let grpc_handle = if grpc_enabled && grpc_port != 0 {
-        tokio::spawn(async move {
-            println!("⚡ gRPC server listening on localhost:{}", grpc_port);
-            tokio::select! {
-                result = mockforge_grpc::start(grpc_port) => {
-                    result.map_err(|e| format!("gRPC server error: {}", e))
-                }
-                _ = grpc_shutdown.cancelled() => {
+    let grpc_handle: tokio::task::JoinHandle<Result<(), String>> = {
+        #[cfg(feature = "grpc")]
+        {
+            let grpc_port = config.grpc.port;
+            let grpc_enabled = config.grpc.enabled;
+            let grpc_shutdown = shutdown_token.clone();
+            if grpc_enabled && grpc_port != 0 {
+                tokio::spawn(async move {
+                    println!("⚡ gRPC server listening on localhost:{}", grpc_port);
+                    tokio::select! {
+                        result = mockforge_grpc::start(grpc_port) => {
+                            result.map_err(|e| format!("gRPC server error: {}", e))
+                        }
+                        _ = grpc_shutdown.cancelled() => {
+                            Ok(())
+                        }
+                    }
+                })
+            } else {
+                tracing::debug!(
+                    "gRPC server disabled (enabled: {}, port: {})",
+                    grpc_enabled,
+                    grpc_port
+                );
+                tokio::spawn(async move {
+                    grpc_shutdown.cancelled().await;
                     Ok(())
-                }
+                })
             }
-        })
-    } else {
-        // gRPC disabled or port is 0, create a no-op handle
-        tracing::debug!("gRPC server disabled (enabled: {}, port: {})", grpc_enabled, grpc_port);
-        tokio::spawn(async move {
-            // Wait for shutdown signal, then return Ok
-            grpc_shutdown.cancelled().await;
-            Ok(())
-        })
+        }
+        #[cfg(not(feature = "grpc"))]
+        {
+            let shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                shutdown.cancelled().await;
+                Ok(())
+            })
+        }
     };
 
     #[cfg(feature = "smtp")]

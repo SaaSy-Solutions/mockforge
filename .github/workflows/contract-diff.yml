@@ -79,7 +79,7 @@ jobs:
           key: ${{ runner.os }}-target-contract-diff-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build MockForge CLI
-        run: cargo build --release --package mockforge-cli
+        run: cargo build --release --package mockforge-cli --features all-protocols
 
       - name: Detect OpenAPI spec files
         id: detect-specs

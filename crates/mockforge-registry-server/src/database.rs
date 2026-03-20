@@ -3,7 +3,7 @@
 use anyhow::Result;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Database {
     pool: PgPool,
 }
@@ -215,8 +215,10 @@ mod tests {
         let result = Database::connect(database_url).await;
 
         // We expect this to fail since we don't have a database running
-        // The important thing is that the function exists and can be called
-        assert!(result.is_err() || result.is_ok());
+        assert!(
+            result.is_err(),
+            "expected connection to fail without a running database, but got: {result:?}"
+        );
     }
 
     #[test]

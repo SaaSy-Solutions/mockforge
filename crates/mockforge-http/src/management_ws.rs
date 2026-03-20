@@ -369,8 +369,8 @@ mod tests {
 
         // Should be able to send even with no subscribers
         let result = state.broadcast(event);
-        // With no subscribers, this returns Err with the number of subscribers (0)
-        assert!(result.is_err() || result.is_ok());
+        // With no subscribers, broadcast returns Err (send count = 0)
+        assert!(result.is_err(), "expected broadcast to fail with no subscribers");
     }
 
     #[tokio::test]

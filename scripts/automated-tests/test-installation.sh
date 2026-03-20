@@ -74,7 +74,7 @@ test_build_from_source() {
     if [ -f "Makefile" ] && grep -q "install:" Makefile; then
         make install
     else
-        cargo install --path crates/mockforge-cli --force
+        cargo install --path crates/mockforge-cli --features all-protocols --force
     fi
 
     # Verify installation

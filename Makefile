@@ -209,7 +209,7 @@ check-all: fmt-check clippy warning-gate audit security-deny test ## Run all che
 
 # Install CLI tool locally
 install: ## Install the CLI tool locally
-	cargo install --path crates/mockforge-cli
+	cargo install --path crates/mockforge-cli --features all-protocols
 
 # TUI
 build-tui: ## Build TUI crate
@@ -222,11 +222,11 @@ test-tui: ## Test TUI crate
 	cargo test -p mockforge-tui
 
 build-cli-tui: ## Build CLI with TUI feature enabled
-	cargo build -p mockforge-cli --features tui
+	cargo build -p mockforge-cli --features "tui,all-protocols"
 
 # Examples
 run-example: ## Run with example configuration
-	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true cargo run -p mockforge-cli -- serve --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051 --admin --admin-port 9080
+	MOCKFORGE_LATENCY_ENABLED=true MOCKFORGE_FAILURES_ENABLED=false MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true cargo run -p mockforge-cli --features all-protocols -- serve --spec examples/openapi-demo.json --http-port 3000 --ws-port 3001 --grpc-port 50051 --admin --admin-port 9080
 
 # Docker
 docker-build: ## Build Docker image

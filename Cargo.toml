@@ -119,6 +119,8 @@ doc_markdown = "warn"
 # Useful nursery lints
 use_self = "warn"
 redundant_pub_crate = "warn"
+# Correctness / robustness
+unwrap_used = "warn"
 # Cargo lints
 cargo = { level = "warn", priority = -1 }
 # Allow multiple crate versions — transitive deps cause unavoidable duplicates

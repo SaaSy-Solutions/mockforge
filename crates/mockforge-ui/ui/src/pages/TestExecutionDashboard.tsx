@@ -32,20 +32,32 @@ import {
   Stop as StopIcon,
 } from '@mui/icons-material';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
   Tooltip as ChartTooltip,
   Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-} from 'recharts';
+  Filler,
+} from 'chart.js';
+import { Line, Pie } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  ArcElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  Filler
+);
 
 interface TestExecution {
   id: string;
@@ -196,6 +208,76 @@ const TestExecutionDashboard: React.FC = () => {
 
   const COLORS = ['#4caf50', '#f44336', '#2196f3'];
 
+  const lineChartData = metrics
+    ? {
+        labels: metrics.executions_by_day.map((d) => d.date),
+        datasets: [
+          {
+            label: 'Executions',
+            data: metrics.executions_by_day.map((d) => d.count),
+            borderColor: '#2196f3',
+            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+            tension: 0.4,
+            fill: false,
+          },
+        ],
+      }
+    : null;
+
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+      },
+    },
+    scales: {
+      x: {
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.1)',
+        },
+      },
+      y: {
+        grid: {
+          display: true,
+          color: 'rgba(0, 0, 0, 0.1)',
+        },
+        beginAtZero: true,
+      },
+    },
+  };
+
+  const pieChartData = metrics
+    ? {
+        labels: metrics.executions_by_status.map((d) => d.name),
+        datasets: [
+          {
+            data: metrics.executions_by_status.map((d) => d.value),
+            backgroundColor: COLORS.slice(0, metrics.executions_by_status.length),
+          },
+        ],
+      }
+    : null;
+
+  const pieChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: { label?: string; parsed: number }) => {
+            return `${context.label}: ${context.parsed}`;
+          },
+        },
+      },
+    },
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ my: 4 }}>
@@ -272,16 +354,9 @@ const TestExecutionDashboard: React.FC = () => {
                 <Typography variant="h6" gutterBottom>
                   Executions Over Time
                 </Typography>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={metrics.executions_by_day}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <ChartTooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="count" stroke="#2196f3" name="Executions" />
-                  </LineChart>
-                </ResponsiveContainer>
+                <Box sx={{ height: 300 }}>
+                  {lineChartData && <Line data={lineChartData} options={lineChartOptions} />}
+                </Box>
               </Paper>
             </Grid>
 
@@ -290,25 +365,9 @@ const TestExecutionDashboard: React.FC = () => {
                 <Typography variant="h6" gutterBottom>
                   Status Distribution
                 </Typography>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={metrics.executions_by_status}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={(entry) => `${entry.name}: ${entry.value}`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {metrics.executions_by_status.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                <Box sx={{ height: 300 }}>
+                  {pieChartData && <Pie data={pieChartData} options={pieChartOptions} />}
+                </Box>
               </Paper>
             </Grid>
           </Grid>

@@ -43,7 +43,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build MockForge binary (needed for integration tests)
-        run: cargo build --bin mockforge --release
+        run: cargo build --bin mockforge --release --features all-protocols
 
       - name: Verify binary exists
         run: |
