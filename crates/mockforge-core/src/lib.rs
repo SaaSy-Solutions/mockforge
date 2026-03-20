@@ -268,6 +268,8 @@ pub mod pillars;
 pub mod pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
+/// Protocol server lifecycle trait for uniform server startup and shutdown
+pub mod protocol_server;
 pub mod proxy;
 pub mod reality;
 pub mod reality_continuum;

@@ -204,6 +204,8 @@
 use mockforge_core::LatencyProfile;
 
 pub mod dynamic;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 pub mod reflection;
 pub mod registry;
 

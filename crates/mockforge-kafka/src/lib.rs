@@ -130,6 +130,8 @@ pub mod fixtures;
 pub mod metrics;
 pub mod partitions;
 pub mod protocol;
+/// Unified protocol server lifecycle implementation (KafkaMockServer)
+pub mod server;
 pub mod spec_registry;
 pub mod topics;
 

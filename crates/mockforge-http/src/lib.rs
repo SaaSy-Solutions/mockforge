@@ -187,6 +187,8 @@ pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
 pub mod op_middleware;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 /// Browser/Mobile Proxy Server
 pub mod proxy_server;
 /// Quick mock generation utilities

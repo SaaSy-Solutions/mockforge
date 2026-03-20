@@ -22,6 +22,8 @@
 //! ```
 
 mod fixtures;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 mod server;
 mod spec_registry;
 

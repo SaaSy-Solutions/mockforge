@@ -150,6 +150,8 @@
 
 pub mod ai_event_generator;
 pub mod handlers;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 pub mod ws_tracing;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};

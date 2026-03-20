@@ -40,6 +40,8 @@ pub mod broker;
 pub mod fixtures;
 pub mod metrics;
 pub mod protocol;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 pub mod qos;
 pub mod server;
 pub mod session;

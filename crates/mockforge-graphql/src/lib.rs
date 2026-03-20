@@ -153,6 +153,8 @@ pub mod cache;
 pub mod executor;
 pub mod graphql_tracing;
 pub mod handlers;
+/// Unified protocol server lifecycle implementation
+pub mod protocol_server;
 pub mod registry;
 pub mod resolvers;
 pub mod schema;
