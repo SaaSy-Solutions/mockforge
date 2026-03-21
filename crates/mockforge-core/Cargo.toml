@@ -76,6 +76,11 @@ cron = "0.15"
 # JSON Schema generation (optional, for schema crate)
 schemars = { version = "0.8", features = ["derive"], optional = true }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"], optional = true }
+# TLS support
+tokio-rustls = "0.26"
+rustls = { version = "0.23", features = ["ring"] }
+rustls-pemfile = "2"
+webpki-roots = "0.26"
 mockforge-data = { version = "0.3.70", path = "../mockforge-data", optional = true }
 
 [dev-dependencies]
@@ -85,6 +90,7 @@ tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.8.0"
 mockforge-template-expansion = { version = "0.3.70", path = "../mockforge-template-expansion" }
+rcgen = "0.13"
 # Note: mockforge-cli dev-dependency removed to avoid circular dependency during publishing
 
 [[bench]]

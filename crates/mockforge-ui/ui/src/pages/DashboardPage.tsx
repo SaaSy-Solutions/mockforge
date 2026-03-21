@@ -5,6 +5,7 @@ import { TimeTravelWidget } from '../components/time-travel/TimeTravelWidget';
 import { RealitySlider } from '../components/reality/RealitySlider';
 import { RealityIndicator } from '../components/reality/RealityIndicator';
 import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
+import { useDashboardStream } from '../hooks/useDashboardStream';
 import type { LatencyMetrics, LogEntry } from '../types';
 import { useDashboard, useLogs } from '../hooks/useApi';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../components/ui/DesignSystem';
 import { MetricIcon, StatusIcon } from '../components/ui/IconSystem';
 import { DashboardLoading, ErrorState } from '../components/ui/LoadingStates';
+import { Wifi, WifiOff } from 'lucide-react';
 
 function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -106,6 +108,10 @@ export function DashboardPage() {
   // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
   const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
 
+  // Wire real-time WebSocket updates — patches React Query cache on incoming events.
+  // Polling continues as fallback when the WebSocket is unavailable.
+  const { connected: wsConnected } = useDashboardStream();
+
   // Enable keyboard shortcuts for reality level changes
   // This hook must be called unconditionally before any early returns
   useRealityShortcuts();
@@ -190,14 +196,25 @@ export function DashboardPage() {
         subtitle="Current system performance indicators"
         className="space-section section-breathing"
         action={
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
+            {/* WebSocket connection indicator */}
+            <div className={`flex items-center gap-1.5 ${wsConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
+              {wsConnected ? (
+                <Wifi className="h-3.5 w-3.5" />
+              ) : (
+                <WifiOff className="h-3.5 w-3.5" />
+              )}
+              <span className="text-xs font-medium">
+                {wsConnected ? 'Streaming' : 'Polling'}
+              </span>
+            </div>
             <div className="relative flex items-center gap-2 text-green-600 dark:text-green-400">
               <div className="relative">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                 <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
               </div>
               <span className="font-medium">Live</span>
-              {isFetching && (
+              {isFetching && !wsConnected && (
                 <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(updating...)</span>
               )}
             </div>

@@ -1990,7 +1990,7 @@ pub async fn handle_serve(
     };
 
     #[cfg(feature = "smtp")]
-    let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
+    let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
 
@@ -2046,7 +2046,7 @@ pub async fn handle_serve(
     };
 
     #[cfg(feature = "mqtt")]
-    let _mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
+    let mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();
 
@@ -2087,7 +2087,7 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "mqtt"))]
-    let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
     let _tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
@@ -2190,7 +2190,7 @@ pub async fn handle_serve(
 
     // Start Kafka broker (if enabled)
     #[cfg(feature = "kafka")]
-    let _kafka_handle = if config.kafka.enabled {
+    let kafka_handle = if config.kafka.enabled {
         let kafka_config = config.kafka.clone();
         let kafka_shutdown = shutdown_token.clone();
 
@@ -2219,11 +2219,11 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "kafka"))]
-    let _kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start AMQP broker (if enabled)
     #[cfg(feature = "amqp")]
-    let _amqp_handle = if config.amqp.enabled {
+    let amqp_handle = if config.amqp.enabled {
         let amqp_config = config.amqp.clone();
         let amqp_shutdown = shutdown_token.clone();
 
@@ -2263,11 +2263,11 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "amqp"))]
-    let _amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start TCP server (if enabled)
     #[cfg(feature = "tcp")]
-    let _tcp_handle = if config.tcp.enabled {
+    let tcp_handle = if config.tcp.enabled {
         use mockforge_tcp::{TcpConfig as TcpServerConfig, TcpServer, TcpSpecRegistry};
         use std::sync::Arc;
 
@@ -2330,7 +2330,7 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "tcp"))]
-    let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
     use mockforge_core::latency::{FaultConfig, LatencyInjector};
@@ -2630,6 +2630,77 @@ pub async fn handle_serve(
                     eprintln!("❌ {}", error);
                     Some(error)
                 }
+                None => None
+            }
+        }
+        // Monitor optional protocol handles — errors are no longer silent
+        result = async {
+            if let Some(handle) = smtp_handle {
+                Some(("SMTP", handle.await))
+            } else {
+                std::future::pending().await
+            }
+        } => {
+            match result {
+                Some((name, Ok(Ok(())))) => { println!("📧 {} server stopped gracefully", name); None }
+                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} server error: {}", name, e); Some(e) }
+                Some((name, Err(e))) => { let error = format!("{} server task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = mqtt_handle {
+                Some(("MQTT", handle.await))
+            } else {
+                std::future::pending().await
+            }
+        } => {
+            match result {
+                Some((name, Ok(Ok(())))) => { println!("📡 {} broker stopped gracefully", name); None }
+                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
+                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = kafka_handle {
+                Some(("Kafka", handle.await))
+            } else {
+                std::future::pending().await
+            }
+        } => {
+            match result {
+                Some((name, Ok(Ok(())))) => { println!("📨 {} broker stopped gracefully", name); None }
+                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
+                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = amqp_handle {
+                Some(("AMQP", handle.await))
+            } else {
+                std::future::pending().await
+            }
+        } => {
+            match result {
+                Some((name, Ok(Ok(())))) => { println!("🐰 {} broker stopped gracefully", name); None }
+                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
+                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
+                None => None
+            }
+        }
+        result = async {
+            if let Some(handle) = tcp_handle {
+                Some(("TCP", handle.await))
+            } else {
+                std::future::pending().await
+            }
+        } => {
+            match result {
+                Some((name, Ok(Ok(())))) => { println!("🔌 {} server stopped gracefully", name); None }
+                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} server error: {}", name, e); Some(e) }
+                Some((name, Err(e))) => { let error = format!("{} server task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
                 None => None
             }
         }

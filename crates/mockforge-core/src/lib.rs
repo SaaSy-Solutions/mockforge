@@ -304,6 +304,8 @@ pub mod template_library;
 pub mod templating;
 pub mod time_travel;
 pub mod time_travel_handler;
+/// Shared TLS utilities for building rustls server and client configurations.
+pub mod tls;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
