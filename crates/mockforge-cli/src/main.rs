@@ -4268,7 +4268,7 @@ pub async fn handle_serve(
 
     // Apply network profile if specified
     if let Some(profile_name) = serve_args.network_profile {
-        use mockforge_core::NetworkProfileCatalog;
+        use mockforge_chaos::core_network_profiles::NetworkProfileCatalog;
         let catalog = NetworkProfileCatalog::new();
 
         if let Some(profile) = catalog.get(&profile_name) {
@@ -4289,7 +4289,7 @@ pub async fn handle_serve(
 
     // Enable random chaos mode if specified
     if serve_args.chaos_random {
-        use mockforge_core::ChaosConfig;
+        use mockforge_chaos::core_chaos_utilities::ChaosConfig;
 
         println!("🎲 Random chaos mode enabled");
         println!("   Error rate: {:.1}%", chaos_random_error_rate * 100.0);

@@ -12,7 +12,8 @@ use axum::{
     routing::get,
     Router,
 };
-use mockforge_core::{ChaosConfig, ChaosEngine, ChaosResult, Config};
+use mockforge_chaos::core_chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult};
+use mockforge_core::Config;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 

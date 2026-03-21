@@ -60,7 +60,7 @@ mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios", opt
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 mockforge-mqtt = { version = "0.3.70", path = "../mockforge-mqtt", optional = true }
-mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos", optional = true }
+mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
 mockforge-performance = { version = "0.3.70", path = "../mockforge-performance", optional = true }
 mockforge-world-state = { version = "0.3.95", path = "../mockforge-world-state", optional = true }
 mockforge-template-expansion = { version = "0.3.70", path = "../mockforge-template-expansion" }
@@ -80,7 +80,7 @@ mockforge-bench = { version = "0.3.70", path = "../mockforge-bench", optional = 
 [features]
 default = ["chaos-engine", "performance-profiling", "world-state", "route-chaos", "scenario-engine"]
 # Chaos engineering handlers and middleware
-chaos-engine = ["mockforge-chaos"]
+chaos-engine = []
 # Performance profiling handlers
 performance-profiling = ["mockforge-performance"]
 # World state graph engine

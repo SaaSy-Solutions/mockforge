@@ -4057,7 +4057,7 @@ async fn update_chaos_config(
 
 /// List available network profiles
 async fn list_network_profiles() -> impl IntoResponse {
-    use mockforge_core::network_profiles::NetworkProfileCatalog;
+    use mockforge_chaos::core_network_profiles::NetworkProfileCatalog;
 
     let catalog = NetworkProfileCatalog::default();
     let profiles: Vec<serde_json::Value> = catalog
@@ -4089,7 +4089,7 @@ async fn apply_network_profile(
     State(state): State<ManagementState>,
     Json(request): Json<ApplyNetworkProfileRequest>,
 ) -> impl IntoResponse {
-    use mockforge_core::network_profiles::NetworkProfileCatalog;
+    use mockforge_chaos::core_network_profiles::NetworkProfileCatalog;
 
     let catalog = NetworkProfileCatalog::default();
     if let Some(profile) = catalog.get(&request.profile_name) {

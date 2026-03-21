@@ -4,7 +4,7 @@
 //! scenarios including 500 errors, timeouts, and other error conditions.
 
 use axum::Router;
-use mockforge_core::failure_injection::FailureConfig;
+use mockforge_chaos::core_failure_injection::FailureConfig;
 use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
 use std::net::SocketAddr;

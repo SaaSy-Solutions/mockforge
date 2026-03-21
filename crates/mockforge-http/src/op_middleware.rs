@@ -7,7 +7,9 @@ use axum::response::Response;
 use serde_json::Value;
 
 use crate::latency_profiles::LatencyProfiles;
-use mockforge_core::{FailureInjector, Overrides, TrafficShaper};
+use mockforge_chaos::core_failure_injection::FailureInjector;
+use mockforge_chaos::core_traffic_shaping::TrafficShaper;
+use mockforge_core::Overrides;
 
 /// Metadata for the current OpenAPI operation
 #[derive(Clone)]

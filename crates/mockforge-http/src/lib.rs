@@ -290,7 +290,7 @@ use axum::extract::State;
 use axum::middleware::from_fn_with_state;
 use axum::response::Json;
 use axum::Router;
-use mockforge_core::failure_injection::{FailureConfig, FailureInjector};
+use mockforge_chaos::core_failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::intelligent_behavior::config::Persona;
 use mockforge_core::latency::LatencyInjector;
 use mockforge_core::openapi::OpenApiSpec;

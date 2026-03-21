@@ -51,6 +51,12 @@ pub mod trace_collector;
 pub mod traffic_shaping;
 pub mod version_control;
 
+// Modules extracted from mockforge-core (Phase 6a)
+pub mod core_chaos_utilities;
+pub mod core_failure_injection;
+pub mod core_network_profiles;
+pub mod core_traffic_shaping;
+
 pub use ab_testing::{
     ABTest, ABTestConfig, ABTestStats, ABTestStatus, ABTestingEngine, MetricComparison, MetricType,
     SingleMetricComparison, SuccessCriteria, TestConclusion, TestVariant, VariantMetrics,
@@ -176,6 +182,20 @@ pub use template_marketplace::{
     TemplateReview, TemplateSearchFilters, TemplateSortBy, TemplateStats,
 };
 pub use traffic_shaping::TrafficShaper;
+
+// Re-exports from modules extracted from mockforge-core (Phase 6a)
+pub use core_chaos_utilities::{
+    ChaosConfig as CoreChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics,
+};
+pub use core_failure_injection::{
+    create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
+};
+pub use core_network_profiles::{NetworkProfile as CoreNetworkProfile, NetworkProfileCatalog};
+pub use core_traffic_shaping::{
+    BandwidthConfig, BurstLossConfig, TrafficShaper as CoreTrafficShaper,
+    TrafficShapingConfig as CoreTrafficShapingConfig,
+};
+
 pub use version_control::{
     Branch, Commit, Diff, DiffChange, DiffChangeType, DiffStats, VersionControlRepository,
 };

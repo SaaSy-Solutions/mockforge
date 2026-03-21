@@ -326,6 +326,7 @@ pub use behavioral_cloning::{
     ProbabilisticModel, SequenceLearner, SequenceStep,
 };
 pub use chain_execution::{ChainExecutionEngine, ChainExecutionResult, ChainExecutionStatus};
+#[deprecated(note = "Use mockforge_chaos::core_chaos_utilities instead")]
 pub use chaos_utilities::{ChaosConfig, ChaosEngine, ChaosResult, ChaosStatistics};
 pub use conditions::{evaluate_condition, ConditionContext, ConditionError};
 pub use config::{
@@ -349,6 +350,7 @@ pub use failure_analysis::{
     ContributingFactor, FailureContext, FailureContextCollector, FailureNarrative,
     FailureNarrativeGenerator, NarrativeFrame,
 };
+#[deprecated(note = "Use mockforge_chaos::core_failure_injection instead")]
 pub use failure_injection::{
     create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
 };
@@ -372,6 +374,7 @@ pub use multi_tenant::{
     MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
     WorkspaceContext, WorkspaceRouter, WorkspaceStats,
 };
+#[deprecated(note = "Use mockforge_chaos::core_network_profiles instead")]
 pub use network_profiles::{NetworkProfile, NetworkProfileCatalog};
 pub use openapi::{
     OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSecurityRequirement, OpenApiSpec,
@@ -454,6 +457,7 @@ pub use time_travel::{
 pub use time_travel_handler::{
     time_travel_middleware, ScheduledResponseWrapper, TimeTravelHandler,
 };
+#[deprecated(note = "Use mockforge_chaos::core_traffic_shaping instead")]
 pub use traffic_shaping::{BandwidthConfig, BurstLossConfig, TrafficShaper, TrafficShapingConfig};
 pub use uuid::Uuid;
 pub use validation::{validate_openapi_operation_security, validate_openapi_security, Validator};
