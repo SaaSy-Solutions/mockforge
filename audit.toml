@@ -6,4 +6,10 @@ ignore = [
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained but not a security issue, only affects desktop app GUI dependencies" },
     { id = "RUSTSEC-2026-0020", reason = "wasmtime WASI resource exhaustion - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
     { id = "RUSTSEC-2026-0021", reason = "wasmtime wasi:http/types.fields panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
+    { id = "RUSTSEC-2026-0044", reason = "aws-lc-sys X.509 bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
+    { id = "RUSTSEC-2026-0045", reason = "aws-lc-sys AES-CCM timing - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
+    { id = "RUSTSEC-2026-0046", reason = "aws-lc-sys PKCS7 chain bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
+    { id = "RUSTSEC-2026-0047", reason = "aws-lc-sys PKCS7 sig bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
+    { id = "RUSTSEC-2026-0048", reason = "aws-lc-sys CRL DP logic error - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
+    { id = "RUSTSEC-2026-0049", reason = "rustls-webpki CRL DP matching - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints" },
 ]

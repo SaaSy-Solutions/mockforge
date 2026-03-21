@@ -209,16 +209,16 @@ pub mod ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 pub mod behavioral_cloning;
 pub mod behavioral_economics;
-pub mod cache;
+pub(crate) mod cache;
 pub mod chain_execution;
 pub mod chaos_utilities;
 pub mod codegen;
 /// Collection export utilities for exporting mock data in various formats
-pub mod collection_export;
+pub(crate) mod collection_export;
 pub mod conditions;
 pub mod config;
 /// Connection pooling for HTTP clients with health checks and idle management
-pub mod connection_pool;
+pub(crate) mod connection_pool;
 /// Cross-protocol consistency engine for unified state across all protocols
 pub mod consistency;
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
@@ -228,14 +228,14 @@ pub mod contract_drift;
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
-pub mod contract_webhooks;
+pub(crate) mod contract_webhooks;
 pub mod custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
 /// Deceptive canary mode for routing team traffic to deceptive deploys
 pub mod deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
-pub mod docker_compose;
+pub(crate) mod docker_compose;
 /// GitOps integration for drift budget violations
 pub mod drift_gitops;
 pub mod encryption;
@@ -244,7 +244,7 @@ pub mod failure_analysis;
 pub mod failure_injection;
 pub mod fidelity;
 pub mod generate_config;
-pub mod generative_schema;
+pub(crate) mod generative_schema;
 pub mod git_watch;
 pub mod graph;
 pub mod import;
@@ -278,11 +278,11 @@ pub mod request_capture;
 pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
-pub mod request_scripting;
+pub(crate) mod request_scripting;
 // Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
 // Import directly from mockforge-route-chaos crate instead of re-exporting here
 // to avoid circular dependency (mockforge-route-chaos depends on mockforge-core for config types)
-pub mod persona_lifecycle_time;
+pub(crate) mod persona_lifecycle_time;
 pub mod routing;
 /// Runtime validation for SDKs (request/response validation at runtime)
 pub mod runtime_validation;

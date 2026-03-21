@@ -1,27 +1,11 @@
 //! Test that ensures our critical modules can be imported and basic functionality works
 
-use mockforge_core::{cache::Cache, performance::PerformanceMetrics};
+use mockforge_core::performance::PerformanceMetrics;
 use std::time::Duration;
 
 #[cfg(test)]
 mod import_tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_cache_can_be_imported_and_used() {
-        let cache: Cache<String, i32> = Cache::new(10);
-
-        // Basic insertion should work
-        cache.insert("test".to_string(), 42, None).await;
-
-        // Basic retrieval should work
-        let value = cache.get(&"test".to_string()).await;
-        assert_eq!(value, Some(42));
-
-        // Non-existent key should return None
-        let missing = cache.get(&"missing".to_string()).await;
-        assert_eq!(missing, None);
-    }
 
     #[tokio::test]
     async fn test_performance_metrics_can_be_imported_and_used() {
