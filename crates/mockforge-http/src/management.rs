@@ -1206,6 +1206,40 @@ async fn health_check() -> Json<serde_json::Value> {
     }))
 }
 
+/// Report which features and protocols are available in this build.
+///
+/// The UI queries this on startup to auto-stub any missing features
+/// instead of maintaining hardcoded prefix lists.
+async fn get_capabilities() -> Json<serde_json::Value> {
+    let mut features = vec!["core", "http", "management", "mocks", "proxy", "ai"];
+
+    #[cfg(feature = "smtp")]
+    features.push("smtp");
+    #[cfg(feature = "mqtt")]
+    features.push("mqtt");
+    #[cfg(feature = "kafka")]
+    features.push("kafka");
+    #[cfg(feature = "conformance")]
+    features.push("conformance");
+    #[cfg(feature = "behavioral-cloning")]
+    features.push("behavioral-cloning");
+
+    // Always-available subsystems (registered unconditionally in the router)
+    features.extend_from_slice(&[
+        "chaos",
+        "network-profiles",
+        "state-machines",
+        "migration",
+        "snapshot-diff",
+        "mockai",
+    ]);
+
+    Json(serde_json::json!({
+        "features": features,
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
+}
+
 /// Export format for mock configurations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -2440,6 +2474,7 @@ async fn get_proxy_inspect(
 /// Build the management API router
 pub fn management_router(state: ManagementState) -> Router {
     let router = Router::new()
+        .route("/capabilities", get(get_capabilities))
         .route("/health", get(health_check))
         .route("/stats", get(get_stats))
         .route("/config", get(get_config))

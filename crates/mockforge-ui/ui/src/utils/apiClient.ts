@@ -254,6 +254,8 @@ function createCloudStubResponse(url: string): Response {
 
 // Local-only API paths that don't exist on the registry server.
 // In cloud mode, return stubs instead of letting them 404.
+// This list is a static fallback — the server also exposes GET /api/capabilities
+// which the UI can query at startup to dynamically determine available features.
 const LOCAL_ONLY_API_PREFIXES = [
   '/api/chaos/',
   '/api/observability/',
@@ -269,6 +271,33 @@ const LOCAL_ONLY_API_PREFIXES = [
   '/api/v1/snapshots',
   '/api/v2/analytics/',
 ];
+
+// Cached server capabilities (fetched once from GET /api/capabilities)
+let cachedCapabilities: string[] | null = null;
+
+/** Fetch available features from the server's capabilities endpoint. */
+export async function fetchCapabilities(baseUrl?: string): Promise<string[]> {
+  if (cachedCapabilities) return cachedCapabilities;
+  try {
+    const url = baseUrl
+      ? `${baseUrl}/api/capabilities`
+      : '/api/capabilities';
+    const res = await originalFetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      cachedCapabilities = data.features ?? [];
+      return cachedCapabilities;
+    }
+  } catch {
+    // Server may not support capabilities yet — fall back to static list
+  }
+  return [];
+}
+
+/** Check whether a feature is reported as available by the server. */
+export function hasCapability(feature: string): boolean {
+  return cachedCapabilities?.includes(feature) ?? false;
+}
 
 function isLocalOnlyApi(url: string): boolean {
   const path = new URL(url, window.location.origin).pathname;

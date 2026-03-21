@@ -103,12 +103,10 @@ impl K6Executor {
             cmd.arg("--address").arg(format!("localhost:{}", port));
         }
 
-        // Add output options — use absolute path since we set CWD to output_dir below.
-        if let Some(dir) = output_dir {
-            let abs_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
-            let summary_path = abs_dir.join("summary.json");
-            cmd.arg("--summary-export").arg(summary_path);
-        }
+        // summary.json is written by the k6 script's handleSummary() function
+        // (relative to CWD, set to output_dir below). We no longer use
+        // --summary-export as it's deprecated in newer k6 versions and
+        // conflicts with handleSummary when both try to write the same file.
 
         // Add verbosity
         if verbose {
