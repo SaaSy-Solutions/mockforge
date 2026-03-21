@@ -118,7 +118,7 @@ jobs:
         cargo publish -p mockforge-template-expansion || true
         cargo publish -p mockforge-tracing || true
         cargo publish -p mockforge-tunnel || true
-        sleep 45
+        sleep 20
 
         # Tier 1: Depend only on leaf crates
         cargo publish -p mockforge-amqp || true
@@ -138,38 +138,37 @@ jobs:
         cargo publish -p mockforge-schema || true
         cargo publish -p mockforge-smtp || true
         cargo publish -p mockforge-tcp || true
-        sleep 45
+        sleep 20
 
         # Tier 2: Core and mid-level crates
         cargo publish -p mockforge-collab || true
         cargo publish -p mockforge-core || true
         cargo publish -p mockforge-runtime-daemon || true
         cargo publish -p mockforge-world-state || true
-        sleep 45
+        sleep 20
 
         # Tier 3: Higher-level crates
         cargo publish -p mockforge-bench || true
         cargo publish -p mockforge-chaos || true
         cargo publish -p mockforge-test || true
         cargo publish -p mockforge-vbr || true
-        sleep 45
+        sleep 20
 
         # Tier 4: Protocol crates
         cargo publish -p mockforge-graphql || true
         cargo publish -p mockforge-grpc || true
         cargo publish -p mockforge-scenarios || true
         cargo publish -p mockforge-ws || true
-        sleep 45
+        sleep 20
 
         # Tier 5: High-level crates
-        cargo publish -p mockforge-registry-server || true
         cargo publish -p mockforge-sdk || true
         cargo publish -p mockforge-ui || true
-        sleep 45
+        sleep 20
 
         # Tier 6: Top-level crates
         cargo publish -p mockforge-http || true
-        sleep 45
+        sleep 20
 
         # Tier 7: CLI (depends on everything)
         cargo publish -p mockforge-cli || true

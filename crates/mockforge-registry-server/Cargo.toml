@@ -12,6 +12,7 @@ documentation = "https://docs.rs/mockforge-registry-server"
 readme = "README.md"
 keywords = ["mock", "api", "testing", "registry", "plugin"]
 categories = ["development-tools", "web-programming"]
+publish = false
 
 [dependencies]
 # Web framework
