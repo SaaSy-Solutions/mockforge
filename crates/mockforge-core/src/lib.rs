@@ -202,16 +202,22 @@
 #![allow(deprecated)]
 
 pub mod ab_testing;
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_contract_diff;
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_response;
 /// AI Studio - Unified AI Copilot for all AI-powered features
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod behavioral_cloning;
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod behavioral_economics;
 pub(crate) mod cache;
 pub mod chain_execution;
 pub mod chaos_utilities;
+#[deprecated(note = "Will be extracted to mockforge-import crate")]
 pub mod codegen;
 /// Collection export utilities for exporting mock data in various formats
 pub(crate) mod collection_export;
@@ -221,10 +227,13 @@ pub mod config;
 pub(crate) mod connection_pool;
 /// Cross-protocol consistency engine for unified state across all protocols
 pub mod consistency;
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
 pub mod consumer_contracts;
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_drift;
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// Contract validation for ensuring API contracts match specifications
 pub mod contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
@@ -236,8 +245,10 @@ pub mod data_source;
 pub mod deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 pub(crate) mod docker_compose;
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// GitOps integration for drift budget violations
 pub mod drift_gitops;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod encryption;
 pub mod error;
 pub mod failure_analysis;
@@ -245,13 +256,17 @@ pub mod failure_injection;
 pub mod fidelity;
 pub mod generate_config;
 pub(crate) mod generative_schema;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod git_watch;
 pub mod graph;
+#[deprecated(note = "Will be extracted to mockforge-import crate")]
 pub mod import;
 pub mod incidents;
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod intelligent_behavior;
 pub mod latency;
 pub mod lifecycle;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod multi_tenant;
 pub mod network_profiles;
 /// OData function call URI rewrite middleware
@@ -270,6 +285,7 @@ pub mod priority_handler;
 pub mod protocol_abstraction;
 /// Protocol server lifecycle trait for uniform server startup and shutdown
 pub mod protocol_server;
+#[deprecated(note = "Will be extracted to mockforge-proxy crate")]
 pub mod proxy;
 pub mod reality;
 pub mod reality_continuum;
@@ -289,6 +305,7 @@ pub mod runtime_validation;
 /// Scenario Studio - Visual editor for co-editing business flows
 pub mod scenario_studio;
 pub mod scenarios;
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 pub mod schema_diff;
 pub mod security;
 pub mod server_utils;
@@ -296,6 +313,7 @@ pub mod server_utils;
 pub mod snapshots;
 pub mod spec_parser;
 pub mod stateful_handler;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod sync_watcher;
 /// Template expansion utilities (Send-safe, isolated from templating module)
 pub mod template_expansion;
@@ -310,8 +328,11 @@ pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
 pub mod voice;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod workspace;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod workspace_import;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod workspace_persistence;
 pub mod ws_proxy;
 
@@ -320,6 +341,7 @@ pub use ab_testing::{
     ABTestingMiddlewareState, MockVariant, VariantAllocation, VariantAnalytics, VariantComparison,
     VariantManager, VariantSelectionStrategy,
 };
+#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub use behavioral_cloning::{
     AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EdgeAmplifier,
     EndpointProbabilityModel, ErrorPattern, LatencyDistribution, PayloadVariation,
@@ -360,6 +382,7 @@ pub use generate_config::{
     save_generate_config, BarrelType, GenerateConfig, GenerateOptions, InputConfig, OutputConfig,
     PluginConfig,
 };
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use git_watch::{GitWatchConfig, GitWatchService};
 pub use graph::{
     builder::GraphBuilder, relationships, ClusterType, EdgeType, GraphCluster, GraphData,
@@ -370,6 +393,7 @@ pub use lifecycle::{
     LifecycleHook, LifecycleHookRegistry, MockLifecycleEvent, RequestContext, ResponseContext,
     ServerLifecycleEvent,
 };
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use multi_tenant::{
     MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
     WorkspaceContext, WorkspaceRouter, WorkspaceStats,
@@ -396,6 +420,7 @@ pub use protocol_abstraction::{
     ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
+#[deprecated(note = "Will be extracted to mockforge-proxy crate")]
 pub use proxy::{ProxyConfig, ProxyHandler, ProxyResponse};
 pub use reality::{PresetMetadata, RealityConfig, RealityEngine, RealityLevel, RealityPreset};
 pub use reality_continuum::{
@@ -433,6 +458,7 @@ pub use scenarios::{
     ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
     ScenarioStep,
 };
+#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
@@ -442,6 +468,7 @@ pub use stateful_handler::{
     ResourceIdExtract, StateInfo, StateResponse, StatefulConfig, StatefulResponse,
     StatefulResponseHandler, TransitionTrigger,
 };
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use template_library::{
     TemplateLibrary, TemplateLibraryEntry, TemplateLibraryManager, TemplateMarketplace,
@@ -470,13 +497,17 @@ pub use voice::{
     HookTranspiler, ParsedCommand, ParsedWorkspaceScenario, VoiceCommandParser, VoiceSpecGenerator,
     WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace::promotion_trait::PromotionService;
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace_import::{
     create_workspace_from_curl, create_workspace_from_har, create_workspace_from_insomnia,
     create_workspace_from_postman, import_postman_to_existing_workspace,
     import_postman_to_workspace, WorkspaceImportConfig, WorkspaceImportResult,
 };
+#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace_persistence::WorkspacePersistence;
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 // Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
