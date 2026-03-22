@@ -592,23 +592,43 @@ impl BenchCommand {
         );
 
         // Execute all targets
+        let start_time = std::time::Instant::now();
         let aggregated_results = executor.execute_all().await?;
+        let elapsed = start_time.elapsed();
 
         // Organize and report results
-        self.report_multi_target_results(&aggregated_results)?;
+        self.report_multi_target_results(&aggregated_results, elapsed)?;
 
         Ok(())
     }
 
     /// Report results for multi-target execution
-    fn report_multi_target_results(&self, results: &AggregatedResults) -> Result<()> {
+    fn report_multi_target_results(
+        &self,
+        results: &AggregatedResults,
+        elapsed: std::time::Duration,
+    ) -> Result<()> {
         // Print summary
         TerminalReporter::print_multi_target_summary(results);
+
+        // Print elapsed time
+        let total_secs = elapsed.as_secs();
+        let hours = total_secs / 3600;
+        let minutes = (total_secs % 3600) / 60;
+        let seconds = total_secs % 60;
+        if hours > 0 {
+            println!("\n  Total Elapsed Time:   {}h {}m {}s", hours, minutes, seconds);
+        } else if minutes > 0 {
+            println!("\n  Total Elapsed Time:   {}m {}s", minutes, seconds);
+        } else {
+            println!("\n  Total Elapsed Time:   {}s", seconds);
+        }
 
         // Save aggregated summary if requested
         if self.results_format == "aggregated" || self.results_format == "both" {
             let summary_path = self.output.join("aggregated_summary.json");
             let summary_json = serde_json::json!({
+                "total_elapsed_seconds": elapsed.as_secs(),
                 "total_targets": results.total_targets,
                 "successful_targets": results.successful_targets,
                 "failed_targets": results.failed_targets,
@@ -652,8 +672,35 @@ impl BenchCommand {
             ));
         }
 
+        // Write CSV with all per-target results for easy parsing
+        let csv_path = self.output.join("all_targets.csv");
+        let mut csv = String::from(
+            "target_url,success,requests,failed,rps,vus,min_ms,avg_ms,med_ms,p90_ms,p95_ms,p99_ms,max_ms,error\n",
+        );
+        for r in &results.target_results {
+            csv.push_str(&format!(
+                "{},{},{},{},{:.1},{},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{}\n",
+                r.target_url,
+                r.success,
+                r.results.total_requests,
+                r.results.failed_requests,
+                r.results.rps,
+                r.results.vus_max,
+                r.results.min_duration_ms,
+                r.results.avg_duration_ms,
+                r.results.med_duration_ms,
+                r.results.p90_duration_ms,
+                r.results.p95_duration_ms,
+                r.results.p99_duration_ms,
+                r.results.max_duration_ms,
+                r.error.as_deref().unwrap_or(""),
+            ));
+        }
+        let _ = std::fs::write(&csv_path, &csv);
+
         println!("\nResults saved to: {}", self.output.display());
         println!("  - Per-target results: {}", self.output.join("target_*").display());
+        println!("  - All targets CSV:    {}", csv_path.display());
         if self.results_format == "aggregated" || self.results_format == "both" {
             println!(
                 "  - Aggregated summary: {}",
