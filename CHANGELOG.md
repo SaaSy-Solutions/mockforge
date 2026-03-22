@@ -1,3 +1,99 @@
+## [0.3.98] - 2026-03-22
+
+### Fixed
+
+- **[Bench]** Fix zero stats in multi-target summary — removed deprecated `--summary-export` flag; rely solely on `handleSummary()` for writing `summary.json` (#79)
+- **[Bench]** Fix failed_requests metric reading `.fails` (success count) instead of `.passes` (failure count) from k6 Rate metric (#79)
+- **[Bench]** Fix k6 script path not found when CWD is set to output dir — now uses absolute script path (#79)
+- **[Bench]** Fix `--summary-export` absolute path for CWD mismatch (#79)
+- **[Bench]** Fix k6 API server port conflict in multi-target mode — each parallel instance gets a unique port (#79)
+- **[Bench]** Treat k6 exit code 99 (thresholds crossed) as warning, still parse results (#79)
+- **[Bench]** Warn when `--conformance` is used with `--targets-file` (not yet supported) (#79)
+- **[Core]** Downgrade contract diff `$ref` resolver warnings from WARN to DEBUG (#79)
+
+### Added
+
+- **[Bench]** Total elapsed time in multi-target summary output and `aggregated_summary.json` (#79)
+- **[Bench]** `all_targets.csv` file with per-target metrics for easy parsing (#79)
+- **[UI]** Host header column in admin dashboard Recent Logs (#79)
+- **[TUI]** Client IP and Host columns in both Dashboard and Logs screens (#79)
+
+## [0.3.91] - 2026-03-17
+
+### Fixed
+
+- **[HTTP]** Fix double-slash in conformance URLs when `--target` has trailing slash (#79)
+- **[HTTP]** Apply OData rewrite layer to TLS/HTTPS server path (was only on non-TLS) (#79)
+- **[CLI]** Downgrade non-actionable WARN messages to DEBUG/INFO (MockAI key, proto dir, auth backend, JWT secret) (#79)
+
+## [0.3.90] - 2026-03-16
+
+### Added
+
+- **[Core]** OData function call path support via URI rewrite layer (#79)
+  - Handles paths like `(period='{period}')` for Microsoft Graph compatibility
+  - Mock responses generated for OData function endpoints
+
+## [0.3.89] - 2026-03-15
+
+### Fixed
+
+- **[Core]** Gracefully skip OData function call paths in OpenAPI specs instead of failing (#79)
+
+## [0.3.88] - 2026-03-14
+
+### Added
+
+- **[Bench]** `--conformance-delay` flag to add delay between conformance requests (#79)
+- **[Bench]** k6 output logging to file for debugging (#79)
+- **[Bench]** 429 rate-limit detection and error clarity in conformance output (#79)
+
+### Fixed
+
+- **[Cloud]** End-to-end deployment pipeline, storage fallback, remaining console errors
+- **[CLI]** Load OpenAPI spec from `MOCKFORGE_CONFIG` env var for cloud deployments
+- **[Cloud]** Auto-detect Fly.io registry images for cross-app pulls
+
+## [0.3.85] - 2026-03-12
+
+### Added
+
+- **[Bench]** Native conformance executor with API, UI dashboard, and SDK integration (#79)
+- **[Bench]** Conformance report UX improvements and custom test authoring (#79)
+- **[Bench]** Full request/response detail capture for conformance failures (#79)
+- **[Bench]** OWASP API Top 10 coverage mapping in conformance reports (#79)
+
+### Fixed
+
+- **[Bench]** Eliminate misleading error rate in conformance output (#79)
+- **[Bench]** Deduplicate native executor checks, write failure details file (#79)
+- **[Bench]** Custom conformance checks now emit failure details (#79)
+- **[Core/Bench]** Resolve 3 conformance test failures (#79)
+- **[UI/Bench]** Fix empty routes and add endpoint details to conformance (#79)
+
+## [0.3.80] - 2026-03-10
+
+### Fixed
+
+- **[Analytics]** Make migrations idempotent with `IF NOT EXISTS` guards (#79)
+- **[TUI]** Add g/G and PgUp/PgDn to routes screen status hint (#79)
+- **[UI/Bench]** Fix routes proxy, improve OWASP coverage reporting (#79)
+
+### Added
+
+- **[Cloud]** Cloud mode support, auth fixes, runtime error hardening
+- **[Cloud]** Deployment deletion CLI command and background cleanup worker
+- **[HTTP/UI]** API explorer for hosted mock deployments
+
+### Changed
+
+- **[Refactor]** Architectural overhaul — 10 workstreams across core, UI, CI
+- **[Perf]** Replace linear route scan with matchit trie-based matching
+- **[Refactor]** Extract chaos modules from core into mockforge-chaos
+- **[Refactor]** Split config.rs and openapi/response.rs into submodules
+- **[Refactor]** Restrict 8 internal modules to pub(crate), add 35 GraphQL tests
+- **[Refactor]** Implement MockProtocolServer trait for all 10 protocols
+
 ## [0.3.76] - 2026-03-08
 
 ### Fixed
