@@ -698,25 +698,18 @@ pub async fn compare_contracts_handler(
             // Run fitness tests if registry is available
             let mut drift_result_with_fitness = drift_result.clone();
             if let Some(ref fitness_registry) = state.fitness_registry {
-                let rt = tokio::runtime::Handle::try_current();
-                if let Ok(handle) = rt {
-                    let fitness_results = handle.block_on(async {
-                        let guard = fitness_registry.read().await;
-                        guard.evaluate_all_protocol(
-                            Some(old_contract),
-                            new_contract,
-                            &diff_result,
-                            operation_id,
-                            None, // workspace_id
-                            None, // service_name
-                        )
-                    });
-                    if let Ok(results) = fitness_results {
-                        drift_result_with_fitness.fitness_test_results = results;
-                        if drift_result_with_fitness.fitness_test_results.iter().any(|r| !r.passed)
-                        {
-                            drift_result_with_fitness.should_create_incident = true;
-                        }
+                let guard = fitness_registry.read().await;
+                if let Ok(results) = guard.evaluate_all_protocol(
+                    Some(old_contract),
+                    new_contract,
+                    &diff_result,
+                    operation_id,
+                    None, // workspace_id
+                    None, // service_name
+                ) {
+                    drift_result_with_fitness.fitness_test_results = results;
+                    if drift_result_with_fitness.fitness_test_results.iter().any(|r| !r.passed) {
+                        drift_result_with_fitness.should_create_incident = true;
                     }
                 }
             }
@@ -724,20 +717,11 @@ pub async fn compare_contracts_handler(
             // Analyze consumer impact if analyzer is available
             // Use operation_id for more flexible protocol-specific matching
             if let Some(ref consumer_analyzer) = state.consumer_analyzer {
-                let rt = tokio::runtime::Handle::try_current();
-                if let Ok(handle) = rt {
-                    let impact = handle.block_on(async {
-                        let guard = consumer_analyzer.read().await;
-                        // Use analyze_impact_with_operation_id for better protocol support
-                        guard.analyze_impact_with_operation_id(
-                            &endpoint,
-                            &method,
-                            Some(operation_id),
-                        )
-                    });
-                    if let Some(impact) = impact {
-                        drift_result_with_fitness.consumer_impact = Some(impact);
-                    }
+                let guard = consumer_analyzer.read().await;
+                let impact =
+                    guard.analyze_impact_with_operation_id(&endpoint, &method, Some(operation_id));
+                if let Some(impact) = impact {
+                    drift_result_with_fitness.consumer_impact = Some(impact);
                 }
             }
 

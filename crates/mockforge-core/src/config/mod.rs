@@ -689,6 +689,7 @@ pub async fn load_config_with_profile<P: AsRef<Path>>(
 }
 
 /// Load configuration from TypeScript/JavaScript file
+#[cfg(feature = "scripting")]
 pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
     use rquickjs::{Context, Runtime};
 
@@ -743,6 +744,7 @@ pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig
 /// # Errors
 /// Returns an error if regex compilation fails. This should never happen with static patterns,
 /// but we handle it gracefully to prevent panics.
+#[cfg(feature = "scripting")]
 fn strip_typescript_types(content: &str) -> Result<String> {
     use regex::Regex;
 
@@ -785,11 +787,23 @@ pub async fn load_config_auto<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
     let ext = path.as_ref().extension().and_then(|s| s.to_str()).unwrap_or("");
 
     match ext {
+        #[cfg(feature = "scripting")]
         "ts" | "js" => load_config_from_js(&path).await,
+        #[cfg(not(feature = "scripting"))]
+        "ts" | "js" => Err(Error::generic(
+            "JS/TS config files require the 'scripting' feature (rquickjs). \
+             Enable it with: cargo build --features scripting"
+                .to_string(),
+        )),
         "yaml" | "yml" | "json" => load_config(&path).await,
         _ => Err(Error::generic(format!(
-            "Unsupported config file format: {}. Supported: .ts, .js, .yaml, .yml, .json",
-            ext
+            "Unsupported config file format: {}. Supported: .yaml, .yml, .json{}",
+            ext,
+            if cfg!(feature = "scripting") {
+                ", .ts, .js"
+            } else {
+                ""
+            }
         ))),
     }
 }
@@ -956,6 +970,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "scripting")]
     fn test_strip_typescript_types() {
         let ts_code = r#"
 interface Config {

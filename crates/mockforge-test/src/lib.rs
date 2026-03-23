@@ -60,6 +60,7 @@
 
 pub mod config;
 pub mod error;
+pub mod fixtures;
 pub mod health;
 pub mod process;
 pub mod scenario;
@@ -67,6 +68,9 @@ pub mod server;
 
 pub use config::{ServerConfig, ServerConfigBuilder};
 pub use error::{Error, Result};
+pub use fixtures::{
+    minimal_openapi_spec, openapi_spec_crud, openapi_spec_with_get, write_spec_to, write_temp_spec,
+};
 pub use health::{HealthCheck, HealthStatus};
 pub use scenario::ScenarioManager;
 pub use server::MockForgeServer;

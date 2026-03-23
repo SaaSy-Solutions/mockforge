@@ -1,7 +1,126 @@
 //! SMTP server management and mailbox operations
 
-use crate::{FixturesCommands, MailboxCommands, SmtpCommands};
+use clap::Subcommand;
 use mockforge_smtp::SmtpFixture;
+use std::path::PathBuf;
+
+#[derive(Subcommand)]
+pub(crate) enum SmtpCommands {
+    /// Mailbox management commands
+    Mailbox {
+        #[command(subcommand)]
+        mailbox_command: MailboxCommands,
+    },
+
+    /// Fixture management commands
+    Fixtures {
+        #[command(subcommand)]
+        fixtures_command: FixturesCommands,
+    },
+
+    /// Send test email
+    Send {
+        /// Recipient email address
+        #[arg(short, long)]
+        to: String,
+
+        /// Email subject
+        #[arg(short, long)]
+        subject: String,
+
+        /// Email body
+        #[arg(short, long, default_value = "Test email from MockForge CLI")]
+        body: String,
+
+        /// SMTP server host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// SMTP server port
+        #[arg(long, default_value = "1025")]
+        port: u16,
+
+        /// Sender email address
+        #[arg(long, default_value = "test@mockforge.cli")]
+        from: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MailboxCommands {
+    /// List all emails in mailbox
+    List,
+
+    /// Show details of specific email
+    Show {
+        /// Email ID
+        email_id: String,
+    },
+
+    /// Clear all emails from mailbox
+    Clear,
+
+    /// Export mailbox to file
+    Export {
+        /// Output format (mbox, json, csv)
+        #[arg(short, long, default_value = "mbox")]
+        format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+
+    /// Search emails in mailbox
+    Search {
+        /// Filter by sender email
+        #[arg(long)]
+        sender: Option<String>,
+
+        /// Filter by recipient email
+        #[arg(long)]
+        recipient: Option<String>,
+
+        /// Filter by subject
+        #[arg(long)]
+        subject: Option<String>,
+
+        /// Filter by body content
+        #[arg(long)]
+        body: Option<String>,
+
+        /// Filter emails since date (RFC3339 format)
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Filter emails until date (RFC3339 format)
+        #[arg(long)]
+        until: Option<String>,
+
+        /// Use regex matching instead of substring
+        #[arg(long)]
+        regex: bool,
+
+        /// Case sensitive matching
+        #[arg(long)]
+        case_sensitive: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FixturesCommands {
+    /// List loaded fixtures
+    List,
+
+    /// Reload fixtures from disk
+    Reload,
+
+    /// Validate fixture file
+    Validate {
+        /// Fixture file path
+        file: PathBuf,
+    },
+}
 
 /// Handle SMTP commands
 pub async fn handle_smtp_command(

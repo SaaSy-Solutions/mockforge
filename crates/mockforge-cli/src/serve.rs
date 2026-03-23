@@ -1,91 +1,165 @@
-use axum::serve as axum_serve;
+use std::path::PathBuf;
+
+#[cfg(feature = "chaos")]
 use mockforge_chaos::api::create_chaos_api_router;
+#[cfg(feature = "chaos")]
 use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
-use mockforge_core::{apply_env_overrides, OpenApiSpec, ServerConfig};
+use mockforge_core::{OpenApiSpec, ServerConfig};
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
 use std::any::Any;
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::time::Duration;
 use tokio::net::TcpListener;
 
-/// Arguments for building server configuration
+/// Arguments for building server configuration and running the serve command.
+///
+/// This struct consolidates the 60+ parameters that `handle_serve` previously accepted
+/// as individual function arguments, improving readability and maintainability.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub(crate) struct ServeArgs {
-    pub config_path: Option<PathBuf>,
-    pub profile: Option<String>,
-    pub http_port: Option<u16>,
-    pub ws_port: Option<u16>,
-    pub grpc_port: Option<u16>,
-    pub tcp_port: Option<u16>,
-    pub admin: bool,
-    pub admin_port: Option<u16>,
-    pub metrics: bool,
-    pub metrics_port: Option<u16>,
-    pub tracing: bool,
-    pub tracing_service_name: String,
-    pub tracing_environment: String,
-    pub jaeger_endpoint: String,
-    pub tracing_sampling_rate: f64,
-    pub recorder: bool,
-    pub recorder_db: String,
-    pub recorder_no_api: bool,
-    pub recorder_api_port: Option<u16>,
-    pub recorder_max_requests: i64,
-    pub recorder_retention_days: i64,
-    pub chaos: bool,
-    pub chaos_scenario: Option<String>,
-    pub chaos_latency_ms: Option<u64>,
-    pub chaos_latency_range: Option<String>,
-    pub chaos_latency_probability: f64,
-    pub chaos_http_errors: Option<String>,
-    pub chaos_http_error_probability: f64,
-    pub chaos_rate_limit: Option<u32>,
-    pub chaos_bandwidth_limit: Option<u64>,
-    pub chaos_packet_loss: Option<f64>,
-    pub spec: Vec<PathBuf>,
-    pub spec_dir: Option<PathBuf>,
-    pub merge_conflicts: String,
-    pub api_versioning: String,
-    pub base_path: Option<String>,
-    pub tls_enabled: bool,
-    pub tls_cert: Option<PathBuf>,
-    pub tls_key: Option<PathBuf>,
-    pub tls_ca: Option<PathBuf>,
-    pub tls_min_version: String,
-    pub mtls: String,
-    pub ws_replay_file: Option<PathBuf>,
-    pub graphql: Option<PathBuf>,
-    pub graphql_port: Option<u16>,
-    pub graphql_upstream: Option<String>,
-    pub traffic_shaping: bool,
-    pub bandwidth_limit: u64,
-    pub burst_size: u64,
-    pub ai_enabled: bool,
-    pub rag_provider: Option<String>,
-    pub rag_model: Option<String>,
-    pub rag_api_key: Option<String>,
-    pub network_profile: Option<String>,
-    pub chaos_random: bool,
+    pub(crate) config_path: Option<PathBuf>,
+    pub(crate) profile: Option<String>,
+    pub(crate) http_port: Option<u16>,
+    pub(crate) ws_port: Option<u16>,
+    pub(crate) grpc_port: Option<u16>,
+    pub(crate) tcp_port: Option<u16>,
+    pub(crate) admin: bool,
+    pub(crate) admin_port: Option<u16>,
+    pub(crate) metrics: bool,
+    pub(crate) metrics_port: Option<u16>,
+    pub(crate) tracing: bool,
+    pub(crate) tracing_service_name: String,
+    pub(crate) tracing_environment: String,
+    pub(crate) jaeger_endpoint: String,
+    pub(crate) tracing_sampling_rate: f64,
+    pub(crate) recorder: bool,
+    pub(crate) recorder_db: String,
+    pub(crate) recorder_no_api: bool,
+    pub(crate) recorder_api_port: Option<u16>,
+    pub(crate) recorder_max_requests: i64,
+    pub(crate) recorder_retention_days: i64,
+    pub(crate) chaos: bool,
+    pub(crate) chaos_scenario: Option<String>,
+    pub(crate) chaos_latency_ms: Option<u64>,
+    pub(crate) chaos_latency_range: Option<String>,
+    pub(crate) chaos_latency_probability: f64,
+    pub(crate) chaos_http_errors: Option<String>,
+    pub(crate) chaos_http_error_probability: f64,
+    pub(crate) chaos_rate_limit: Option<u32>,
+    pub(crate) chaos_bandwidth_limit: Option<u64>,
+    pub(crate) chaos_packet_loss: Option<f64>,
+    pub(crate) spec: Vec<PathBuf>,
+    pub(crate) spec_dir: Option<PathBuf>,
+    pub(crate) merge_conflicts: String,
+    pub(crate) api_versioning: String,
+    pub(crate) base_path: Option<String>,
+    pub(crate) tls_enabled: bool,
+    pub(crate) tls_cert: Option<PathBuf>,
+    pub(crate) tls_key: Option<PathBuf>,
+    pub(crate) tls_ca: Option<PathBuf>,
+    pub(crate) tls_min_version: String,
+    pub(crate) mtls: String,
+    pub(crate) ws_replay_file: Option<PathBuf>,
+    pub(crate) graphql: Option<PathBuf>,
+    pub(crate) graphql_port: Option<u16>,
+    pub(crate) graphql_upstream: Option<String>,
+    pub(crate) traffic_shaping: bool,
+    pub(crate) bandwidth_limit: u64,
+    pub(crate) burst_size: u64,
+    pub(crate) ai_enabled: bool,
+    pub(crate) rag_provider: Option<String>,
+    pub(crate) rag_model: Option<String>,
+    pub(crate) rag_api_key: Option<String>,
+    pub(crate) network_profile: Option<String>,
+    pub(crate) chaos_random: bool,
     /// Random chaos: error injection rate (0.0-1.0)
-    pub chaos_random_error_rate: f64,
+    pub(crate) chaos_random_error_rate: f64,
     /// Random chaos: delay injection rate (0.0-1.0)
-    pub chaos_random_delay_rate: f64,
+    pub(crate) chaos_random_delay_rate: f64,
     /// Random chaos: minimum delay in milliseconds
-    pub chaos_random_min_delay: u64,
+    pub(crate) chaos_random_min_delay: u64,
     /// Random chaos: maximum delay in milliseconds
-    pub chaos_random_max_delay: u64,
-    pub reality_level: Option<u8>,
-    pub dry_run: bool,
-    pub progress: bool,
-    pub verbose: bool,
+    pub(crate) chaos_random_max_delay: u64,
+    pub(crate) reality_level: Option<u8>,
+    pub(crate) dry_run: bool,
+    pub(crate) progress: bool,
+    pub(crate) verbose: bool,
+}
+
+impl Default for ServeArgs {
+    fn default() -> Self {
+        Self {
+            config_path: None,
+            profile: None,
+            http_port: None,
+            ws_port: None,
+            grpc_port: None,
+            tcp_port: None,
+            admin: false,
+            admin_port: None,
+            metrics: false,
+            metrics_port: None,
+            tracing: false,
+            tracing_service_name: "mockforge".to_string(),
+            tracing_environment: "development".to_string(),
+            jaeger_endpoint: String::new(),
+            tracing_sampling_rate: 1.0,
+            recorder: false,
+            recorder_db: String::new(),
+            recorder_no_api: false,
+            recorder_api_port: None,
+            recorder_max_requests: 0,
+            recorder_retention_days: 0,
+            chaos: false,
+            chaos_scenario: None,
+            chaos_latency_ms: None,
+            chaos_latency_range: None,
+            chaos_latency_probability: 0.0,
+            chaos_http_errors: None,
+            chaos_http_error_probability: 0.0,
+            chaos_rate_limit: None,
+            chaos_bandwidth_limit: None,
+            chaos_packet_loss: None,
+            spec: Vec::new(),
+            spec_dir: None,
+            merge_conflicts: "overwrite".to_string(),
+            api_versioning: "none".to_string(),
+            base_path: None,
+            tls_enabled: false,
+            tls_cert: None,
+            tls_key: None,
+            tls_ca: None,
+            tls_min_version: "1.2".to_string(),
+            mtls: "off".to_string(),
+            ws_replay_file: None,
+            graphql: None,
+            graphql_port: None,
+            graphql_upstream: None,
+            traffic_shaping: false,
+            bandwidth_limit: 0,
+            burst_size: 0,
+            ai_enabled: false,
+            rag_provider: None,
+            rag_model: None,
+            rag_api_key: None,
+            network_profile: None,
+            chaos_random: false,
+            chaos_random_error_rate: 0.0,
+            chaos_random_delay_rate: 0.0,
+            chaos_random_min_delay: 0,
+            chaos_random_max_delay: 0,
+            reality_level: None,
+            dry_run: false,
+            progress: false,
+            verbose: false,
+        }
+    }
 }
 
 /// Build ServerConfig from CLI arguments, config file, and environment variables
 /// Precedence: CLI args > Env vars > Profile > Config file > Defaults
-async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
+pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
+    use mockforge_core::apply_env_overrides;
     use mockforge_core::config::{
         discover_config_file_all_formats, load_config_auto, load_config_with_profile,
     };
@@ -387,7 +461,7 @@ async fn build_server_config_from_cli(serve_args: &ServeArgs) -> ServerConfig {
     config
 }
 
-fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
+pub(crate) fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
     let mut unavailable_ports = Vec::new();
 
     for (port, name) in ports {
@@ -416,7 +490,7 @@ fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
 }
 
 /// Validate server configuration before starting
-async fn validate_serve_config(
+pub(crate) async fn validate_serve_config(
     config_path: &Option<PathBuf>,
     spec_paths: &[PathBuf],
     ports: &[(u16, &str)],
@@ -479,7 +553,8 @@ async fn validate_serve_config(
 }
 
 /// Initialize OpenTelemetry tracing with the given configuration
-fn initialize_opentelemetry_tracing(
+#[cfg(feature = "tracing")]
+pub(crate) fn initialize_opentelemetry_tracing(
     otel_config: &mockforge_core::config::OpenTelemetryConfig,
     logging_config: &mockforge_observability::LoggingConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -532,80 +607,15 @@ fn initialize_opentelemetry_tracing(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 /// Start the MockForge server with the given configuration
 ///
 /// This function is public so it can be called from other commands like deploy
 pub async fn handle_serve(
-    config_path: Option<PathBuf>,
-    profile: Option<String>,
-    http_port: Option<u16>,
-    ws_port: Option<u16>,
-    grpc_port: Option<u16>,
-    _smtp_port: Option<u16>,
-    tcp_port: Option<u16>,
-    admin: bool,
-    admin_port: Option<u16>,
-    metrics: bool,
-    metrics_port: Option<u16>,
-    tracing: bool,
-    tracing_service_name: String,
-    tracing_environment: String,
-    jaeger_endpoint: String,
-    tracing_sampling_rate: f64,
-    recorder: bool,
-    recorder_db: String,
-    recorder_no_api: bool,
-    recorder_api_port: Option<u16>,
-    recorder_max_requests: i64,
-    recorder_retention_days: i64,
-    chaos: bool,
-    chaos_scenario: Option<String>,
-    chaos_latency_ms: Option<u64>,
-    chaos_latency_range: Option<String>,
-    chaos_latency_probability: f64,
-    chaos_http_errors: Option<String>,
-    chaos_http_error_probability: f64,
-    chaos_rate_limit: Option<u32>,
-    chaos_bandwidth_limit: Option<u64>,
-    chaos_packet_loss: Option<f64>,
-    spec: Vec<PathBuf>,
-    spec_dir: Option<PathBuf>,
-    merge_conflicts: String,
-    api_versioning: String,
-    base_path: Option<String>,
-    tls_enabled: bool,
-    tls_cert: Option<PathBuf>,
-    tls_key: Option<PathBuf>,
-    tls_ca: Option<PathBuf>,
-    tls_min_version: String,
-    mtls: String,
-    ws_replay_file: Option<PathBuf>,
-    graphql: Option<PathBuf>,
-    graphql_port: Option<u16>,
-    graphql_upstream: Option<String>,
-    traffic_shaping: bool,
-    bandwidth_limit: u64,
-    burst_size: u64,
-    network_profile: Option<String>,
-    chaos_random: bool,
-    chaos_random_error_rate: f64,
-    chaos_random_delay_rate: f64,
-    chaos_random_min_delay: u64,
-    chaos_random_max_delay: u64,
-    _chaos_profile: Option<String>,
-    ai_enabled: bool,
-    reality_level: Option<u8>,
-    rag_provider: Option<String>,
-    rag_model: Option<String>,
-    rag_api_key: Option<String>,
-    dry_run: bool,
-    progress: bool,
-    verbose: bool,
+    serve_args: ServeArgs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Auto-discover config file if not provided
-    let effective_config_path = if config_path.is_some() {
-        config_path.clone()
+    let effective_config_path = if serve_args.config_path.is_some() {
+        serve_args.config_path.clone()
     } else {
         // Try to discover config file
         if let Ok(current_dir) = std::env::current_dir() {
@@ -633,7 +643,7 @@ pub async fn handle_serve(
 
     // If no spec files provided, check MOCKFORGE_CONFIG env var (inline spec content)
     // or MOCKFORGE_OPENAPI_SPEC_URL env var (URL or local path to spec)
-    let spec = if spec.is_empty() {
+    let spec = if serve_args.spec.is_empty() {
         if let Ok(config_json) = std::env::var("MOCKFORGE_CONFIG") {
             // MOCKFORGE_CONFIG contains the OpenAPI spec as JSON
             let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
@@ -690,76 +700,18 @@ pub async fn handle_serve(
             vec![]
         }
     } else {
-        spec
+        serve_args.spec.clone()
     };
 
+    // Rebuild serve_args with effective config path and resolved spec
     let serve_args = ServeArgs {
         config_path: effective_config_path.clone(),
-        profile,
-        http_port,
-        ws_port,
-        grpc_port,
-        tcp_port,
-        admin,
-        admin_port,
-        metrics,
-        metrics_port,
-        tracing,
-        tracing_service_name,
-        tracing_environment,
-        jaeger_endpoint,
-        tracing_sampling_rate,
-        recorder,
-        recorder_db,
-        recorder_no_api,
-        recorder_api_port,
-        recorder_max_requests,
-        recorder_retention_days,
-        chaos,
-        chaos_scenario,
-        chaos_latency_ms,
-        chaos_latency_range,
-        chaos_latency_probability,
-        chaos_http_errors,
-        chaos_http_error_probability,
-        chaos_rate_limit,
-        chaos_bandwidth_limit,
-        chaos_packet_loss,
         spec,
-        spec_dir,
-        merge_conflicts,
-        api_versioning,
-        base_path,
-        tls_enabled,
-        tls_cert,
-        tls_key,
-        tls_ca,
-        tls_min_version,
-        mtls,
-        ws_replay_file,
-        graphql,
-        graphql_port,
-        graphql_upstream,
-        traffic_shaping,
-        bandwidth_limit,
-        burst_size,
-        ai_enabled,
-        rag_provider,
-        rag_model,
-        rag_api_key,
-        network_profile,
-        chaos_random,
-        chaos_random_error_rate,
-        chaos_random_delay_rate,
-        chaos_random_min_delay,
-        chaos_random_max_delay,
-        reality_level: reality_level.or_else(|| {
+        reality_level: serve_args.reality_level.or_else(|| {
             // Check environment variable as fallback
             std::env::var("MOCKFORGE_REALITY_LEVEL").ok().and_then(|v| v.parse::<u8>().ok())
         }),
-        dry_run,
-        progress,
-        verbose,
+        ..serve_args
     };
 
     // Validate config and spec paths (skip port checks for now)
@@ -837,13 +789,19 @@ pub async fn handle_serve(
         use mockforge_chaos::core_chaos_utilities::ChaosConfig;
 
         println!("🎲 Random chaos mode enabled");
-        println!("   Error rate: {:.1}%", chaos_random_error_rate * 100.0);
-        println!("   Delay rate: {:.1}%", chaos_random_delay_rate * 100.0);
-        println!("   Delay range: {}-{} ms", chaos_random_min_delay, chaos_random_max_delay);
+        println!("   Error rate: {:.1}%", serve_args.chaos_random_error_rate * 100.0);
+        println!("   Delay rate: {:.1}%", serve_args.chaos_random_delay_rate * 100.0);
+        println!(
+            "   Delay range: {}-{} ms",
+            serve_args.chaos_random_min_delay, serve_args.chaos_random_max_delay
+        );
 
         // Create and apply chaos config
-        let chaos_config = ChaosConfig::new(chaos_random_error_rate, chaos_random_delay_rate)
-            .with_delay_range(chaos_random_min_delay, chaos_random_max_delay);
+        let chaos_config = ChaosConfig::new(
+            serve_args.chaos_random_error_rate,
+            serve_args.chaos_random_delay_rate,
+        )
+        .with_delay_range(serve_args.chaos_random_min_delay, serve_args.chaos_random_max_delay);
 
         config.core.chaos_random = Some(chaos_config);
     }
@@ -1004,41 +962,41 @@ pub async fn handle_serve(
         impl mockforge_core::security::UserDataProvider for SimpleUserDataProvider {
             async fn get_all_users(
                 &self,
-            ) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_security_core::error::Error>
+            ) -> Result<Vec<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
             {
                 // Return empty list - would be populated from actual user management system
                 Ok(Vec::new())
             }
             async fn get_privileged_users(
                 &self,
-            ) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_security_core::error::Error>
+            ) -> Result<Vec<mockforge_core::security::PrivilegedAccessInfo>, mockforge_core::Error>
             {
                 Ok(Vec::new())
             }
             async fn get_api_tokens(
                 &self,
-            ) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_security_core::error::Error>
+            ) -> Result<Vec<mockforge_core::security::ApiTokenInfo>, mockforge_core::Error>
             {
                 Ok(Vec::new())
             }
             async fn get_user(
                 &self,
                 _user_id: uuid::Uuid,
-            ) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_security_core::error::Error>
+            ) -> Result<Option<mockforge_core::security::UserAccessInfo>, mockforge_core::Error>
             {
                 Ok(None)
             }
             async fn get_last_login(
                 &self,
                 _user_id: uuid::Uuid,
-            ) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_security_core::error::Error> {
+            ) -> Result<Option<chrono::DateTime<chrono::Utc>>, mockforge_core::Error> {
                 Ok(None)
             }
             async fn revoke_user_access(
                 &self,
                 _user_id: uuid::Uuid,
                 _reason: String,
-            ) -> Result<(), mockforge_security_core::error::Error> {
+            ) -> Result<(), mockforge_core::Error> {
                 Ok(())
             }
             async fn update_user_permissions(
@@ -1046,7 +1004,7 @@ pub async fn handle_serve(
                 _user_id: uuid::Uuid,
                 _roles: Vec<String>,
                 _permissions: Vec<String>,
-            ) -> Result<(), mockforge_security_core::error::Error> {
+            ) -> Result<(), mockforge_core::Error> {
                 Ok(())
             }
         }
@@ -1322,6 +1280,7 @@ pub async fn handle_serve(
     // Create health manager for Kubernetes-native health checks
     use mockforge_http::HealthManager;
     use std::sync::Arc;
+    use std::time::Duration;
 
     let health_manager = Arc::new(HealthManager::with_init_timeout(Duration::from_secs(60)));
     let health_manager_for_router = health_manager.clone();
@@ -1681,22 +1640,25 @@ pub async fn handle_serve(
         None
     };
 
-    // Use composable router builder
-    #[allow(deprecated)]
-    let mut http_app = mockforge_http::HttpRouterBuilder::new()
-        .spec_path_opt(final_spec_path)
-        .validation_options(validation_options)
-        .with_multi_tenant_opt(multi_tenant_config)
-        .route_configs(config.routes.clone())
-        .cors_config_opt(config.http.cors.clone())
-        .smtp_registry_opt(smtp_registry.as_ref().cloned())
-        .mqtt_broker_opt(mqtt_broker_for_http)
-        .with_traffic_shaping_opt(traffic_shaper, traffic_shaping_enabled)
-        .health_manager(health_manager_for_router)
-        .with_mockai_opt(mockai.clone())
-        .with_deceptive_deploy(config.deceptive_deploy.clone())
-        .build()
-        .await;
+    // Use standard router
+    let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
+        final_spec_path,
+        Some(validation_options),
+        None, // circling_config
+        multi_tenant_config,
+        Some(config.routes.clone()),
+        config.http.cors.clone(),
+        None, // ai_generator
+        smtp_registry.as_ref().cloned(),
+        mqtt_broker_for_http,
+        traffic_shaper,                        // traffic_shaper
+        traffic_shaping_enabled,               // traffic_shaping_enabled
+        Some(health_manager_for_router),       // health_manager
+        mockai.clone(),                        // mockai
+        Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
+        None,                                  // proxy_config (ProxyConfig not in ServerConfig)
+    )
+    .await;
 
     // Integrate chaos engineering API router
     // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
@@ -1948,49 +1910,77 @@ pub async fn handle_serve(
     });
 
     // Start WebSocket server
-    let ws_port = config.websocket.port;
-    let ws_host = config.websocket.host.clone();
-    let ws_shutdown = shutdown_token.clone();
-    let ws_handle = tokio::spawn(async move {
-        println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
-        tokio::select! {
-            result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
-                result.map_err(|e| format!("WebSocket server error: {}", e))
-            }
-            _ = ws_shutdown.cancelled() => {
-                Ok(())
-            }
+    let ws_handle: tokio::task::JoinHandle<Result<(), String>> = {
+        #[cfg(feature = "ws")]
+        {
+            let ws_port = config.websocket.port;
+            let ws_host = config.websocket.host.clone();
+            let ws_shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
+                tokio::select! {
+                    result = mockforge_ws::start_with_latency_and_host(ws_port, &ws_host, None) => {
+                        result.map_err(|e| format!("WebSocket server error: {}", e))
+                    }
+                    _ = ws_shutdown.cancelled() => {
+                        Ok(())
+                    }
+                }
+            })
         }
-    });
+        #[cfg(not(feature = "ws"))]
+        {
+            let shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                shutdown.cancelled().await;
+                Ok(())
+            })
+        }
+    };
 
     // Start gRPC server (only if enabled and port is not 0)
-    let grpc_port = config.grpc.port;
-    let grpc_enabled = config.grpc.enabled;
-    let grpc_shutdown = shutdown_token.clone();
-    let grpc_handle = if grpc_enabled && grpc_port != 0 {
-        tokio::spawn(async move {
-            println!("⚡ gRPC server listening on localhost:{}", grpc_port);
-            tokio::select! {
-                result = mockforge_grpc::start(grpc_port) => {
-                    result.map_err(|e| format!("gRPC server error: {}", e))
-                }
-                _ = grpc_shutdown.cancelled() => {
+    let grpc_handle: tokio::task::JoinHandle<Result<(), String>> = {
+        #[cfg(feature = "grpc")]
+        {
+            let grpc_port = config.grpc.port;
+            let grpc_enabled = config.grpc.enabled;
+            let grpc_shutdown = shutdown_token.clone();
+            if grpc_enabled && grpc_port != 0 {
+                tokio::spawn(async move {
+                    println!("⚡ gRPC server listening on localhost:{}", grpc_port);
+                    tokio::select! {
+                        result = mockforge_grpc::start(grpc_port) => {
+                            result.map_err(|e| format!("gRPC server error: {}", e))
+                        }
+                        _ = grpc_shutdown.cancelled() => {
+                            Ok(())
+                        }
+                    }
+                })
+            } else {
+                tracing::debug!(
+                    "gRPC server disabled (enabled: {}, port: {})",
+                    grpc_enabled,
+                    grpc_port
+                );
+                tokio::spawn(async move {
+                    grpc_shutdown.cancelled().await;
                     Ok(())
-                }
+                })
             }
-        })
-    } else {
-        // gRPC disabled or port is 0, create a no-op handle
-        tracing::debug!("gRPC server disabled (enabled: {}, port: {})", grpc_enabled, grpc_port);
-        tokio::spawn(async move {
-            // Wait for shutdown signal, then return Ok
-            grpc_shutdown.cancelled().await;
-            Ok(())
-        })
+        }
+        #[cfg(not(feature = "grpc"))]
+        {
+            let shutdown = shutdown_token.clone();
+            tokio::spawn(async move {
+                shutdown.cancelled().await;
+                Ok(())
+            })
+        }
     };
 
     #[cfg(feature = "smtp")]
-    let smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
+    let _smtp_handle = if let Some(ref smtp_registry) = smtp_registry {
         let smtp_config = config.smtp.clone();
         let smtp_shutdown = shutdown_token.clone();
 
@@ -2046,7 +2036,7 @@ pub async fn handle_serve(
     };
 
     #[cfg(feature = "mqtt")]
-    let mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
+    let _mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();
 
@@ -2087,7 +2077,7 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "mqtt"))]
-    let mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
     let _tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
@@ -2190,7 +2180,7 @@ pub async fn handle_serve(
 
     // Start Kafka broker (if enabled)
     #[cfg(feature = "kafka")]
-    let kafka_handle = if config.kafka.enabled {
+    let _kafka_handle = if config.kafka.enabled {
         let kafka_config = config.kafka.clone();
         let kafka_shutdown = shutdown_token.clone();
 
@@ -2219,11 +2209,11 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "kafka"))]
-    let kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let _kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start AMQP broker (if enabled)
     #[cfg(feature = "amqp")]
-    let amqp_handle = if config.amqp.enabled {
+    let _amqp_handle = if config.amqp.enabled {
         let amqp_config = config.amqp.clone();
         let amqp_shutdown = shutdown_token.clone();
 
@@ -2263,11 +2253,11 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "amqp"))]
-    let amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let _amqp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start TCP server (if enabled)
     #[cfg(feature = "tcp")]
-    let tcp_handle = if config.tcp.enabled {
+    let _tcp_handle = if config.tcp.enabled {
         use mockforge_tcp::{TcpConfig as TcpServerConfig, TcpServer, TcpSpecRegistry};
         use std::sync::Arc;
 
@@ -2330,7 +2320,7 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "tcp"))]
-    let tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
     use mockforge_core::latency::{FaultConfig, LatencyInjector};
@@ -2515,7 +2505,7 @@ pub async fn handle_serve(
                 .await
                 .map_err(|e| format!("Failed to bind metrics server to {}: {}", addr, e))?;
             tokio::select! {
-                result = axum_serve(listener, app) => {
+                result = axum::serve(listener, app) => {
                     result.map_err(|e| format!("Metrics server error: {}", e))
                 }
                 _ = metrics_shutdown.cancelled() => {
@@ -2630,77 +2620,6 @@ pub async fn handle_serve(
                     eprintln!("❌ {}", error);
                     Some(error)
                 }
-                None => None
-            }
-        }
-        // Monitor optional protocol handles — errors are no longer silent
-        result = async {
-            if let Some(handle) = smtp_handle {
-                Some(("SMTP", handle.await))
-            } else {
-                std::future::pending().await
-            }
-        } => {
-            match result {
-                Some((name, Ok(Ok(())))) => { println!("📧 {} server stopped gracefully", name); None }
-                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} server error: {}", name, e); Some(e) }
-                Some((name, Err(e))) => { let error = format!("{} server task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = mqtt_handle {
-                Some(("MQTT", handle.await))
-            } else {
-                std::future::pending().await
-            }
-        } => {
-            match result {
-                Some((name, Ok(Ok(())))) => { println!("📡 {} broker stopped gracefully", name); None }
-                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
-                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = kafka_handle {
-                Some(("Kafka", handle.await))
-            } else {
-                std::future::pending().await
-            }
-        } => {
-            match result {
-                Some((name, Ok(Ok(())))) => { println!("📨 {} broker stopped gracefully", name); None }
-                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
-                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = amqp_handle {
-                Some(("AMQP", handle.await))
-            } else {
-                std::future::pending().await
-            }
-        } => {
-            match result {
-                Some((name, Ok(Ok(())))) => { println!("🐰 {} broker stopped gracefully", name); None }
-                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} broker error: {}", name, e); Some(e) }
-                Some((name, Err(e))) => { let error = format!("{} broker task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = tcp_handle {
-                Some(("TCP", handle.await))
-            } else {
-                std::future::pending().await
-            }
-        } => {
-            match result {
-                Some((name, Ok(Ok(())))) => { println!("🔌 {} server stopped gracefully", name); None }
-                Some((name, Ok(Err(e)))) => { eprintln!("❌ {} server error: {}", name, e); Some(e) }
-                Some((name, Err(e))) => { let error = format!("{} server task panicked: {}", name, e); eprintln!("❌ {}", error); Some(error) }
                 None => None
             }
         }

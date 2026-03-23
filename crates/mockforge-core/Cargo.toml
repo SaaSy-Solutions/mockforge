@@ -69,8 +69,8 @@ prost-reflect = "0.16"
 prost-types = "0.14"
 bytes = "1.5"
 notify = "8.2"
-# JavaScript runtime for scripting
-rquickjs = { version = "0.9", features = ["macro", "classes"] }
+# JavaScript runtime for scripting (optional — gate behind "scripting" feature)
+rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
 # Cron expression parsing for scheduled events
 cron = "0.15"
 # JSON Schema generation (optional, for schema crate)
@@ -102,7 +102,8 @@ harness = false
 windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 
 [features]
-default = ["data", "ai", "contracts", "workspace-mgmt", "voice", "advanced"]
+default = ["data", "ai", "contracts", "workspace-mgmt", "voice", "advanced", "scripting"]
+scripting = ["rquickjs"]
 parallel-routes = ["rayon"]
 schema = ["schemars"]
 database = ["sqlx"]

@@ -95,6 +95,36 @@ pub enum Error {
     #[error("Regex error: {0}")]
     Regex(#[from] regex::Error),
 
+    /// Route not found error with method and path context
+    #[error("Route not found: {method} {path}")]
+    RouteNotFound {
+        /// HTTP method
+        method: String,
+        /// Request path
+        path: String,
+    },
+
+    /// Schema validation failed with structured context
+    #[error("Schema validation failed at '{path}': expected {expected}, got {actual}")]
+    SchemaValidationFailed {
+        /// JSON path where validation failed
+        path: String,
+        /// Expected type or value
+        expected: String,
+        /// Actual type or value encountered
+        actual: String,
+    },
+
+    /// Configuration error with source
+    #[error("Configuration error: {message}")]
+    ConfigWithSource {
+        /// Configuration error message
+        message: String,
+        /// Underlying cause
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     /// Generic error with message string
     #[error("Generic error: {0}")]
     Generic(String),
@@ -104,6 +134,7 @@ pub enum Error {
     Encryption(#[from] crate::encryption::EncryptionError),
 
     /// JavaScript evaluation error (template engine, etc.)
+    #[cfg(feature = "scripting")]
     #[error("JavaScript error: {0}")]
     JavaScript(#[from] rquickjs::Error),
 }
@@ -176,6 +207,34 @@ impl Error {
         Self::ProtocolValidationError {
             protocol: protocol.into(),
             message: message.into(),
+        }
+    }
+
+    /// Create a route-not-found error with method and path context
+    pub fn route_not_found<S: Into<String>>(method: S, path: S) -> Self {
+        Self::RouteNotFound {
+            method: method.into(),
+            path: path.into(),
+        }
+    }
+
+    /// Create a schema validation error with path, expected, and actual context
+    pub fn schema_validation_failed<S: Into<String>>(path: S, expected: S, actual: S) -> Self {
+        Self::SchemaValidationFailed {
+            path: path.into(),
+            expected: expected.into(),
+            actual: actual.into(),
+        }
+    }
+
+    /// Create a configuration error with an underlying source error
+    pub fn config_with_source<S: Into<String>>(
+        message: S,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self::ConfigWithSource {
+            message: message.into(),
+            source: Box::new(source),
         }
     }
 

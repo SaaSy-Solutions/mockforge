@@ -1,8 +1,112 @@
 //! MQTT broker management and topic operations
 
-use crate::MqttCommands;
+use clap::Subcommand;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
+use std::path::PathBuf;
 use std::time::Duration;
+
+#[derive(Subcommand)]
+pub(crate) enum MqttCommands {
+    /// Publish message to MQTT topic
+    Publish {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic to publish to
+        #[arg(short, long)]
+        topic: String,
+
+        /// Message payload (JSON string)
+        #[arg(short, long)]
+        payload: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+
+        /// Retain message
+        #[arg(long)]
+        retain: bool,
+    },
+
+    /// Subscribe to MQTT topic
+    Subscribe {
+        /// MQTT broker host
+        #[arg(long, default_value = "localhost")]
+        host: String,
+
+        /// MQTT broker port
+        #[arg(long, default_value = "1883")]
+        port: u16,
+
+        /// Topic filter to subscribe to
+        #[arg(short, long)]
+        topic: String,
+
+        /// QoS level (0, 1, 2)
+        #[arg(short, long, default_value = "0")]
+        qos: u8,
+    },
+
+    /// Topic management commands
+    Topics {
+        #[command(subcommand)]
+        topics_command: MqttTopicsCommands,
+    },
+
+    /// Fixture management commands
+    Fixtures {
+        #[command(subcommand)]
+        fixtures_command: MqttFixturesCommands,
+    },
+
+    /// Client management commands
+    Clients {
+        #[command(subcommand)]
+        clients_command: MqttClientsCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MqttTopicsCommands {
+    /// List active topics
+    List,
+
+    /// Clear retained messages
+    ClearRetained,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MqttFixturesCommands {
+    /// Load fixtures from directory
+    Load {
+        /// Path to fixtures directory
+        path: PathBuf,
+    },
+
+    /// Start auto-publish for all fixtures
+    StartAutoPublish,
+
+    /// Stop auto-publish for all fixtures
+    StopAutoPublish,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MqttClientsCommands {
+    /// List connected clients
+    List,
+
+    /// Disconnect client
+    Disconnect {
+        /// Client ID to disconnect
+        client_id: String,
+    },
+}
 
 /// Handle MQTT commands
 pub async fn handle_mqtt_command(
@@ -145,13 +249,13 @@ async fn handle_subscribe_command(
 
 /// Handle topics command
 async fn handle_topics_command(
-    topics_command: crate::MqttTopicsCommands,
+    topics_command: MqttTopicsCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match topics_command {
-        crate::MqttTopicsCommands::List => {
+        MqttTopicsCommands::List => {
             handle_topics_list().await?;
         }
-        crate::MqttTopicsCommands::ClearRetained => {
+        MqttTopicsCommands::ClearRetained => {
             handle_topics_clear_retained().await?;
         }
     }
@@ -229,16 +333,16 @@ async fn handle_topics_clear_retained() -> Result<(), Box<dyn std::error::Error 
 
 /// Handle fixtures command
 async fn handle_fixtures_command(
-    fixtures_command: crate::MqttFixturesCommands,
+    fixtures_command: MqttFixturesCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match fixtures_command {
-        crate::MqttFixturesCommands::Load { path } => {
+        MqttFixturesCommands::Load { path } => {
             handle_fixtures_load(path).await?;
         }
-        crate::MqttFixturesCommands::StartAutoPublish => {
+        MqttFixturesCommands::StartAutoPublish => {
             handle_fixtures_start_auto_publish().await?;
         }
-        crate::MqttFixturesCommands::StopAutoPublish => {
+        MqttFixturesCommands::StopAutoPublish => {
             handle_fixtures_stop_auto_publish().await?;
         }
     }
@@ -404,13 +508,13 @@ async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::E
 
 /// Handle clients command
 async fn handle_clients_command(
-    clients_command: crate::MqttClientsCommands,
+    clients_command: MqttClientsCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match clients_command {
-        crate::MqttClientsCommands::List => {
+        MqttClientsCommands::List => {
             handle_clients_list().await?;
         }
-        crate::MqttClientsCommands::Disconnect { client_id } => {
+        MqttClientsCommands::Disconnect { client_id } => {
             handle_clients_disconnect(client_id).await?;
         }
     }
@@ -504,7 +608,7 @@ async fn handle_clients_disconnect(
 
 #[cfg(test)]
 mod tests {
-    use crate::{MqttClientsCommands, MqttCommands, MqttFixturesCommands, MqttTopicsCommands};
+    use super::*;
 
     #[test]
     fn test_mqtt_publish_command_construction() {

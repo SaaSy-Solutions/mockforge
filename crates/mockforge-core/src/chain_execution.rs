@@ -7,6 +7,7 @@ use crate::request_chaining::{
     ChainConfig, ChainDefinition, ChainExecutionContext, ChainLink, ChainResponse,
     ChainTemplatingContext, RequestChainRegistry,
 };
+#[cfg(feature = "scripting")]
 use crate::request_scripting::{ScriptContext, ScriptEngine};
 use crate::templating::{expand_str_with_context, TemplatingContext};
 use crate::{Error, Result};
@@ -44,6 +45,7 @@ pub struct ChainExecutionEngine {
     /// Execution history storage (chain_id -> Vec<ExecutionRecord>)
     execution_history: Arc<Mutex<HashMap<String, Vec<ExecutionRecord>>>>,
     /// JavaScript scripting engine for pre/post request scripts
+    #[cfg(feature = "scripting")]
     script_engine: ScriptEngine,
 }
 
@@ -85,6 +87,7 @@ impl ChainExecutionEngine {
             registry,
             config,
             execution_history: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(feature = "scripting")]
             script_engine: ScriptEngine::new(),
         })
     }
@@ -349,6 +352,7 @@ impl ChainExecutionEngine {
         }
 
         // Execute pre-request script if configured
+        #[cfg(feature = "scripting")]
         if let Some(scripting) = &link.request.scripting {
             if let Some(pre_script) = &scripting.pre_script {
                 let script_context = ScriptContext {
@@ -448,6 +452,7 @@ impl ChainExecutionEngine {
         }
 
         // Execute post-request script if configured
+        #[cfg(feature = "scripting")]
         if let Some(scripting) = &link.request.scripting {
             if let Some(post_script) = &scripting.post_script {
                 let script_context = ScriptContext {

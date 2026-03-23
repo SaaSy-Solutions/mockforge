@@ -215,74 +215,13 @@ async fn handle_create(
         tokio::fs::write(&temp_spec, content).await?;
 
         // Start server using the existing serve infrastructure
-        use crate::handle_serve;
-        handle_serve(
-            None,                      // config_path
-            None,                      // profile
-            Some(port),                // http_port
-            None,                      // ws_port
-            None,                      // grpc_port
-            None,                      // smtp_port
-            None,                      // tcp_port
-            true,                      // admin (enable admin UI)
-            None,                      // admin_port
-            false,                     // metrics
-            None,                      // metrics_port
-            false,                     // tracing
-            "mockforge".to_string(),   // tracing_service_name
-            "development".to_string(), // tracing_environment
-            String::new(),             // jaeger_endpoint
-            1.0,                       // tracing_sampling_rate
-            false,                     // recorder
-            String::new(),             // recorder_db
-            false,                     // recorder_no_api
-            None,                      // recorder_api_port
-            0,                         // recorder_max_requests
-            0,                         // recorder_retention_days
-            false,                     // chaos
-            None,                      // chaos_scenario
-            None,                      // chaos_latency_ms
-            None,                      // chaos_latency_range
-            0.0,                       // chaos_latency_probability
-            None,                      // chaos_http_errors
-            0.0,                       // chaos_http_error_probability
-            None,                      // chaos_rate_limit
-            None,                      // chaos_bandwidth_limit
-            None,                      // chaos_packet_loss
-            vec![temp_spec],           // spec
-            None,                      // spec_dir
-            "overwrite".to_string(),   // merge_conflicts
-            "none".to_string(),        // api_versioning
-            None,                      // base_path
-            false,                     // tls_enabled
-            None,                      // tls_cert
-            None,                      // tls_key
-            None,                      // tls_ca
-            "1.2".to_string(),         // tls_min_version
-            "off".to_string(),         // mtls
-            None,                      // ws_replay_file
-            None,                      // graphql
-            None,                      // graphql_port
-            None,                      // graphql_upstream
-            false,                     // traffic_shaping
-            0,                         // bandwidth_limit
-            0,                         // burst_size
-            None,                      // network_profile
-            false,                     // chaos_random
-            0.0,                       // chaos_random_error_rate
-            0.0,                       // chaos_random_delay_rate
-            0,                         // chaos_random_min_delay
-            0,                         // chaos_random_max_delay
-            None,                      // chaos_profile
-            false,                     // ai_enabled
-            None,                      // reality_level
-            None,                      // rag_provider
-            None,                      // rag_model
-            None,                      // rag_api_key
-            false,                     // dry_run
-            false,                     // progress
-            false,                     // verbose
-        )
+        use crate::serve;
+        serve::handle_serve(serve::ServeArgs {
+            http_port: Some(port),
+            admin: true,
+            spec: vec![temp_spec],
+            ..serve::ServeArgs::default()
+        })
         .await?;
     }
 
@@ -446,74 +385,13 @@ async fn handle_interactive(
             tokio::fs::write(&temp_spec, content).await?;
 
             // Start server using the existing serve infrastructure
-            use crate::handle_serve;
-            handle_serve(
-                None,                      // config_path
-                None,                      // profile
-                Some(port),                // http_port
-                None,                      // ws_port
-                None,                      // grpc_port
-                None,                      // smtp_port
-                None,                      // tcp_port
-                true,                      // admin (enable admin UI)
-                None,                      // admin_port
-                false,                     // metrics
-                None,                      // metrics_port
-                false,                     // tracing
-                "mockforge".to_string(),   // tracing_service_name
-                "development".to_string(), // tracing_environment
-                String::new(),             // jaeger_endpoint
-                1.0,                       // tracing_sampling_rate
-                false,                     // recorder
-                String::new(),             // recorder_db
-                false,                     // recorder_no_api
-                None,                      // recorder_api_port
-                0,                         // recorder_max_requests
-                0,                         // recorder_retention_days
-                false,                     // chaos
-                None,                      // chaos_scenario
-                None,                      // chaos_latency_ms
-                None,                      // chaos_latency_range
-                0.0,                       // chaos_latency_probability
-                None,                      // chaos_http_errors
-                0.0,                       // chaos_http_error_probability
-                None,                      // chaos_rate_limit
-                None,                      // chaos_bandwidth_limit
-                None,                      // chaos_packet_loss
-                vec![temp_spec],           // spec
-                None,                      // spec_dir
-                "overwrite".to_string(),   // merge_conflicts
-                "none".to_string(),        // api_versioning
-                None,                      // base_path
-                false,                     // tls_enabled
-                None,                      // tls_cert
-                None,                      // tls_key
-                None,                      // tls_ca
-                "1.2".to_string(),         // tls_min_version
-                "off".to_string(),         // mtls
-                None,                      // ws_replay_file
-                None,                      // graphql
-                None,                      // graphql_port
-                None,                      // graphql_upstream
-                false,                     // traffic_shaping
-                0,                         // bandwidth_limit
-                0,                         // burst_size
-                None,                      // network_profile
-                false,                     // chaos_random
-                0.0,                       // chaos_random_error_rate
-                0.0,                       // chaos_random_delay_rate
-                0,                         // chaos_random_min_delay
-                0,                         // chaos_random_max_delay
-                None,                      // chaos_profile
-                false,                     // ai_enabled
-                None,                      // reality_level
-                None,                      // rag_provider
-                None,                      // rag_model
-                None,                      // rag_api_key
-                false,                     // dry_run
-                false,                     // progress
-                false,                     // verbose
-            )
+            use crate::serve;
+            serve::handle_serve(serve::ServeArgs {
+                http_port: Some(port),
+                admin: true,
+                spec: vec![temp_spec],
+                ..serve::ServeArgs::default()
+            })
             .await?;
         }
     } else {

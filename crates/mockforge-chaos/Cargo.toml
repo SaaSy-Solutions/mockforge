@@ -79,7 +79,13 @@ printpdf = "0.7"
 tokio-tungstenite = "0.28"
 
 [features]
-default = []
+default = ["ml", "enterprise"]
+# Machine learning components (reinforcement learning, multi-armed bandits,
+# anomaly detection, parameter optimization, assertion generation)
+ml = []
+# Enterprise features (integrations, multi-cluster, multi-tenancy, GitOps,
+# distributed coordination, chaos mesh, template marketplace, version control)
+enterprise = []
 distributed = ["redis"]
 
 [dev-dependencies]

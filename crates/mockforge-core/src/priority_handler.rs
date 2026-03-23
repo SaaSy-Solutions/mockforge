@@ -241,15 +241,14 @@ impl PriorityHttpHandler {
                 }
 
                 // Convert response to JSON string if it's not already a string
-                let response_body = if custom_fixture.response.is_string() {
-                    custom_fixture.response.as_str().unwrap().to_string()
-                } else {
-                    serde_json::to_string(&custom_fixture.response).map_err(|e| {
+                let response_body = match custom_fixture.response.as_str() {
+                    Some(s) => s.to_string(),
+                    None => serde_json::to_string(&custom_fixture.response).map_err(|e| {
                         Error::generic(format!(
                             "Failed to serialize custom fixture response: {}",
                             e
                         ))
-                    })?
+                    })?,
                 };
 
                 // Determine content type

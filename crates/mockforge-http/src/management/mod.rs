@@ -1,0 +1,1188 @@
+/// Management API for MockForge
+///
+/// Provides REST endpoints for controlling mocks, server configuration,
+/// and integration with developer tools (VS Code extension, CI/CD, etc.)
+mod ai_gen;
+mod health;
+mod import_export;
+mod migration;
+mod mocks;
+mod protocols;
+mod proxy;
+
+pub use ai_gen::*;
+pub use health::*;
+pub use import_export::*;
+pub use proxy::{BodyTransformRequest, ProxyRuleRequest, ProxyRuleResponse};
+
+use axum::{
+    routing::{delete, get, post, put},
+    Router,
+};
+use mockforge_core::openapi::OpenApiSpec;
+use mockforge_core::proxy::config::ProxyConfig;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock};
+
+/// Default broadcast channel capacity for message events
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
+const DEFAULT_MESSAGE_BROADCAST_CAPACITY: usize = 1000;
+
+/// Get the broadcast channel capacity from environment or use default
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
+fn get_message_broadcast_capacity() -> usize {
+    std::env::var("MOCKFORGE_MESSAGE_BROADCAST_CAPACITY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_MESSAGE_BROADCAST_CAPACITY)
+}
+
+/// Message event types for real-time monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "protocol", content = "data")]
+#[serde(rename_all = "lowercase")]
+pub enum MessageEvent {
+    #[cfg(feature = "mqtt")]
+    /// MQTT message event
+    Mqtt(MqttMessageEvent),
+    #[cfg(feature = "kafka")]
+    /// Kafka message event
+    Kafka(KafkaMessageEvent),
+}
+
+#[cfg(feature = "mqtt")]
+/// MQTT message event for real-time monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttMessageEvent {
+    /// MQTT topic name
+    pub topic: String,
+    /// Message payload content
+    pub payload: String,
+    /// Quality of Service level (0, 1, or 2)
+    pub qos: u8,
+    /// Whether the message is retained
+    pub retain: bool,
+    /// RFC3339 formatted timestamp
+    pub timestamp: String,
+}
+
+#[cfg(feature = "kafka")]
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaMessageEvent {
+    pub topic: String,
+    pub key: Option<String>,
+    pub value: String,
+    pub partition: i32,
+    pub offset: i64,
+    pub headers: Option<std::collections::HashMap<String, String>>,
+    pub timestamp: String,
+}
+
+/// Mock configuration representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MockConfig {
+    /// Unique identifier for the mock
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    /// Human-readable name for the mock
+    pub name: String,
+    /// HTTP method (GET, POST, etc.)
+    pub method: String,
+    /// API path pattern to match
+    pub path: String,
+    /// Response configuration
+    pub response: MockResponse,
+    /// Whether this mock is currently enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Optional latency to inject in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    /// Optional HTTP status code override
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<u16>,
+    /// Request matching criteria (headers, query params, body patterns)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_match: Option<RequestMatchCriteria>,
+    /// Priority for mock ordering (higher priority mocks are matched first)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i32>,
+    /// Scenario name for stateful mocking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scenario: Option<String>,
+    /// Required scenario state for this mock to be active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_scenario_state: Option<String>,
+    /// New scenario state after this mock is matched
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_scenario_state: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Mock response configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MockResponse {
+    /// Response body as JSON
+    pub body: serde_json::Value,
+    /// Optional custom response headers
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Request matching criteria for advanced request matching
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RequestMatchCriteria {
+    /// Headers that must be present and match (case-insensitive header names)
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub headers: std::collections::HashMap<String, String>,
+    /// Query parameters that must be present and match
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub query_params: std::collections::HashMap<String, String>,
+    /// Request body pattern (supports exact match or regex)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_pattern: Option<String>,
+    /// JSONPath expression for JSON body matching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_path: Option<String>,
+    /// XPath expression for XML body matching
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub xpath: Option<String>,
+    /// Custom matcher expression (e.g., "headers.content-type == \"application/json\"")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_matcher: Option<String>,
+}
+
+/// Check if a request matches the given mock configuration
+///
+/// This function implements comprehensive request matching including:
+/// - Method and path matching
+/// - Header matching (with regex support)
+/// - Query parameter matching
+/// - Body pattern matching (exact, regex, JSONPath, XPath)
+/// - Custom matcher expressions
+pub fn mock_matches_request(
+    mock: &MockConfig,
+    method: &str,
+    path: &str,
+    headers: &std::collections::HashMap<String, String>,
+    query_params: &std::collections::HashMap<String, String>,
+    body: Option<&[u8]>,
+) -> bool {
+    use regex::Regex;
+
+    // Check if mock is enabled
+    if !mock.enabled {
+        return false;
+    }
+
+    // Check method (case-insensitive)
+    if mock.method.to_uppercase() != method.to_uppercase() {
+        return false;
+    }
+
+    // Check path pattern (supports wildcards and path parameters)
+    if !path_matches_pattern(&mock.path, path) {
+        return false;
+    }
+
+    // Check request matching criteria if present
+    if let Some(criteria) = &mock.request_match {
+        // Check headers
+        for (key, expected_value) in &criteria.headers {
+            let header_key_lower = key.to_lowercase();
+            let found = headers.iter().find(|(k, _)| k.to_lowercase() == header_key_lower);
+
+            if let Some((_, actual_value)) = found {
+                // Try regex match first, then exact match
+                if let Ok(re) = Regex::new(expected_value) {
+                    if !re.is_match(actual_value) {
+                        return false;
+                    }
+                } else if actual_value != expected_value {
+                    return false;
+                }
+            } else {
+                return false; // Header not found
+            }
+        }
+
+        // Check query parameters
+        for (key, expected_value) in &criteria.query_params {
+            if let Some(actual_value) = query_params.get(key) {
+                if actual_value != expected_value {
+                    return false;
+                }
+            } else {
+                return false; // Query param not found
+            }
+        }
+
+        // Check body pattern
+        if let Some(pattern) = &criteria.body_pattern {
+            if let Some(body_bytes) = body {
+                let body_str = String::from_utf8_lossy(body_bytes);
+                // Try regex first, then exact match
+                if let Ok(re) = Regex::new(pattern) {
+                    if !re.is_match(&body_str) {
+                        return false;
+                    }
+                } else if body_str.as_ref() != pattern {
+                    return false;
+                }
+            } else {
+                return false; // Body required but not present
+            }
+        }
+
+        // Check JSONPath (simplified implementation)
+        if let Some(json_path) = &criteria.json_path {
+            if let Some(body_bytes) = body {
+                if let Ok(body_str) = std::str::from_utf8(body_bytes) {
+                    if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(body_str) {
+                        // Simple JSONPath check
+                        if !json_path_exists(&json_value, json_path) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check XPath (supports a focused subset)
+        if let Some(xpath) = &criteria.xpath {
+            if let Some(body_bytes) = body {
+                if let Ok(body_str) = std::str::from_utf8(body_bytes) {
+                    if !xml_xpath_exists(body_str, xpath) {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } else {
+                return false; // Body required but not present
+            }
+        }
+
+        // Check custom matcher
+        if let Some(custom) = &criteria.custom_matcher {
+            if !evaluate_custom_matcher(custom, method, path, headers, query_params, body) {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Check if a path matches a pattern (supports wildcards and path parameters)
+fn path_matches_pattern(pattern: &str, path: &str) -> bool {
+    // Exact match
+    if pattern == path {
+        return true;
+    }
+
+    // Wildcard match
+    if pattern == "*" {
+        return true;
+    }
+
+    // Path parameter matching (e.g., /users/{id} matches /users/123)
+    let pattern_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
+    let path_parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+    if pattern_parts.len() != path_parts.len() {
+        // Check for wildcard patterns
+        if pattern.contains('*') {
+            return matches_wildcard_pattern(pattern, path);
+        }
+        return false;
+    }
+
+    for (pattern_part, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
+        // Check for path parameters {param}
+        if pattern_part.starts_with('{') && pattern_part.ends_with('}') {
+            continue; // Matches any value
+        }
+
+        if pattern_part != path_part {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check if path matches a wildcard pattern
+fn matches_wildcard_pattern(pattern: &str, path: &str) -> bool {
+    use regex::Regex;
+
+    // Convert pattern to regex
+    let regex_pattern = pattern.replace('*', ".*").replace('?', ".?");
+
+    if let Ok(re) = Regex::new(&format!("^{}$", regex_pattern)) {
+        return re.is_match(path);
+    }
+
+    false
+}
+
+/// Check if a JSONPath exists in a JSON value
+///
+/// Supports:
+/// - `$` — root element
+/// - `$.field.subfield` — nested object access
+/// - `$.items[0].name` — array index access
+/// - `$.items[*]` — array wildcard (checks array is non-empty)
+fn json_path_exists(json: &serde_json::Value, json_path: &str) -> bool {
+    let path = if json_path == "$" {
+        return true;
+    } else if let Some(p) = json_path.strip_prefix("$.") {
+        p
+    } else if let Some(p) = json_path.strip_prefix('$') {
+        p.strip_prefix('.').unwrap_or(p)
+    } else {
+        json_path
+    };
+
+    let mut current = json;
+    for segment in split_json_path_segments(path) {
+        match segment {
+            JsonPathSegment::Field(name) => {
+                if let Some(obj) = current.as_object() {
+                    if let Some(value) = obj.get(name) {
+                        current = value;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            JsonPathSegment::Index(idx) => {
+                if let Some(arr) = current.as_array() {
+                    if let Some(value) = arr.get(idx) {
+                        current = value;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+            JsonPathSegment::Wildcard => {
+                if let Some(arr) = current.as_array() {
+                    return !arr.is_empty();
+                }
+                return false;
+            }
+        }
+    }
+    true
+}
+
+enum JsonPathSegment<'a> {
+    Field(&'a str),
+    Index(usize),
+    Wildcard,
+}
+
+/// Split a JSONPath (without the leading `$`) into segments
+fn split_json_path_segments(path: &str) -> Vec<JsonPathSegment<'_>> {
+    let mut segments = Vec::new();
+    for part in path.split('.') {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(bracket_start) = part.find('[') {
+            let field_name = &part[..bracket_start];
+            if !field_name.is_empty() {
+                segments.push(JsonPathSegment::Field(field_name));
+            }
+            let bracket_content = &part[bracket_start + 1..part.len() - 1];
+            if bracket_content == "*" {
+                segments.push(JsonPathSegment::Wildcard);
+            } else if let Ok(idx) = bracket_content.parse::<usize>() {
+                segments.push(JsonPathSegment::Index(idx));
+            }
+        } else {
+            segments.push(JsonPathSegment::Field(part));
+        }
+    }
+    segments
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct XPathSegment {
+    name: String,
+    text_equals: Option<String>,
+}
+
+fn parse_xpath_segment(segment: &str) -> Option<XPathSegment> {
+    if segment.is_empty() {
+        return None;
+    }
+
+    let trimmed = segment.trim();
+    if let Some(bracket_start) = trimmed.find('[') {
+        if !trimmed.ends_with(']') {
+            return None;
+        }
+
+        let name = trimmed[..bracket_start].trim();
+        let predicate = &trimmed[bracket_start + 1..trimmed.len() - 1];
+        let predicate = predicate.trim();
+
+        // Support simple predicate: [text()="value"] or [text()='value']
+        if let Some(raw) = predicate.strip_prefix("text()=") {
+            let raw = raw.trim();
+            if raw.len() >= 2
+                && ((raw.starts_with('"') && raw.ends_with('"'))
+                    || (raw.starts_with('\'') && raw.ends_with('\'')))
+            {
+                let text = raw[1..raw.len() - 1].to_string();
+                if !name.is_empty() {
+                    return Some(XPathSegment {
+                        name: name.to_string(),
+                        text_equals: Some(text),
+                    });
+                }
+            }
+        }
+
+        None
+    } else {
+        Some(XPathSegment {
+            name: trimmed.to_string(),
+            text_equals: None,
+        })
+    }
+}
+
+fn segment_matches(node: roxmltree::Node<'_, '_>, segment: &XPathSegment) -> bool {
+    if !node.is_element() {
+        return false;
+    }
+    if node.tag_name().name() != segment.name {
+        return false;
+    }
+    match &segment.text_equals {
+        Some(expected) => node.text().map(str::trim).unwrap_or_default() == expected,
+        None => true,
+    }
+}
+
+/// Check if an XPath expression matches an XML body.
+///
+/// Supported subset:
+/// - Absolute paths: `/root/child/item`
+/// - Descendant search: `//item` and `//parent/child`
+/// - Optional text predicate per segment: `item[text()="value"]`
+fn xml_xpath_exists(xml_body: &str, xpath: &str) -> bool {
+    let doc = match roxmltree::Document::parse(xml_body) {
+        Ok(doc) => doc,
+        Err(err) => {
+            tracing::warn!("Failed to parse XML for XPath matching: {}", err);
+            return false;
+        }
+    };
+
+    let expr = xpath.trim();
+    if expr.is_empty() {
+        return false;
+    }
+
+    let (is_descendant, path_str) = if let Some(rest) = expr.strip_prefix("//") {
+        (true, rest)
+    } else if let Some(rest) = expr.strip_prefix('/') {
+        (false, rest)
+    } else {
+        tracing::warn!("Unsupported XPath expression (must start with / or //): {}", expr);
+        return false;
+    };
+
+    let segments: Vec<XPathSegment> = path_str
+        .split('/')
+        .filter(|s| !s.trim().is_empty())
+        .filter_map(parse_xpath_segment)
+        .collect();
+
+    if segments.is_empty() {
+        return false;
+    }
+
+    if is_descendant {
+        let first = &segments[0];
+        for node in doc.descendants().filter(|n| segment_matches(*n, first)) {
+            let mut frontier = vec![node];
+            for segment in &segments[1..] {
+                let mut next_frontier = Vec::new();
+                for parent in &frontier {
+                    for child in parent.children().filter(|n| segment_matches(*n, segment)) {
+                        next_frontier.push(child);
+                    }
+                }
+                if next_frontier.is_empty() {
+                    frontier.clear();
+                    break;
+                }
+                frontier = next_frontier;
+            }
+            if !frontier.is_empty() {
+                return true;
+            }
+        }
+        false
+    } else {
+        let mut frontier = vec![doc.root_element()];
+        for (index, segment) in segments.iter().enumerate() {
+            let mut next_frontier = Vec::new();
+            for parent in &frontier {
+                if index == 0 {
+                    if segment_matches(*parent, segment) {
+                        next_frontier.push(*parent);
+                    }
+                    continue;
+                }
+                for child in parent.children().filter(|n| segment_matches(*n, segment)) {
+                    next_frontier.push(child);
+                }
+            }
+            if next_frontier.is_empty() {
+                return false;
+            }
+            frontier = next_frontier;
+        }
+        !frontier.is_empty()
+    }
+}
+
+/// Evaluate a custom matcher expression
+fn evaluate_custom_matcher(
+    expression: &str,
+    method: &str,
+    path: &str,
+    headers: &std::collections::HashMap<String, String>,
+    query_params: &std::collections::HashMap<String, String>,
+    body: Option<&[u8]>,
+) -> bool {
+    use regex::Regex;
+
+    let expr = expression.trim();
+
+    // Handle equality expressions (field == "value")
+    if expr.contains("==") {
+        let parts: Vec<&str> = expr.split("==").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let expected_value = parts[1].trim_matches('"').trim_matches('\'');
+
+        match field {
+            "method" => method == expected_value,
+            "path" => path == expected_value,
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..];
+                headers.get(header_name).map(|v| v == expected_value).unwrap_or(false)
+            }
+            _ if field.starts_with("query.") => {
+                let param_name = &field[6..];
+                query_params.get(param_name).map(|v| v == expected_value).unwrap_or(false)
+            }
+            _ => false,
+        }
+    }
+    // Handle regex match expressions (field =~ "pattern")
+    else if expr.contains("=~") {
+        let parts: Vec<&str> = expr.split("=~").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let pattern = parts[1].trim_matches('"').trim_matches('\'');
+
+        if let Ok(re) = Regex::new(pattern) {
+            match field {
+                "method" => re.is_match(method),
+                "path" => re.is_match(path),
+                _ if field.starts_with("headers.") => {
+                    let header_name = &field[8..];
+                    headers.get(header_name).map(|v| re.is_match(v)).unwrap_or(false)
+                }
+                _ if field.starts_with("query.") => {
+                    let param_name = &field[6..];
+                    query_params.get(param_name).map(|v| re.is_match(v)).unwrap_or(false)
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+    // Handle contains expressions (field contains "value")
+    else if expr.contains("contains") {
+        let parts: Vec<&str> = expr.split("contains").map(|s| s.trim()).collect();
+        if parts.len() != 2 {
+            return false;
+        }
+
+        let field = parts[0];
+        let search_value = parts[1].trim_matches('"').trim_matches('\'');
+
+        match field {
+            "path" => path.contains(search_value),
+            _ if field.starts_with("headers.") => {
+                let header_name = &field[8..];
+                headers.get(header_name).map(|v| v.contains(search_value)).unwrap_or(false)
+            }
+            _ if field.starts_with("body") => {
+                if let Some(body_bytes) = body {
+                    let body_str = String::from_utf8_lossy(body_bytes);
+                    body_str.contains(search_value)
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    } else {
+        // Unknown expression format
+        tracing::warn!("Unknown custom matcher expression format: {}", expr);
+        false
+    }
+}
+
+/// Server statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerStats {
+    /// Server uptime in seconds
+    pub uptime_seconds: u64,
+    /// Total number of requests processed
+    pub total_requests: u64,
+    /// Number of active mock configurations
+    pub active_mocks: usize,
+    /// Number of currently enabled mocks
+    pub enabled_mocks: usize,
+    /// Number of registered API routes
+    pub registered_routes: usize,
+}
+
+/// Server configuration info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerConfig {
+    /// MockForge version string
+    pub version: String,
+    /// Server port number
+    pub port: u16,
+    /// Whether an OpenAPI spec is loaded
+    pub has_openapi_spec: bool,
+    /// Optional path to the OpenAPI spec file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spec_path: Option<String>,
+}
+
+/// Shared state for the management API
+#[derive(Clone)]
+pub struct ManagementState {
+    /// Collection of mock configurations
+    pub mocks: Arc<RwLock<Vec<MockConfig>>>,
+    /// Optional OpenAPI specification
+    pub spec: Option<Arc<OpenApiSpec>>,
+    /// Optional path to the OpenAPI spec file
+    pub spec_path: Option<String>,
+    /// Server port number
+    pub port: u16,
+    /// Server start time for uptime calculation
+    pub start_time: std::time::Instant,
+    /// Counter for total requests processed
+    pub request_counter: Arc<RwLock<u64>>,
+    /// Optional proxy configuration for migration pipeline
+    pub proxy_config: Option<Arc<RwLock<ProxyConfig>>>,
+    /// Optional SMTP registry for email mocking
+    #[cfg(feature = "smtp")]
+    pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
+    /// Optional MQTT broker for message mocking
+    #[cfg(feature = "mqtt")]
+    pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
+    /// Optional Kafka broker for event streaming
+    #[cfg(feature = "kafka")]
+    pub kafka_broker: Option<Arc<mockforge_kafka::KafkaMockBroker>>,
+    /// Broadcast channel for message events (MQTT & Kafka)
+    #[cfg(any(feature = "mqtt", feature = "kafka"))]
+    pub message_events: Arc<broadcast::Sender<MessageEvent>>,
+    /// State machine manager for scenario state machines
+    pub state_machine_manager:
+        Arc<RwLock<mockforge_scenarios::state_machine::ScenarioStateMachineManager>>,
+    /// Optional WebSocket broadcast channel for real-time updates
+    pub ws_broadcast: Option<Arc<broadcast::Sender<crate::management_ws::MockEvent>>>,
+    /// Lifecycle hook registry for extensibility
+    pub lifecycle_hooks: Option<Arc<mockforge_core::lifecycle::LifecycleHookRegistry>>,
+    /// Rule explanations storage (in-memory for now)
+    pub rule_explanations: Arc<
+        RwLock<
+            std::collections::HashMap<
+                String,
+                mockforge_core::intelligent_behavior::RuleExplanation,
+            >,
+        >,
+    >,
+    /// Optional chaos API state for chaos config management
+    #[cfg(feature = "chaos")]
+    pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
+    /// Optional server configuration for profile application
+    pub server_config: Option<Arc<RwLock<mockforge_core::config::ServerConfig>>>,
+    /// Conformance testing state
+    #[cfg(feature = "conformance")]
+    pub conformance_state: crate::handlers::conformance::ConformanceState,
+}
+
+impl ManagementState {
+    /// Create a new management state
+    ///
+    /// # Arguments
+    /// * `spec` - Optional OpenAPI specification
+    /// * `spec_path` - Optional path to the OpenAPI spec file
+    /// * `port` - Server port number
+    pub fn new(spec: Option<Arc<OpenApiSpec>>, spec_path: Option<String>, port: u16) -> Self {
+        Self {
+            mocks: Arc::new(RwLock::new(Vec::new())),
+            spec,
+            spec_path,
+            port,
+            start_time: std::time::Instant::now(),
+            request_counter: Arc::new(RwLock::new(0)),
+            proxy_config: None,
+            #[cfg(feature = "smtp")]
+            smtp_registry: None,
+            #[cfg(feature = "mqtt")]
+            mqtt_broker: None,
+            #[cfg(feature = "kafka")]
+            kafka_broker: None,
+            #[cfg(any(feature = "mqtt", feature = "kafka"))]
+            message_events: {
+                let capacity = get_message_broadcast_capacity();
+                let (tx, _) = broadcast::channel(capacity);
+                Arc::new(tx)
+            },
+            state_machine_manager: Arc::new(RwLock::new(
+                mockforge_scenarios::state_machine::ScenarioStateMachineManager::new(),
+            )),
+            ws_broadcast: None,
+            lifecycle_hooks: None,
+            rule_explanations: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            #[cfg(feature = "chaos")]
+            chaos_api_state: None,
+            server_config: None,
+            #[cfg(feature = "conformance")]
+            conformance_state: crate::handlers::conformance::ConformanceState::new(),
+        }
+    }
+
+    /// Add lifecycle hook registry to management state
+    pub fn with_lifecycle_hooks(
+        mut self,
+        hooks: Arc<mockforge_core::lifecycle::LifecycleHookRegistry>,
+    ) -> Self {
+        self.lifecycle_hooks = Some(hooks);
+        self
+    }
+
+    /// Add WebSocket broadcast channel to management state
+    pub fn with_ws_broadcast(
+        mut self,
+        ws_broadcast: Arc<broadcast::Sender<crate::management_ws::MockEvent>>,
+    ) -> Self {
+        self.ws_broadcast = Some(ws_broadcast);
+        self
+    }
+
+    /// Add proxy configuration to management state
+    pub fn with_proxy_config(mut self, proxy_config: Arc<RwLock<ProxyConfig>>) -> Self {
+        self.proxy_config = Some(proxy_config);
+        self
+    }
+
+    #[cfg(feature = "smtp")]
+    /// Add SMTP registry to management state
+    pub fn with_smtp_registry(
+        mut self,
+        smtp_registry: Arc<mockforge_smtp::SmtpSpecRegistry>,
+    ) -> Self {
+        self.smtp_registry = Some(smtp_registry);
+        self
+    }
+
+    #[cfg(feature = "mqtt")]
+    /// Add MQTT broker to management state
+    pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
+        self.mqtt_broker = Some(mqtt_broker);
+        self
+    }
+
+    #[cfg(feature = "kafka")]
+    /// Add Kafka broker to management state
+    pub fn with_kafka_broker(
+        mut self,
+        kafka_broker: Arc<mockforge_kafka::KafkaMockBroker>,
+    ) -> Self {
+        self.kafka_broker = Some(kafka_broker);
+        self
+    }
+
+    #[cfg(feature = "chaos")]
+    /// Add chaos API state to management state
+    pub fn with_chaos_api_state(
+        mut self,
+        chaos_api_state: Arc<mockforge_chaos::api::ChaosApiState>,
+    ) -> Self {
+        self.chaos_api_state = Some(chaos_api_state);
+        self
+    }
+
+    /// Add server configuration to management state
+    pub fn with_server_config(
+        mut self,
+        server_config: Arc<RwLock<mockforge_core::config::ServerConfig>>,
+    ) -> Self {
+        self.server_config = Some(server_config);
+        self
+    }
+}
+
+/// Build the management API router
+pub fn management_router(state: ManagementState) -> Router {
+    let router = Router::new()
+        .route("/capabilities", get(health::get_capabilities))
+        .route("/health", get(health::health_check))
+        .route("/stats", get(health::get_stats))
+        .route("/config", get(health::get_config))
+        .route("/config/validate", post(health::validate_config))
+        .route("/config/bulk", post(health::bulk_update_config))
+        .route("/mocks", get(mocks::list_mocks))
+        .route("/mocks", post(mocks::create_mock))
+        .route("/mocks/{id}", get(mocks::get_mock))
+        .route("/mocks/{id}", put(mocks::update_mock))
+        .route("/mocks/{id}", delete(mocks::delete_mock))
+        .route("/export", get(import_export::export_mocks))
+        .route("/import", post(import_export::import_mocks))
+        .route("/spec", get(health::get_openapi_spec));
+
+    #[cfg(feature = "smtp")]
+    let router = router
+        .route("/smtp/mailbox", get(protocols::list_smtp_emails))
+        .route("/smtp/mailbox", delete(protocols::clear_smtp_mailbox))
+        .route("/smtp/mailbox/{id}", get(protocols::get_smtp_email))
+        .route("/smtp/mailbox/export", get(protocols::export_smtp_mailbox))
+        .route("/smtp/mailbox/search", get(protocols::search_smtp_emails));
+
+    #[cfg(not(feature = "smtp"))]
+    let router = router;
+
+    // MQTT routes
+    #[cfg(feature = "mqtt")]
+    let router = router
+        .route("/mqtt/stats", get(protocols::get_mqtt_stats))
+        .route("/mqtt/clients", get(protocols::get_mqtt_clients))
+        .route("/mqtt/topics", get(protocols::get_mqtt_topics))
+        .route("/mqtt/clients/{client_id}", delete(protocols::disconnect_mqtt_client))
+        .route("/mqtt/messages/stream", get(protocols::mqtt_messages_stream))
+        .route("/mqtt/publish", post(protocols::publish_mqtt_message_handler))
+        .route("/mqtt/publish/batch", post(protocols::publish_mqtt_batch_handler));
+
+    #[cfg(not(feature = "mqtt"))]
+    let router = router
+        .route("/mqtt/publish", post(protocols::publish_mqtt_message_handler))
+        .route("/mqtt/publish/batch", post(protocols::publish_mqtt_batch_handler));
+
+    #[cfg(feature = "kafka")]
+    let router = router
+        .route("/kafka/stats", get(protocols::get_kafka_stats))
+        .route("/kafka/topics", get(protocols::get_kafka_topics))
+        .route("/kafka/topics/{topic}", get(protocols::get_kafka_topic))
+        .route("/kafka/groups", get(protocols::get_kafka_groups))
+        .route("/kafka/groups/{group_id}", get(protocols::get_kafka_group))
+        .route("/kafka/produce", post(protocols::produce_kafka_message))
+        .route("/kafka/produce/batch", post(protocols::produce_kafka_batch))
+        .route("/kafka/messages/stream", get(protocols::kafka_messages_stream));
+
+    #[cfg(not(feature = "kafka"))]
+    let router = router;
+
+    // Migration pipeline routes
+    let router = router
+        .route("/migration/routes", get(migration::get_migration_routes))
+        .route("/migration/routes/{pattern}/toggle", post(migration::toggle_route_migration))
+        .route("/migration/routes/{pattern}", put(migration::set_route_migration_mode))
+        .route("/migration/groups/{group}/toggle", post(migration::toggle_group_migration))
+        .route("/migration/groups/{group}", put(migration::set_group_migration_mode))
+        .route("/migration/groups", get(migration::get_migration_groups))
+        .route("/migration/status", get(migration::get_migration_status));
+
+    // Proxy replacement rules routes
+    let router = router
+        .route("/proxy/rules", get(proxy::list_proxy_rules))
+        .route("/proxy/rules", post(proxy::create_proxy_rule))
+        .route("/proxy/rules/{id}", get(proxy::get_proxy_rule))
+        .route("/proxy/rules/{id}", put(proxy::update_proxy_rule))
+        .route("/proxy/rules/{id}", delete(proxy::delete_proxy_rule))
+        .route("/proxy/inspect", get(proxy::get_proxy_inspect));
+
+    // AI-powered features
+    let router = router.route("/ai/generate-spec", post(ai_gen::generate_ai_spec));
+
+    // Snapshot diff endpoints
+    let router = router.nest(
+        "/snapshot-diff",
+        crate::handlers::snapshot_diff::snapshot_diff_router(state.clone()),
+    );
+
+    #[cfg(feature = "behavioral-cloning")]
+    let router =
+        router.route("/mockai/generate-openapi", post(ai_gen::generate_openapi_from_traffic));
+
+    let router = router
+        .route("/mockai/learn", post(ai_gen::learn_from_examples))
+        .route("/mockai/rules/explanations", get(ai_gen::list_rule_explanations))
+        .route("/mockai/rules/{id}/explanation", get(ai_gen::get_rule_explanation))
+        .route("/chaos/config", get(ai_gen::get_chaos_config))
+        .route("/chaos/config", post(ai_gen::update_chaos_config))
+        .route("/network/profiles", get(ai_gen::list_network_profiles))
+        .route("/network/profile/apply", post(ai_gen::apply_network_profile));
+
+    // State machine API routes
+    let router =
+        router.nest("/state-machines", crate::state_machine_api::create_state_machine_routes());
+
+    // Conformance testing API routes
+    #[cfg(feature = "conformance")]
+    let router = router.nest_service(
+        "/conformance",
+        crate::handlers::conformance::conformance_router(state.conformance_state.clone()),
+    );
+    #[cfg(not(feature = "conformance"))]
+    let router = router;
+
+    router.with_state(state)
+}
+
+/// Build the management API router with UI Builder support
+pub fn management_router_with_ui_builder(
+    state: ManagementState,
+    server_config: mockforge_core::config::ServerConfig,
+) -> Router {
+    use crate::ui_builder::{create_ui_builder_router, UIBuilderState};
+
+    // Create the base management router
+    let management = management_router(state);
+
+    // Create UI Builder state and router
+    let ui_builder_state = UIBuilderState::new(server_config);
+    let ui_builder = create_ui_builder_router(ui_builder_state);
+
+    // Nest UI Builder under /ui-builder
+    management.nest("/ui-builder", ui_builder)
+}
+
+/// Build management router with spec import API
+pub fn management_router_with_spec_import(state: ManagementState) -> Router {
+    use crate::spec_import::{spec_import_router, SpecImportState};
+
+    // Create base management router
+    let management = management_router(state);
+
+    // Merge with spec import router
+    Router::new()
+        .merge(management)
+        .merge(spec_import_router(SpecImportState::new()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_create_and_get_mock() {
+        let state = ManagementState::new(None, None, 3000);
+
+        let mock = MockConfig {
+            id: "test-1".to_string(),
+            name: "Test Mock".to_string(),
+            method: "GET".to_string(),
+            path: "/test".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"message": "test"}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: None,
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        // Create mock
+        {
+            let mut mocks = state.mocks.write().await;
+            mocks.push(mock.clone());
+        }
+
+        // Get mock
+        let mocks = state.mocks.read().await;
+        let found = mocks.iter().find(|m| m.id == "test-1");
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "Test Mock");
+    }
+
+    #[tokio::test]
+    async fn test_server_stats() {
+        let state = ManagementState::new(None, None, 3000);
+
+        // Add some mocks
+        {
+            let mut mocks = state.mocks.write().await;
+            mocks.push(MockConfig {
+                id: "1".to_string(),
+                name: "Mock 1".to_string(),
+                method: "GET".to_string(),
+                path: "/test1".to_string(),
+                response: MockResponse {
+                    body: serde_json::json!({}),
+                    headers: None,
+                },
+                enabled: true,
+                latency_ms: None,
+                status_code: Some(200),
+                request_match: None,
+                priority: None,
+                scenario: None,
+                required_scenario_state: None,
+                new_scenario_state: None,
+            });
+            mocks.push(MockConfig {
+                id: "2".to_string(),
+                name: "Mock 2".to_string(),
+                method: "POST".to_string(),
+                path: "/test2".to_string(),
+                response: MockResponse {
+                    body: serde_json::json!({}),
+                    headers: None,
+                },
+                enabled: false,
+                latency_ms: None,
+                status_code: Some(201),
+                request_match: None,
+                priority: None,
+                scenario: None,
+                required_scenario_state: None,
+                new_scenario_state: None,
+            });
+        }
+
+        let mocks = state.mocks.read().await;
+        assert_eq!(mocks.len(), 2);
+        assert_eq!(mocks.iter().filter(|m| m.enabled).count(), 1);
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_absolute_path() {
+        let mock = MockConfig {
+            id: "xpath-1".to_string(),
+            name: "XPath Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("/root/order/id".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_text_predicate() {
+        let mock = MockConfig {
+            id: "xpath-2".to_string(),
+            name: "XPath Predicate Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("//order/id[text()='123']".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
+    }
+
+    #[test]
+    fn test_mock_matches_request_with_xpath_no_match() {
+        let mock = MockConfig {
+            id: "xpath-3".to_string(),
+            name: "XPath No Match".to_string(),
+            method: "POST".to_string(),
+            path: "/xml".to_string(),
+            response: MockResponse {
+                body: serde_json::json!({"ok": true}),
+                headers: None,
+            },
+            enabled: true,
+            latency_ms: None,
+            status_code: Some(200),
+            request_match: Some(RequestMatchCriteria {
+                xpath: Some("//order/id[text()='456']".to_string()),
+                ..Default::default()
+            }),
+            priority: None,
+            scenario: None,
+            required_scenario_state: None,
+            new_scenario_state: None,
+        };
+
+        let body = br#"<root><order><id>123</id></order></root>"#;
+        let headers = std::collections::HashMap::new();
+        let query = std::collections::HashMap::new();
+
+        assert!(!mock_matches_request(&mock, "POST", "/xml", &headers, &query, Some(body)));
+    }
+}

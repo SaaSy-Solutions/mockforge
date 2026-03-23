@@ -7,6 +7,7 @@
 //! - Contract health status
 
 use chrono::{DateTime, Utc};
+use clap::Subcommand;
 use mockforge_core::{
     contract_drift::forecasting::{Forecaster, ForecastingConfig},
     contract_drift::threat_modeling::{
@@ -18,6 +19,163 @@ use mockforge_core::{
 };
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::path::PathBuf;
+
+/// Governance commands
+#[derive(Subcommand)]
+pub(crate) enum GovernanceCommands {
+    /// API change forecasting
+    Forecast {
+        #[command(subcommand)]
+        forecast_command: ForecastCommands,
+    },
+    /// Semantic drift analysis
+    Semantic {
+        #[command(subcommand)]
+        semantic_command: SemanticCommands,
+    },
+    /// Threat assessment
+    Threat {
+        #[command(subcommand)]
+        threat_command: ThreatCommands,
+    },
+    /// Governance status
+    Status {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+    },
+}
+
+/// Forecast commands
+#[derive(Subcommand)]
+pub(crate) enum ForecastCommands {
+    /// Generate API change forecast
+    Generate {
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Forecast window in days (30, 90, or 180)
+        #[arg(long, default_value = "90")]
+        window_days: u32,
+    },
+}
+
+/// Semantic commands
+#[derive(Subcommand)]
+pub(crate) enum SemanticCommands {
+    /// Analyze semantic drift between contract versions
+    Analyze {
+        /// Path to before contract specification
+        #[arg(long)]
+        before: PathBuf,
+        /// Path to after contract specification
+        #[arg(long)]
+        after: PathBuf,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: String,
+        /// HTTP method
+        #[arg(long)]
+        method: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Threat commands
+#[derive(Subcommand)]
+pub(crate) enum ThreatCommands {
+    /// Assess contract security threats
+    Assess {
+        /// Path to contract specification
+        #[arg(short, long)]
+        spec: PathBuf,
+        /// Workspace ID
+        #[arg(long)]
+        workspace_id: Option<String>,
+        /// Service ID
+        #[arg(long)]
+        service_id: Option<String>,
+        /// Endpoint path
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// HTTP method
+        #[arg(long)]
+        method: Option<String>,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+}
+
+/// Handle governance commands
+pub(crate) async fn handle_governance(gov_command: GovernanceCommands) -> Result<()> {
+    match gov_command {
+        GovernanceCommands::Forecast { forecast_command } => match forecast_command {
+            ForecastCommands::Generate {
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                window_days,
+            } => {
+                handle_forecast_generate(
+                    workspace_id,
+                    service_id,
+                    endpoint,
+                    method,
+                    Some(window_days),
+                )
+                .await?;
+            }
+        },
+        GovernanceCommands::Semantic { semantic_command } => match semantic_command {
+            SemanticCommands::Analyze {
+                before,
+                after,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_semantic_analyze(before, after, endpoint, method, output).await?;
+            }
+        },
+        GovernanceCommands::Threat { threat_command } => match threat_command {
+            ThreatCommands::Assess {
+                spec,
+                workspace_id,
+                service_id,
+                endpoint,
+                method,
+                output,
+            } => {
+                handle_threat_assess(spec, workspace_id, service_id, endpoint, method, output)
+                    .await?;
+            }
+        },
+        GovernanceCommands::Status {
+            workspace_id,
+            service_id,
+        } => {
+            handle_governance_status(workspace_id, service_id).await?;
+        }
+    }
+
+    Ok(())
+}
 use tracing::{error, info, warn};
 use uuid::Uuid;
 

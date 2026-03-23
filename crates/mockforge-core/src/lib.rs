@@ -320,6 +320,7 @@ pub mod request_capture;
 pub mod request_chaining;
 pub mod request_fingerprint;
 pub mod request_logger;
+#[cfg(feature = "scripting")]
 pub(crate) mod request_scripting;
 // Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
 // Import directly from mockforge-route-chaos crate instead of re-exporting here
