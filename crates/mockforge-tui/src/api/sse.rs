@@ -131,6 +131,7 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn format_bytes(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{bytes}B")

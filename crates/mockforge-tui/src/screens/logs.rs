@@ -304,7 +304,9 @@ impl Screen for LogsScreen {
 
         // Update filtered indices if filter is active.
         let idx = self.lines.len() - 1;
-        if self.filter.is_empty() || self.filter.matches(self.lines.back().unwrap()) {
+        if self.filter.is_empty()
+            || self.lines.back().map_or(false, |line| self.filter.matches(line))
+        {
             self.filtered_indices.push(idx);
         }
 
