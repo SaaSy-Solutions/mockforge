@@ -225,7 +225,84 @@ pub struct ProfileConfig {
     pub security: Option<SecurityConfig>,
 }
 
-// Default is derived for ServerConfig
+impl ServerConfig {
+    /// Create a minimal configuration with all defaults.
+    pub fn minimal() -> Self {
+        Self::default()
+    }
+
+    /// Create a development-friendly configuration with admin UI enabled and
+    /// debug-level logging.
+    pub fn development() -> Self {
+        let mut cfg = Self::default();
+        cfg.admin.enabled = true;
+        cfg.logging.level = "debug".to_string();
+        cfg
+    }
+
+    /// Create a CI-oriented configuration with latency and failure injection
+    /// disabled for deterministic test runs.
+    pub fn ci() -> Self {
+        let mut cfg = Self::default();
+        cfg.core.latency_enabled = false;
+        cfg.core.failures_enabled = false;
+        cfg
+    }
+
+    /// Builder: set the HTTP port.
+    #[must_use]
+    pub fn with_http_port(mut self, port: u16) -> Self {
+        self.http.port = port;
+        self
+    }
+
+    /// Builder: enable the admin UI on the given port.
+    #[must_use]
+    pub fn with_admin(mut self, port: u16) -> Self {
+        self.admin.enabled = true;
+        self.admin.port = port;
+        self
+    }
+
+    /// Builder: enable gRPC on the given port.
+    #[must_use]
+    pub fn with_grpc(mut self, port: u16) -> Self {
+        self.grpc.enabled = true;
+        self.grpc.port = port;
+        self.protocols.grpc.enabled = true;
+        self
+    }
+
+    /// Builder: enable WebSocket on the given port.
+    #[must_use]
+    pub fn with_websocket(mut self, port: u16) -> Self {
+        self.websocket.enabled = true;
+        self.websocket.port = port;
+        self.protocols.websocket.enabled = true;
+        self
+    }
+
+    /// Builder: set the log level.
+    #[must_use]
+    pub fn with_log_level(mut self, level: &str) -> Self {
+        self.logging.level = level.to_string();
+        self
+    }
+
+    /// Check whether any advanced features (MockAI, behavioral cloning,
+    /// reality continuum) are enabled.
+    pub fn has_advanced_features(&self) -> bool {
+        self.mockai.enabled
+            || self.behavioral_cloning.as_ref().is_some_and(|bc| bc.enabled)
+            || self.reality_continuum.enabled
+    }
+
+    /// Check whether any enterprise features (multi-tenant, federation,
+    /// security monitoring) are enabled.
+    pub fn has_enterprise_features(&self) -> bool {
+        self.multi_tenant.enabled || self.security.monitoring.siem.enabled
+    }
+}
 
 /// Load configuration from file
 pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
@@ -809,6 +886,73 @@ mod tests {
         assert_eq!(merged.http.port, 8080);
         assert_eq!(merged.logging.level, "debug");
         assert_eq!(merged.websocket.port, 3001); // Unchanged
+    }
+
+    #[test]
+    fn test_minimal_config() {
+        let config = ServerConfig::minimal();
+        assert_eq!(config.http.port, 3000);
+        assert!(!config.admin.enabled);
+    }
+
+    #[test]
+    fn test_development_config() {
+        let config = ServerConfig::development();
+        assert!(config.admin.enabled);
+        assert_eq!(config.logging.level, "debug");
+    }
+
+    #[test]
+    fn test_ci_config() {
+        let config = ServerConfig::ci();
+        assert!(!config.core.latency_enabled);
+        assert!(!config.core.failures_enabled);
+    }
+
+    #[test]
+    fn test_builder_with_http_port() {
+        let config = ServerConfig::minimal().with_http_port(8080);
+        assert_eq!(config.http.port, 8080);
+    }
+
+    #[test]
+    fn test_builder_with_admin() {
+        let config = ServerConfig::minimal().with_admin(9090);
+        assert!(config.admin.enabled);
+        assert_eq!(config.admin.port, 9090);
+    }
+
+    #[test]
+    fn test_builder_with_grpc() {
+        let config = ServerConfig::minimal().with_grpc(50052);
+        assert!(config.grpc.enabled);
+        assert_eq!(config.grpc.port, 50052);
+        assert!(config.protocols.grpc.enabled);
+    }
+
+    #[test]
+    fn test_builder_with_websocket() {
+        let config = ServerConfig::minimal().with_websocket(3002);
+        assert!(config.websocket.enabled);
+        assert_eq!(config.websocket.port, 3002);
+    }
+
+    #[test]
+    fn test_builder_with_log_level() {
+        let config = ServerConfig::minimal().with_log_level("trace");
+        assert_eq!(config.logging.level, "trace");
+    }
+
+    #[test]
+    fn test_has_advanced_features_default() {
+        let config = ServerConfig::minimal();
+        assert!(!config.has_advanced_features());
+    }
+
+    #[test]
+    fn test_has_enterprise_features_default() {
+        let config = ServerConfig::minimal();
+        assert!(!config.has_enterprise_features());
     }
 
     #[test]

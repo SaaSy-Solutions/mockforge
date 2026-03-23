@@ -73,7 +73,7 @@ pub unsafe extern "C" fn mockforge_server_stub(
     handle: *mut MockServerHandle,
     method: *const c_char,
     path: *const c_char,
-    status: u16,
+    _status: u16,
     body: *const c_char,
 ) -> i32 {
     if handle.is_null() || method.is_null() || path.is_null() || body.is_null() {

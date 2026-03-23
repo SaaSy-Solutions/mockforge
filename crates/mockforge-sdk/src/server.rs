@@ -154,7 +154,7 @@ impl MockServer {
 
     /// Build a simple router from stored routes
     fn build_simple_router(&self, stub_store: StubStore) -> Router {
-        use axum::extract::{Path, Request, State};
+        use axum::extract::{Path, Request};
         use axum::http::StatusCode;
         use axum::routing::{delete, get, post, put};
         use axum::{response::IntoResponse, Json};

@@ -102,9 +102,14 @@ harness = false
 windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 
 [features]
-default = ["data"]
+default = ["data", "ai", "contracts", "workspace-mgmt", "voice", "advanced"]
 parallel-routes = ["rayon"]
 schema = ["schemars"]
 database = ["sqlx"]
 data = ["mockforge-data"]
 persona-graph = []
+ai = []
+contracts = []
+workspace-mgmt = []
+voice = []
+advanced = []
