@@ -99,9 +99,9 @@ missing_docs = "warn"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
 # Allow common development warnings
-dead_code = "allow"
-unused_variables = "allow"
-unused_imports = "allow"
+dead_code = "warn"
+unused_variables = "warn"
+unused_imports = "warn"
 private_interfaces = "allow"
 
 [workspace.lints.clippy]

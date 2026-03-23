@@ -4,6 +4,7 @@
 //! protocols, enabling code reuse for spec-driven mocking, middleware, and request matching.
 
 pub mod auth;
+pub mod base_registry;
 pub mod matcher;
 pub mod middleware;
 pub mod protocol_registry;
@@ -17,6 +18,7 @@ use std::sync::Arc;
 
 // Re-export middleware types
 pub use auth::{AuthMiddleware, AuthResult, Claims};
+pub use base_registry::{BaseSpecRegistry, ProtocolFixture};
 pub use matcher::{FuzzyRequestMatcher, RequestFingerprint, SimpleRequestMatcher};
 pub use middleware::{LatencyMiddleware, LoggingMiddleware, MetricsMiddleware};
 pub use protocol_registry::{ProtocolHandler, ProtocolRegistry};

@@ -4,6 +4,7 @@
 
 use crate::federation::Federation;
 use crate::service::ServiceBoundary;
+#[cfg(test)]
 use chrono::Utc;
 use std::sync::Arc;
 use tracing::debug;

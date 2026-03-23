@@ -1,7 +1,9 @@
 use axum::serve;
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+#[cfg(feature = "chaos")]
 use mockforge_chaos::api::create_chaos_api_router;
+#[cfg(feature = "chaos")]
 use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::{
@@ -56,8 +58,10 @@ mod mqtt_commands;
 mod plugin_commands;
 #[allow(dead_code)]
 mod progress;
+#[cfg(feature = "recorder")]
 #[allow(dead_code)]
 mod recorder_commands;
+#[cfg(feature = "scenarios")]
 mod scenario_commands;
 mod schema;
 #[cfg(feature = "smtp")]
@@ -68,7 +72,9 @@ mod snapshot_commands;
 mod template_commands;
 #[allow(dead_code)]
 mod time_commands;
+#[cfg(feature = "tunnel")]
 mod tunnel_commands;
+#[cfg(feature = "vbr")]
 mod vbr_commands;
 #[allow(dead_code)]
 mod voice_commands;
@@ -993,6 +999,7 @@ enum Commands {
     /// Examples:
     ///   mockforge recorder convert --recording-id abc123 --output fixtures/user-api.yaml
     ///   mockforge recorder convert --input recordings.db --output fixtures/ --format yaml
+    #[cfg(feature = "recorder")]
     Recorder {
         #[command(subcommand)]
         recorder_command: recorder_commands::RecorderCommands,
@@ -1019,6 +1026,7 @@ enum Commands {
     ///   mockforge scenario list
     ///   mockforge scenario search ecommerce
     ///   mockforge scenario use ecommerce-store
+    #[cfg(feature = "scenarios")]
     #[command(verbatim_doc_comment)]
     Scenario {
         #[command(subcommand)]
@@ -1033,6 +1041,7 @@ enum Commands {
     ///   mockforge reality-profile install ecommerce-peak-season
     ///   mockforge reality-profile list
     ///   mockforge reality-profile apply ecommerce-peak-season --workspace default
+    #[cfg(feature = "scenarios")]
     #[command(verbatim_doc_comment)]
     RealityProfile {
         #[command(subcommand)]
@@ -1047,6 +1056,7 @@ enum Commands {
     ///   mockforge behavior-rule add --name "latency-conversion" --condition latency --threshold 400 --action modify-conversion-rate --multiplier 0.8
     ///   mockforge behavior-rule list
     ///   mockforge behavior-rule enable
+    #[cfg(feature = "scenarios")]
     #[command(verbatim_doc_comment)]
     BehaviorRule {
         #[command(subcommand)]
@@ -1061,6 +1071,7 @@ enum Commands {
     ///   mockforge drift-learning enable --sensitivity 0.2 --min-samples 10
     ///   mockforge drift-learning status
     ///   mockforge drift-learning disable
+    #[cfg(feature = "scenarios")]
     #[command(verbatim_doc_comment)]
     DriftLearning {
         #[command(subcommand)]
@@ -1180,6 +1191,7 @@ enum Commands {
     ///   mockforge tunnel status
     ///   mockforge tunnel stop
     ///   mockforge tunnel list
+    #[cfg(feature = "tunnel")]
     #[command(verbatim_doc_comment)]
     Tunnel {
         #[command(subcommand)]
@@ -1209,6 +1221,7 @@ enum Commands {
     ///   mockforge vbr create entity User --fields id:string,name:string,email:string
     ///   mockforge vbr serve --port 3000 --storage sqlite
     ///   mockforge vbr manage entities list
+    #[cfg(feature = "vbr")]
     #[command(verbatim_doc_comment)]
     Vbr {
         #[command(subcommand)]
@@ -1545,6 +1558,7 @@ enum Commands {
     ///   mockforge bench --spec pools.yaml --spec vs.yaml --target https://api.com
     ///   mockforge bench --spec-dir ./specs/ --target https://api.com
     ///   mockforge bench --spec a.yaml --spec b.yaml --merge-conflicts first --target https://api.com
+    #[cfg(feature = "bench")]
     #[command(verbatim_doc_comment)]
     Bench {
         /// API specification file(s) (OpenAPI/Swagger). Can specify multiple.
@@ -3039,25 +3053,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Plugin { plugin_command } => {
             plugin_commands::handle_plugin_command(plugin_command).await?;
         }
+        #[cfg(feature = "recorder")]
         Commands::Recorder { recorder_command } => {
             recorder_commands::handle_recorder_command(recorder_command).await?;
         }
         Commands::Flow { flow_command } => {
             flow_commands::handle_flow_command(flow_command).await?;
         }
+        #[cfg(feature = "scenarios")]
         Commands::Scenario { scenario_command } => {
             scenario_commands::handle_scenario_command(scenario_command).await?;
         }
+        #[cfg(feature = "scenarios")]
         Commands::RealityProfile {
             reality_profile_command,
         } => {
             scenario_commands::handle_reality_profile_command(reality_profile_command).await?;
         }
+        #[cfg(feature = "scenarios")]
         Commands::BehaviorRule {
             behavior_rule_command,
         } => {
             scenario_commands::handle_behavior_rule_command(behavior_rule_command).await?;
         }
+        #[cfg(feature = "scenarios")]
         Commands::DriftLearning {
             drift_learning_command,
         } => {
@@ -3112,6 +3131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .map_err(|e| anyhow::anyhow!("Login failed: {}", e))?;
         }
 
+        #[cfg(feature = "tunnel")]
         Commands::Tunnel { tunnel_command } => {
             tunnel_commands::handle_tunnel_command(tunnel_command)
                 .await
@@ -3124,6 +3144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map_err(|e| anyhow::anyhow!("Deploy command failed: {}", e))?;
         }
 
+        #[cfg(feature = "vbr")]
         Commands::Vbr { vbr_command } => {
             vbr_commands::execute_vbr_command(vbr_command)
                 .await
@@ -3266,6 +3287,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .await?;
         }
 
+        #[cfg(feature = "bench")]
         Commands::Bench {
             spec,
             spec_dir,
@@ -3934,6 +3956,7 @@ async fn validate_serve_config(
 }
 
 /// Initialize OpenTelemetry tracing with the given configuration
+#[cfg(feature = "tracing")]
 fn initialize_opentelemetry_tracing(
     otel_config: &mockforge_core::config::OpenTelemetryConfig,
     logging_config: &mockforge_observability::LoggingConfig,

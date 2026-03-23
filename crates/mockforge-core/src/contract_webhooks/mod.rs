@@ -40,5 +40,3 @@ pub mod types;
 pub mod webhook_dispatcher;
 
 // Re-export main types
-pub use types::{ContractEvent, WebhookConfig, WebhookPayload, WebhookResult};
-pub use webhook_dispatcher::WebhookDispatcher;

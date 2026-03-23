@@ -33,23 +33,23 @@ mockforge-graphql = { version = "0.3.70", path = "../mockforge-graphql", optiona
 mockforge-smtp = { version = "0.3.70", path = "../mockforge-smtp", optional = true }
 mockforge-mqtt = { version = "0.3.70", path = "../mockforge-mqtt", optional = true }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
-mockforge-ui = { version = "0.3.70", path = "../mockforge-ui" }
+mockforge-ui = { version = "0.3.70", path = "../mockforge-ui", optional = true }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
-mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
-mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
-mockforge-bench = { version = "0.3.70", path = "../mockforge-bench" }
+mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing", optional = true }
+mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder", optional = true }
+mockforge-federation = { version = "0.3.70", path = "../mockforge-federation", optional = true }
+mockforge-bench = { version = "0.3.70", path = "../mockforge-bench", optional = true }
 mockforge-ftp = { version = "0.3.70", path = "../mockforge-ftp", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
 mockforge-amqp = { version = "0.3.70", path = "../mockforge-amqp", optional = true }
 mockforge-tcp = { version = "0.3.70", path = "../mockforge-tcp", optional = true }
-mockforge-tunnel = { version = "0.3.70", path = "../mockforge-tunnel" }
+mockforge-tunnel = { version = "0.3.70", path = "../mockforge-tunnel", optional = true }
 mockforge-tui = { version = "0.3.70", path = "../mockforge-tui", optional = true }
-mockforge-vbr = { version = "0.3.70", path = "../mockforge-vbr" }
+mockforge-vbr = { version = "0.3.70", path = "../mockforge-vbr", optional = true }
 mockforge-plugin-core = { version = "0.3.70", path = "../mockforge-plugin-core" }
 mockforge-plugin-loader = { version = "0.3.70", path = "../mockforge-plugin-loader" }
-mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios", features = ["studio-packs"] }
-mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
+mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios", features = ["studio-packs"], optional = true }
+mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos", optional = true }
 schemars = { version = "0.8", features = ["derive"] }
 jsonschema = { workspace = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
@@ -87,8 +87,19 @@ cpal = { version = "0.15", optional = true }
 hound = { version = "3.5", optional = true }
 
 [features]
-default = ["http"]
+default = ["http", "admin", "bench", "chaos", "recorder", "scenarios", "tracing", "federation", "tunnel", "vbr"]
+full = ["default", "all-protocols", "pipelines", "tui", "stt-all", "studio-packs"]
 all-protocols = ["http", "mqtt", "ws", "grpc", "graphql", "ftp", "amqp", "kafka", "smtp", "tcp"]
+# Feature-gated CLI subsystems
+admin = ["dep:mockforge-ui"]
+bench = ["dep:mockforge-bench"]
+chaos = ["dep:mockforge-chaos"]
+recorder = ["dep:mockforge-recorder"]
+scenarios = ["dep:mockforge-scenarios"]
+tracing = ["dep:mockforge-tracing"]
+federation = ["dep:mockforge-federation"]
+tunnel = ["dep:mockforge-tunnel"]
+vbr = ["dep:mockforge-vbr"]
 # Speech-to-text features
 stt-cloud = []  # Cloud API backends (OpenAI Whisper, Google Speech-to-Text)
 stt-vosk = ["vosk", "cpal", "hound"]  # Offline STT using vosk-rs
