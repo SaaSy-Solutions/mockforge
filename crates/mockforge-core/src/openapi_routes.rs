@@ -233,9 +233,9 @@ impl OpenApiRouteRegistry {
         &self.spec
     }
 
-    /// Normalize an Axum path for route dedup by replacing all `{param}` with `{_}`.
+    /// Normalize an Axum path for dedup by replacing all `{param}` with `{_}`.
     /// This ensures paths like `/func/{period}` and `/func/{date}` are treated as duplicates,
-    /// since Axum treats all path parameters as equivalent for routing.
+    /// since Axum/matchit treats all path parameters as equivalent for routing.
     fn normalize_path_for_dedup(path: &str) -> String {
         let mut result = String::with_capacity(path.len());
         let mut in_brace = false;
@@ -257,6 +257,11 @@ impl OpenApiRouteRegistry {
         let mut router = Router::new();
         tracing::debug!("Building router from {} routes", self.routes.len());
         let mut registered_routes: HashSet<(String, String)> = HashSet::new();
+        // Track normalized path → first registered axum path, so routes with
+        // different param names (e.g., {attestation_id} vs {subject_digest}) reuse
+        // the first path's param names. Axum/matchit panics if param names differ.
+        let mut canonical_paths: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
 
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
@@ -269,9 +274,15 @@ impl OpenApiRouteRegistry {
                 continue;
             }
             let axum_path = route.axum_path();
-            // Skip duplicate routes (e.g., OData functions with different param names
-            // that collapse to the same Axum path pattern)
-            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            let normalized = Self::normalize_path_for_dedup(&axum_path);
+            // Rewrite param names to match the first route registered for this pattern.
+            // This prevents matchit panics when two OpenAPI paths differ only in param names.
+            let axum_path = canonical_paths
+                .entry(normalized.clone())
+                .or_insert_with(|| axum_path.clone())
+                .clone();
+            // Skip duplicate routes (same method + same normalized path)
+            let route_key = (route.method.clone(), normalized);
             if !registered_routes.insert(route_key) {
                 tracing::debug!(
                     "Skipping duplicate route: {} {} (axum path: {})",
@@ -725,6 +736,8 @@ impl OpenApiRouteRegistry {
     ) -> Router {
         let mut router = Router::new();
         let mut registered_routes: HashSet<(String, String)> = HashSet::new();
+        let mut canonical_paths: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
 
         // Create individual routes for each operation
         let custom_loader = self.custom_fixture_loader.clone();
@@ -738,7 +751,12 @@ impl OpenApiRouteRegistry {
                 continue;
             }
             let axum_path = route.axum_path();
-            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            let normalized = Self::normalize_path_for_dedup(&axum_path);
+            let axum_path = canonical_paths
+                .entry(normalized.clone())
+                .or_insert_with(|| axum_path.clone())
+                .clone();
+            let route_key = (route.method.clone(), normalized);
             if !registered_routes.insert(route_key) {
                 tracing::debug!(
                     "Skipping duplicate route: {} {} (axum path: {})",
@@ -1502,6 +1520,8 @@ impl OpenApiRouteRegistry {
 
         let mut router = Router::new();
         let mut registered_routes: HashSet<(String, String)> = HashSet::new();
+        let mut canonical_paths: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
 
         for route in &self.routes {
@@ -1514,7 +1534,12 @@ impl OpenApiRouteRegistry {
                 continue;
             }
             let axum_path = route.axum_path();
-            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            let normalized = Self::normalize_path_for_dedup(&axum_path);
+            let axum_path = canonical_paths
+                .entry(normalized.clone())
+                .or_insert_with(|| axum_path.clone())
+                .clone();
+            let route_key = (route.method.clone(), normalized);
             if !registered_routes.insert(route_key) {
                 tracing::debug!(
                     "Skipping duplicate route: {} {} (axum path: {})",
@@ -1618,6 +1643,8 @@ impl OpenApiRouteRegistry {
 
         let mut router = Router::new();
         let mut registered_routes: HashSet<(String, String)> = HashSet::new();
+        let mut canonical_paths: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
 
         // Get custom fixture loader for fixture checking
@@ -1633,7 +1660,12 @@ impl OpenApiRouteRegistry {
                 continue;
             }
             let axum_path = route.axum_path();
-            let route_key = (route.method.clone(), Self::normalize_path_for_dedup(&axum_path));
+            let normalized = Self::normalize_path_for_dedup(&axum_path);
+            let axum_path = canonical_paths
+                .entry(normalized.clone())
+                .or_insert_with(|| axum_path.clone())
+                .clone();
+            let route_key = (route.method.clone(), normalized);
             if !registered_routes.insert(route_key) {
                 tracing::debug!(
                     "Skipping duplicate route: {} {} (axum path: {})",
