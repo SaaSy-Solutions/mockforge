@@ -207,16 +207,17 @@ fn convert_operation(
         produces
     };
 
-    // Process parameters - separate body parameters for requestBody
+    // Process parameters - separate body and formData parameters for requestBody
     let mut non_body_params = Vec::new();
     let mut body_param: Option<&Value> = None;
+    let mut form_data_params = Vec::new();
 
     if let Some(params) = operation.get("parameters").and_then(|v| v.as_array()) {
         for param in params {
-            if param.get("in").and_then(|v| v.as_str()) == Some("body") {
-                body_param = Some(param);
-            } else {
-                non_body_params.push(convert_parameter(param));
+            match param.get("in").and_then(|v| v.as_str()) {
+                Some("body") => body_param = Some(param),
+                Some("formData") => form_data_params.push(param),
+                _ => non_body_params.push(convert_parameter(param)),
             }
         }
     }
@@ -230,6 +231,53 @@ fn convert_operation(
     if let Some(body) = body_param {
         let request_body = convert_body_to_request_body(body, &consumes);
         converted.insert("requestBody".to_string(), request_body);
+    } else if !form_data_params.is_empty() {
+        // Convert formData parameters to requestBody with form encoding
+        let mut properties = serde_json::Map::new();
+        let mut required = Vec::new();
+        let mut has_file = false;
+        for param in &form_data_params {
+            if let Some(name) = param.get("name").and_then(|v| v.as_str()) {
+                let mut prop = serde_json::Map::new();
+                if let Some(typ) = param.get("type").and_then(|v| v.as_str()) {
+                    if typ == "file" {
+                        prop.insert("type".to_string(), json!("string"));
+                        prop.insert("format".to_string(), json!("binary"));
+                        has_file = true;
+                    } else {
+                        prop.insert("type".to_string(), json!(typ));
+                    }
+                }
+                if let Some(desc) = param.get("description") {
+                    prop.insert("description".to_string(), desc.clone());
+                }
+                properties.insert(name.to_string(), json!(prop));
+                if param.get("required").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    required.push(json!(name));
+                }
+            }
+        }
+        let content_type = if has_file {
+            "multipart/form-data"
+        } else {
+            "application/x-www-form-urlencoded"
+        };
+        let mut schema = serde_json::Map::new();
+        schema.insert("type".to_string(), json!("object"));
+        schema.insert("properties".to_string(), json!(properties));
+        if !required.is_empty() {
+            schema.insert("required".to_string(), json!(required));
+        }
+        converted.insert(
+            "requestBody".to_string(),
+            json!({
+                "content": {
+                    content_type: {
+                        "schema": schema
+                    }
+                }
+            }),
+        );
     }
 
     // Convert responses
