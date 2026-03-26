@@ -1008,18 +1008,28 @@ impl NativeConformanceExecutor {
         self.config.custom_headers.clone()
     }
 
-    /// Inject security headers based on resolved security schemes
+    /// Inject security headers based on resolved security schemes.
+    /// If the user provides a Cookie header via --conformance-header, skip automatic
+    /// Authorization headers (Bearer/Basic) since the user manages their own auth.
     fn inject_security_headers(
         &self,
         schemes: &[SecuritySchemeInfo],
         headers: &mut Vec<(String, String)>,
     ) {
+        // If user provides Cookie header, they're using session-based auth — skip auto auth
+        let has_cookie_auth =
+            self.config.custom_headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("Cookie"));
         let mut to_add: Vec<(String, String)> = Vec::new();
 
         for scheme in schemes {
             match scheme {
                 SecuritySchemeInfo::Bearer => {
-                    if !Self::header_present("Authorization", headers, &self.config.custom_headers)
+                    if !has_cookie_auth
+                        && !Self::header_present(
+                            "Authorization",
+                            headers,
+                            &self.config.custom_headers,
+                        )
                     {
                         to_add.push((
                             "Authorization".to_string(),
@@ -1028,7 +1038,12 @@ impl NativeConformanceExecutor {
                     }
                 }
                 SecuritySchemeInfo::Basic => {
-                    if !Self::header_present("Authorization", headers, &self.config.custom_headers)
+                    if !has_cookie_auth
+                        && !Self::header_present(
+                            "Authorization",
+                            headers,
+                            &self.config.custom_headers,
+                        )
                     {
                         let creds = self.config.basic_auth.as_deref().unwrap_or("test:test");
                         use base64::Engine;

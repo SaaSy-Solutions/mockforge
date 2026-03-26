@@ -1062,10 +1062,13 @@ impl SpecDrivenConformanceGenerator {
                 || self.config.custom_headers.iter().any(|(h, _)| h.eq_ignore_ascii_case(name))
         };
 
+        // If user provides Cookie header, they're using session-based auth — skip auto auth
+        let has_cookie_auth = has_header("Cookie", headers);
+
         for scheme in schemes {
             match scheme {
                 SecuritySchemeInfo::Bearer => {
-                    if !has_header("Authorization", headers) {
+                    if !has_cookie_auth && !has_header("Authorization", headers) {
                         // MockForge mock server accepts any Bearer token
                         to_add.push((
                             "Authorization".to_string(),
@@ -1074,7 +1077,7 @@ impl SpecDrivenConformanceGenerator {
                     }
                 }
                 SecuritySchemeInfo::Basic => {
-                    if !has_header("Authorization", headers) {
+                    if !has_cookie_auth && !has_header("Authorization", headers) {
                         let creds = self.config.basic_auth.as_deref().unwrap_or("test:test");
                         use base64::Engine;
                         let encoded =
