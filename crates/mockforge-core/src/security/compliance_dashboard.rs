@@ -270,7 +270,7 @@ impl ComplianceDashboardEngine {
     /// compliance status.
     pub async fn get_dashboard_data(&self) -> Result<ComplianceDashboardData, Error> {
         if !self.config.enabled {
-            return Err(Error::Generic("Compliance dashboard is disabled".to_string()));
+            return Err(Error::feature_disabled("Compliance dashboard"));
         }
 
         // Calculate compliance scores
@@ -649,7 +649,7 @@ impl ComplianceDashboardEngine {
                 gap.remediated_at = Some(Utc::now());
             }
         } else {
-            return Err(Error::Generic("Gap not found".to_string()));
+            return Err(Error::not_found("ComplianceGap", gap_id));
         }
         Ok(())
     }

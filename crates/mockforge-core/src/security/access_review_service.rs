@@ -133,7 +133,7 @@ impl AccessReviewService {
     ) -> Result<(), Error> {
         self.engine
             .approve_user_access(review_id, user_id, approved_by, justification)
-            .map_err(|e| Error::Generic(e.to_string()))
+            .map_err(|e| Error::internal(e.to_string()))
     }
 
     /// Revoke user access in a review
@@ -149,7 +149,7 @@ impl AccessReviewService {
         // Update the review
         self.engine
             .revoke_user_access(review_id, user_id, revoked_by, reason.clone())
-            .map_err(|e| Error::Generic(e.to_string()))?;
+            .map_err(|e| Error::internal(e.to_string()))?;
 
         // Actually revoke the user's access
         self.user_provider.revoke_user_access(user_id, reason).await?;
@@ -180,7 +180,7 @@ impl AccessReviewService {
                 new_permissions.clone(),
                 reason.clone(),
             )
-            .map_err(|e| Error::Generic(e.to_string()))?;
+            .map_err(|e| Error::internal(e.to_string()))?;
 
         // Actually update the user's permissions in the user management system
         self.user_provider

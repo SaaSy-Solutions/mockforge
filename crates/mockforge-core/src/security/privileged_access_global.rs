@@ -23,9 +23,7 @@ pub async fn init_global_privileged_access_manager(
 ) -> Result<(), crate::Error> {
     let mut global = GLOBAL_PRIVILEGED_ACCESS_MANAGER.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic(
-            "Global privileged access manager already initialized".to_string(),
-        ));
+        return Err(crate::Error::already_initialized("Global privileged access manager"));
     }
     *global = Some(manager);
     debug!("Global privileged access manager initialized");

@@ -541,23 +541,21 @@ impl SiemTransport for SyslogTransport {
             use tokio::net::TcpStream;
             let addr = format!("{}:{}", self.host, self.port);
             let mut stream = TcpStream::connect(&addr).await.map_err(|e| {
-                Error::Generic(format!("Failed to connect to syslog server: {}", e))
+                Error::siem_transport(format!("Failed to connect to syslog server: {}", e))
             })?;
-            stream
-                .write_all(message.as_bytes())
-                .await
-                .map_err(|e| Error::Generic(format!("Failed to send syslog message: {}", e)))?;
+            stream.write_all(message.as_bytes()).await.map_err(|e| {
+                Error::siem_transport(format!("Failed to send syslog message: {}", e))
+            })?;
         } else {
             // UDP syslog
             use tokio::net::UdpSocket;
             let socket = UdpSocket::bind("0.0.0.0:0")
                 .await
-                .map_err(|e| Error::Generic(format!("Failed to bind UDP socket: {}", e)))?;
+                .map_err(|e| Error::siem_transport(format!("Failed to bind UDP socket: {}", e)))?;
             let addr = format!("{}:{}", self.host, self.port);
-            socket
-                .send_to(message.as_bytes(), &addr)
-                .await
-                .map_err(|e| Error::Generic(format!("Failed to send UDP syslog message: {}", e)))?;
+            socket.send_to(message.as_bytes(), &addr).await.map_err(|e| {
+                Error::siem_transport(format!("Failed to send UDP syslog message: {}", e))
+            })?;
         }
 
         debug!("Sent syslog event: {}", event.event_type);
@@ -613,7 +611,12 @@ impl SiemTransport for HttpTransport {
             "POST" => self.client.post(&self.url),
             "PUT" => self.client.put(&self.url),
             "PATCH" => self.client.patch(&self.url),
-            _ => return Err(Error::Generic(format!("Unsupported HTTP method: {}", self.method))),
+            _ => {
+                return Err(Error::siem_transport(format!(
+                    "Unsupported HTTP method: {}",
+                    self.method
+                )))
+            }
         };
 
         // Add custom headers
@@ -639,11 +642,13 @@ impl SiemTransport for HttpTransport {
                             return Ok(());
                         } else {
                             let status = response.status();
-                            last_error = Some(Error::Generic(format!("HTTP error: {}", status)));
+                            last_error =
+                                Some(Error::siem_transport(format!("HTTP error: {}", status)));
                         }
                     }
                     Err(e) => {
-                        last_error = Some(Error::Generic(format!("HTTP request failed: {}", e)));
+                        last_error =
+                            Some(Error::siem_transport(format!("HTTP request failed: {}", e)));
                     }
                 },
                 None => {
@@ -678,9 +683,8 @@ impl SiemTransport for HttpTransport {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            Error::Generic("Failed to send HTTP event after retries".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| Error::siem_transport("Failed to send HTTP event after retries")))
     }
 }
 
@@ -707,7 +711,7 @@ impl FileTransport {
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| Error::Generic(format!("Failed to create directory: {}", e)))?;
+                .map_err(|e| Error::siem_transport(format!("Failed to create directory: {}", e)))?;
         }
 
         // Open file for appending
@@ -716,7 +720,7 @@ impl FileTransport {
             .append(true)
             .open(&path)
             .await
-            .map_err(|e| Error::Generic(format!("Failed to open file: {}", e)))?;
+            .map_err(|e| Error::siem_transport(format!("Failed to open file: {}", e)))?;
 
         let writer = Arc::new(RwLock::new(Some(BufWriter::new(file))));
 
@@ -744,17 +748,17 @@ impl SiemTransport for FileTransport {
             writer
                 .write_all(line.as_bytes())
                 .await
-                .map_err(|e| Error::Generic(format!("Failed to write to file: {}", e)))?;
+                .map_err(|e| Error::siem_transport(format!("Failed to write to file: {}", e)))?;
 
             writer
                 .flush()
                 .await
-                .map_err(|e| Error::Generic(format!("Failed to flush file: {}", e)))?;
+                .map_err(|e| Error::siem_transport(format!("Failed to flush file: {}", e)))?;
 
             debug!("Wrote event to file {}: {}", self.path.display(), event.event_type);
             Ok(())
         } else {
-            Err(Error::Generic("File writer not initialized".to_string()))
+            Err(Error::siem_transport("File writer not initialized"))
         }
     }
 }
@@ -839,12 +843,15 @@ impl SiemTransport for SplunkTransport {
                     } else {
                         let status = response.status();
                         let body = response.text().await.unwrap_or_default();
-                        last_error =
-                            Some(Error::Generic(format!("Splunk HTTP error {}: {}", status, body)));
+                        last_error = Some(Error::siem_transport(format!(
+                            "Splunk HTTP error {}: {}",
+                            status, body
+                        )));
                     }
                 }
                 Err(e) => {
-                    last_error = Some(Error::Generic(format!("Splunk request failed: {}", e)));
+                    last_error =
+                        Some(Error::siem_transport(format!("Splunk request failed: {}", e)));
                 }
             }
 
@@ -858,9 +865,8 @@ impl SiemTransport for SplunkTransport {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            Error::Generic("Failed to send Splunk event after retries".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| Error::siem_transport("Failed to send Splunk event after retries")))
     }
 }
 
@@ -944,14 +950,15 @@ impl SiemTransport for DatadogTransport {
                     } else {
                         let status = response.status();
                         let body = response.text().await.unwrap_or_default();
-                        last_error = Some(Error::Generic(format!(
+                        last_error = Some(Error::siem_transport(format!(
                             "Datadog HTTP error {}: {}",
                             status, body
                         )));
                     }
                 }
                 Err(e) => {
-                    last_error = Some(Error::Generic(format!("Datadog request failed: {}", e)));
+                    last_error =
+                        Some(Error::siem_transport(format!("Datadog request failed: {}", e)));
                 }
             }
 
@@ -965,9 +972,8 @@ impl SiemTransport for DatadogTransport {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            Error::Generic("Failed to send Datadog event after retries".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| Error::siem_transport("Failed to send Datadog event after retries")))
     }
 }
 
@@ -1056,7 +1062,7 @@ impl SiemTransport for CloudwatchTransport {
                             "CloudWatch transport failed after {} attempts (status={}): {}",
                             attempt, status, body
                         );
-                        return Err(Error::generic(format!(
+                        return Err(Error::siem_transport(format!(
                             "CloudWatch PutLogEvents failed with status {}: {}",
                             status, body
                         )));
@@ -1070,7 +1076,7 @@ impl SiemTransport for CloudwatchTransport {
                     attempt += 1;
                     if attempt >= self.retry.max_attempts as usize {
                         warn!("CloudWatch transport failed after {} attempts: {}", attempt, e);
-                        return Err(Error::generic(format!(
+                        return Err(Error::siem_transport(format!(
                             "CloudWatch PutLogEvents request failed: {}",
                             e
                         )));
@@ -1170,7 +1176,7 @@ impl SiemTransport for GcpTransport {
                             "GCP transport failed after {} attempts (status={}): {}",
                             attempt, status, body
                         );
-                        return Err(Error::generic(format!(
+                        return Err(Error::siem_transport(format!(
                             "GCP entries:write failed with status {}: {}",
                             status, body
                         )));
@@ -1184,7 +1190,7 @@ impl SiemTransport for GcpTransport {
                     attempt += 1;
                     if attempt >= self.retry.max_attempts as usize {
                         warn!("GCP transport failed after {} attempts: {}", attempt, e);
-                        return Err(Error::generic(format!(
+                        return Err(Error::siem_transport(format!(
                             "GCP entries:write request failed: {}",
                             e
                         )));
@@ -1247,8 +1253,9 @@ impl AzureTransport {
         let string_to_sign =
             format!("{}\n{}\n{}\n{}\n{}", method, content_length, content_type, date, resource);
 
-        let key_bytes = base64::decode(&self.shared_key)
-            .map_err(|e| Error::generic(format!("Azure shared_key is not valid base64: {}", e)))?;
+        let key_bytes = base64::decode(&self.shared_key).map_err(|e| {
+            Error::siem_transport(format!("Azure shared_key is not valid base64: {}", e))
+        })?;
 
         let mut mac =
             HmacSha256::new_from_slice(&key_bytes).expect("HMAC can take key of any size");
@@ -1305,7 +1312,7 @@ impl SiemTransport for AzureTransport {
                     } else {
                         let status = response.status();
                         let body = response.text().await.unwrap_or_default();
-                        last_error = Some(Error::Generic(format!(
+                        last_error = Some(Error::siem_transport(format!(
                             "Azure Monitor HTTP error {}: {}",
                             status, body
                         )));
@@ -1313,7 +1320,7 @@ impl SiemTransport for AzureTransport {
                 }
                 Err(e) => {
                     last_error =
-                        Some(Error::Generic(format!("Azure Monitor request failed: {}", e)));
+                        Some(Error::siem_transport(format!("Azure Monitor request failed: {}", e)));
                 }
             }
 
@@ -1328,7 +1335,7 @@ impl SiemTransport for AzureTransport {
         }
 
         Err(last_error.unwrap_or_else(|| {
-            Error::Generic("Failed to send Azure Monitor event after retries".to_string())
+            Error::siem_transport("Failed to send Azure Monitor event after retries")
         }))
     }
 }
@@ -1506,7 +1513,7 @@ impl SiemEmitter {
                 Err(e) => {
                     let error_msg = format!("{}", e);
                     error!("Failed to send event to SIEM: {}", error_msg);
-                    errors.push(Error::Generic(error_msg.clone()));
+                    errors.push(Error::siem_transport(error_msg.clone()));
                     if let Some(health) = health_status.get_mut(idx) {
                         health.healthy = false;
                         health.failure_count += 1;
@@ -1520,7 +1527,7 @@ impl SiemEmitter {
 
         if !errors.is_empty() && errors.len() == self.transports.len() {
             // All transports failed
-            return Err(Error::Generic(format!(
+            return Err(Error::siem_transport(format!(
                 "All SIEM transports failed: {} errors",
                 errors.len()
             )));

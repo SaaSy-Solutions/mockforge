@@ -125,6 +125,59 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    /// Entity not found
+    #[error("{entity} not found: {id}")]
+    NotFound {
+        /// Entity type that was not found
+        entity: String,
+        /// Identifier that was looked up
+        id: String,
+    },
+
+    /// Feature is disabled
+    #[error("Feature disabled: {feature}")]
+    FeatureDisabled {
+        /// Feature name that is disabled
+        feature: String,
+    },
+
+    /// Global component already initialized
+    #[error("Already initialized: {component}")]
+    AlreadyInitialized {
+        /// Component name that was already initialized
+        component: String,
+    },
+
+    /// Invalid state for the requested operation
+    #[error("Invalid state: {message}")]
+    InvalidState {
+        /// Description of the invalid state
+        message: String,
+    },
+
+    /// SIEM transport error
+    #[error("SIEM transport error: {message}")]
+    SiemTransport {
+        /// SIEM transport error message
+        message: String,
+    },
+
+    /// I/O error with additional context
+    #[error("I/O error ({context}): {message}")]
+    IoWithContext {
+        /// Context describing what operation failed
+        context: String,
+        /// The underlying error message
+        message: String,
+    },
+
+    /// Internal error wrapping an underlying cause
+    #[error("Internal error: {message}")]
+    Internal {
+        /// Internal error message
+        message: String,
+    },
+
     /// Generic error with message string
     #[error("Generic error: {0}")]
     Generic(String),
@@ -238,7 +291,59 @@ impl Error {
         }
     }
 
+    /// Create a not-found error
+    pub fn not_found<S: Into<String>>(entity: S, id: S) -> Self {
+        Self::NotFound {
+            entity: entity.into(),
+            id: id.into(),
+        }
+    }
+
+    /// Create a feature-disabled error
+    pub fn feature_disabled<S: Into<String>>(feature: S) -> Self {
+        Self::FeatureDisabled {
+            feature: feature.into(),
+        }
+    }
+
+    /// Create an already-initialized error
+    pub fn already_initialized<S: Into<String>>(component: S) -> Self {
+        Self::AlreadyInitialized {
+            component: component.into(),
+        }
+    }
+
+    /// Create an invalid-state error
+    pub fn invalid_state<S: Into<String>>(message: S) -> Self {
+        Self::InvalidState {
+            message: message.into(),
+        }
+    }
+
+    /// Create a SIEM transport error
+    pub fn siem_transport<S: Into<String>>(message: S) -> Self {
+        Self::SiemTransport {
+            message: message.into(),
+        }
+    }
+
+    /// Create an I/O error with context
+    pub fn io_with_context<S: Into<String>>(context: S, message: S) -> Self {
+        Self::IoWithContext {
+            context: context.into(),
+            message: message.into(),
+        }
+    }
+
+    /// Create an internal error
+    pub fn internal<S: Into<String>>(message: S) -> Self {
+        Self::Internal {
+            message: message.into(),
+        }
+    }
+
     /// Create a generic error
+    #[deprecated(note = "Use a specific error variant instead of Generic")]
     pub fn generic<S: Into<String>>(message: S) -> Self {
         Self::Generic(message.into())
     }
@@ -284,10 +389,53 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_generic_error() {
         let err = Error::generic("test generic");
         assert!(err.to_string().contains("Generic error"));
         assert!(err.to_string().contains("test generic"));
+    }
+
+    #[test]
+    fn test_not_found_error() {
+        let err = Error::not_found("User", "user-123");
+        assert_eq!(err.to_string(), "User not found: user-123");
+    }
+
+    #[test]
+    fn test_feature_disabled_error() {
+        let err = Error::feature_disabled("access review");
+        assert_eq!(err.to_string(), "Feature disabled: access review");
+    }
+
+    #[test]
+    fn test_already_initialized_error() {
+        let err = Error::already_initialized("SIEM emitter");
+        assert_eq!(err.to_string(), "Already initialized: SIEM emitter");
+    }
+
+    #[test]
+    fn test_invalid_state_error() {
+        let err = Error::invalid_state("Request is not pending approval");
+        assert_eq!(err.to_string(), "Invalid state: Request is not pending approval");
+    }
+
+    #[test]
+    fn test_siem_transport_error() {
+        let err = Error::siem_transport("Connection refused");
+        assert_eq!(err.to_string(), "SIEM transport error: Connection refused");
+    }
+
+    #[test]
+    fn test_io_with_context_error() {
+        let err = Error::io_with_context("reading risk register", "file not found");
+        assert_eq!(err.to_string(), "I/O error (reading risk register): file not found");
+    }
+
+    #[test]
+    fn test_internal_error() {
+        let err = Error::internal("unexpected failure");
+        assert_eq!(err.to_string(), "Internal error: unexpected failure");
     }
 
     #[test]
@@ -323,6 +471,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_error_display() {
         let errors = vec![
             (Error::validation("msg"), "Validation error: msg"),

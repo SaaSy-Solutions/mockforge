@@ -304,29 +304,25 @@ impl AccessReviewScheduler {
         let review_id = match review_type {
             ReviewType::UserAccess => {
                 if !self.config.user_review.enabled {
-                    return Err(Error::Generic("User access review is not enabled".to_string()));
+                    return Err(Error::feature_disabled("User access review"));
                 }
                 service.start_user_access_review().await?
             }
             ReviewType::PrivilegedAccess => {
                 if !self.config.privileged_review.enabled {
-                    return Err(Error::Generic(
-                        "Privileged access review is not enabled".to_string(),
-                    ));
+                    return Err(Error::feature_disabled("Privileged access review"));
                 }
                 service.start_privileged_access_review().await?
             }
             ReviewType::ApiToken => {
                 if !self.config.token_review.enabled {
-                    return Err(Error::Generic("API token review is not enabled".to_string()));
+                    return Err(Error::feature_disabled("API token review"));
                 }
                 service.start_token_review().await?
             }
             ReviewType::ResourceAccess => {
                 if !self.config.resource_review.enabled {
-                    return Err(Error::Generic(
-                        "Resource access review is not enabled".to_string(),
-                    ));
+                    return Err(Error::feature_disabled("Resource access review"));
                 }
                 service.start_resource_access_review(Vec::new()).await?
             }

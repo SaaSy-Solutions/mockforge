@@ -23,9 +23,7 @@ pub async fn init_global_compliance_dashboard_engine(
 ) -> Result<(), crate::Error> {
     let mut global = GLOBAL_COMPLIANCE_DASHBOARD_ENGINE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic(
-            "Global compliance dashboard engine already initialized".to_string(),
-        ));
+        return Err(crate::Error::already_initialized("Global compliance dashboard engine"));
     }
     *global = Some(engine);
     debug!("Global compliance dashboard engine initialized");

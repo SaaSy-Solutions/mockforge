@@ -85,17 +85,9 @@ struct Cli {
     command: Commands,
 }
 
-/// CLI arguments for the serve command (extracted to reduce enum size and prevent stack overflow)
+/// Network port configuration for all supported protocols
 #[derive(Args)]
-struct ServeCliArgs {
-    /// Configuration file path
-    #[arg(short, long)]
-    pub config: Option<PathBuf>,
-
-    /// Configuration profile to use (dev, ci, demo, etc.)
-    #[arg(short, long)]
-    pub profile: Option<String>,
-
+struct PortArgs {
     /// HTTP server port (defaults to config or 3000)
     #[arg(long, help_heading = "Server Ports")]
     pub http_port: Option<u16>,
@@ -128,6 +120,14 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Server Ports")]
     pub tcp_port: Option<u16>,
 
+    /// GraphQL server port (defaults to config or 4000)
+    #[arg(long, help_heading = "Server Ports")]
+    pub graphql_port: Option<u16>,
+}
+
+/// TLS/HTTPS configuration
+#[derive(Args)]
+struct TlsArgs {
     /// Enable TLS/HTTPS
     #[arg(long, help_heading = "TLS/HTTPS")]
     pub tls_enabled: bool,
@@ -151,15 +151,11 @@ struct ServeCliArgs {
     /// Mutual TLS mode: off (default), optional, required
     #[arg(long, default_value = "off", help_heading = "TLS/HTTPS")]
     pub mtls: String,
+}
 
-    /// Enable admin UI
-    #[arg(long, help_heading = "Admin & UI")]
-    pub admin: bool,
-
-    /// Admin UI port (defaults to config or 9080)
-    #[arg(long, help_heading = "Admin & UI")]
-    pub admin_port: Option<u16>,
-
+/// Observability configuration (metrics + distributed tracing)
+#[derive(Args)]
+struct ObservabilityArgs {
     /// Enable Prometheus metrics endpoint
     #[arg(long, help_heading = "Observability & Metrics")]
     pub metrics: bool,
@@ -191,7 +187,11 @@ struct ServeCliArgs {
     /// Tracing sampling rate (0.0 to 1.0)
     #[arg(long, default_value = "1.0", help_heading = "Tracing")]
     pub tracing_sampling_rate: f64,
+}
 
+/// API Flight Recorder configuration
+#[derive(Args)]
+struct RecorderArgs {
     /// Enable API Flight Recorder
     #[arg(long, help_heading = "API Flight Recorder")]
     pub recorder: bool,
@@ -219,7 +219,11 @@ struct ServeCliArgs {
     /// Auto-delete recordings older than N days (0 to disable)
     #[arg(long, default_value = "7", help_heading = "API Flight Recorder")]
     pub recorder_retention_days: i64,
+}
 
+/// Chaos engineering, fault injection, and resilience pattern configuration
+#[derive(Args)]
+struct ChaosArgs {
     /// Enable chaos engineering (fault injection and reliability testing)
     #[arg(long, help_heading = "Chaos Engineering")]
     pub chaos: bool,
@@ -316,6 +320,46 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
     pub chaos_graphql_resolver_latency: bool,
 
+    /// Enable random chaos mode (randomly injects errors and delays)
+    #[arg(long, help_heading = "Chaos Engineering - Random")]
+    pub chaos_random: bool,
+
+    /// Random chaos: error injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.1",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_error_rate: f64,
+
+    /// Random chaos: delay injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.3",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_delay_rate: f64,
+
+    /// Random chaos: minimum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "100",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_min_delay: u64,
+
+    /// Random chaos: maximum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "2000",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_max_delay: u64,
+
+    /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
+    #[arg(long, help_heading = "Chaos Engineering - Profiles")]
+    pub chaos_profile: Option<String>,
+
     /// Enable circuit breaker pattern
     #[arg(long, help_heading = "Resilience Patterns")]
     pub circuit_breaker: bool,
@@ -351,6 +395,78 @@ struct ServeCliArgs {
     /// Bulkhead: queue timeout in milliseconds
     #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
     pub bulkhead_queue_timeout_ms: u64,
+}
+
+/// Traffic shaping and network simulation configuration
+#[derive(Args)]
+struct TrafficArgs {
+    /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
+    #[arg(long, help_heading = "Traffic Shaping")]
+    pub traffic_shaping: bool,
+
+    /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
+    #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
+    pub bandwidth_limit: u64,
+
+    /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
+    #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
+    pub burst_size: u64,
+
+    /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
+    #[arg(long, help_heading = "Network Profiles")]
+    pub network_profile: Option<String>,
+
+    /// List all available network profiles with descriptions
+    #[arg(long, help_heading = "Network Profiles")]
+    pub list_network_profiles: bool,
+}
+
+/// AI-powered features and reality simulation configuration
+#[derive(Args)]
+struct AiArgs {
+    /// Enable AI-powered features
+    #[arg(long, help_heading = "AI Features")]
+    pub ai_enabled: bool,
+
+    /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_provider: Option<String>,
+
+    /// AI/RAG model name
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_model: Option<String>,
+
+    /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_api_key: Option<String>,
+
+    /// Reality level (1-5) for unified realism control
+    ///
+    /// Controls chaos, latency, and MockAI behavior:
+    ///   1 = Static Stubs (no chaos, instant, no AI)
+    ///   2 = Light Simulation (minimal latency, basic AI)
+    ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
+    ///   4 = High Realism (increased chaos, realistic latency, session state)
+    ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
+    ///
+    /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
+    #[arg(long, help_heading = "Reality Slider")]
+    pub reality_level: Option<u8>,
+}
+
+/// CLI arguments for the serve command (extracted to reduce enum size and prevent stack overflow)
+///
+/// Grouped into logical sub-structs for navigability. CLI flags are unchanged —
+/// `#[command(flatten)]` inlines all sub-struct args at the top level.
+#[derive(Args)]
+struct ServeCliArgs {
+    /// Configuration file path
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Configuration profile to use (dev, ci, demo, etc.)
+    #[arg(short, long)]
+    pub profile: Option<String>,
 
     /// OpenAPI spec file(s) for HTTP server (can be repeated multiple times)
     #[arg(short, long, help_heading = "Server Configuration", action = clap::ArgAction::Append)]
@@ -392,102 +508,17 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Server Configuration")]
     pub graphql: Option<PathBuf>,
 
-    /// GraphQL server port (defaults to config or 4000)
-    #[arg(long, help_heading = "Server Ports")]
-    pub graphql_port: Option<u16>,
-
     /// GraphQL upstream server URL for passthrough
     #[arg(long, help_heading = "Server Configuration")]
     pub graphql_upstream: Option<String>,
 
-    /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
-    #[arg(long, help_heading = "Traffic Shaping")]
-    pub traffic_shaping: bool,
+    /// Enable admin UI
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin: bool,
 
-    /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
-    #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
-    pub bandwidth_limit: u64,
-
-    /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
-    #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
-    pub burst_size: u64,
-
-    /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
-    #[arg(long, help_heading = "Network Profiles")]
-    pub network_profile: Option<String>,
-
-    /// List all available network profiles with descriptions
-    #[arg(long, help_heading = "Network Profiles")]
-    pub list_network_profiles: bool,
-
-    /// Enable random chaos mode (randomly injects errors and delays)
-    #[arg(long, help_heading = "Chaos Engineering - Random")]
-    pub chaos_random: bool,
-
-    /// Random chaos: error injection rate (0.0-1.0)
-    #[arg(
-        long,
-        default_value = "0.1",
-        help_heading = "Chaos Engineering - Random"
-    )]
-    pub chaos_random_error_rate: f64,
-
-    /// Random chaos: delay injection rate (0.0-1.0)
-    #[arg(
-        long,
-        default_value = "0.3",
-        help_heading = "Chaos Engineering - Random"
-    )]
-    pub chaos_random_delay_rate: f64,
-
-    /// Random chaos: minimum delay in milliseconds
-    #[arg(
-        long,
-        default_value = "100",
-        help_heading = "Chaos Engineering - Random"
-    )]
-    pub chaos_random_min_delay: u64,
-
-    /// Random chaos: maximum delay in milliseconds
-    #[arg(
-        long,
-        default_value = "2000",
-        help_heading = "Chaos Engineering - Random"
-    )]
-    pub chaos_random_max_delay: u64,
-
-    /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
-    #[arg(long, help_heading = "Chaos Engineering - Profiles")]
-    pub chaos_profile: Option<String>,
-
-    /// Enable AI-powered features
-    #[arg(long, help_heading = "AI Features")]
-    pub ai_enabled: bool,
-
-    /// Reality level (1-5) for unified realism control
-    ///
-    /// Controls chaos, latency, and MockAI behavior:
-    ///   1 = Static Stubs (no chaos, instant, no AI)
-    ///   2 = Light Simulation (minimal latency, basic AI)
-    ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
-    ///   4 = High Realism (increased chaos, realistic latency, session state)
-    ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
-    ///
-    /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
-    #[arg(long, help_heading = "Reality Slider")]
-    pub reality_level: Option<u8>,
-
-    /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
-    #[arg(long, help_heading = "AI Features")]
-    pub rag_provider: Option<String>,
-
-    /// AI/RAG model name
-    #[arg(long, help_heading = "AI Features")]
-    pub rag_model: Option<String>,
-
-    /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
-    #[arg(long, help_heading = "AI Features")]
-    pub rag_api_key: Option<String>,
+    /// Admin UI port (defaults to config or 9080)
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin_port: Option<u16>,
 
     /// Validate configuration and check port availability without starting servers
     #[arg(long, help_heading = "Validation")]
@@ -500,6 +531,27 @@ struct ServeCliArgs {
     /// Enable verbose logging output
     #[arg(long, help_heading = "Validation")]
     pub verbose: bool,
+
+    #[command(flatten)]
+    pub ports: PortArgs,
+
+    #[command(flatten)]
+    pub tls: TlsArgs,
+
+    #[command(flatten)]
+    pub observability: ObservabilityArgs,
+
+    #[command(flatten)]
+    pub recorder_opts: RecorderArgs,
+
+    #[command(flatten)]
+    pub chaos_opts: ChaosArgs,
+
+    #[command(flatten)]
+    pub traffic: TrafficArgs,
+
+    #[command(flatten)]
+    pub ai: AiArgs,
 }
 
 #[derive(Subcommand)]
@@ -2040,7 +2092,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match cli.command {
         Commands::Serve(args) => {
             // Handle --list-network-profiles flag
-            if args.list_network_profiles {
+            if args.traffic.list_network_profiles {
                 let catalog = mockforge_core::NetworkProfileCatalog::new();
                 println!("\n📡 Available Network Profiles:\n");
                 for (name, description) in catalog.list_profiles_with_description() {
@@ -2051,18 +2103,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
 
             // Validate TLS flags
-            if args.tls_enabled {
-                if args.tls_cert.is_none() || args.tls_key.is_none() {
+            if args.tls.tls_enabled {
+                if args.tls.tls_cert.is_none() || args.tls.tls_key.is_none() {
                     eprintln!("Error: --tls-enabled requires --tls-cert and --tls-key");
                     std::process::exit(1);
                 }
-                if (args.mtls == "optional" || args.mtls == "required") && args.tls_ca.is_none() {
-                    eprintln!("Error: --mtls {} requires --tls-ca", args.mtls);
+                if (args.tls.mtls == "optional" || args.tls.mtls == "required")
+                    && args.tls.tls_ca.is_none()
+                {
+                    eprintln!("Error: --mtls {} requires --tls-ca", args.tls.mtls);
                     std::process::exit(1);
                 }
             }
-            if (args.mtls == "optional" || args.mtls == "required") && !args.tls_enabled {
-                eprintln!("Error: --mtls {} requires --tls-enabled", args.mtls);
+            if (args.tls.mtls == "optional" || args.tls.mtls == "required") && !args.tls.tls_enabled
+            {
+                eprintln!("Error: --mtls {} requires --tls-enabled", args.tls.mtls);
                 std::process::exit(1);
             }
 
@@ -2085,64 +2140,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             serve::handle_serve(serve::ServeArgs {
                 config_path: args.config,
                 profile: args.profile,
-                http_port: args.http_port,
-                ws_port: args.ws_port,
-                grpc_port: args.grpc_port,
-                tcp_port: args.tcp_port,
+                http_port: args.ports.http_port,
+                ws_port: args.ports.ws_port,
+                grpc_port: args.ports.grpc_port,
+                tcp_port: args.ports.tcp_port,
                 admin: args.admin,
                 admin_port: args.admin_port,
-                metrics: args.metrics,
-                metrics_port: args.metrics_port,
-                tracing: args.tracing,
-                tracing_service_name: args.tracing_service_name,
-                tracing_environment: args.tracing_environment,
-                jaeger_endpoint: args.jaeger_endpoint,
-                tracing_sampling_rate: args.tracing_sampling_rate,
-                recorder: args.recorder,
-                recorder_db: args.recorder_db,
-                recorder_no_api: args.recorder_no_api,
-                recorder_api_port: args.recorder_api_port,
-                recorder_max_requests: args.recorder_max_requests,
-                recorder_retention_days: args.recorder_retention_days,
-                chaos: args.chaos,
-                chaos_scenario: args.chaos_scenario,
-                chaos_latency_ms: args.chaos_latency_ms,
-                chaos_latency_range: args.chaos_latency_range,
-                chaos_latency_probability: args.chaos_latency_probability,
-                chaos_http_errors: args.chaos_http_errors,
-                chaos_http_error_probability: args.chaos_http_error_probability,
-                chaos_rate_limit: args.chaos_rate_limit,
-                chaos_bandwidth_limit: args.chaos_bandwidth_limit,
-                chaos_packet_loss: args.chaos_packet_loss,
+                metrics: args.observability.metrics,
+                metrics_port: args.observability.metrics_port,
+                tracing: args.observability.tracing,
+                tracing_service_name: args.observability.tracing_service_name,
+                tracing_environment: args.observability.tracing_environment,
+                jaeger_endpoint: args.observability.jaeger_endpoint,
+                tracing_sampling_rate: args.observability.tracing_sampling_rate,
+                recorder: args.recorder_opts.recorder,
+                recorder_db: args.recorder_opts.recorder_db,
+                recorder_no_api: args.recorder_opts.recorder_no_api,
+                recorder_api_port: args.recorder_opts.recorder_api_port,
+                recorder_max_requests: args.recorder_opts.recorder_max_requests,
+                recorder_retention_days: args.recorder_opts.recorder_retention_days,
+                chaos: args.chaos_opts.chaos,
+                chaos_scenario: args.chaos_opts.chaos_scenario,
+                chaos_latency_ms: args.chaos_opts.chaos_latency_ms,
+                chaos_latency_range: args.chaos_opts.chaos_latency_range,
+                chaos_latency_probability: args.chaos_opts.chaos_latency_probability,
+                chaos_http_errors: args.chaos_opts.chaos_http_errors,
+                chaos_http_error_probability: args.chaos_opts.chaos_http_error_probability,
+                chaos_rate_limit: args.chaos_opts.chaos_rate_limit,
+                chaos_bandwidth_limit: args.chaos_opts.chaos_bandwidth_limit,
+                chaos_packet_loss: args.chaos_opts.chaos_packet_loss,
                 spec: args.spec,
                 spec_dir: args.spec_dir,
                 merge_conflicts: args.merge_conflicts,
                 api_versioning: args.api_versioning,
                 base_path: args.base_path,
-                tls_enabled: args.tls_enabled,
-                tls_cert: args.tls_cert,
-                tls_key: args.tls_key,
-                tls_ca: args.tls_ca,
-                tls_min_version: args.tls_min_version,
-                mtls: args.mtls,
+                tls_enabled: args.tls.tls_enabled,
+                tls_cert: args.tls.tls_cert,
+                tls_key: args.tls.tls_key,
+                tls_ca: args.tls.tls_ca,
+                tls_min_version: args.tls.tls_min_version,
+                mtls: args.tls.mtls,
                 ws_replay_file: args.ws_replay_file,
                 graphql: args.graphql,
-                graphql_port: args.graphql_port,
+                graphql_port: args.ports.graphql_port,
                 graphql_upstream: args.graphql_upstream,
-                traffic_shaping: args.traffic_shaping,
-                bandwidth_limit: args.bandwidth_limit,
-                burst_size: args.burst_size,
-                ai_enabled: args.ai_enabled,
-                rag_provider: args.rag_provider,
-                rag_model: args.rag_model,
-                rag_api_key: args.rag_api_key,
-                network_profile: args.network_profile,
-                chaos_random: args.chaos_random,
-                chaos_random_error_rate: args.chaos_random_error_rate,
-                chaos_random_delay_rate: args.chaos_random_delay_rate,
-                chaos_random_min_delay: args.chaos_random_min_delay,
-                chaos_random_max_delay: args.chaos_random_max_delay,
-                reality_level: args.reality_level,
+                traffic_shaping: args.traffic.traffic_shaping,
+                bandwidth_limit: args.traffic.bandwidth_limit,
+                burst_size: args.traffic.burst_size,
+                ai_enabled: args.ai.ai_enabled,
+                rag_provider: args.ai.rag_provider,
+                rag_model: args.ai.rag_model,
+                rag_api_key: args.ai.rag_api_key,
+                network_profile: args.traffic.network_profile,
+                chaos_random: args.chaos_opts.chaos_random,
+                chaos_random_error_rate: args.chaos_opts.chaos_random_error_rate,
+                chaos_random_delay_rate: args.chaos_opts.chaos_random_delay_rate,
+                chaos_random_min_delay: args.chaos_opts.chaos_random_min_delay,
+                chaos_random_max_delay: args.chaos_opts.chaos_random_max_delay,
+                reality_level: args.ai.reality_level,
                 dry_run: args.dry_run,
                 progress: args.progress,
                 verbose: args.verbose,

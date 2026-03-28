@@ -295,10 +295,10 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::Generic("Request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
 
         if request.status != RequestStatus::PendingManager {
-            return Err(Error::Generic("Request is not pending manager approval".to_string()));
+            return Err(Error::invalid_state("Request is not pending manager approval"));
         }
 
         let user_id = request.user_id;
@@ -344,10 +344,10 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::Generic("Request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
 
         if request.status != RequestStatus::PendingSecurity {
-            return Err(Error::Generic("Request is not pending security approval".to_string()));
+            return Err(Error::invalid_state("Request is not pending security approval"));
         }
 
         request.security_approval = Some(approver_id);
@@ -404,7 +404,7 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::Generic("Request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
 
         let user_id = request.user_id;
         request.status = RequestStatus::Denied;
@@ -529,7 +529,7 @@ impl PrivilegedAccessManager {
     ) -> Result<(), Error> {
         // Check MFA compliance
         if !self.check_mfa_compliance(user_id).await? && self.config.auto_suspend_no_mfa {
-            return Err(Error::Generic("MFA not enabled for privileged user".to_string()));
+            return Err(Error::invalid_state("MFA not enabled for privileged user"));
         }
 
         // Check concurrent session limit
@@ -538,7 +538,7 @@ impl PrivilegedAccessManager {
             sessions.values().filter(|s| s.user_id == user_id && s.is_active).count();
 
         if active_sessions >= self.config.max_concurrent_sessions as usize {
-            return Err(Error::Generic("Maximum concurrent sessions reached".to_string()));
+            return Err(Error::invalid_state("Maximum concurrent sessions reached"));
         }
         drop(sessions);
 

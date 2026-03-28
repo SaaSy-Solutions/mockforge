@@ -1,6 +1,6 @@
 //! Unified middleware implementations for common patterns across protocols
 
-use super::{Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
+use super::{MiddlewareAction, Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
 use crate::{request_logger::log_request_global, Result};
 use std::time::Instant;
 
@@ -28,7 +28,7 @@ impl ProtocolMiddleware for LoggingMiddleware {
         &self.name
     }
 
-    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
+    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<MiddlewareAction> {
         // Add timestamp to request metadata
         let timestamp = chrono::Utc::now().to_rfc3339();
         request.metadata.insert("x-mockforge-request-time".to_string(), timestamp);
@@ -57,7 +57,7 @@ impl ProtocolMiddleware for LoggingMiddleware {
             );
         }
 
-        Ok(())
+        Ok(MiddlewareAction::Continue)
     }
 
     async fn process_response(
@@ -296,7 +296,7 @@ impl ProtocolMiddleware for MetricsMiddleware {
         &self.name
     }
 
-    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
+    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<MiddlewareAction> {
         // Store start time for metrics calculation
         request.metadata.insert(
             "x-mockforge-metrics-start".to_string(),
@@ -309,7 +309,7 @@ impl ProtocolMiddleware for MetricsMiddleware {
             "Metrics: request started"
         );
 
-        Ok(())
+        Ok(MiddlewareAction::Continue)
     }
 
     async fn process_response(
@@ -369,7 +369,7 @@ impl ProtocolMiddleware for LatencyMiddleware {
         &self.name
     }
 
-    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
+    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<MiddlewareAction> {
         // Extract tags from request metadata
         let tags: Vec<String> = request
             .metadata
@@ -380,7 +380,7 @@ impl ProtocolMiddleware for LatencyMiddleware {
         // Inject latency
         self.injector.inject_latency(&tags).await?;
 
-        Ok(())
+        Ok(MiddlewareAction::Continue)
     }
 
     async fn process_response(

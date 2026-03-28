@@ -426,7 +426,7 @@ impl AccessReviewEngine {
         users: Vec<UserAccessInfo>,
     ) -> Result<AccessReview, crate::Error> {
         if !self.config.enabled || !self.config.user_review.enabled {
-            return Err(crate::Error::Generic("User access review is not enabled".to_string()));
+            return Err(crate::Error::feature_disabled("User access review"));
         }
 
         let now = Utc::now();
@@ -517,7 +517,7 @@ impl AccessReviewEngine {
         tokens: Vec<ApiTokenInfo>,
     ) -> Result<AccessReview, crate::Error> {
         if !self.config.enabled || !self.config.token_review.enabled {
-            return Err(crate::Error::Generic("API token review is not enabled".to_string()));
+            return Err(crate::Error::feature_disabled("API token review"));
         }
 
         let now = Utc::now();
@@ -595,7 +595,7 @@ impl AccessReviewEngine {
         resources: Vec<ResourceAccessInfo>,
     ) -> Result<AccessReview, crate::Error> {
         if !self.config.enabled || !self.config.resource_review.enabled {
-            return Err(crate::Error::Generic("Resource access review is not enabled".to_string()));
+            return Err(crate::Error::feature_disabled("Resource access review"));
         }
 
         let now = Utc::now();
@@ -683,15 +683,16 @@ impl AccessReviewEngine {
         let review = self
             .active_reviews
             .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
+            .ok_or_else(|| crate::Error::not_found("Review", review_id))?;
 
-        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
-            crate::Error::Generic(format!("Review items for {} not found", review_id))
-        })?;
+        let items = self
+            .user_review_items
+            .get_mut(review_id)
+            .ok_or_else(|| crate::Error::not_found("ReviewItems", review_id))?;
 
-        let item = items.get_mut(&user_id).ok_or_else(|| {
-            crate::Error::Generic(format!("User {} not found in review", user_id))
-        })?;
+        let item = items
+            .get_mut(&user_id)
+            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
 
         item.status = "approved".to_string();
         item.approved_by = Some(approved_by);
@@ -721,15 +722,16 @@ impl AccessReviewEngine {
         let review = self
             .active_reviews
             .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
+            .ok_or_else(|| crate::Error::not_found("Review", review_id))?;
 
-        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
-            crate::Error::Generic(format!("Review items for {} not found", review_id))
-        })?;
+        let items = self
+            .user_review_items
+            .get_mut(review_id)
+            .ok_or_else(|| crate::Error::not_found("ReviewItems", review_id))?;
 
-        let item = items.get_mut(&user_id).ok_or_else(|| {
-            crate::Error::Generic(format!("User {} not found in review", user_id))
-        })?;
+        let item = items
+            .get_mut(&user_id)
+            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
 
         item.status = "revoked".to_string();
         item.rejection_reason = Some(reason.clone());
@@ -762,15 +764,16 @@ impl AccessReviewEngine {
         let review = self
             .active_reviews
             .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
+            .ok_or_else(|| crate::Error::not_found("Review", review_id))?;
 
-        let items = self.user_review_items.get_mut(review_id).ok_or_else(|| {
-            crate::Error::Generic(format!("Review items for {} not found", review_id))
-        })?;
+        let items = self
+            .user_review_items
+            .get_mut(review_id)
+            .ok_or_else(|| crate::Error::not_found("ReviewItems", review_id))?;
 
-        let item = items.get_mut(&user_id).ok_or_else(|| {
-            crate::Error::Generic(format!("User {} not found in review", user_id))
-        })?;
+        let item = items
+            .get_mut(&user_id)
+            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
 
         // Store old permissions for tracking
         let old_roles = item.access_info.roles.clone();
@@ -870,7 +873,7 @@ impl AccessReviewEngine {
         let review = self
             .active_reviews
             .get_mut(review_id)
-            .ok_or_else(|| crate::Error::Generic(format!("Review {} not found", review_id)))?;
+            .ok_or_else(|| crate::Error::not_found("Review", review_id))?;
 
         review.status = ReviewStatus::Completed;
 

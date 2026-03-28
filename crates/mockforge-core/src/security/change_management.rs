@@ -439,14 +439,14 @@ impl ChangeManagementEngine {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
-            .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("ChangeRequest", change_id))?;
 
         if change.status != ChangeStatus::PendingApproval {
-            return Err(Error::Generic("Change request is not pending approval".to_string()));
+            return Err(Error::invalid_state("Change request is not pending approval"));
         }
 
         if !change.approvers.contains(&approver.to_string()) {
-            return Err(Error::Generic("User is not an approver for this change".to_string()));
+            return Err(Error::invalid_state("User is not an approver for this change"));
         }
 
         change.approval_status.insert(approver.to_string(), ApprovalStatus::Approved);
@@ -485,10 +485,10 @@ impl ChangeManagementEngine {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
-            .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("ChangeRequest", change_id))?;
 
         if change.status != ChangeStatus::PendingApproval {
-            return Err(Error::Generic("Change request is not pending approval".to_string()));
+            return Err(Error::invalid_state("Change request is not pending approval"));
         }
 
         change.approval_status.insert(approver.to_string(), ApprovalStatus::Rejected);
@@ -513,11 +513,11 @@ impl ChangeManagementEngine {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
-            .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("ChangeRequest", change_id))?;
 
         if change.status != ChangeStatus::Approved {
-            return Err(Error::Generic(
-                "Change request must be approved before implementation".to_string(),
+            return Err(Error::invalid_state(
+                "Change request must be approved before implementation",
             ));
         }
 
@@ -546,12 +546,10 @@ impl ChangeManagementEngine {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
-            .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("ChangeRequest", change_id))?;
 
         if change.status != ChangeStatus::Implementing {
-            return Err(Error::Generic(
-                "Change request must be in implementing status".to_string(),
-            ));
+            return Err(Error::invalid_state("Change request must be in implementing status"));
         }
 
         change.status = ChangeStatus::Completed;
@@ -608,7 +606,7 @@ impl ChangeManagementEngine {
         let mut changes = self.changes.write().await;
         let change = changes
             .get_mut(change_id)
-            .ok_or_else(|| Error::Generic("Change request not found".to_string()))?;
+            .ok_or_else(|| Error::not_found("ChangeRequest", change_id))?;
 
         change.status = ChangeStatus::Cancelled;
         change.add_history(

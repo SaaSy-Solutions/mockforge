@@ -1,6 +1,9 @@
 //! Unified authentication middleware for all protocols
 
-use super::{Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse};
+use super::{
+    MiddlewareAction, Protocol, ProtocolMiddleware, ProtocolRequest, ProtocolResponse,
+    ResponseStatus,
+};
 use crate::config::AuthConfig;
 use crate::Result;
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
@@ -234,10 +237,10 @@ impl ProtocolMiddleware for AuthMiddleware {
         &self.name
     }
 
-    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
+    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<MiddlewareAction> {
         // Skip authentication for health checks and admin endpoints
         if request.path.starts_with("/health") || request.path.starts_with("/__mockforge") {
-            return Ok(());
+            return Ok(MiddlewareAction::Continue);
         }
 
         // Perform authentication
@@ -253,7 +256,7 @@ impl ProtocolMiddleware for AuthMiddleware {
                     user = %claims.sub,
                     "Authentication successful"
                 );
-                Ok(())
+                Ok(MiddlewareAction::Continue)
             }
             AuthResult::Failure(reason) => {
                 tracing::warn!(
@@ -262,7 +265,13 @@ impl ProtocolMiddleware for AuthMiddleware {
                     reason = %reason,
                     "Authentication failed"
                 );
-                Err(crate::Error::validation(format!("Authentication failed: {}", reason)))
+                Ok(MiddlewareAction::ShortCircuit(ProtocolResponse {
+                    status: ResponseStatus::HttpStatus(401),
+                    metadata: std::collections::HashMap::new(),
+                    body: format!(r#"{{"error":"Authentication failed","reason":"{}"}}"#, reason)
+                        .into_bytes(),
+                    content_type: "application/json".to_string(),
+                }))
             }
             AuthResult::NetworkError(reason) => {
                 tracing::error!(
@@ -270,7 +279,16 @@ impl ProtocolMiddleware for AuthMiddleware {
                     reason = %reason,
                     "Authentication network error"
                 );
-                Err(crate::Error::validation(format!("Authentication error: {}", reason)))
+                Ok(MiddlewareAction::ShortCircuit(ProtocolResponse {
+                    status: ResponseStatus::HttpStatus(503),
+                    metadata: std::collections::HashMap::new(),
+                    body: format!(
+                        r#"{{"error":"Authentication service unavailable","reason":"{}"}}"#,
+                        reason
+                    )
+                    .into_bytes(),
+                    content_type: "application/json".to_string(),
+                }))
             }
         }
     }

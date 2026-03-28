@@ -23,9 +23,7 @@ pub async fn init_global_change_management_engine(
 ) -> Result<(), crate::Error> {
     let mut global = GLOBAL_CHANGE_MANAGEMENT_ENGINE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic(
-            "Global change management engine already initialized".to_string(),
-        ));
+        return Err(crate::Error::already_initialized("Global change management engine"));
     }
     *global = Some(engine);
     debug!("Global change management engine initialized");

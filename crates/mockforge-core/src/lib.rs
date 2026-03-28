@@ -458,8 +458,8 @@ pub use priority_handler::{
     MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
 };
 pub use protocol_abstraction::{
-    MessagePattern, MiddlewareChain, Protocol, ProtocolMiddleware, ProtocolRequest,
-    ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
+    MessagePattern, MiddlewareAction, MiddlewareChain, Protocol, ProtocolMiddleware,
+    ProtocolRequest, ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError as ProtocolValidationError, ValidationResult as ProtocolValidationResult,
 };
 #[deprecated(note = "Will be extracted to mockforge-proxy crate")]

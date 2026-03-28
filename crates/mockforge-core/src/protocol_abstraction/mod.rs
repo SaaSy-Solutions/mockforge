@@ -297,6 +297,18 @@ impl ValidationResult {
     }
 }
 
+/// Result of middleware request processing
+///
+/// Allows middleware to either continue the chain or short-circuit with a response
+/// (e.g., auth middleware rejecting an unauthenticated request with a 401).
+#[derive(Debug)]
+pub enum MiddlewareAction {
+    /// Continue processing the next middleware in the chain
+    Continue,
+    /// Stop the chain and return this response immediately
+    ShortCircuit(ProtocolResponse),
+}
+
 /// Trait for protocol-agnostic middleware
 #[async_trait::async_trait]
 pub trait ProtocolMiddleware: Send + Sync {
@@ -304,7 +316,10 @@ pub trait ProtocolMiddleware: Send + Sync {
     fn name(&self) -> &str;
 
     /// Process a request before it reaches the handler
-    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()>;
+    ///
+    /// Returns `MiddlewareAction::Continue` to pass the request to the next middleware,
+    /// or `MiddlewareAction::ShortCircuit(response)` to stop the chain and return early.
+    async fn process_request(&self, request: &mut ProtocolRequest) -> Result<MiddlewareAction>;
 
     /// Process a response before it's returned to the client
     async fn process_response(
@@ -725,13 +740,28 @@ impl MiddlewareChain {
     }
 
     /// Process a request through all middleware
-    pub async fn process_request(&self, request: &mut ProtocolRequest) -> Result<()> {
+    ///
+    /// Returns `Ok(None)` if all middleware passed (continue to handler),
+    /// or `Ok(Some(response))` if a middleware short-circuited the chain.
+    pub async fn process_request(
+        &self,
+        request: &mut ProtocolRequest,
+    ) -> Result<Option<ProtocolResponse>> {
         for middleware in &self.middleware {
             if middleware.supports_protocol(request.protocol) {
-                middleware.process_request(request).await?;
+                match middleware.process_request(request).await? {
+                    MiddlewareAction::Continue => {}
+                    MiddlewareAction::ShortCircuit(response) => {
+                        tracing::debug!(
+                            middleware = middleware.name(),
+                            "Middleware short-circuited request processing"
+                        );
+                        return Ok(Some(response));
+                    }
+                }
             }
         }
-        Ok(())
+        Ok(None)
     }
 
     /// Process a response through all middleware (in reverse order)

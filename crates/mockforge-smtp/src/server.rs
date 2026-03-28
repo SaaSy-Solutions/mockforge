@@ -346,8 +346,10 @@ async fn process_email(
         client_ip: Some(peer_addr.ip().to_string()),
     };
 
-    // Process through middleware
-    middleware.process_request(&mut request).await?;
+    // Process through middleware (may short-circuit, e.g., auth rejection)
+    if let Some(short_circuit_response) = middleware.process_request(&mut request).await? {
+        return Ok(String::from_utf8_lossy(&short_circuit_response.body).to_string());
+    }
 
     // Generate response
     let mut response = registry.generate_mock_response(&request)?;

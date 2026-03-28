@@ -22,9 +22,7 @@ pub async fn init_global_risk_assessment_engine(
 ) -> Result<(), crate::Error> {
     let mut global = GLOBAL_RISK_ASSESSMENT_ENGINE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic(
-            "Global risk assessment engine already initialized".to_string(),
-        ));
+        return Err(crate::Error::already_initialized("Global risk assessment engine"));
     }
     *global = Some(engine);
     debug!("Global risk assessment engine initialized");

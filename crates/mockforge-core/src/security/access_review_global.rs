@@ -22,9 +22,7 @@ pub async fn init_global_access_review_service(
 ) -> Result<(), crate::Error> {
     let mut global = GLOBAL_ACCESS_REVIEW_SERVICE.write().await;
     if global.is_some() {
-        return Err(crate::Error::Generic(
-            "Global access review service already initialized".to_string(),
-        ));
+        return Err(crate::Error::already_initialized("Global access review service"));
     }
     *global = Some(service);
     debug!("Global access review service initialized");
