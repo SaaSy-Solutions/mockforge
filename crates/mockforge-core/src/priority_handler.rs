@@ -97,15 +97,55 @@ pub struct PriorityHttpHandler {
     request_metrics: Arc<RwLock<HashMap<String, (u64, u64, std::time::Instant)>>>,
 }
 
+/// Result of mock response generation, providing structured context for why
+/// generation succeeded or was skipped.
+#[derive(Debug, Clone)]
+pub enum GenerationResult {
+    /// A mock response was successfully generated
+    Generated(MockResponse),
+    /// No matching schema found for the given path/method combination
+    NoMatchingSchema {
+        /// The request path that had no schema match
+        path: String,
+        /// The HTTP method
+        method: String,
+    },
+    /// The mock generator is disabled or not configured
+    GeneratorDisabled,
+    /// Multiple operations matched and the generator couldn't disambiguate
+    AmbiguousOperation {
+        /// The candidate operation IDs that matched
+        candidates: Vec<String>,
+    },
+}
+
+impl GenerationResult {
+    /// Returns the generated response if this is a `Generated` variant
+    pub fn into_response(self) -> Option<MockResponse> {
+        match self {
+            Self::Generated(r) => Some(r),
+            _ => None,
+        }
+    }
+
+    /// Returns true if a response was generated
+    pub fn is_generated(&self) -> bool {
+        matches!(self, Self::Generated(_))
+    }
+}
+
 /// Trait for mock response generation
 pub trait MockGenerator {
     /// Generate a mock response for the given request
+    ///
+    /// Returns a `GenerationResult` indicating either a generated response or
+    /// a structured reason why generation was skipped.
     fn generate_mock_response(
         &self,
         fingerprint: &RequestFingerprint,
         headers: &HeaderMap,
         body: Option<&[u8]>,
-    ) -> Result<Option<MockResponse>>;
+    ) -> Result<GenerationResult>;
 }
 
 /// Mock response
@@ -427,7 +467,9 @@ impl PriorityHttpHandler {
                     // Fetch both responses in parallel
                     let proxy_future = proxy_handler.proxy_request(method, uri, headers, body);
                     let mock_result = if let Some(ref mock_generator) = self.mock_generator {
-                        mock_generator.generate_mock_response(&fingerprint, headers, body)
+                        mock_generator
+                            .generate_mock_response(&fingerprint, headers, body)
+                            .map(|r| r.into_response())
                     } else {
                         Ok(None)
                     };
@@ -618,8 +660,12 @@ impl PriorityHttpHandler {
                         // If shadow mode, also generate mock response for comparison
                         if is_shadow {
                             if let Some(ref mock_generator) = self.mock_generator {
-                                if let Ok(Some(mock_response)) = mock_generator
-                                    .generate_mock_response(&fingerprint, headers, body)
+                                if let Ok(GenerationResult::Generated(mock_response)) =
+                                    mock_generator.generate_mock_response(
+                                        &fingerprint,
+                                        headers,
+                                        body,
+                                    )
                                 {
                                     // Log comparison between real and mock
                                     tracing::info!(
@@ -699,7 +745,7 @@ impl PriorityHttpHandler {
                 None
             };
 
-            if let Some(mock_response) =
+            if let GenerationResult::Generated(mock_response) =
                 mock_generator.generate_mock_response(&fingerprint, headers, body)?
             {
                 let mut source = ResponseSource::new(ResponsePriority::Mock, "mock".to_string())
@@ -901,8 +947,8 @@ impl MockGenerator for SimpleMockGenerator {
         _fingerprint: &RequestFingerprint,
         _headers: &HeaderMap,
         _body: Option<&[u8]>,
-    ) -> Result<Option<MockResponse>> {
-        Ok(Some(MockResponse {
+    ) -> Result<GenerationResult> {
+        Ok(GenerationResult::Generated(MockResponse {
             status_code: self.default_status,
             headers: HashMap::new(),
             body: self.default_body.clone(),
@@ -1130,11 +1176,11 @@ mod tests {
             None,
         );
 
-        let response =
+        let result =
             generator.generate_mock_response(&fingerprint, &HeaderMap::new(), None).unwrap();
 
-        assert!(response.is_some());
-        let mock_response = response.unwrap();
+        assert!(result.is_generated());
+        let mock_response = result.into_response().unwrap();
         assert_eq!(mock_response.status_code, 404);
         assert_eq!(mock_response.body, r#"{"error": "not found"}"#);
     }

@@ -85,11 +85,14 @@
 
 // Public modules
 pub mod auth;
+#[cfg(feature = "codegen")]
 pub mod backend_generator;
+#[cfg(feature = "codegen")]
 pub mod client_generator;
 pub mod datasource;
 pub mod error;
 pub mod manifest;
+#[cfg(feature = "codegen")]
 pub mod plugins;
 pub mod response;
 pub mod runtime;
@@ -102,10 +105,12 @@ pub use async_trait::TokenResolver;
 
 // Re-export types
 pub use auth::*;
+#[cfg(feature = "codegen")]
 pub use backend_generator::{
     BackendGenerationMetadata, BackendGenerationResult, BackendGeneratorConfig,
     BackendGeneratorPlugin, BackendGeneratorPluginConfig, Complexity, TodoCategory, TodoItem,
 };
+#[cfg(feature = "codegen")]
 pub use client_generator::{
     ClientGenerationResult, ClientGeneratorConfig, ClientGeneratorPlugin,
     ClientGeneratorPluginConfig, GeneratedFile, GenerationMetadata, OpenApiSpec,
@@ -113,6 +118,7 @@ pub use client_generator::{
 pub use datasource::{
     DataConnection, DataQuery, DataResult, DataSourcePlugin, DataSourcePluginConfig,
 };
+#[cfg(feature = "codegen")]
 pub use plugins::{ReactClientGenerator, VueClientGenerator};
 pub use response::{
     ResponseData, ResponseModifierConfig, ResponseModifierPlugin, ResponsePlugin,
@@ -209,5 +215,5 @@ mod tests {
 }
 
 // Include client generator tests
-#[cfg(test)]
+#[cfg(all(test, feature = "codegen"))]
 mod client_generator_tests;

@@ -455,7 +455,8 @@ pub use output_control::{
 pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
 pub use pillars::{Pillar, PillarMetadata};
 pub use priority_handler::{
-    MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse, SimpleMockGenerator,
+    GenerationResult, MockGenerator, MockResponse, PriorityHttpHandler, PriorityResponse,
+    SimpleMockGenerator,
 };
 pub use protocol_abstraction::{
     MessagePattern, MiddlewareAction, MiddlewareChain, Protocol, ProtocolMiddleware,

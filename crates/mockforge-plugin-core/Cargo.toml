@@ -58,8 +58,14 @@ urlencoding.workspace = true
 base64.workspace = true
 semver = "1.0"
 
-# Template engine for client generation
-handlebars = "4.5"
+# Template engine for client generation (only needed with codegen feature)
+handlebars = { version = "4.5", optional = true }
+
+[features]
+default = ["codegen"]
+## Include client/backend code generators (React, Vue, Angular, Svelte, Rust-Axum).
+## Disable to reduce compile times when only plugin traits are needed.
+codegen = ["dep:handlebars"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
