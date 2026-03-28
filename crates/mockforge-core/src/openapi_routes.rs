@@ -252,36 +252,31 @@ impl OpenApiRouteRegistry {
         result
     }
 
-    /// Build an Axum router from the OpenAPI spec (simplified)
-    pub fn build_router(self) -> Router {
-        let mut router = Router::new();
-        tracing::debug!("Building router from {} routes", self.routes.len());
+    /// Returns deduplicated routes with their resolved Axum-compatible paths.
+    ///
+    /// Handles path validation, canonical param-name resolution (to prevent matchit panics
+    /// when two OpenAPI paths differ only in param names), and duplicate detection.
+    /// This is the shared preamble extracted from all `build_router_*` variants.
+    fn deduplicated_routes(&self) -> Vec<(String, &OpenApiRoute)> {
+        let mut result = Vec::new();
         let mut registered_routes: HashSet<(String, String)> = HashSet::new();
-        // Track normalized path → first registered axum path, so routes with
-        // different param names (e.g., {attestation_id} vs {subject_digest}) reuse
-        // the first path's param names. Axum/matchit panics if param names differ.
-        let mut canonical_paths: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
+        let mut canonical_paths: HashMap<String, String> = HashMap::new();
 
-        // Create individual routes for each operation
-        let custom_loader = self.custom_fixture_loader.clone();
         for route in &self.routes {
             if !route.is_valid_axum_path() {
                 tracing::warn!(
-                    "Skipping route with unsupported path syntax: {} {} (OData function calls or multi-param segments are converted but may still be incompatible)",
-                    route.method, route.path
+                    "Skipping route with unsupported path syntax: {} {}",
+                    route.method,
+                    route.path
                 );
                 continue;
             }
             let axum_path = route.axum_path();
             let normalized = Self::normalize_path_for_dedup(&axum_path);
-            // Rewrite param names to match the first route registered for this pattern.
-            // This prevents matchit panics when two OpenAPI paths differ only in param names.
             let axum_path = canonical_paths
                 .entry(normalized.clone())
                 .or_insert_with(|| axum_path.clone())
                 .clone();
-            // Skip duplicate routes (same method + same normalized path)
             let route_key = (route.method.clone(), normalized);
             if !registered_routes.insert(route_key) {
                 tracing::debug!(
@@ -292,12 +287,45 @@ impl OpenApiRouteRegistry {
                 );
                 continue;
             }
+            result.push((axum_path, route));
+        }
+        result
+    }
+
+    /// Register a handler on a router for the given HTTP method.
+    ///
+    /// Shared epilogue extracted from all `build_router_*` variants.
+    fn route_for_method<H, T>(router: Router, path: &str, method: &str, handler: H) -> Router
+    where
+        H: axum::handler::Handler<T, ()>,
+        T: 'static,
+    {
+        match method {
+            "GET" => router.route(path, get(handler)),
+            "POST" => router.route(path, post(handler)),
+            "PUT" => router.route(path, put(handler)),
+            "DELETE" => router.route(path, delete(handler)),
+            "PATCH" => router.route(path, patch(handler)),
+            "HEAD" => router.route(path, head(handler)),
+            "OPTIONS" => router.route(path, options(handler)),
+            _ => router,
+        }
+    }
+
+    /// Build an Axum router from the OpenAPI spec (simplified)
+    pub fn build_router(self) -> Router {
+        let mut router = Router::new();
+        tracing::debug!("Building router from {} routes", self.routes.len());
+
+        let deduped = self.deduplicated_routes();
+        let custom_loader = self.custom_fixture_loader.clone();
+        for (axum_path, route) in &deduped {
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let operation = route.operation.clone();
             let method = route.method.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
-            let route_clone = route.clone();
+            let route_clone = (*route).clone();
             let custom_loader_clone = custom_loader.clone();
 
             // Handler: check custom fixtures, then validate path/query/header/cookie/body, then return mock
@@ -687,17 +715,7 @@ impl OpenApiRouteRegistry {
                 response
             };
 
-            // Register the handler based on HTTP method
-            router = match route.method.as_str() {
-                "GET" => router.route(&axum_path, get(handler)),
-                "POST" => router.route(&axum_path, post(handler)),
-                "PUT" => router.route(&axum_path, put(handler)),
-                "DELETE" => router.route(&axum_path, delete(handler)),
-                "PATCH" => router.route(&axum_path, patch(handler)),
-                "HEAD" => router.route(&axum_path, head(handler)),
-                "OPTIONS" => router.route(&axum_path, options(handler)),
-                _ => router, // Skip unknown methods
-            };
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
         // Add OpenAPI documentation endpoint
@@ -735,44 +753,16 @@ impl OpenApiRouteRegistry {
         overrides_enabled: bool,
     ) -> Router {
         let mut router = Router::new();
-        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
-        let mut canonical_paths: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
 
-        // Create individual routes for each operation
+        let deduped = self.deduplicated_routes();
         let custom_loader = self.custom_fixture_loader.clone();
-        for route in &self.routes {
-            if !route.is_valid_axum_path() {
-                tracing::warn!(
-                    "Skipping route with unsupported path syntax: {} {}",
-                    route.method,
-                    route.path
-                );
-                continue;
-            }
-            let axum_path = route.axum_path();
-            let normalized = Self::normalize_path_for_dedup(&axum_path);
-            let axum_path = canonical_paths
-                .entry(normalized.clone())
-                .or_insert_with(|| axum_path.clone())
-                .clone();
-            let route_key = (route.method.clone(), normalized);
-            if !registered_routes.insert(route_key) {
-                tracing::debug!(
-                    "Skipping duplicate route: {} {} (axum path: {})",
-                    route.method,
-                    route.path,
-                    axum_path
-                );
-                continue;
-            }
+        for (axum_path, route) in &deduped {
             let operation = route.operation.clone();
             let method = route.method.clone();
             let method_str = method.clone();
-            let method_for_router = method_str.clone();
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
-            let route_clone = route.clone();
+            let route_clone = (*route).clone();
             let injector = latency_injector.clone();
             let failure_injector = failure_injector.clone();
             let route_overrides = overrides.clone();
@@ -1126,17 +1116,7 @@ impl OpenApiRouteRegistry {
                 )
             };
 
-            // Add route to router based on HTTP method
-            router = match method_for_router.as_str() {
-                "GET" => router.route(&axum_path, get(handler)),
-                "POST" => router.route(&axum_path, post(handler)),
-                "PUT" => router.route(&axum_path, put(handler)),
-                "PATCH" => router.route(&axum_path, patch(handler)),
-                "DELETE" => router.route(&axum_path, delete(handler)),
-                "HEAD" => router.route(&axum_path, head(handler)),
-                "OPTIONS" => router.route(&axum_path, options(handler)),
-                _ => router.route(&axum_path, get(handler)), // Default to GET for unknown methods
-            };
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
         // Add OpenAPI documentation endpoint
@@ -1519,39 +1499,13 @@ impl OpenApiRouteRegistry {
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
-        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
-        let mut canonical_paths: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
+        let deduped = self.deduplicated_routes();
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
 
-        for route in &self.routes {
-            if !route.is_valid_axum_path() {
-                tracing::warn!(
-                    "Skipping route with unsupported path syntax: {} {}",
-                    route.method,
-                    route.path
-                );
-                continue;
-            }
-            let axum_path = route.axum_path();
-            let normalized = Self::normalize_path_for_dedup(&axum_path);
-            let axum_path = canonical_paths
-                .entry(normalized.clone())
-                .or_insert_with(|| axum_path.clone())
-                .clone();
-            let route_key = (route.method.clone(), normalized);
-            if !registered_routes.insert(route_key) {
-                tracing::debug!(
-                    "Skipping duplicate route: {} {} (axum path: {})",
-                    route.method,
-                    route.path,
-                    axum_path
-                );
-                continue;
-            }
+        for (axum_path, route) in &deduped {
             tracing::debug!("Adding AI-enabled route: {} {}", route.method, route.path);
 
-            let route_clone = route.clone();
+            let route_clone = (*route).clone();
             let ai_generator_clone = ai_generator.clone();
 
             // Create async handler that extracts request data and builds context
@@ -1600,24 +1554,7 @@ impl OpenApiRouteRegistry {
                 }
             };
 
-            match route.method.as_str() {
-                "GET" => {
-                    router = router.route(&axum_path, get(handler));
-                }
-                "POST" => {
-                    router = router.route(&axum_path, post(handler));
-                }
-                "PUT" => {
-                    router = router.route(&axum_path, put(handler));
-                }
-                "DELETE" => {
-                    router = router.route(&axum_path, delete(handler));
-                }
-                "PATCH" => {
-                    router = router.route(&axum_path, patch(handler));
-                }
-                _ => tracing::warn!("Unsupported HTTP method for AI: {}", route.method),
-            }
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
         router
@@ -1642,42 +1579,14 @@ impl OpenApiRouteRegistry {
         use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
-        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
-        let mut canonical_paths: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
+        let deduped = self.deduplicated_routes();
         tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
 
-        // Get custom fixture loader for fixture checking
         let custom_loader = self.custom_fixture_loader.clone();
-
-        for route in &self.routes {
-            if !route.is_valid_axum_path() {
-                tracing::warn!(
-                    "Skipping route with unsupported path syntax: {} {}",
-                    route.method,
-                    route.path
-                );
-                continue;
-            }
-            let axum_path = route.axum_path();
-            let normalized = Self::normalize_path_for_dedup(&axum_path);
-            let axum_path = canonical_paths
-                .entry(normalized.clone())
-                .or_insert_with(|| axum_path.clone())
-                .clone();
-            let route_key = (route.method.clone(), normalized);
-            if !registered_routes.insert(route_key) {
-                tracing::debug!(
-                    "Skipping duplicate route: {} {} (axum path: {})",
-                    route.method,
-                    route.path,
-                    axum_path
-                );
-                continue;
-            }
+        for (axum_path, route) in &deduped {
             tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
 
-            let route_clone = route.clone();
+            let route_clone = (*route).clone();
             let mockai_clone = mockai.clone();
             let custom_loader_clone = custom_loader.clone();
 
@@ -1940,24 +1849,7 @@ impl OpenApiRouteRegistry {
                 }
             };
 
-            match route.method.as_str() {
-                "GET" => {
-                    router = router.route(&axum_path, get(handler));
-                }
-                "POST" => {
-                    router = router.route(&axum_path, post(handler));
-                }
-                "PUT" => {
-                    router = router.route(&axum_path, put(handler));
-                }
-                "DELETE" => {
-                    router = router.route(&axum_path, delete(handler));
-                }
-                "PATCH" => {
-                    router = router.route(&axum_path, patch(handler));
-                }
-                _ => tracing::warn!("Unsupported HTTP method for MockAI: {}", route.method),
-            }
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
         router
