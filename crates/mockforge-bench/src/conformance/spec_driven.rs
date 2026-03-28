@@ -1165,6 +1165,7 @@ impl SpecDrivenConformanceGenerator {
             "    '{}': JSON.stringify({{ checks: checkResults, overall: checks }}, null, 2),\n",
             report_path
         ));
+        script.push_str("    'summary.json': JSON.stringify(data),\n");
         script.push_str("    stdout: textSummary(data, { indent: '  ', enableColors: true }),\n");
         script.push_str("  };\n");
         script.push_str("}\n\n");
