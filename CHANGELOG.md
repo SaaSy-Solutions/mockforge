@@ -1,3 +1,52 @@
+## [0.3.103] - 2026-03-28
+
+### Added
+
+- **[Bench]** Field-level schema validation errors in conformance failure details (#79)
+  - Violations now show specific field path, violation type, expected/actual values
+  - Uses `jsonschema::validate()` instead of `is_valid()` for detailed error reporting
+  - Displayed in terminal output and `conformance-failure-details.json`
+- **[Bench]** HAR-to-YAML generator: `mockforge har-to-conformance --har file.har` (#79)
+  - Converts browser HAR captures to custom compliance YAML
+  - Auto-detects base URL, filters static assets, extracts response headers and JSON body field types
+  - Output compatible with `--conformance-custom`
+- **[Bench]** Multi-target conformance: `--conformance` + `--targets-file` now works (#79)
+  - Runs conformance tests against each target sequentially using native executor
+  - Per-target reports in `output/target_N/conformance-report.json`
+  - Combined summary in `multi-target-conformance-summary.json`
+
+## [0.3.102] - 2026-03-28
+
+### Fixed
+
+- **[Bench]** Add `summary.json` to spec-driven conformance `handleSummary` (#79)
+  - Custom conformance tests (via `--conformance-custom`) now generate `summary.json`
+
+## [0.3.101] - 2026-03-26
+
+### Fixed
+
+- **[Bench]** Skip automatic Authorization (Basic/Bearer) headers when Cookie header is provided via `--conformance-header` (#79)
+  - Users managing session-based auth no longer get conflicting Basic Auth headers
+- **[Bench]** Add `summary.json` output to reference conformance generator's `handleSummary` (#79)
+
+## [0.3.100] - 2026-03-24
+
+### Fixed
+
+- **[Core]** Prevent panic on conflicting parameter names in OpenAPI routes (#79)
+  - Routes with different param names at the same position (e.g., `{attestation_id}` vs `{subject_digest}`) now canonicalize to first-registered names
+  - Fixes crashes when loading GitHub, Xero, and similar real-world specs
+  - Applied to all 4 router builders
+- **[Core]** Swagger 2.0 `formData` parameters now properly converted to OpenAPI 3 `requestBody` (#79)
+  - `application/x-www-form-urlencoded` for regular fields, `multipart/form-data` for file uploads
+
+## [0.3.99] - 2026-03-23
+
+### Fixed
+
+- **[Core]** Fix param name conflict panic — same as v0.3.100 (v0.3.99 publish was overwritten by concurrent process)
+
 ## [0.3.98] - 2026-03-22
 
 ### Fixed
