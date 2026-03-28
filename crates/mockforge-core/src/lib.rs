@@ -272,6 +272,8 @@ pub mod error;
 pub mod failure_analysis;
 pub mod failure_injection;
 pub mod fidelity;
+/// Generic fixture loading utilities shared across protocol crates
+pub mod fixture_store;
 pub mod generate_config;
 #[allow(dead_code)]
 pub(crate) mod generative_schema;
