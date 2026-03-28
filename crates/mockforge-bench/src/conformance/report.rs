@@ -1,5 +1,6 @@
 //! Conformance test report parsing and display
 
+use super::executor::SchemaViolation;
 use super::spec::ConformanceFeature;
 use crate::error::{BenchError, Result};
 use crate::owasp_api::categories::OwaspCategory;
@@ -39,6 +40,9 @@ pub struct FailureDetail {
     pub response: FailureResponse,
     /// What the check expected
     pub expected: String,
+    /// Field-level schema validation violations (empty for non-schema checks)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub schema_violations: Vec<SchemaViolation>,
 }
 
 /// Request details for a failed check
@@ -499,6 +503,29 @@ impl ConformanceReport {
                                 detail.response.body.clone()
                             };
                             println!("      Response body: {}", body_preview.bright_black());
+                        }
+                        // Show field-level schema violations if present
+                        if !detail.schema_violations.is_empty() {
+                            println!(
+                                "      {} ({} violation{}):",
+                                "Schema violations".red(),
+                                detail.schema_violations.len(),
+                                if detail.schema_violations.len() == 1 {
+                                    ""
+                                } else {
+                                    "s"
+                                }
+                            );
+                            for violation in &detail.schema_violations {
+                                println!(
+                                    "        {} {}: {} (expected: {}, actual: {})",
+                                    "·".bright_black(),
+                                    violation.field_path.yellow(),
+                                    violation.violation_type.red(),
+                                    violation.expected.bright_black(),
+                                    violation.actual.bright_black()
+                                );
+                            }
                         }
                     }
                 }

@@ -1978,6 +1978,43 @@ enum Commands {
         #[arg(long)]
         use_k6: bool,
     },
+
+    /// Convert a HAR file to conformance custom-checks YAML
+    ///
+    /// Reads a recorded HTTP Archive (.har) file and generates a YAML config
+    /// that can be used with `mockforge bench --conformance-custom`.
+    ///
+    /// Examples:
+    ///   mockforge har-to-conformance --har recording.har
+    ///   mockforge har-to-conformance --har recording.har --output checks.yaml
+    ///   mockforge har-to-conformance --har recording.har --include-headers content-type,x-api-version
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    HarToConformance {
+        /// Path to the HAR file
+        #[arg(long)]
+        har: PathBuf,
+
+        /// Output file path (default: stdout)
+        #[arg(long)]
+        output: Option<PathBuf>,
+
+        /// Base URL to strip from entry URLs (auto-detected if omitted)
+        #[arg(long)]
+        base_url: Option<String>,
+
+        /// Skip static asset entries (.js, .css, .png, etc.)
+        #[arg(long, default_value = "true")]
+        skip_static: bool,
+
+        /// Response headers to include in checks (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        include_headers: Vec<String>,
+
+        /// Maximum number of HAR entries to process (0 = unlimited)
+        #[arg(long, default_value = "0")]
+        max_entries: usize,
+    },
 }
 
 #[tokio::main]
@@ -2675,6 +2712,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             if let Err(e) = bench_cmd.execute().await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::HarToConformance {
+            har,
+            output,
+            base_url,
+            skip_static,
+            include_headers,
+            max_entries,
+        } => {
+            use mockforge_bench::conformance::har_to_custom::{
+                generate_custom_yaml_from_har, HarToCustomOptions,
+            };
+
+            let options = HarToCustomOptions {
+                base_url,
+                skip_static,
+                include_headers: if include_headers.is_empty() {
+                    vec!["content-type".to_string()]
+                } else {
+                    include_headers
+                },
+                max_entries,
+            };
+
+            match generate_custom_yaml_from_har(&har, options) {
+                Ok(yaml) => {
+                    if let Some(output_path) = output {
+                        std::fs::write(&output_path, &yaml)?;
+                        println!("Custom conformance YAML written to: {}", output_path.display());
+                    } else {
+                        println!("{}", yaml);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error generating conformance YAML from HAR: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }

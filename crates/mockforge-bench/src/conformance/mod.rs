@@ -6,6 +6,7 @@
 pub mod custom;
 pub mod executor;
 pub mod generator;
+pub mod har_to_custom;
 pub mod report;
 pub mod sarif;
 pub mod schema_validator;
@@ -15,6 +16,7 @@ pub mod spec_driven;
 pub use custom::CustomConformanceConfig;
 pub use executor::{ConformanceProgress, NativeConformanceExecutor};
 pub use generator::{ConformanceConfig, ConformanceGenerator};
+pub use har_to_custom::{generate_custom_yaml_from_har, HarToCustomOptions};
 pub use report::ConformanceReport;
 pub use sarif::ConformanceSarifReport;
 pub use schema_validator::SchemaValidatorGenerator;

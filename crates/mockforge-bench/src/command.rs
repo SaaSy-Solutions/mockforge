@@ -258,11 +258,7 @@ impl BenchCommand {
         // Check if we're in multi-target mode
         if let Some(targets_file) = &self.targets_file {
             if self.conformance {
-                TerminalReporter::print_warning(
-                    "--conformance is not yet supported with --targets-file (multi-target mode). \
-                     Running load test instead. To run conformance tests against multiple targets, \
-                     run separate `mockforge bench --conformance --target <url>` commands for each target.",
-                );
+                return self.execute_multi_target_conformance(targets_file).await;
             }
             return self.execute_multi_target(targets_file).await;
         }
@@ -2129,6 +2125,333 @@ impl BenchCommand {
                 self.conformance_report.display()
             ));
         }
+        Ok(())
+    }
+
+    /// Execute conformance tests against multiple targets from a targets file.
+    ///
+    /// Uses the native `NativeConformanceExecutor` (no k6 dependency). Targets are
+    /// tested sequentially to avoid overwhelming them, and per-target headers from
+    /// the targets file are merged with the base `--conformance-header` headers.
+    async fn execute_multi_target_conformance(&self, targets_file: &Path) -> Result<()> {
+        use crate::conformance::generator::ConformanceConfig;
+        use crate::conformance::spec::ConformanceFeature;
+
+        TerminalReporter::print_progress("Multi-target OpenAPI 3.0.0 Conformance Testing Mode");
+
+        // Parse targets file
+        TerminalReporter::print_progress("Parsing targets file...");
+        let targets = parse_targets_file(targets_file)?;
+        let num_targets = targets.len();
+        TerminalReporter::print_success(&format!("Loaded {} targets", num_targets));
+
+        if targets.is_empty() {
+            return Err(BenchError::Other("No targets found in file".to_string()));
+        }
+
+        TerminalReporter::print_progress(
+            "Conformance mode runs 1 VU, 1 iteration per endpoint (--vus and -d are ignored)",
+        );
+
+        // Parse category filter (shared across all targets)
+        let categories = self.conformance_categories.as_ref().map(|cats_str| {
+            cats_str
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if let Some(canonical) = ConformanceFeature::category_from_cli_name(trimmed) {
+                        Some(canonical.to_string())
+                    } else {
+                        TerminalReporter::print_warning(&format!(
+                            "Unknown conformance category: '{}'. Valid categories: {}",
+                            trimmed,
+                            ConformanceFeature::cli_category_names()
+                                .iter()
+                                .map(|(cli, _)| *cli)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                        None
+                    }
+                })
+                .collect::<Vec<String>>()
+        });
+
+        // Parse base custom headers from --conformance-header flags
+        let base_custom_headers: Vec<(String, String)> = self
+            .conformance_headers
+            .iter()
+            .filter_map(|h| {
+                let (name, value) = h.split_once(':')?;
+                Some((name.trim().to_string(), value.trim().to_string()))
+            })
+            .collect();
+
+        if !base_custom_headers.is_empty() {
+            TerminalReporter::print_progress(&format!(
+                "Using {} base custom header(s) for authentication",
+                base_custom_headers.len()
+            ));
+        }
+
+        // Load spec once if provided (shared across all targets)
+        let annotated_ops = if !self.spec.is_empty() {
+            TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
+            let parser = SpecParser::from_file(&self.spec[0]).await?;
+            let operations = parser.get_operations();
+            let annotated =
+                crate::conformance::spec_driven::SpecDrivenConformanceGenerator::annotate_operations(
+                    &operations,
+                    parser.spec(),
+                );
+            TerminalReporter::print_success(&format!(
+                "Analyzed {} operations, found {} feature annotations",
+                operations.len(),
+                annotated.iter().map(|a| a.features.len()).sum::<usize>()
+            ));
+            Some(annotated)
+        } else {
+            None
+        };
+
+        // Ensure output dir exists
+        std::fs::create_dir_all(&self.output)?;
+
+        // Collect per-target results for the summary
+        struct TargetResult {
+            url: String,
+            passed: usize,
+            failed: usize,
+            elapsed: std::time::Duration,
+            report_json: serde_json::Value,
+        }
+
+        let mut target_results: Vec<TargetResult> = Vec::with_capacity(num_targets);
+        let total_start = std::time::Instant::now();
+
+        for (idx, target) in targets.iter().enumerate() {
+            tracing::info!(
+                "Running conformance tests against target {}/{}: {}",
+                idx + 1,
+                num_targets,
+                target.url
+            );
+            TerminalReporter::print_progress(&format!(
+                "\n--- Target {}/{}: {} ---",
+                idx + 1,
+                num_targets,
+                target.url
+            ));
+
+            // Merge base headers with per-target headers
+            let mut merged_headers = base_custom_headers.clone();
+            if let Some(ref target_headers) = target.headers {
+                for (name, value) in target_headers {
+                    // Per-target headers override base headers with the same name
+                    if let Some(existing) = merged_headers.iter_mut().find(|(n, _)| n == name) {
+                        existing.1 = value.clone();
+                    } else {
+                        merged_headers.push((name.clone(), value.clone()));
+                    }
+                }
+            }
+            // Add auth header if present on target
+            if let Some(ref auth) = target.auth {
+                if let Some(existing) =
+                    merged_headers.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case("Authorization"))
+                {
+                    existing.1 = auth.clone();
+                } else {
+                    merged_headers.push(("Authorization".to_string(), auth.clone()));
+                }
+            }
+
+            let config = ConformanceConfig {
+                target_url: target.url.clone(),
+                api_key: self.conformance_api_key.clone(),
+                basic_auth: self.conformance_basic_auth.clone(),
+                skip_tls_verify: self.skip_tls_verify,
+                categories: categories.clone(),
+                base_path: self.base_path.clone(),
+                custom_headers: merged_headers,
+                output_dir: Some(self.output.clone()),
+                all_operations: self.conformance_all_operations,
+                custom_checks_file: self.conformance_custom.clone(),
+                request_delay_ms: self.conformance_delay_ms,
+            };
+
+            let mut executor =
+                crate::conformance::executor::NativeConformanceExecutor::new(config)?;
+
+            executor = if let Some(ref annotated) = annotated_ops {
+                executor.with_spec_driven_checks(annotated)
+            } else {
+                executor.with_reference_checks()
+            };
+            executor = executor.with_custom_checks()?;
+
+            TerminalReporter::print_success(&format!(
+                "Executing {} conformance checks against {}...",
+                executor.check_count(),
+                target.url
+            ));
+
+            let target_start = std::time::Instant::now();
+            let report = executor.execute().await?;
+            let target_elapsed = target_start.elapsed();
+
+            let report_json = report.to_json();
+
+            // Extract pass/fail from the summary in the JSON
+            let passed = report_json["summary"]["passed"].as_u64().unwrap_or(0) as usize;
+            let failed = report_json["summary"]["failed"].as_u64().unwrap_or(0) as usize;
+            let total_checks = passed + failed;
+            let rate = if total_checks == 0 {
+                0.0
+            } else {
+                (passed as f64 / total_checks as f64) * 100.0
+            };
+
+            TerminalReporter::print_success(&format!(
+                "Target {}: {}/{} passed ({:.1}%) in {:.1}s",
+                target.url,
+                passed,
+                total_checks,
+                rate,
+                target_elapsed.as_secs_f64()
+            ));
+
+            // Save per-target report
+            let target_dir = self.output.join(format!("target_{}", idx));
+            std::fs::create_dir_all(&target_dir)?;
+            let target_report_path = target_dir.join("conformance-report.json");
+            let report_str = serde_json::to_string_pretty(&report_json)
+                .map_err(|e| BenchError::Other(format!("Failed to serialize report: {}", e)))?;
+            std::fs::write(&target_report_path, &report_str)
+                .map_err(|e| BenchError::Other(format!("Failed to write report: {}", e)))?;
+
+            // Save failure details if any
+            let failure_details = report.failure_details();
+            if !failure_details.is_empty() {
+                let details_path = target_dir.join("conformance-failure-details.json");
+                if let Ok(json) = serde_json::to_string_pretty(&failure_details) {
+                    let _ = std::fs::write(&details_path, json);
+                }
+            }
+
+            target_results.push(TargetResult {
+                url: target.url.clone(),
+                passed,
+                failed,
+                elapsed: target_elapsed,
+                report_json,
+            });
+        }
+
+        let total_elapsed = total_start.elapsed();
+
+        // Print summary table
+        println!("\n{}", "=".repeat(80));
+        println!("  Multi-Target Conformance Summary");
+        println!("{}", "=".repeat(80));
+        println!(
+            "  {:<40} {:>8} {:>8} {:>8} {:>8}",
+            "Target URL", "Passed", "Failed", "Rate", "Time"
+        );
+        println!("  {}", "-".repeat(76));
+
+        let mut total_passed = 0usize;
+        let mut total_failed = 0usize;
+
+        for result in &target_results {
+            let total_checks = result.passed + result.failed;
+            let rate = if total_checks == 0 {
+                0.0
+            } else {
+                (result.passed as f64 / total_checks as f64) * 100.0
+            };
+
+            // Truncate long URLs for display
+            let display_url = if result.url.len() > 38 {
+                format!("{}...", &result.url[..35])
+            } else {
+                result.url.clone()
+            };
+
+            println!(
+                "  {:<40} {:>8} {:>8} {:>7.1}% {:>6.1}s",
+                display_url,
+                result.passed,
+                result.failed,
+                rate,
+                result.elapsed.as_secs_f64()
+            );
+
+            total_passed += result.passed;
+            total_failed += result.failed;
+        }
+
+        let grand_total = total_passed + total_failed;
+        let overall_rate = if grand_total == 0 {
+            0.0
+        } else {
+            (total_passed as f64 / grand_total as f64) * 100.0
+        };
+
+        println!("  {}", "-".repeat(76));
+        println!(
+            "  {:<40} {:>8} {:>8} {:>7.1}% {:>6.1}s",
+            format!("TOTAL ({} targets)", num_targets),
+            total_passed,
+            total_failed,
+            overall_rate,
+            total_elapsed.as_secs_f64()
+        );
+        println!("{}", "=".repeat(80));
+
+        // Save combined summary
+        let per_target_summaries: Vec<serde_json::Value> = target_results
+            .iter()
+            .enumerate()
+            .map(|(idx, r)| {
+                let total_checks = r.passed + r.failed;
+                let rate = if total_checks == 0 {
+                    0.0
+                } else {
+                    (r.passed as f64 / total_checks as f64) * 100.0
+                };
+                serde_json::json!({
+                    "target_url": r.url,
+                    "target_index": idx,
+                    "checks_passed": r.passed,
+                    "checks_failed": r.failed,
+                    "total_checks": total_checks,
+                    "pass_rate": rate,
+                    "elapsed_seconds": r.elapsed.as_secs_f64(),
+                    "report": r.report_json,
+                })
+            })
+            .collect();
+
+        let combined_summary = serde_json::json!({
+            "total_targets": num_targets,
+            "total_checks_passed": total_passed,
+            "total_checks_failed": total_failed,
+            "overall_pass_rate": overall_rate,
+            "total_elapsed_seconds": total_elapsed.as_secs_f64(),
+            "targets": per_target_summaries,
+        });
+
+        let summary_path = self.output.join("multi-target-conformance-summary.json");
+        let summary_str = serde_json::to_string_pretty(&combined_summary)
+            .map_err(|e| BenchError::Other(format!("Failed to serialize summary: {}", e)))?;
+        std::fs::write(&summary_path, &summary_str)
+            .map_err(|e| BenchError::Other(format!("Failed to write summary: {}", e)))?;
+        TerminalReporter::print_success(&format!(
+            "Combined summary saved to: {}",
+            summary_path.display()
+        ));
+
         Ok(())
     }
 

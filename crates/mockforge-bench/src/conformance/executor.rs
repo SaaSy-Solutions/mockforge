@@ -15,6 +15,19 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// A field-level schema validation violation
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SchemaViolation {
+    /// JSON path to the field that failed validation (e.g., "/name", "/items/0/age")
+    pub field_path: String,
+    /// Type of violation (e.g., "type", "required", "additionalProperties")
+    pub violation_type: String,
+    /// What the schema expected
+    pub expected: String,
+    /// What was actually found
+    pub actual: String,
+}
+
 /// A single conformance check to execute
 #[derive(Debug, Clone)]
 pub struct ConformanceCheck {
@@ -627,6 +640,7 @@ impl NativeConformanceExecutor {
                             body: format!("Request failed: {}", e),
                         },
                         expected: format!("{:?}", check.validation),
+                        schema_violations: Vec::new(),
                     }),
                 };
             }
@@ -640,7 +654,8 @@ impl NativeConformanceExecutor {
             .collect();
         let resp_body = response.text().await.unwrap_or_default();
 
-        let passed = self.validate_response(&check.validation, status, &resp_headers, &resp_body);
+        let (passed, schema_violations) =
+            self.validate_response(&check.validation, status, &resp_headers, &resp_body);
 
         let failure_detail = if !passed {
             Some(FailureDetail {
@@ -670,6 +685,7 @@ impl NativeConformanceExecutor {
                     },
                 },
                 expected: Self::describe_validation(&check.validation),
+                schema_violations,
             })
         } else {
             None
@@ -682,32 +698,92 @@ impl NativeConformanceExecutor {
         }
     }
 
-    /// Validate a response against the check's validation rules
+    /// Validate a response against the check's validation rules.
+    ///
+    /// Returns `(passed, schema_violations)` where `schema_violations` contains
+    /// field-level details when a `SchemaValidation` check fails.
     fn validate_response(
         &self,
         validation: &CheckValidation,
         status: u16,
         headers: &HashMap<String, String>,
         body: &str,
-    ) -> bool {
+    ) -> (bool, Vec<SchemaViolation>) {
         match validation {
             CheckValidation::StatusRange { min, max_exclusive } => {
-                status >= *min && status < *max_exclusive
+                (status >= *min && status < *max_exclusive, Vec::new())
             }
-            CheckValidation::ExactStatus(expected) => status == *expected,
+            CheckValidation::ExactStatus(expected) => (status == *expected, Vec::new()),
             CheckValidation::SchemaValidation {
                 status_min,
                 status_max,
                 schema,
             } => {
                 if status < *status_min || status >= *status_max {
-                    return false;
+                    return (false, Vec::new());
                 }
                 // Parse body as JSON and validate against schema
                 let Ok(body_value) = serde_json::from_str::<serde_json::Value>(body) else {
-                    return false;
+                    return (
+                        false,
+                        vec![SchemaViolation {
+                            field_path: "/".to_string(),
+                            violation_type: "parse_error".to_string(),
+                            expected: "valid JSON".to_string(),
+                            actual: "non-JSON response body".to_string(),
+                        }],
+                    );
                 };
-                jsonschema::is_valid(schema, &body_value)
+                match jsonschema::validator_for(schema) {
+                    Ok(validator) => {
+                        let errors: Vec<_> = validator.iter_errors(&body_value).collect();
+                        if errors.is_empty() {
+                            (true, Vec::new())
+                        } else {
+                            let violations = errors
+                                .iter()
+                                .map(|err| {
+                                    let field_path = err.instance_path.to_string();
+                                    let field_path = if field_path.is_empty() {
+                                        "/".to_string()
+                                    } else {
+                                        field_path
+                                    };
+                                    SchemaViolation {
+                                        field_path,
+                                        violation_type: format!("{:?}", err.kind)
+                                            .split('(')
+                                            .next()
+                                            .unwrap_or("unknown")
+                                            .split('{')
+                                            .next()
+                                            .unwrap_or("unknown")
+                                            .split(' ')
+                                            .next()
+                                            .unwrap_or("unknown")
+                                            .trim()
+                                            .to_string(),
+                                        expected: format!("{}", err.schema_path),
+                                        actual: format!("{}", err),
+                                    }
+                                })
+                                .collect();
+                            (false, violations)
+                        }
+                    }
+                    Err(_) => {
+                        // Schema compilation failed — fall back to is_valid behavior
+                        (
+                            false,
+                            vec![SchemaViolation {
+                                field_path: "/".to_string(),
+                                violation_type: "schema_compile_error".to_string(),
+                                expected: "valid JSON schema".to_string(),
+                                actual: "schema failed to compile".to_string(),
+                            }],
+                        )
+                    }
+                }
             }
             CheckValidation::Custom {
                 expected_status,
@@ -715,7 +791,7 @@ impl NativeConformanceExecutor {
                 expected_body_fields,
             } => {
                 if status != *expected_status {
-                    return false;
+                    return (false, Vec::new());
                 }
                 // Check headers with regex
                 for (header_name, pattern) in expected_headers {
@@ -726,14 +802,14 @@ impl NativeConformanceExecutor {
                         .unwrap_or("");
                     if let Ok(re) = regex::Regex::new(pattern) {
                         if !re.is_match(header_val) {
-                            return false;
+                            return (false, Vec::new());
                         }
                     }
                 }
                 // Check body field types
                 if !expected_body_fields.is_empty() {
                     let Ok(body_value) = serde_json::from_str::<serde_json::Value>(body) else {
-                        return false;
+                        return (false, Vec::new());
                     };
                     for (field_name, field_type) in expected_body_fields {
                         let field = &body_value[field_name];
@@ -747,11 +823,11 @@ impl NativeConformanceExecutor {
                             _ => !field.is_null(),
                         };
                         if !ok {
-                            return false;
+                            return (false, Vec::new());
                         }
                     }
                 }
-                true
+                (true, Vec::new())
             }
         }
     }
@@ -1248,33 +1324,45 @@ mod tests {
         let executor = NativeConformanceExecutor::new(config).unwrap();
         let headers = HashMap::new();
 
-        assert!(executor.validate_response(
-            &CheckValidation::StatusRange {
-                min: 200,
-                max_exclusive: 500,
-            },
-            200,
-            &headers,
-            "",
-        ));
-        assert!(executor.validate_response(
-            &CheckValidation::StatusRange {
-                min: 200,
-                max_exclusive: 500,
-            },
-            404,
-            &headers,
-            "",
-        ));
-        assert!(!executor.validate_response(
-            &CheckValidation::StatusRange {
-                min: 200,
-                max_exclusive: 500,
-            },
-            500,
-            &headers,
-            "",
-        ));
+        assert!(
+            executor
+                .validate_response(
+                    &CheckValidation::StatusRange {
+                        min: 200,
+                        max_exclusive: 500,
+                    },
+                    200,
+                    &headers,
+                    "",
+                )
+                .0
+        );
+        assert!(
+            executor
+                .validate_response(
+                    &CheckValidation::StatusRange {
+                        min: 200,
+                        max_exclusive: 500,
+                    },
+                    404,
+                    &headers,
+                    "",
+                )
+                .0
+        );
+        assert!(
+            !executor
+                .validate_response(
+                    &CheckValidation::StatusRange {
+                        min: 200,
+                        max_exclusive: 500,
+                    },
+                    500,
+                    &headers,
+                    "",
+                )
+                .0
+        );
     }
 
     #[test]
@@ -1286,8 +1374,16 @@ mod tests {
         let executor = NativeConformanceExecutor::new(config).unwrap();
         let headers = HashMap::new();
 
-        assert!(executor.validate_response(&CheckValidation::ExactStatus(200), 200, &headers, "",));
-        assert!(!executor.validate_response(&CheckValidation::ExactStatus(200), 201, &headers, "",));
+        assert!(
+            executor
+                .validate_response(&CheckValidation::ExactStatus(200), 200, &headers, "")
+                .0
+        );
+        assert!(
+            !executor
+                .validate_response(&CheckValidation::ExactStatus(200), 201, &headers, "")
+                .0
+        );
     }
 
     #[test]
@@ -1308,7 +1404,7 @@ mod tests {
             "required": ["name"]
         });
 
-        assert!(executor.validate_response(
+        let (passed, violations) = executor.validate_response(
             &CheckValidation::SchemaValidation {
                 status_min: 200,
                 status_max: 300,
@@ -1317,10 +1413,12 @@ mod tests {
             200,
             &headers,
             r#"{"name": "test", "age": 25}"#,
-        ));
+        );
+        assert!(passed);
+        assert!(violations.is_empty());
 
         // Missing required field
-        assert!(!executor.validate_response(
+        let (passed, violations) = executor.validate_response(
             &CheckValidation::SchemaValidation {
                 status_min: 200,
                 status_max: 300,
@@ -1329,7 +1427,10 @@ mod tests {
             200,
             &headers,
             r#"{"age": 25}"#,
-        ));
+        );
+        assert!(!passed);
+        assert!(!violations.is_empty());
+        assert_eq!(violations[0].violation_type, "Required");
     }
 
     #[test]
@@ -1342,31 +1443,39 @@ mod tests {
         let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
 
-        assert!(executor.validate_response(
-            &CheckValidation::Custom {
-                expected_status: 200,
-                expected_headers: vec![(
-                    "content-type".to_string(),
-                    "application/json".to_string(),
-                )],
-                expected_body_fields: vec![("name".to_string(), "string".to_string())],
-            },
-            200,
-            &headers,
-            r#"{"name": "test"}"#,
-        ));
+        assert!(
+            executor
+                .validate_response(
+                    &CheckValidation::Custom {
+                        expected_status: 200,
+                        expected_headers: vec![(
+                            "content-type".to_string(),
+                            "application/json".to_string(),
+                        )],
+                        expected_body_fields: vec![("name".to_string(), "string".to_string())],
+                    },
+                    200,
+                    &headers,
+                    r#"{"name": "test"}"#,
+                )
+                .0
+        );
 
         // Wrong status
-        assert!(!executor.validate_response(
-            &CheckValidation::Custom {
-                expected_status: 200,
-                expected_headers: vec![],
-                expected_body_fields: vec![],
-            },
-            404,
-            &headers,
-            "",
-        ));
+        assert!(
+            !executor
+                .validate_response(
+                    &CheckValidation::Custom {
+                        expected_status: 200,
+                        expected_headers: vec![],
+                        expected_body_fields: vec![],
+                    },
+                    404,
+                    &headers,
+                    "",
+                )
+                .0
+        );
     }
 
     #[test]
@@ -1394,6 +1503,7 @@ mod tests {
                         body: "error".to_string(),
                     },
                     expected: "status >= 200 && status < 500".to_string(),
+                    schema_violations: Vec::new(),
                 }),
             },
         ];
