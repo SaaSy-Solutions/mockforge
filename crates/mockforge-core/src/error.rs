@@ -292,7 +292,7 @@ impl Error {
     }
 
     /// Create a not-found error
-    pub fn not_found<S: Into<String>>(entity: S, id: S) -> Self {
+    pub fn not_found<S1: Into<String>, S2: Into<String>>(entity: S1, id: S2) -> Self {
         Self::NotFound {
             entity: entity.into(),
             id: id.into(),

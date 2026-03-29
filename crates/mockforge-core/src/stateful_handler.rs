@@ -255,7 +255,7 @@ impl StatefulResponseHandler {
 
         // Generate response based on current state
         let state_response = config.state_responses.get(&current_state).ok_or_else(|| {
-            Error::generic(format!("No response configuration for state '{}'", current_state))
+            Error::invalid_state(format!("No response configuration for state '{}'", current_state))
         })?;
 
         // Update state instance if transition occurred
@@ -294,7 +294,7 @@ impl StatefulResponseHandler {
                 if let Some(last) = segments.last() {
                     Ok(last.to_string())
                 } else {
-                    Err(Error::generic(format!(
+                    Err(Error::validation(format!(
                         "Could not extract path parameter '{}' from path '{}'",
                         param, path
                     )))
@@ -304,7 +304,7 @@ impl StatefulResponseHandler {
                 .get(name)
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.to_string())
-                .ok_or_else(|| Error::generic(format!("Header '{}' not found", name))),
+                .ok_or_else(|| Error::not_found("header", name)),
             ResourceIdExtract::QueryParam { param } => {
                 // Extract from query string
                 uri.query()
@@ -313,15 +313,15 @@ impl StatefulResponseHandler {
                             .find(|(k, _)| k == param)
                             .map(|(_, v)| v.to_string())
                     })
-                    .ok_or_else(|| Error::generic(format!("Query parameter '{}' not found", param)))
+                    .ok_or_else(|| Error::not_found("query parameter", param))
             }
             ResourceIdExtract::JsonPath { path: json_path } => {
                 let body_str = body
                     .and_then(|b| std::str::from_utf8(b).ok())
-                    .ok_or_else(|| Error::generic("Request body is not valid UTF-8".to_string()))?;
+                    .ok_or_else(|| Error::validation("Request body is not valid UTF-8"))?;
 
                 let json: Value = serde_json::from_str(body_str)
-                    .map_err(|e| Error::generic(format!("Invalid JSON body: {}", e)))?;
+                    .map_err(|e| Error::validation(format!("Invalid JSON body: {}", e)))?;
 
                 // Simple JSONPath implementation (supports $.field notation)
                 self.extract_json_path(&json, json_path)
@@ -333,7 +333,7 @@ impl StatefulResponseHandler {
                         return Ok(id);
                     }
                 }
-                Err(Error::generic("Could not extract resource ID from any source".to_string()))
+                Err(Error::validation("Could not extract resource ID from any source"))
             }
         }
     }
@@ -347,20 +347,18 @@ impl StatefulResponseHandler {
         for part in parts {
             match current {
                 Value::Object(map) => {
-                    current = map
-                        .get(part)
-                        .ok_or_else(|| Error::generic(format!("Path '{}' not found", path)))?;
+                    current = map.get(part).ok_or_else(|| Error::not_found("JSON path", path))?;
                 }
                 Value::Array(arr) => {
                     let idx: usize = part
                         .parse()
-                        .map_err(|_| Error::generic(format!("Invalid array index: {}", part)))?;
+                        .map_err(|_| Error::validation(format!("Invalid array index: {}", part)))?;
                     current = arr.get(idx).ok_or_else(|| {
-                        Error::generic(format!("Array index {} out of bounds", idx))
+                        Error::validation(format!("Array index {} out of bounds", idx))
                     })?;
                 }
                 _ => {
-                    return Err(Error::generic(format!(
+                    return Err(Error::validation(format!(
                         "Cannot traverse path '{}' at '{}'",
                         path, part
                     )));
@@ -371,9 +369,10 @@ impl StatefulResponseHandler {
         match current {
             Value::String(s) => Ok(s.clone()),
             Value::Number(n) => Ok(n.to_string()),
-            _ => {
-                Err(Error::generic(format!("Path '{}' does not point to a string or number", path)))
-            }
+            _ => Err(Error::validation(format!(
+                "Path '{}' does not point to a string or number",
+                path
+            ))),
         }
     }
 
@@ -433,10 +432,10 @@ impl StatefulResponseHandler {
         if condition.starts_with("$.") {
             let body_str = body
                 .and_then(|b| std::str::from_utf8(b).ok())
-                .ok_or_else(|| Error::generic("Request body is not valid UTF-8".to_string()))?;
+                .ok_or_else(|| Error::validation("Request body is not valid UTF-8"))?;
 
             let json: Value = serde_json::from_str(body_str)
-                .map_err(|e| Error::generic(format!("Invalid JSON body: {}", e)))?;
+                .map_err(|e| Error::validation(format!("Invalid JSON body: {}", e)))?;
 
             // Extract value and check if it's truthy
             let value = self.extract_json_path(&json, condition)?;
@@ -583,10 +582,10 @@ impl StatefulResponseHandler {
                 return Ok(());
             }
         }
-        Err(Error::generic(format!(
-            "Resource '{}' of type '{}' not found",
-            resource_id, resource_type
-        )))
+        Err(Error::not_found(
+            format!("resource of type '{}'", resource_type),
+            resource_id.to_string(),
+        ))
     }
 
     /// Get current state for a resource

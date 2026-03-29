@@ -176,11 +176,11 @@ impl CustomFixtureLoader {
     pub fn convert_nested_to_flat(nested: NestedFixture) -> Result<CustomFixture> {
         let request = nested
             .request
-            .ok_or_else(|| Error::generic("Nested fixture missing 'request' object".to_string()))?;
+            .ok_or_else(|| Error::config("Nested fixture missing 'request' object"))?;
 
-        let response = nested.response.ok_or_else(|| {
-            Error::generic("Nested fixture missing 'response' object".to_string())
-        })?;
+        let response = nested
+            .response
+            .ok_or_else(|| Error::config("Nested fixture missing 'response' object"))?;
 
         Ok(CustomFixture {
             method: request.method,
@@ -196,14 +196,14 @@ impl CustomFixtureLoader {
     pub fn validate_fixture(fixture: &CustomFixture, file_path: &Path) -> Result<()> {
         // Check required fields
         if fixture.method.is_empty() {
-            return Err(Error::generic(format!(
+            return Err(Error::validation(format!(
                 "Invalid fixture in {}: method is required and cannot be empty",
                 file_path.display()
             )));
         }
 
         if fixture.path.is_empty() {
-            return Err(Error::generic(format!(
+            return Err(Error::validation(format!(
                 "Invalid fixture in {}: path is required and cannot be empty",
                 file_path.display()
             )));
@@ -224,7 +224,7 @@ impl CustomFixtureLoader {
 
         // Validate status code
         if fixture.status < 100 || fixture.status >= 600 {
-            return Err(Error::generic(format!(
+            return Err(Error::validation(format!(
                 "Invalid fixture in {}: status code {} is not a valid HTTP status code (100-599)",
                 file_path.display(),
                 fixture.status
@@ -253,17 +253,16 @@ impl CustomFixtureLoader {
 
         // Scan directory for JSON files
         let mut entries = fs::read_dir(&self.fixtures_dir).await.map_err(|e| {
-            Error::generic(format!(
-                "Failed to read fixtures directory {}: {}",
-                self.fixtures_dir.display(),
-                e
-            ))
+            Error::io_with_context(
+                format!("reading fixtures directory {}", self.fixtures_dir.display()),
+                e.to_string(),
+            )
         })?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?
         {
             let path = entry.path();
             if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
@@ -297,7 +296,10 @@ impl CustomFixtureLoader {
     /// Load a single fixture file
     async fn load_fixture_file(&mut self, path: &Path) -> Result<LoadResult> {
         let content = fs::read_to_string(path).await.map_err(|e| {
-            Error::generic(format!("Failed to read fixture file {}: {}", path.display(), e))
+            Error::io_with_context(
+                format!("reading fixture file {}", path.display()),
+                e.to_string(),
+            )
         })?;
 
         // Check if this is a template file that should be skipped
@@ -316,7 +318,7 @@ impl CustomFixtureLoader {
             Err(_) => {
                 // Try nested format
                 let nested: NestedFixture = serde_json::from_str(&content).map_err(|e| {
-                    Error::generic(format!(
+                    Error::config(format!(
                         "Failed to parse fixture file {}: not a valid flat or nested format. Error: {}",
                         path.display(),
                         e

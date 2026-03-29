@@ -348,7 +348,7 @@ impl WorkspacePersistence {
     pub async fn ensure_workspace_dir(&self) -> Result<()> {
         if !self.base_dir.exists() {
             fs::create_dir_all(&self.base_dir).await.map_err(|e| {
-                Error::generic(format!("Failed to create workspace directory: {}", e))
+                Error::io_with_context("creating workspace directory", e.to_string())
             })?;
         }
         Ok(())
@@ -360,11 +360,11 @@ impl WorkspacePersistence {
 
         let file_path = self.workspace_file_path(&workspace.id);
         let content = serde_yaml::to_string(workspace)
-            .map_err(|e| Error::generic(format!("Failed to serialize workspace: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize workspace: {}", e)))?;
 
         fs::write(&file_path, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write workspace file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing workspace file", e.to_string()))?;
 
         Ok(())
     }
@@ -374,15 +374,15 @@ impl WorkspacePersistence {
         let file_path = self.workspace_file_path(workspace_id);
 
         if !file_path.exists() {
-            return Err(Error::generic(format!("Workspace file not found: {:?}", file_path)));
+            return Err(Error::not_found("Workspace file", &*file_path.to_string_lossy()));
         }
 
         let content = fs::read_to_string(&file_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read workspace file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading workspace file", e.to_string()))?;
 
         let mut workspace: Workspace = serde_yaml::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to deserialize workspace: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to deserialize workspace: {}", e)))?;
 
         // Initialize default mock environments if they don't exist (for backward compatibility)
         workspace.initialize_default_mock_environments();
@@ -397,7 +397,7 @@ impl WorkspacePersistence {
         if file_path.exists() {
             fs::remove_file(&file_path)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to delete workspace file: {}", e)))?;
+                .map_err(|e| Error::io_with_context("deleting workspace file", e.to_string()))?;
         }
 
         Ok(())
@@ -414,11 +414,11 @@ impl WorkspacePersistence {
 
         let file_path = self.registry_file_path();
         let content = serde_yaml::to_string(&serializable)
-            .map_err(|e| Error::generic(format!("Failed to serialize registry: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize registry: {}", e)))?;
 
         fs::write(&file_path, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write registry file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing registry file", e.to_string()))?;
 
         Ok(())
     }
@@ -434,10 +434,10 @@ impl WorkspacePersistence {
 
         let content = fs::read_to_string(&file_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read registry file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading registry file", e.to_string()))?;
 
         let serializable: SerializableWorkspaceRegistry = serde_yaml::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to deserialize registry: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to deserialize registry: {}", e)))?;
 
         let mut registry = WorkspaceRegistry::new();
 
@@ -471,11 +471,11 @@ impl WorkspacePersistence {
 
         let file_path = self.sync_state_file_path();
         let content = serde_yaml::to_string(sync_state)
-            .map_err(|e| Error::generic(format!("Failed to serialize sync state: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize sync state: {}", e)))?;
 
         fs::write(&file_path, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write sync state file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing sync state file", e.to_string()))?;
 
         Ok(())
     }
@@ -493,10 +493,10 @@ impl WorkspacePersistence {
 
         let content = fs::read_to_string(&file_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read sync state file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading sync state file", e.to_string()))?;
 
         let sync_state: SyncState = serde_yaml::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to deserialize sync state: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to deserialize sync state: {}", e)))?;
 
         Ok(sync_state)
     }
@@ -511,12 +511,12 @@ impl WorkspacePersistence {
 
         let mut entries = fs::read_dir(&self.base_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read workspace directory: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading workspace directory", e.to_string()))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?
         {
             let path = entry.path();
             if path.is_file() {
@@ -556,14 +556,14 @@ impl WorkspacePersistence {
         let workspace_file = self.workspace_file_path(workspace_id);
 
         if !workspace_file.exists() {
-            return Err(Error::generic(format!("Workspace {} does not exist", workspace_id)));
+            return Err(Error::not_found("Workspace", workspace_id));
         }
 
         // Ensure backup directory exists
         if !backup_dir.exists() {
             fs::create_dir_all(backup_dir)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to create backup directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("creating backup directory", e.to_string()))?;
         }
 
         // Create backup filename with timestamp
@@ -574,7 +574,7 @@ impl WorkspacePersistence {
         // Copy workspace file
         fs::copy(&workspace_file, &backup_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to create backup: {}", e)))?;
+            .map_err(|e| Error::io_with_context("creating backup", e.to_string()))?;
 
         Ok(backup_path)
     }
@@ -582,16 +582,16 @@ impl WorkspacePersistence {
     /// Restore workspace from backup
     pub async fn restore_workspace(&self, backup_path: &Path) -> Result<EntityId> {
         if !backup_path.exists() {
-            return Err(Error::generic(format!("Backup file does not exist: {:?}", backup_path)));
+            return Err(Error::not_found("Backup file", &*backup_path.to_string_lossy()));
         }
 
         // Load workspace from backup
         let content = fs::read_to_string(backup_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read backup file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading backup file", e.to_string()))?;
 
         let workspace: Workspace = serde_yaml::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to deserialize backup: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to deserialize backup: {}", e)))?;
 
         // Save restored workspace
         self.save_workspace(&workspace).await?;
@@ -609,12 +609,12 @@ impl WorkspacePersistence {
 
         let mut entries = fs::read_dir(backup_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read backup directory: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading backup directory", e.to_string()))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read backup entry: {}", e)))?
+            .map_err(|e| Error::io_with_context("reading backup entry", e.to_string()))?
         {
             let path = entry.path();
             if path.is_file() {
@@ -664,7 +664,7 @@ impl WorkspacePersistence {
         if !dry_run && !target_path.exists() {
             fs::create_dir_all(&target_path)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to create target directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("creating target directory", e.to_string()))?;
         }
 
         // Parse strategy
@@ -676,10 +676,10 @@ impl WorkspacePersistence {
                     let workspace_list = ids.split(',').map(|s| s.trim().to_string()).collect();
                     SyncStrategy::Selective(workspace_list)
                 } else {
-                    return Err(Error::generic("Selective strategy requires workspace IDs"));
+                    return Err(Error::validation("Selective strategy requires workspace IDs"));
                 }
             }
-            _ => return Err(Error::generic(format!("Unknown sync strategy: {}", strategy))),
+            _ => return Err(Error::validation(format!("Unknown sync strategy: {}", strategy))),
         };
 
         // Parse directory structure
@@ -687,7 +687,12 @@ impl WorkspacePersistence {
             "flat" => DirectoryStructure::Flat,
             "nested" => DirectoryStructure::Nested,
             "grouped" => DirectoryStructure::Grouped,
-            _ => return Err(Error::generic(format!("Unknown directory structure: {}", structure))),
+            _ => {
+                return Err(Error::validation(format!(
+                    "Unknown directory structure: {}",
+                    structure
+                )))
+            }
         };
 
         // Get workspaces to sync based on strategy
@@ -767,11 +772,11 @@ impl WorkspacePersistence {
                 if force || !file_path.exists() {
                     if !dry_run {
                         let content = serde_yaml::to_string(&export).map_err(|e| {
-                            Error::generic(format!("Failed to serialize workspace: {}", e))
+                            Error::config(format!("Failed to serialize workspace: {}", e))
                         })?;
 
                         fs::write(&file_path, content).await.map_err(|e| {
-                            Error::generic(format!("Failed to write workspace file: {}", e))
+                            Error::io_with_context("writing workspace file", e.to_string())
                         })?;
                     }
                     result.files_created += 1;
@@ -783,7 +788,7 @@ impl WorkspacePersistence {
                     target_dir.join(self.generate_filename(filename_pattern, workspace));
                 if !dry_run && !workspace_dir.exists() {
                     fs::create_dir_all(&workspace_dir).await.map_err(|e| {
-                        Error::generic(format!("Failed to create workspace directory: {}", e))
+                        Error::io_with_context("creating workspace directory", e.to_string())
                     })?;
                 }
 
@@ -794,11 +799,11 @@ impl WorkspacePersistence {
                 if force || !workspace_file.exists() {
                     if !dry_run {
                         let content = serde_yaml::to_string(&export).map_err(|e| {
-                            Error::generic(format!("Failed to serialize workspace: {}", e))
+                            Error::config(format!("Failed to serialize workspace: {}", e))
                         })?;
 
                         fs::write(&workspace_file, content).await.map_err(|e| {
-                            Error::generic(format!("Failed to write workspace file: {}", e))
+                            Error::io_with_context("writing workspace file", e.to_string())
                         })?;
                     }
                     result.files_created += 1;
@@ -808,7 +813,7 @@ impl WorkspacePersistence {
                 let requests_dir = workspace_dir.join("requests");
                 if !dry_run && !requests_dir.exists() {
                     fs::create_dir_all(&requests_dir).await.map_err(|e| {
-                        Error::generic(format!("Failed to create requests directory: {}", e))
+                        Error::io_with_context("creating requests directory", e.to_string())
                     })?;
                 }
 
@@ -826,7 +831,7 @@ impl WorkspacePersistence {
                     for dir in [&requests_dir, &workspaces_dir] {
                         if !dir.exists() {
                             fs::create_dir_all(dir).await.map_err(|e| {
-                                Error::generic(format!("Failed to create directory: {}", e))
+                                Error::io_with_context("creating directory", e.to_string())
                             })?;
                         }
                     }
@@ -840,11 +845,11 @@ impl WorkspacePersistence {
                 if force || !workspace_file.exists() {
                     if !dry_run {
                         let content = serde_yaml::to_string(&export).map_err(|e| {
-                            Error::generic(format!("Failed to serialize workspace: {}", e))
+                            Error::config(format!("Failed to serialize workspace: {}", e))
                         })?;
 
                         fs::write(&workspace_file, content).await.map_err(|e| {
-                            Error::generic(format!("Failed to write workspace file: {}", e))
+                            Error::io_with_context("writing workspace file", e.to_string())
                         })?;
                     }
                     result.files_created += 1;
@@ -898,11 +903,11 @@ impl WorkspacePersistence {
                 if !dry_run {
                     let exported = self.convert_request_to_exported(request, "");
                     let content = serde_yaml::to_string(&exported).map_err(|e| {
-                        Error::generic(format!("Failed to serialize request: {}", e))
+                        Error::config(format!("Failed to serialize request: {}", e))
                     })?;
 
                     fs::write(&file_path, content).await.map_err(|e| {
-                        Error::generic(format!("Failed to write request file: {}", e))
+                        Error::io_with_context("writing request file", e.to_string())
                     })?;
                 }
                 count += 1;
@@ -945,11 +950,11 @@ impl WorkspacePersistence {
                     if !dry_run {
                         let exported = self.convert_request_to_exported(request, &current_path);
                         let content = serde_yaml::to_string(&exported).map_err(|e| {
-                            Error::generic(format!("Failed to serialize request: {}", e))
+                            Error::config(format!("Failed to serialize request: {}", e))
                         })?;
 
                         fs::write(&file_path, content).await.map_err(|e| {
-                            Error::generic(format!("Failed to write request file: {}", e))
+                            Error::io_with_context("writing request file", e.to_string())
                         })?;
                     }
                     count += 1;
@@ -983,7 +988,7 @@ impl WorkspacePersistence {
 
         if !dry_run && !workspace_requests_dir.exists() {
             fs::create_dir_all(&workspace_requests_dir).await.map_err(|e| {
-                Error::generic(format!("Failed to create workspace requests directory: {}", e))
+                Error::io_with_context("creating workspace requests directory", e.to_string())
             })?;
         }
 
@@ -1009,7 +1014,7 @@ impl WorkspacePersistence {
         if !target_path.exists() {
             fs::create_dir_all(&target_path)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to create target directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("creating target directory", e.to_string()))?;
         }
 
         // Parse strategy
@@ -1021,10 +1026,10 @@ impl WorkspacePersistence {
                     let workspace_list = ids.split(',').map(|s| s.trim().to_string()).collect();
                     SyncStrategy::Selective(workspace_list)
                 } else {
-                    return Err(Error::generic("Selective strategy requires workspace IDs"));
+                    return Err(Error::validation("Selective strategy requires workspace IDs"));
                 }
             }
-            _ => return Err(Error::generic(format!("Unknown sync strategy: {}", strategy))),
+            _ => return Err(Error::validation(format!("Unknown sync strategy: {}", strategy))),
         };
 
         // Parse directory structure
@@ -1032,7 +1037,12 @@ impl WorkspacePersistence {
             "flat" => DirectoryStructure::Flat,
             "nested" => DirectoryStructure::Nested,
             "grouped" => DirectoryStructure::Grouped,
-            _ => return Err(Error::generic(format!("Unknown directory structure: {}", structure))),
+            _ => {
+                return Err(Error::validation(format!(
+                    "Unknown directory structure: {}",
+                    structure
+                )))
+            }
         };
 
         // Get workspaces to sync based on strategy
@@ -1131,11 +1141,11 @@ impl WorkspacePersistence {
 
                 if force || !file_path.exists() {
                     let content = serde_yaml::to_string(&export).map_err(|e| {
-                        Error::generic(format!("Failed to serialize workspace: {}", e))
+                        Error::config(format!("Failed to serialize workspace: {}", e))
                     })?;
 
                     fs::write(&file_path, content).await.map_err(|e| {
-                        Error::generic(format!("Failed to write workspace file: {}", e))
+                        Error::io_with_context("writing workspace file", e.to_string())
                     })?;
 
                     result.files_created += 1;
@@ -1146,7 +1156,7 @@ impl WorkspacePersistence {
                 let workspace_dir = target_dir.join(self.sanitize_filename(&workspace.name));
                 if !workspace_dir.exists() {
                     fs::create_dir_all(&workspace_dir).await.map_err(|e| {
-                        Error::generic(format!("Failed to create workspace directory: {}", e))
+                        Error::io_with_context("creating workspace directory", e.to_string())
                     })?;
                 }
 
@@ -1156,11 +1166,11 @@ impl WorkspacePersistence {
 
                 if force || !workspace_file.exists() {
                     let content = serde_yaml::to_string(&export).map_err(|e| {
-                        Error::generic(format!("Failed to serialize workspace: {}", e))
+                        Error::config(format!("Failed to serialize workspace: {}", e))
                     })?;
 
                     fs::write(&workspace_file, content).await.map_err(|e| {
-                        Error::generic(format!("Failed to write workspace file: {}", e))
+                        Error::io_with_context("writing workspace file", e.to_string())
                     })?;
 
                     result.files_created += 1;
@@ -1170,7 +1180,7 @@ impl WorkspacePersistence {
                 let requests_dir = workspace_dir.join("requests");
                 if !requests_dir.exists() {
                     fs::create_dir_all(&requests_dir).await.map_err(|e| {
-                        Error::generic(format!("Failed to create requests directory: {}", e))
+                        Error::io_with_context("creating requests directory", e.to_string())
                     })?;
                 }
 
@@ -1186,7 +1196,7 @@ impl WorkspacePersistence {
                 for dir in [&requests_dir, &workspaces_dir] {
                     if !dir.exists() {
                         fs::create_dir_all(dir).await.map_err(|e| {
-                            Error::generic(format!("Failed to create directory: {}", e))
+                            Error::io_with_context("creating directory", e.to_string())
                         })?;
                     }
                 }
@@ -1198,11 +1208,11 @@ impl WorkspacePersistence {
 
                 if force || !workspace_file.exists() {
                     let content = serde_yaml::to_string(&export).map_err(|e| {
-                        Error::generic(format!("Failed to serialize workspace: {}", e))
+                        Error::config(format!("Failed to serialize workspace: {}", e))
                     })?;
 
                     fs::write(&workspace_file, content).await.map_err(|e| {
-                        Error::generic(format!("Failed to write workspace file: {}", e))
+                        Error::io_with_context("writing workspace file", e.to_string())
                     })?;
 
                     result.files_created += 1;
@@ -1334,7 +1344,7 @@ impl WorkspacePersistence {
     ) -> Result<EncryptedExportResult> {
         // Check if encryption is enabled for this workspace
         if !workspace.config.auto_encryption.enabled {
-            return Err(Error::generic("Encryption is not enabled for this workspace. Enable encryption in workspace settings first."));
+            return Err(Error::invalid_state("Encryption is not enabled for this workspace. Enable encryption in workspace settings first."));
         }
 
         // Get auto-encryption config
@@ -1352,7 +1362,7 @@ impl WorkspacePersistence {
 
         // Encrypt the entire export
         let export_json = serde_json::to_string_pretty(&export)
-            .map_err(|e| Error::generic(format!("Failed to serialize export: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize export: {}", e)))?;
 
         let encrypted_data = utils::encrypt_for_workspace(&workspace.id, &export_json)?;
 
@@ -1363,7 +1373,7 @@ impl WorkspacePersistence {
         // Write encrypted data to file
         fs::write(output_path, &encrypted_data)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write encrypted export: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing encrypted export", e.to_string()))?;
 
         Ok(EncryptedExportResult {
             output_path: output_path.to_path_buf(),
@@ -1384,11 +1394,11 @@ impl WorkspacePersistence {
         // Read encrypted data
         let _encrypted_data = fs::read_to_string(encrypted_file)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read encrypted file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading encrypted file", e.to_string()))?;
 
         // For import, we need the workspace ID and backup key
         // This would typically be provided by the user or extracted from metadata
-        Err(Error::generic("Encrypted import requires workspace ID and backup key. Use import_workspace_encrypted_with_key instead."))
+        Err(Error::validation("Encrypted import requires workspace ID and backup key. Use import_workspace_encrypted_with_key instead."))
     }
 
     /// Import encrypted workspace with specific workspace ID and backup key
@@ -1409,13 +1419,13 @@ impl WorkspacePersistence {
         // Read and decrypt the data
         let encrypted_data = fs::read_to_string(encrypted_file)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read encrypted file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading encrypted file", e.to_string()))?;
 
         let decrypted_json = utils::decrypt_for_workspace(workspace_id, &encrypted_data)?;
 
         // Parse the export data
         let export: WorkspaceExport = serde_json::from_str(&decrypted_json)
-            .map_err(|e| Error::generic(format!("Failed to parse decrypted export: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse decrypted export: {}", e)))?;
 
         // Convert export to workspace
         let workspace = self.convert_export_to_workspace(&export, workspace_name)?;
@@ -1507,7 +1517,7 @@ impl WorkspacePersistence {
             "PATCH" => Ok(crate::routing::HttpMethod::PATCH),
             "HEAD" => Ok(crate::routing::HttpMethod::HEAD),
             "OPTIONS" => Ok(crate::routing::HttpMethod::OPTIONS),
-            _ => Err(Error::generic(format!("Unknown HTTP method: {}", method_str))),
+            _ => Err(Error::validation(format!("Unknown HTTP method: {}", method_str))),
         }
     }
 
@@ -1680,11 +1690,11 @@ impl WorkspacePersistence {
             if force || !file_path.exists() {
                 let exported = self.convert_request_to_exported(request, "");
                 let content = serde_yaml::to_string(&exported)
-                    .map_err(|e| Error::generic(format!("Failed to serialize request: {}", e)))?;
+                    .map_err(|e| Error::config(format!("Failed to serialize request: {}", e)))?;
 
                 fs::write(&file_path, content)
                     .await
-                    .map_err(|e| Error::generic(format!("Failed to write request file: {}", e)))?;
+                    .map_err(|e| Error::io_with_context("writing request file", e.to_string()))?;
 
                 count += 1;
             }
@@ -1722,11 +1732,11 @@ impl WorkspacePersistence {
                 if force || !file_path.exists() {
                     let exported = self.convert_request_to_exported(request, &current_path);
                     let content = serde_yaml::to_string(&exported).map_err(|e| {
-                        Error::generic(format!("Failed to serialize request: {}", e))
+                        Error::config(format!("Failed to serialize request: {}", e))
                     })?;
 
                     fs::write(&file_path, content).await.map_err(|e| {
-                        Error::generic(format!("Failed to write request file: {}", e))
+                        Error::io_with_context("writing request file", e.to_string())
                     })?;
 
                     count += 1;
@@ -1759,7 +1769,7 @@ impl WorkspacePersistence {
 
         if !workspace_requests_dir.exists() {
             fs::create_dir_all(&workspace_requests_dir).await.map_err(|e| {
-                Error::generic(format!("Failed to create workspace requests directory: {}", e))
+                Error::io_with_context("creating workspace requests directory", e.to_string())
             })?;
         }
 
@@ -1788,11 +1798,11 @@ impl WorkspacePersistence {
 
         let metadata_file = target_dir.join(".mockforge-meta.json");
         let content = serde_json::to_string_pretty(&metadata)
-            .map_err(|e| Error::generic(format!("Failed to serialize metadata: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize metadata: {}", e)))?;
 
         fs::write(&metadata_file, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write metadata file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing metadata file", e.to_string()))?;
 
         Ok(())
     }
@@ -1813,22 +1823,22 @@ impl WorkspacePersistence {
             || output_path.extension().and_then(|s| s.to_str()) == Some("yml")
         {
             serde_yaml::to_string(preset)
-                .map_err(|e| Error::generic(format!("Failed to serialize preset to YAML: {}", e)))?
+                .map_err(|e| Error::config(format!("Failed to serialize preset to YAML: {}", e)))?
         } else {
             serde_json::to_string_pretty(preset)
-                .map_err(|e| Error::generic(format!("Failed to serialize preset to JSON: {}", e)))?
+                .map_err(|e| Error::config(format!("Failed to serialize preset to JSON: {}", e)))?
         };
 
         // Ensure parent directory exists
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to create preset directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("creating preset directory", e.to_string()))?;
         }
 
         fs::write(output_path, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write preset file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing preset file", e.to_string()))?;
 
         Ok(())
     }
@@ -1840,7 +1850,7 @@ impl WorkspacePersistence {
     pub async fn import_reality_preset(&self, input_path: &Path) -> Result<crate::RealityPreset> {
         let content = fs::read_to_string(input_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read preset file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading preset file", e.to_string()))?;
 
         // Determine format from file extension
         let preset = if input_path
@@ -1850,11 +1860,11 @@ impl WorkspacePersistence {
             .unwrap_or(false)
         {
             serde_yaml::from_str(&content).map_err(|e| {
-                Error::generic(format!("Failed to deserialize preset from YAML: {}", e))
+                Error::config(format!("Failed to deserialize preset from YAML: {}", e))
             })?
         } else {
             serde_json::from_str(&content).map_err(|e| {
-                Error::generic(format!("Failed to deserialize preset from JSON: {}", e))
+                Error::config(format!("Failed to deserialize preset from JSON: {}", e))
             })?
         };
 
@@ -1878,12 +1888,12 @@ impl WorkspacePersistence {
         let mut presets = Vec::new();
         let mut entries = fs::read_dir(&presets_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read presets directory: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading presets directory", e.to_string()))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?
         {
             let path = entry.path();
             if path.is_file() {

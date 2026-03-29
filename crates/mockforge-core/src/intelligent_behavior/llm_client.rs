@@ -47,7 +47,7 @@ impl LlmClient {
             "anthropic" => Ok(Box::new(AnthropicProvider::new(&self.config)?)),
             "ollama" => Ok(Box::new(OllamaProvider::new(&self.config)?)),
             "openai-compatible" => Ok(Box::new(OpenAICompatibleProvider::new(&self.config)?)),
-            _ => Err(crate::Error::generic(format!(
+            _ => Err(crate::Error::internal(format!(
                 "Unsupported LLM provider: {}",
                 self.config.llm_provider
             ))),
@@ -61,7 +61,7 @@ impl LlmClient {
         let engine = self.rag_engine.read().await;
         let provider = engine
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM provider not initialized"))?;
+            .ok_or_else(|| crate::Error::internal("LLM provider not initialized"))?;
 
         // Build messages
         let messages = vec![
@@ -113,7 +113,7 @@ impl LlmClient {
         let engine = self.rag_engine.read().await;
         let provider = engine
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM provider not initialized"))?;
+            .ok_or_else(|| crate::Error::internal("LLM provider not initialized"))?;
 
         // Build messages
         let messages = vec![
@@ -241,7 +241,7 @@ impl OpenAIProvider {
             .api_key
             .clone()
             .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .ok_or_else(|| crate::Error::generic("OpenAI API key not found"))?;
+            .ok_or_else(|| crate::Error::internal("OpenAI API key not found"))?;
 
         let endpoint = config
             .api_endpoint
@@ -285,21 +285,21 @@ impl LlmProvider for OpenAIProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| crate::Error::generic(format!("OpenAI API request failed: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("OpenAI API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("OpenAI API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+            crate::Error::internal(format!("Failed to parse OpenAI response: {}", e))
         })?;
 
         // Extract content from response
         let content = response_json["choices"][0]["message"]["content"]
             .as_str()
-            .ok_or_else(|| crate::Error::generic("Invalid OpenAI response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid OpenAI response format"))?
             .to_string();
 
         Ok(content)
@@ -331,21 +331,21 @@ impl LlmProvider for OpenAIProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| crate::Error::generic(format!("OpenAI API request failed: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("OpenAI API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("OpenAI API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("OpenAI API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to parse OpenAI response: {}", e))
+            crate::Error::internal(format!("Failed to parse OpenAI response: {}", e))
         })?;
 
         // Extract content from response
         let content = response_json["choices"][0]["message"]["content"]
             .as_str()
-            .ok_or_else(|| crate::Error::generic("Invalid OpenAI response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid OpenAI response format"))?
             .to_string();
 
         // Extract usage information
@@ -416,21 +416,21 @@ impl LlmProvider for OllamaProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| crate::Error::generic(format!("Ollama API request failed: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("Ollama API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("Ollama API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("Ollama API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to parse Ollama response: {}", e))
+            crate::Error::internal(format!("Failed to parse Ollama response: {}", e))
         })?;
 
         // Extract content from response
         let content = response_json["message"]["content"]
             .as_str()
-            .ok_or_else(|| crate::Error::generic("Invalid Ollama response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid Ollama response format"))?
             .to_string();
 
         Ok(content)
@@ -451,7 +451,7 @@ impl AnthropicProvider {
             .api_key
             .clone()
             .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-            .ok_or_else(|| crate::Error::generic("Anthropic API key not found"))?;
+            .ok_or_else(|| crate::Error::internal("Anthropic API key not found"))?;
 
         let endpoint = config
             .api_endpoint
@@ -510,21 +510,21 @@ impl LlmProvider for AnthropicProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| crate::Error::generic(format!("Anthropic API request failed: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("Anthropic API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("Anthropic API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("Anthropic API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to parse Anthropic response: {}", e))
+            crate::Error::internal(format!("Failed to parse Anthropic response: {}", e))
         })?;
 
         // Extract content from response
         let content = response_json["content"][0]["text"]
             .as_str()
-            .ok_or_else(|| crate::Error::generic("Invalid Anthropic response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid Anthropic response format"))?
             .to_string();
 
         Ok(content)
@@ -542,7 +542,7 @@ struct OpenAICompatibleProvider {
 impl OpenAICompatibleProvider {
     fn new(config: &BehaviorModelConfig) -> Result<Self> {
         let endpoint = config.api_endpoint.clone().ok_or_else(|| {
-            crate::Error::generic("API endpoint required for OpenAI-compatible provider")
+            crate::Error::internal("API endpoint required for OpenAI-compatible provider")
         })?;
 
         Ok(Self {
@@ -585,23 +585,23 @@ impl LlmProvider for OpenAICompatibleProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| crate::Error::generic(format!("API request failed: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("API request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to parse API response: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("Failed to parse API response: {}", e)))?;
 
         // Extract content (try both OpenAI and Ollama formats)
         let content = response_json["choices"][0]["message"]["content"]
             .as_str()
             .or_else(|| response_json["message"]["content"].as_str())
-            .ok_or_else(|| crate::Error::generic("Invalid API response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid API response format"))?
             .to_string();
 
         Ok(content)

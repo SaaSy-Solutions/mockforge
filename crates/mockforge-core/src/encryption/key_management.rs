@@ -110,7 +110,10 @@ impl FileKeyStorage {
     fn ensure_base_dir(&self) -> EncryptionResult<()> {
         if !self.base_path.exists() {
             std::fs::create_dir_all(&self.base_path).map_err(|e| {
-                EncryptionError::generic(format!("Failed to create key storage directory: {}", e))
+                EncryptionError::key_store_error(format!(
+                    "Failed to create key storage directory: {}",
+                    e
+                ))
             })?;
         }
         Ok(())
@@ -122,7 +125,7 @@ impl FileKeyStorage {
         tokio::task::spawn_blocking(move || {
             if !base_path.exists() {
                 std::fs::create_dir_all(&base_path).map_err(|e| {
-                    EncryptionError::generic(format!(
+                    EncryptionError::key_store_error(format!(
                         "Failed to create key storage directory: {}",
                         e
                     ))
@@ -132,7 +135,7 @@ impl FileKeyStorage {
             }
         })
         .await
-        .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
+        .map_err(|e| EncryptionError::key_store_error(format!("Task join error: {}", e)))?
     }
 
     /// Store a key asynchronously (non-blocking)
@@ -148,11 +151,11 @@ impl FileKeyStorage {
 
         tokio::task::spawn_blocking(move || {
             std::fs::write(&file_path, encrypted_key).map_err(|e| {
-                EncryptionError::generic(format!("Failed to store key {}: {}", key_id, e))
+                EncryptionError::key_store_error(format!("Failed to store key {}: {}", key_id, e))
             })
         })
         .await
-        .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
+        .map_err(|e| EncryptionError::key_store_error(format!("Task join error: {}", e)))?
     }
 
     /// Retrieve a key asynchronously (non-blocking)
@@ -165,12 +168,15 @@ impl FileKeyStorage {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     EncryptionError::key_not_found(key_id)
                 } else {
-                    EncryptionError::generic(format!("Failed to read key {}: {}", key_id, e))
+                    EncryptionError::key_store_error(format!(
+                        "Failed to read key {}: {}",
+                        key_id, e
+                    ))
                 }
             })
         })
         .await
-        .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
+        .map_err(|e| EncryptionError::key_store_error(format!("Task join error: {}", e)))?
     }
 
     /// Delete a key asynchronously (non-blocking)
@@ -181,12 +187,13 @@ impl FileKeyStorage {
         tokio::task::spawn_blocking(move || match std::fs::remove_file(&file_path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => {
-                Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e)))
-            }
+            Err(e) => Err(EncryptionError::key_store_error(format!(
+                "Failed to delete key {}: {}",
+                key_id, e
+            ))),
         })
         .await
-        .map_err(|e| EncryptionError::generic(format!("Task join error: {}", e)))?
+        .map_err(|e| EncryptionError::key_store_error(format!("Task join error: {}", e)))?
     }
 }
 
@@ -194,8 +201,9 @@ impl KeyStorage for FileKeyStorage {
     fn store_key(&mut self, key_id: &KeyId, encrypted_key: &[u8]) -> EncryptionResult<()> {
         self.ensure_base_dir()?;
         let file_path = self.key_file_path(key_id);
-        std::fs::write(&file_path, encrypted_key)
-            .map_err(|e| EncryptionError::generic(format!("Failed to store key {}: {}", key_id, e)))
+        std::fs::write(&file_path, encrypted_key).map_err(|e| {
+            EncryptionError::key_store_error(format!("Failed to store key {}: {}", key_id, e))
+        })
     }
 
     fn retrieve_key(&self, key_id: &KeyId) -> EncryptionResult<Vec<u8>> {
@@ -204,7 +212,7 @@ impl KeyStorage for FileKeyStorage {
             if e.kind() == std::io::ErrorKind::NotFound {
                 EncryptionError::key_not_found(key_id.clone())
             } else {
-                EncryptionError::generic(format!("Failed to read key {}: {}", key_id, e))
+                EncryptionError::key_store_error(format!("Failed to read key {}: {}", key_id, e))
             }
         })
     }
@@ -214,9 +222,10 @@ impl KeyStorage for FileKeyStorage {
         match std::fs::remove_file(&file_path) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()), // Key doesn't exist, consider it deleted
-            Err(e) => {
-                Err(EncryptionError::generic(format!("Failed to delete key {}: {}", key_id, e)))
-            }
+            Err(e) => Err(EncryptionError::key_store_error(format!(
+                "Failed to delete key {}: {}",
+                key_id, e
+            ))),
         }
     }
 
@@ -335,7 +344,7 @@ impl KeyStore {
         purpose: String,
     ) -> EncryptionResult<()> {
         if self.storage.key_exists(&key_id) {
-            return Err(EncryptionError::generic(format!("Key {} already exists", key_id)));
+            return Err(EncryptionError::key_store_error(format!("Key {} already exists", key_id)));
         }
 
         // Generate the key
@@ -425,7 +434,7 @@ impl KeyStore {
             .clone();
 
         if !old_metadata.is_active {
-            return Err(EncryptionError::generic(format!("Key {} is not active", key_id)));
+            return Err(EncryptionError::key_store_error(format!("Key {} is not active", key_id)));
         }
 
         // Generate new key with same algorithm

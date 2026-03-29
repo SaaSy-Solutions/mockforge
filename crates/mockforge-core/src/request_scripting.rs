@@ -75,7 +75,7 @@ impl ScriptEngine {
     ) -> Result<ScriptResult> {
         let _permit =
             self.semaphore.acquire().await.map_err(|e| {
-                Error::generic(format!("Failed to acquire execution permit: {}", e))
+                Error::internal(format!("Failed to acquire execution permit: {}", e))
             })?;
 
         let script = script.to_string();
@@ -106,10 +106,10 @@ impl ScriptEngine {
                     Ok(script_result)
                 }
                 Ok(Err(e)) => Err(e),
-                Err(e) => Err(Error::generic(format!("Script execution task failed: {}", e))),
+                Err(e) => Err(Error::internal(format!("Script execution task failed: {}", e))),
             },
             Err(_) => {
-                Err(Error::generic(format!("Script execution timed out after {}ms", timeout_ms)))
+                Err(Error::internal(format!("Script execution timed out after {}ms", timeout_ms)))
             }
         }
     }
@@ -120,42 +120,42 @@ impl ScriptEngine {
 fn execute_script_in_runtime(script: &str, script_context: &ScriptContext) -> Result<ScriptResult> {
     // Create JavaScript runtime with proper error handling
     let runtime = Runtime::new()
-        .map_err(|e| Error::generic(format!("Failed to create JavaScript runtime: {:?}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to create JavaScript runtime: {:?}", e)))?;
 
     let context = Context::full(&runtime)
-        .map_err(|e| Error::generic(format!("Failed to create JavaScript context: {:?}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to create JavaScript context: {:?}", e)))?;
 
     context.with(|ctx| {
         // Create the global context object with proper error handling
         let global = ctx.globals();
         let mockforge_obj = Object::new(ctx.clone())
-            .map_err(|e| Error::generic(format!("Failed to create mockforge object: {:?}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create mockforge object: {:?}", e)))?;
 
         // Expose context data
         expose_script_context(ctx.clone(), &mockforge_obj, script_context)
-            .map_err(|e| Error::generic(format!("Failed to expose script context: {:?}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to expose script context: {:?}", e)))?;
 
         // Add the mockforge object to global scope
         global.set("mockforge", mockforge_obj).map_err(|e| {
-            Error::generic(format!("Failed to set global mockforge object: {:?}", e))
+            Error::internal(format!("Failed to set global mockforge object: {:?}", e))
         })?;
 
         // Add utility functions
         add_global_functions(ctx.clone(), &global, script_context)
-            .map_err(|e| Error::generic(format!("Failed to add global functions: {:?}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to add global functions: {:?}", e)))?;
 
         // Execute the script
         let result = ctx
             .eval(script)
-            .map_err(|e| Error::generic(format!("Script execution failed: {:?}", e)))?;
+            .map_err(|e| Error::internal(format!("Script execution failed: {:?}", e)))?;
 
         // Extract modified variables and return value
         let modified_vars = extract_modified_variables(&ctx, script_context).map_err(|e| {
-            Error::generic(format!("Failed to extract modified variables: {:?}", e))
+            Error::internal(format!("Failed to extract modified variables: {:?}", e))
         })?;
 
         let return_value = extract_return_value(&ctx, &result)
-            .map_err(|e| Error::generic(format!("Failed to extract return value: {:?}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to extract return value: {:?}", e)))?;
 
         Ok(ScriptResult {
             return_value,
@@ -316,7 +316,7 @@ fn expose_script_context<'js>(
         // Body
         if let Some(body) = &request.body {
             let body_json = serde_json::to_string(body)
-                .map_err(|e| Error::generic(format!("Failed to serialize request body: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to serialize request body: {}", e)))?;
             request_obj.set("body", body_json)?;
         }
 
@@ -338,8 +338,9 @@ fn expose_script_context<'js>(
 
         // Response body
         if let Some(body) = &response.body {
-            let body_json = serde_json::to_string(body)
-                .map_err(|e| Error::generic(format!("Failed to serialize response body: {}", e)))?;
+            let body_json = serde_json::to_string(body).map_err(|e| {
+                Error::internal(format!("Failed to serialize response body: {}", e))
+            })?;
             response_obj.set("body", body_json)?;
         }
 
@@ -361,12 +362,12 @@ fn expose_script_context<'js>(
             Value::Bool(b) => chain_obj.set(key.as_str(), *b)?,
             Value::Object(obj) => {
                 let json_str = serde_json::to_string(&obj)
-                    .map_err(|e| Error::generic(format!("Failed to serialize object: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to serialize object: {}", e)))?;
                 chain_obj.set(key.as_str(), json_str)?;
             }
             Value::Array(arr) => {
                 let json_str = serde_json::to_string(&arr)
-                    .map_err(|e| Error::generic(format!("Failed to serialize array: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to serialize array: {}", e)))?;
                 chain_obj.set(key.as_str(), json_str)?;
             }
             _ => {} // Skip null values and other types
@@ -389,7 +390,7 @@ fn expose_script_context<'js>(
             Value::Bool(b) => vars_obj.set(key.as_str(), *b)?,
             _ => {
                 let json_str = serde_json::to_string(&value).map_err(|e| {
-                    Error::generic(format!("Failed to serialize variable {}: {}", key, e))
+                    Error::internal(format!("Failed to serialize variable {}: {}", key, e))
                 })?;
                 vars_obj.set(key.as_str(), json_str)?;
             }

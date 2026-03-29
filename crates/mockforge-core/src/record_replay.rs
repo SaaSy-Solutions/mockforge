@@ -81,11 +81,14 @@ impl ReplayHandler {
         }
 
         let content = fs::read_to_string(&fixture_path).await.map_err(|e| {
-            Error::generic(format!("Failed to read fixture {}: {}", fixture_path.display(), e))
+            Error::io_with_context(
+                format!("reading fixture {}", fixture_path.display()),
+                e.to_string(),
+            )
         })?;
 
         let recorded_request: RecordedRequest = serde_json::from_str(&content).map_err(|e| {
-            Error::generic(format!("Failed to parse fixture {}: {}", fixture_path.display(), e))
+            Error::config(format!("Failed to parse fixture {}: {}", fixture_path.display(), e))
         })?;
 
         Ok(Some(recorded_request))
@@ -145,7 +148,10 @@ impl RecordHandler {
         // Create directory if it doesn't exist
         if let Some(parent) = fixture_path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
-                Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+                Error::io_with_context(
+                    format!("creating directory {}", parent.display()),
+                    e.to_string(),
+                )
             })?;
         }
 
@@ -168,10 +174,13 @@ impl RecordHandler {
         };
 
         let content = serde_json::to_string_pretty(&recorded_request)
-            .map_err(|e| Error::generic(format!("Failed to serialize recorded request: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to serialize recorded request: {}", e)))?;
 
         fs::write(&fixture_path, content).await.map_err(|e| {
-            Error::generic(format!("Failed to write fixture {}: {}", fixture_path.display(), e))
+            Error::io_with_context(
+                format!("writing fixture {}", fixture_path.display()),
+                e.to_string(),
+            )
         })?;
 
         tracing::info!("Recorded request to {}", fixture_path.display());
@@ -239,11 +248,11 @@ pub async fn list_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequest>> 
     // Use globwalk to find all JSON files recursively
     let walker = globwalk::GlobWalkerBuilder::from_patterns(&http_dir, &["**/*.json"])
         .build()
-        .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
+        .map_err(|e| Error::io_with_context("building glob walker for fixtures", e.to_string()))?;
 
     for entry in walker {
         let entry =
-            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            entry.map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?;
         let path = entry.path();
 
         if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
@@ -277,12 +286,12 @@ pub async fn clean_old_fixtures(fixtures_dir: &Path, older_than_days: u32) -> Re
 
     let mut entries = fs::read_dir(&http_dir)
         .await
-        .map_err(|e| Error::generic(format!("Failed to read fixtures directory: {}", e)))?;
+        .map_err(|e| Error::io_with_context("reading fixtures directory", e.to_string()))?;
 
     while let Some(entry) = entries
         .next_entry()
         .await
-        .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+        .map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?
     {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
@@ -323,11 +332,11 @@ pub async fn list_ready_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequ
     // Use globwalk to find all JSON files recursively
     let walker = globwalk::GlobWalkerBuilder::from_patterns(&http_dir, &["**/*.json"])
         .build()
-        .map_err(|e| Error::generic(format!("Failed to build glob walker: {}", e)))?;
+        .map_err(|e| Error::io_with_context("building glob walker for fixtures", e.to_string()))?;
 
     for entry in walker {
         let entry =
-            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+            entry.map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?;
         let path = entry.path();
 
         if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {

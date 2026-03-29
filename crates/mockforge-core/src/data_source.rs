@@ -94,7 +94,10 @@ impl DataSource for LocalDataSource {
         debug!("Loading data from local file: {}", self.path.display());
 
         let content = tokio::fs::read(&self.path).await.map_err(|e| {
-            Error::generic(format!("Failed to read local file {}: {}", self.path.display(), e))
+            Error::io_with_context(
+                format!("reading local file {}", self.path.display()),
+                e.to_string(),
+            )
         })?;
 
         let content_type =
@@ -167,7 +170,7 @@ impl GitDataSource {
             let clean = last.split('?').next().unwrap_or(last);
             Ok(clean.to_string())
         } else {
-            Err(Error::generic(format!("Invalid Git repository URL: {}", url)))
+            Err(Error::config(format!("Invalid Git repository URL: {}", url)))
         }
     }
 
@@ -179,7 +182,7 @@ impl GitDataSource {
         if let Some(parent) = self.repo_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to create cache directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("creating cache directory", e.to_string()))?;
         }
 
         if self.repo_path.exists() {
@@ -192,7 +195,7 @@ impl GitDataSource {
             let output = Command::new("git")
                 .args(["-C", repo_path_str, "fetch", "origin", branch])
                 .output()
-                .map_err(|e| Error::generic(format!("Failed to fetch: {}", e)))?;
+                .map_err(|e| Error::io_with_context("git fetch", e.to_string()))?;
 
             if !output.status.success() {
                 warn!("Git fetch failed, continuing anyway");
@@ -208,11 +211,11 @@ impl GitDataSource {
                     &format!("origin/{}", branch),
                 ])
                 .output()
-                .map_err(|e| Error::generic(format!("Failed to reset: {}", e)))?;
+                .map_err(|e| Error::io_with_context("git reset", e.to_string()))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(Error::generic(format!("Git reset failed: {}", stderr)));
+                return Err(Error::io_with_context("git reset", stderr.to_string()));
             }
         } else {
             // Clone repository
@@ -237,11 +240,11 @@ impl GitDataSource {
                     repo_path_str,
                 ])
                 .output()
-                .map_err(|e| Error::generic(format!("Failed to clone: {}", e)))?;
+                .map_err(|e| Error::io_with_context("git clone", e.to_string()))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Err(Error::generic(format!("Git clone failed: {}", stderr)));
+                return Err(Error::io_with_context("git clone", stderr.to_string()));
             }
         }
 
@@ -272,22 +275,22 @@ impl DataSource for GitDataSource {
         let file_path = if let Some(ref path) = self.config.path {
             self.repo_path.join(path)
         } else {
-            return Err(Error::generic(
+            return Err(Error::config(
                 "Git data source requires a 'path' to specify the file within the repository"
                     .to_string(),
             ));
         };
 
         if !file_path.exists() {
-            return Err(Error::generic(format!(
-                "File not found in Git repository: {}",
-                file_path.display()
-            )));
+            return Err(Error::not_found(
+                "file in Git repository".to_string(),
+                file_path.display().to_string(),
+            ));
         }
 
         // Load file content
         let content = tokio::fs::read(&file_path).await.map_err(|e| {
-            Error::generic(format!("Failed to read file from Git repository: {}", e))
+            Error::io_with_context("reading file from Git repository", e.to_string())
         })?;
 
         let content_type =
@@ -347,7 +350,7 @@ impl DataSource for GitDataSource {
                 &format!("HEAD..origin/{}", branch),
             ])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to check for updates: {}", e)))?;
+            .map_err(|e| Error::io_with_context("checking git for updates", e.to_string()))?;
 
         if output.status.success() {
             if let Ok(count_str) = String::from_utf8(output.stdout) {
@@ -397,7 +400,7 @@ impl HttpDataSource {
         }
 
         let response = request.send().await.map_err(|e| {
-            Error::generic(format!("Failed to fetch data from {}: {}", self.url, e))
+            Error::internal(format!("Failed to fetch data from {}: {}", self.url, e))
         })?;
 
         // Extract status and content type before consuming the response
@@ -405,7 +408,7 @@ impl HttpDataSource {
         let status_code = status.as_u16();
 
         if !status.is_success() {
-            return Err(Error::generic(format!("HTTP request failed with status {}", status)));
+            return Err(Error::internal(format!("HTTP request failed with status {}", status)));
         }
 
         let content_type = response
@@ -417,7 +420,7 @@ impl HttpDataSource {
         let content = response
             .bytes()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?
+            .map_err(|e| Error::internal(format!("Failed to read response body: {}", e)))?
             .to_vec();
 
         let mut metadata = HashMap::new();
@@ -525,20 +528,14 @@ impl DataSourceManager {
 
     /// Load data from a named source
     pub async fn load(&self, name: &str) -> Result<DataSourceContent> {
-        let source = self
-            .sources
-            .get(name)
-            .ok_or_else(|| Error::generic(format!("Data source '{}' not found", name)))?;
+        let source = self.sources.get(name).ok_or_else(|| Error::not_found("data source", name))?;
 
         source.load().await
     }
 
     /// Check if a source has been updated
     pub async fn check_updated(&self, name: &str) -> Result<bool> {
-        let source = self
-            .sources
-            .get(name)
-            .ok_or_else(|| Error::generic(format!("Data source '{}' not found", name)))?;
+        let source = self.sources.get(name).ok_or_else(|| Error::not_found("data source", name))?;
 
         source.check_updated().await
     }

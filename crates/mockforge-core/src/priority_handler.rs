@@ -67,6 +67,38 @@ pub struct BehavioralReplayResponse {
     pub content_type: String,
 }
 
+/// Request context passed to each priority step
+pub struct PriorityRequest<'a> {
+    /// HTTP method
+    pub method: &'a Method,
+    /// Request URI
+    pub uri: &'a Uri,
+    /// Request headers
+    pub headers: &'a HeaderMap,
+    /// Request body
+    pub body: Option<&'a [u8]>,
+    /// Pre-computed request fingerprint (normalized path)
+    pub fingerprint: &'a RequestFingerprint,
+}
+
+/// A step in the priority handler chain.
+///
+/// Each step checks if it can handle the request. Steps are executed in priority
+/// order (lower number = higher priority). The first step that returns
+/// `Ok(Some(response))` wins; `Ok(None)` continues to the next step.
+#[async_trait]
+pub trait PriorityStep: Send + Sync {
+    /// Human-readable name for logging
+    fn name(&self) -> &str;
+
+    /// Numeric priority (lower = higher priority). Steps are sorted ascending.
+    fn priority(&self) -> u16;
+
+    /// Try to handle the request. Returns `Ok(Some(response))` to short-circuit
+    /// the chain, `Ok(None)` to pass to the next step, or `Err` to abort.
+    async fn try_handle(&self, req: &PriorityRequest<'_>) -> Result<Option<PriorityResponse>>;
+}
+
 /// Priority-based HTTP request handler
 pub struct PriorityHttpHandler {
     /// Custom fixture loader (simple format fixtures)
@@ -920,6 +952,110 @@ impl PriorityResponse {
         }
 
         response
+    }
+}
+
+// ── PriorityStep implementations ──────────────────────────────────────────────
+
+/// Custom fixture lookup step (priority 0 — highest)
+pub struct CustomFixtureStep {
+    loader: Arc<CustomFixtureLoader>,
+}
+
+impl CustomFixtureStep {
+    /// Create a new custom fixture step
+    pub fn new(loader: Arc<CustomFixtureLoader>) -> Self {
+        Self { loader }
+    }
+}
+
+#[async_trait]
+impl PriorityStep for CustomFixtureStep {
+    fn name(&self) -> &str {
+        "custom_fixture"
+    }
+    fn priority(&self) -> u16 {
+        0
+    }
+    async fn try_handle(&self, req: &PriorityRequest<'_>) -> Result<Option<PriorityResponse>> {
+        if let Some(custom_fixture) = self.loader.load_fixture(req.fingerprint) {
+            if custom_fixture.delay_ms > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(custom_fixture.delay_ms))
+                    .await;
+            }
+
+            let response_body = match custom_fixture.response.as_str() {
+                Some(s) => s.to_string(),
+                None => serde_json::to_string(&custom_fixture.response)
+                    .map_err(|e| Error::internal(format!("Failed to serialize fixture: {}", e)))?,
+            };
+
+            let content_type = custom_fixture
+                .headers
+                .get("content-type")
+                .cloned()
+                .unwrap_or_else(|| "application/json".to_string());
+
+            return Ok(Some(PriorityResponse {
+                source: ResponseSource::new(ResponsePriority::Replay, "custom_fixture".to_string())
+                    .with_metadata("fixture_path".to_string(), custom_fixture.path.clone()),
+                status_code: custom_fixture.status,
+                headers: custom_fixture.headers.clone(),
+                body: response_body.into_bytes(),
+                content_type,
+            }));
+        }
+        Ok(None)
+    }
+}
+
+/// Global/tag-based failure injection step (priority 300)
+pub struct FailureInjectionStep {
+    injector: FailureInjector,
+    spec: Option<crate::openapi::spec::OpenApiSpec>,
+}
+
+impl FailureInjectionStep {
+    /// Create a new failure injection step
+    pub fn new(injector: FailureInjector, spec: Option<crate::openapi::spec::OpenApiSpec>) -> Self {
+        Self { injector, spec }
+    }
+}
+
+#[async_trait]
+impl PriorityStep for FailureInjectionStep {
+    fn name(&self) -> &str {
+        "failure_injection"
+    }
+    fn priority(&self) -> u16 {
+        300
+    }
+    async fn try_handle(&self, req: &PriorityRequest<'_>) -> Result<Option<PriorityResponse>> {
+        let tags = if let Some(ref spec) = self.spec {
+            req.fingerprint.openapi_tags(spec).unwrap_or_else(|| req.fingerprint.tags())
+        } else {
+            req.fingerprint.tags()
+        };
+        if let Some((status_code, error_message)) = self.injector.process_request(&tags) {
+            let error_response = serde_json::json!({
+                "error": error_message,
+                "injected_failure": true,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+
+            return Ok(Some(PriorityResponse {
+                source: ResponseSource::new(
+                    ResponsePriority::Fail,
+                    "failure_injection".to_string(),
+                )
+                .with_metadata("error_message".to_string(), error_message),
+                status_code,
+                headers: HashMap::new(),
+                body: serde_json::to_string(&error_response)?.into_bytes(),
+                content_type: "application/json".to_string(),
+            }));
+        }
+        Ok(None)
     }
 }
 

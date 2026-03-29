@@ -75,7 +75,7 @@ impl ChainExecutionEngine {
             .timeout(Duration::from_secs(config.global_timeout_secs))
             .build()
             .map_err(|e| {
-                Error::generic(format!(
+                Error::internal(format!(
                     "Failed to create HTTP client: {}. \
                 Check that the timeout value ({}) is valid.",
                     e, config.global_timeout_secs
@@ -102,7 +102,7 @@ impl ChainExecutionEngine {
             .registry
             .get_chain(chain_id)
             .await
-            .ok_or_else(|| Error::generic(format!("Chain '{}' not found", chain_id)))?;
+            .ok_or_else(|| Error::internal(format!("Chain '{}' not found", chain_id)))?;
 
         let result = self.execute_chain_definition(&chain, variables).await?;
 
@@ -196,7 +196,7 @@ impl ChainExecutionEngine {
                     .iter()
                     .find(|l| l.request.id == *request_id)
                     .ok_or_else(|| {
-                        Error::generic(format!(
+                        Error::internal(format!(
                             "Chain link not found for request_id '{}' during parallel execution",
                             request_id
                         ))
@@ -246,8 +246,8 @@ impl ChainExecutionEngine {
                 let results = join_all(tasks).await;
                 for result in results {
                     result
-                        .map_err(|e| Error::generic(format!("Task join error: {}", e)))?
-                        .map_err(|e| Error::generic(format!("Request execution error: {}", e)))?;
+                        .map_err(|e| Error::internal(format!("Task join error: {}", e)))?
+                        .map_err(|e| Error::internal(format!("Request execution error: {}", e)))?;
                 }
             }
         }
@@ -279,7 +279,7 @@ impl ChainExecutionEngine {
         execution_context.templating.set_current_request(link.request.clone());
 
         let method = Method::from_bytes(link.request.method.as_bytes()).map_err(|e| {
-            Error::generic(format!("Invalid HTTP method '{}': {}", link.request.method, e))
+            Error::internal(format!("Invalid HTTP method '{}': {}", link.request.method, e))
         })?;
 
         let url = self.expand_template(&link.request.url, &execution_context.templating);
@@ -289,9 +289,9 @@ impl ChainExecutionEngine {
         for (key, value) in &link.request.headers {
             let expanded_value = self.expand_template(value, &execution_context.templating);
             let header_name = HeaderName::from_str(key)
-                .map_err(|e| Error::generic(format!("Invalid header name '{}': {}", key, e)))?;
+                .map_err(|e| Error::internal(format!("Invalid header name '{}': {}", key, e)))?;
             let header_value = HeaderValue::from_str(&expanded_value).map_err(|e| {
-                Error::generic(format!("Invalid header value for '{}': {}", key, e))
+                Error::internal(format!("Invalid header value for '{}': {}", key, e))
             })?;
             headers.insert(header_name, header_value);
         }
@@ -394,10 +394,13 @@ impl ChainExecutionEngine {
         let response = match response_result {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
-                return Err(Error::generic(format!("Request '{}' failed: {}", link.request.id, e)));
+                return Err(Error::internal(format!(
+                    "Request '{}' failed: {}",
+                    link.request.id, e
+                )));
             }
             Err(_) => {
-                return Err(Error::generic(format!("Request '{}' timed out", link.request.id)));
+                return Err(Error::internal(format!("Request '{}' timed out", link.request.id)));
             }
         };
 
@@ -432,7 +435,7 @@ impl ChainExecutionEngine {
                     status.as_u16(),
                     expected
                 );
-                return Err(Error::generic(error_msg));
+                return Err(Error::internal(error_msg));
             }
         }
 
@@ -543,7 +546,7 @@ impl ChainExecutionEngine {
                 if !visited.contains(dep) {
                     self.topo_sort_util(dep, graph, visited, rec_stack, result)?;
                 } else if rec_stack.contains(dep) {
-                    return Err(Error::generic(format!(
+                    return Err(Error::internal(format!(
                         "Circular dependency detected involving '{}'",
                         node
                     )));

@@ -64,11 +64,10 @@ impl GitWatchService {
     pub fn new(config: GitWatchConfig) -> Result<Self> {
         // Create cache directory if it doesn't exist
         std::fs::create_dir_all(&config.cache_dir).map_err(|e| {
-            Error::generic(format!(
-                "Failed to create cache directory {}: {}",
-                config.cache_dir.display(),
-                e
-            ))
+            Error::io_with_context(
+                format!("creating cache directory {}", config.cache_dir.display()),
+                e.to_string(),
+            )
         })?;
 
         // Generate repository path from URL
@@ -101,7 +100,7 @@ impl GitWatchService {
             let clean = last.split('?').next().unwrap_or(last);
             Ok(clean.to_string())
         } else {
-            Err(Error::generic(format!("Invalid repository URL: {}", url)))
+            Err(Error::config(format!("Invalid repository URL: {}", url)))
         }
     }
 
@@ -148,11 +147,11 @@ impl GitWatchService {
                 self.repo_path.to_str().unwrap(),
             ])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to execute git clone: {}", e)))?;
+            .map_err(|e| Error::io_with_context("executing git clone", e.to_string()))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::generic(format!("Git clone failed: {}", stderr)));
+            return Err(Error::io_with_context("git clone", stderr.to_string()));
         }
 
         info!("Repository cloned successfully");
@@ -169,7 +168,7 @@ impl GitWatchService {
         let output = Command::new("git")
             .args(["-C", repo_path_str, "fetch", "origin", &self.config.branch])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to execute git fetch: {}", e)))?;
+            .map_err(|e| Error::io_with_context("executing git fetch", e.to_string()))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -187,11 +186,11 @@ impl GitWatchService {
                 &format!("origin/{}", self.config.branch),
             ])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to execute git reset: {}", e)))?;
+            .map_err(|e| Error::io_with_context("executing git reset", e.to_string()))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::generic(format!("Git reset failed: {}", stderr)));
+            return Err(Error::io_with_context("git reset", stderr.to_string()));
         }
 
         debug!("Repository updated successfully");
@@ -205,11 +204,11 @@ impl GitWatchService {
         let output = Command::new("git")
             .args(["-C", self.repo_path.to_str().unwrap(), "rev-parse", "HEAD"])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to execute git rev-parse: {}", e)))?;
+            .map_err(|e| Error::io_with_context("executing git rev-parse", e.to_string()))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(Error::generic(format!("Git rev-parse failed: {}", stderr)));
+            return Err(Error::io_with_context("git rev-parse", stderr.to_string()));
         }
 
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -272,7 +271,10 @@ impl GitWatchService {
             let walker = GlobWalkerBuilder::from_patterns(&self.repo_path, &[pattern])
                 .build()
                 .map_err(|e| {
-                    Error::generic(format!("Failed to build glob walker for {}: {}", pattern, e))
+                    Error::io_with_context(
+                        format!("building glob walker for {}", pattern),
+                        e.to_string(),
+                    )
                 })?;
 
             for entry in walker {

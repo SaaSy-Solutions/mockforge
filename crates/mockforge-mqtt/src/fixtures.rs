@@ -1,6 +1,7 @@
+use mockforge_core::fixture_store::{load_fixtures_from_dir, FixtureLoadOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 /// MQTT fixture for topic-based mocking
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,46 +81,16 @@ impl MqttFixtureRegistry {
             return Err(format!("Path is not a directory: {}", path.display()).into());
         }
 
-        let mut loaded_count = 0;
+        let loaded: Vec<MqttFixture> =
+            load_fixtures_from_dir(path, &FixtureLoadOptions::yaml_json_single())?;
 
-        // Read all .json and .yaml files from the directory
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_file() {
-                if let Some(extension) = path.extension() {
-                    if extension == "json" || extension == "yaml" || extension == "yml" {
-                        match self.load_fixture_file(&path) {
-                            Ok(fixture) => {
-                                self.add_fixture(fixture);
-                                loaded_count += 1;
-                            }
-                            Err(e) => {
-                                warn!("Failed to load fixture from {}: {}", path.display(), e);
-                            }
-                        }
-                    }
-                }
-            }
+        let loaded_count = loaded.len();
+        for fixture in loaded {
+            self.fixtures.insert(fixture.identifier.clone(), fixture);
         }
 
         info!("Loaded {} MQTT fixtures from {}", loaded_count, path.display());
         Ok(())
-    }
-
-    /// Load a single fixture file
-    fn load_fixture_file(
-        &self,
-        path: &std::path::Path,
-    ) -> Result<MqttFixture, Box<dyn std::error::Error + Send + Sync>> {
-        let content = std::fs::read_to_string(path)?;
-        let fixture: MqttFixture = if path.extension().unwrap_or_default() == "json" {
-            serde_json::from_str(&content)?
-        } else {
-            serde_yaml::from_str(&content)?
-        };
-        Ok(fixture)
     }
 }
 

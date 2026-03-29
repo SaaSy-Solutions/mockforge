@@ -101,11 +101,10 @@ impl TemplateLibrary {
 
         // Create storage directory if it doesn't exist
         std::fs::create_dir_all(&storage_dir).map_err(|e| {
-            Error::generic(format!(
-                "Failed to create template library directory {}: {}",
-                storage_dir.display(),
-                e
-            ))
+            Error::io_with_context(
+                format!("creating template library directory {}", storage_dir.display()),
+                e.to_string(),
+            )
         })?;
 
         let mut library = Self {
@@ -128,10 +127,10 @@ impl TemplateLibrary {
         }
 
         for entry in std::fs::read_dir(&templates_dir)
-            .map_err(|e| Error::generic(format!("Failed to read templates directory: {}", e)))?
+            .map_err(|e| Error::io_with_context("reading templates directory", e.to_string()))?
         {
             let entry = entry
-                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+                .map_err(|e| Error::io_with_context("reading directory entry", e.to_string()))?;
 
             let path = entry.path();
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -157,11 +156,14 @@ impl TemplateLibrary {
     /// Load a template from a file
     fn load_template_file(&self, path: &Path) -> Result<Option<TemplateLibraryEntry>> {
         let content = std::fs::read_to_string(path).map_err(|e| {
-            Error::generic(format!("Failed to read template file {}: {}", path.display(), e))
+            Error::io_with_context(
+                format!("reading template file {}", path.display()),
+                e.to_string(),
+            )
         })?;
 
         let template: TemplateLibraryEntry = serde_json::from_str(&content).map_err(|e| {
-            Error::generic(format!("Failed to parse template file {}: {}", path.display(), e))
+            Error::config(format!("Failed to parse template file {}: {}", path.display(), e))
         })?;
 
         Ok(Some(template))
@@ -230,14 +232,14 @@ impl TemplateLibrary {
     fn save_template(&self, template: &TemplateLibraryEntry) -> Result<()> {
         let templates_dir = self.storage_dir.join("templates");
         std::fs::create_dir_all(&templates_dir)
-            .map_err(|e| Error::generic(format!("Failed to create templates directory: {}", e)))?;
+            .map_err(|e| Error::io_with_context("creating templates directory", e.to_string()))?;
 
         let file_path = templates_dir.join(format!("{}.json", template.id));
         let json = serde_json::to_string_pretty(template)
-            .map_err(|e| Error::generic(format!("Failed to serialize template: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to serialize template: {}", e)))?;
 
         std::fs::write(&file_path, json)
-            .map_err(|e| Error::generic(format!("Failed to write template file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("writing template file", e.to_string()))?;
 
         debug!("Saved template {} to {}", template.id, file_path.display());
         Ok(())
@@ -313,9 +315,8 @@ impl TemplateLibrary {
         if self.templates.remove(id).is_some() {
             let file_path = self.storage_dir.join("templates").join(format!("{}.json", id));
             if file_path.exists() {
-                std::fs::remove_file(&file_path).map_err(|e| {
-                    Error::generic(format!("Failed to remove template file: {}", e))
-                })?;
+                std::fs::remove_file(&file_path)
+                    .map_err(|e| Error::io_with_context("removing template file", e.to_string()))?;
             }
             info!("Removed template: {}", id);
         }
@@ -384,10 +385,10 @@ impl TemplateMarketplace {
         let response = request
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to search marketplace: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to search marketplace: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Marketplace search failed with status: {}",
                 response.status()
             )));
@@ -396,7 +397,7 @@ impl TemplateMarketplace {
         let templates: Vec<TemplateLibraryEntry> = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse marketplace response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse marketplace response: {}", e)))?;
 
         Ok(templates)
     }
@@ -419,17 +420,20 @@ impl TemplateMarketplace {
         }
 
         let response = request.send().await.map_err(|e| {
-            Error::generic(format!("Failed to fetch template from marketplace: {}", e))
+            Error::internal(format!("Failed to fetch template from marketplace: {}", e))
         })?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to fetch template: {}", response.status())));
+            return Err(Error::internal(format!(
+                "Failed to fetch template: {}",
+                response.status()
+            )));
         }
 
         let template: TemplateLibraryEntry = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse template: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse template: {}", e)))?;
 
         Ok(template)
     }
@@ -446,10 +450,10 @@ impl TemplateMarketplace {
         let response = request
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to fetch featured templates: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to fetch featured templates: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to fetch featured templates: {}",
                 response.status()
             )));
@@ -458,7 +462,7 @@ impl TemplateMarketplace {
         let templates: Vec<TemplateLibraryEntry> = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse featured templates: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse featured templates: {}", e)))?;
 
         Ok(templates)
     }
@@ -473,13 +477,12 @@ impl TemplateMarketplace {
             request = request.bearer_auth(token);
         }
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| Error::generic(format!("Failed to fetch templates by category: {}", e)))?;
+        let response = request.send().await.map_err(|e| {
+            Error::internal(format!("Failed to fetch templates by category: {}", e))
+        })?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to fetch templates by category: {}",
                 response.status()
             )));
@@ -488,7 +491,7 @@ impl TemplateMarketplace {
         let templates: Vec<TemplateLibraryEntry> = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse templates: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse templates: {}", e)))?;
 
         Ok(templates)
     }
@@ -527,7 +530,7 @@ impl TemplateLibraryManager {
         let marketplace = self
             .marketplace
             .as_ref()
-            .ok_or_else(|| Error::generic("Marketplace not configured".to_string()))?;
+            .ok_or_else(|| Error::config("Marketplace not configured"))?;
 
         let template = marketplace.get_template(id, version).await?;
 
@@ -535,7 +538,7 @@ impl TemplateLibraryManager {
         let latest_version = template
             .versions
             .first()
-            .ok_or_else(|| Error::generic("Template has no versions".to_string()))?;
+            .ok_or_else(|| Error::not_found("template version", id))?;
 
         let metadata = TemplateMetadata {
             id: template.id.clone(),

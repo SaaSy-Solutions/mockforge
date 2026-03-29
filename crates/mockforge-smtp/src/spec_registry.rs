@@ -1,6 +1,10 @@
 //! SMTP SpecRegistry implementation
 
 use crate::fixtures::{SmtpFixture, StoredEmail};
+use mockforge_core::fixture_store::{
+    load_fixtures_from_dir, FixtureFileFormat, FixtureFileGranularity, FixtureLoadErrorMode,
+    FixtureLoadOptions,
+};
 use mockforge_core::protocol_abstraction::{
     Protocol, ProtocolRequest, ProtocolResponse, ResponseStatus, SpecOperation, SpecRegistry,
     ValidationError, ValidationResult,
@@ -10,7 +14,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 /// Email search filters
 #[derive(Debug, Clone, Default)]
@@ -63,62 +67,19 @@ impl SmtpSpecRegistry {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(path)?;
+        let options = FixtureLoadOptions {
+            formats: vec![FixtureFileFormat::Yaml, FixtureFileFormat::Json],
+            error_mode: FixtureLoadErrorMode::FailFast,
+            granularity: FixtureFileGranularity::Single,
+        };
 
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
+        let loaded: Vec<SmtpFixture> = load_fixtures_from_dir(path, &options)?;
 
-            if path.is_file() {
-                let extension = path.extension().and_then(|s| s.to_str());
-
-                match extension {
-                    Some("yaml") | Some("yml") => {
-                        self.load_fixture_file(&path)?;
-                    }
-                    Some("json") => {
-                        self.load_fixture_file_json(&path)?;
-                    }
-                    _ => {
-                        debug!("Skipping non-fixture file: {:?}", path);
-                    }
-                }
-            }
+        for fixture in loaded {
+            self.fixtures.push(fixture);
         }
 
         info!("Loaded {} SMTP fixtures", self.fixtures.len());
-        Ok(())
-    }
-
-    /// Load a single YAML fixture file
-    fn load_fixture_file(&mut self, path: &Path) -> Result<()> {
-        let content = std::fs::read_to_string(path)?;
-        let fixture: SmtpFixture = serde_yaml::from_str(&content).map_err(|e| {
-            mockforge_core::Error::generic(format!(
-                "Failed to parse fixture file {:?}: {}",
-                path, e
-            ))
-        })?;
-
-        debug!("Loaded fixture: {} from {:?}", fixture.name, path);
-        self.fixtures.push(fixture);
-
-        Ok(())
-    }
-
-    /// Load a single JSON fixture file
-    fn load_fixture_file_json(&mut self, path: &Path) -> Result<()> {
-        let content = std::fs::read_to_string(path)?;
-        let fixture: SmtpFixture = serde_json::from_str(&content).map_err(|e| {
-            mockforge_core::Error::generic(format!(
-                "Failed to parse JSON fixture file {:?}: {}",
-                path, e
-            ))
-        })?;
-
-        debug!("Loaded fixture: {} from {:?}", fixture.name, path);
-        self.fixtures.push(fixture);
-
         Ok(())
     }
 
