@@ -1,8 +1,7 @@
 use chrono::Utc;
+use mockforge_core::fixture_store::{load_fixtures_from_dir, FixtureLoadOptions};
 use serde::{Deserialize, Serialize};
-use serde_yaml;
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -127,19 +126,7 @@ impl AutoProducer {
 impl KafkaFixture {
     /// Load fixtures from a directory
     pub fn load_from_dir(dir: &PathBuf) -> mockforge_core::Result<Vec<Self>> {
-        let mut fixtures = Vec::new();
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("yaml")
-                || path.extension().and_then(|s| s.to_str()) == Some("yml")
-            {
-                let file = fs::File::open(&path)?;
-                let file_fixtures: Vec<Self> = serde_yaml::from_reader(file)?;
-                fixtures.extend(file_fixtures);
-            }
-        }
-        Ok(fixtures)
+        load_fixtures_from_dir(dir, &FixtureLoadOptions::yaml_array_strict())
     }
 
     /// Generate a message using the fixture
@@ -183,6 +170,7 @@ impl KafkaFixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -664,8 +652,8 @@ mod tests {
 
     #[test]
     fn test_load_from_dir_nonexistent() {
-        let result = KafkaFixture::load_from_dir(&PathBuf::from("/nonexistent/path"));
-        assert!(result.is_err());
+        let result = KafkaFixture::load_from_dir(&PathBuf::from("/nonexistent/path")).unwrap();
+        assert!(result.is_empty());
     }
 
     // ==================== AutoProducer Tests ====================

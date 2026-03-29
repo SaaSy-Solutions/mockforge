@@ -33,19 +33,19 @@ impl OpenApiSpec {
         let path_ref = path.as_ref();
         let content = fs::read_to_string(path_ref)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec file: {}", e)))?;
+            .map_err(|e| Error::io_with_context("reading OpenAPI spec file", e.to_string()))?;
 
         let raw_json = if path_ref.extension().and_then(|s| s.to_str()) == Some("yaml")
             || path_ref.extension().and_then(|s| s.to_str()) == Some("yml")
         {
             let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content)
-                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
+                .map_err(|e| Error::config(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
             serde_json::to_value(&yaml_value).map_err(|e| {
-                Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
+                Error::config(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
             })?
         } else {
             serde_json::from_str(&content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+                .map_err(|e| Error::config(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
         };
 
         // Check if this is a Swagger 2.0 spec and convert if necessary
@@ -53,10 +53,10 @@ impl OpenApiSpec {
             tracing::info!("Detected Swagger 2.0 specification, converting to OpenAPI 3.0");
             let converted =
                 swagger_convert::convert_swagger_to_openapi3(&raw_json).map_err(|e| {
-                    Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+                    Error::config(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
                 })?;
             let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
-                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+                Error::config(format!("Failed to parse converted OpenAPI spec: {}", e))
             })?;
             (converted, spec)
         } else {
@@ -84,7 +84,7 @@ impl OpenApiSpec {
                     }
                 }
 
-                Error::generic(error_msg)
+                Error::config(error_msg)
             })?;
             (raw_json, spec)
         };
@@ -103,28 +103,28 @@ impl OpenApiSpec {
     pub fn from_string(content: &str, format: Option<&str>) -> Result<Self> {
         let raw_json = if format == Some("yaml") || format == Some("yml") {
             let yaml_value: serde_yaml::Value = serde_yaml::from_str(content)
-                .map_err(|e| Error::generic(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
+                .map_err(|e| Error::config(format!("Failed to parse YAML OpenAPI spec: {}", e)))?;
             serde_json::to_value(&yaml_value).map_err(|e| {
-                Error::generic(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
+                Error::config(format!("Failed to convert YAML OpenAPI spec to JSON: {}", e))
             })?
         } else {
             serde_json::from_str(content)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
+                .map_err(|e| Error::config(format!("Failed to parse JSON OpenAPI spec: {}", e)))?
         };
 
         // Check if this is a Swagger 2.0 spec and convert if necessary
         let (raw_document, spec) = if swagger_convert::is_swagger_2(&raw_json) {
             let converted =
                 swagger_convert::convert_swagger_to_openapi3(&raw_json).map_err(|e| {
-                    Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+                    Error::config(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
                 })?;
             let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
-                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+                Error::config(format!("Failed to parse converted OpenAPI spec: {}", e))
             })?;
             (converted, spec)
         } else {
             let spec: OpenAPI = serde_json::from_value(raw_json.clone())
-                .map_err(|e| Error::generic(format!("Failed to read OpenAPI spec: {}", e)))?;
+                .map_err(|e| Error::io_with_context("reading OpenAPI spec", e.to_string()))?;
             (raw_json, spec)
         };
 
@@ -143,16 +143,16 @@ impl OpenApiSpec {
         // Check if this is a Swagger 2.0 spec and convert if necessary
         let (raw_document, spec) = if swagger_convert::is_swagger_2(&json) {
             let converted = swagger_convert::convert_swagger_to_openapi3(&json).map_err(|e| {
-                Error::generic(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
+                Error::config(format!("Failed to convert Swagger 2.0 to OpenAPI 3.0: {}", e))
             })?;
             let spec: OpenAPI = serde_json::from_value(converted.clone()).map_err(|e| {
-                Error::generic(format!("Failed to parse converted OpenAPI spec: {}", e))
+                Error::config(format!("Failed to parse converted OpenAPI spec: {}", e))
             })?;
             (converted, spec)
         } else {
             let json_for_doc = json.clone();
             let spec: OpenAPI = serde_json::from_value(json)
-                .map_err(|e| Error::generic(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
+                .map_err(|e| Error::config(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
             (json_for_doc, spec)
         };
 
@@ -170,16 +170,16 @@ impl OpenApiSpec {
     pub fn validate(&self) -> Result<()> {
         // Basic validation - check that we have at least one path
         if self.spec.paths.paths.is_empty() {
-            return Err(Error::generic("OpenAPI spec must contain at least one path"));
+            return Err(Error::validation("OpenAPI spec must contain at least one path"));
         }
 
         // Check that info section has required fields
         if self.spec.info.title.is_empty() {
-            return Err(Error::generic("OpenAPI spec info must have a title"));
+            return Err(Error::validation("OpenAPI spec info must have a title"));
         }
 
         if self.spec.info.version.is_empty() {
-            return Err(Error::generic("OpenAPI spec info must have a version"));
+            return Err(Error::validation("OpenAPI spec info must have a version"));
         }
 
         Ok(())
@@ -338,7 +338,9 @@ impl OpenApiSpec {
             }
         }
 
-        Err(Error::generic("Security validation failed: no valid authentication provided"))
+        Err(Error::validation(
+            "Security validation failed: no valid authentication provided",
+        ))
     }
 
     fn resolve_schema(&self, reference: &str) -> Option<Schema> {
@@ -399,7 +401,7 @@ impl OpenApiSpec {
         let scheme = match security_schemes.get(scheme_name) {
             Some(scheme) => scheme,
             None => {
-                return Err(Error::generic(format!("Security scheme '{}' not found", scheme_name)))
+                return Err(Error::config(format!("Security scheme '{}' not found", scheme_name)))
             }
         };
 
@@ -409,7 +411,7 @@ impl OpenApiSpec {
                 // Resolve $ref like "#/components/securitySchemes/BearerAuth"
                 let ref_name =
                     reference.strip_prefix("#/components/securitySchemes/").ok_or_else(|| {
-                        Error::generic(format!(
+                        Error::config(format!(
                             "Unsupported security scheme reference format: {}",
                             reference
                         ))
@@ -417,13 +419,13 @@ impl OpenApiSpec {
                 match security_schemes.get(ref_name) {
                     Some(ReferenceOr::Item(resolved)) => resolved,
                     Some(ReferenceOr::Reference { .. }) => {
-                        return Err(Error::generic(format!(
+                        return Err(Error::config(format!(
                             "Nested security scheme reference not supported: {}",
                             ref_name
                         )))
                     }
                     None => {
-                        return Err(Error::generic(format!(
+                        return Err(Error::config(format!(
                             "Security scheme '{}' not found",
                             ref_name
                         )))

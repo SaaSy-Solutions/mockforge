@@ -308,7 +308,7 @@ impl ServerConfig {
 pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
     let content = fs::read_to_string(&path)
         .await
-        .map_err(|e| Error::generic(format!("Failed to read config file: {}", e)))?;
+        .map_err(|e| Error::io_with_context("reading config file", e.to_string()))?;
 
     // Parse config with improved error messages
     let config: ServerConfig = if path.as_ref().extension().and_then(|s| s.to_str()) == Some("yaml")
@@ -333,7 +333,7 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
                 full_msg.push_str("\n   See config.template.yaml for valid field names.");
             }
 
-            Error::generic(full_msg)
+            Error::config(full_msg)
         })?
     } else {
         serde_json::from_str(&content).map_err(|e| {
@@ -355,7 +355,7 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
                 full_msg.push_str("\n   See config.template.yaml for valid field names.");
             }
 
-            Error::generic(full_msg)
+            Error::config(full_msg)
         })?
     };
 
@@ -368,15 +368,15 @@ pub async fn save_config<P: AsRef<Path>>(path: P, config: &ServerConfig) -> Resu
         || path.as_ref().extension().and_then(|s| s.to_str()) == Some("yml")
     {
         serde_yaml::to_string(config)
-            .map_err(|e| Error::generic(format!("Failed to serialize config to YAML: {}", e)))?
+            .map_err(|e| Error::config(format!("Failed to serialize config to YAML: {}", e)))?
     } else {
         serde_json::to_string_pretty(config)
-            .map_err(|e| Error::generic(format!("Failed to serialize config to JSON: {}", e)))?
+            .map_err(|e| Error::config(format!("Failed to serialize config to JSON: {}", e)))?
     };
 
     fs::write(path, content)
         .await
-        .map_err(|e| Error::generic(format!("Failed to write config file: {}", e)))?;
+        .map_err(|e| Error::io_with_context("writing config file", e.to_string()))?;
 
     Ok(())
 }
@@ -581,16 +581,16 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
 pub fn validate_config(config: &ServerConfig) -> Result<()> {
     // Validate port ranges
     if config.http.port == 0 {
-        return Err(Error::generic("HTTP port cannot be 0"));
+        return Err(Error::config("HTTP port cannot be 0"));
     }
     if config.websocket.port == 0 {
-        return Err(Error::generic("WebSocket port cannot be 0"));
+        return Err(Error::config("WebSocket port cannot be 0"));
     }
     if config.grpc.port == 0 {
-        return Err(Error::generic("gRPC port cannot be 0"));
+        return Err(Error::config("gRPC port cannot be 0"));
     }
     if config.admin.port == 0 {
-        return Err(Error::generic("Admin port cannot be 0"));
+        return Err(Error::config("Admin port cannot be 0"));
     }
 
     // Check for port conflicts
@@ -604,7 +604,7 @@ pub fn validate_config(config: &ServerConfig) -> Result<()> {
     for i in 0..ports.len() {
         for j in (i + 1)..ports.len() {
             if ports[i].1 == ports[j].1 {
-                return Err(Error::generic(format!(
+                return Err(Error::config(format!(
                     "Port conflict: {} and {} both use port {}",
                     ports[i].0, ports[j].0, ports[i].1
                 )));
@@ -615,7 +615,7 @@ pub fn validate_config(config: &ServerConfig) -> Result<()> {
     // Validate log level
     let valid_levels = ["trace", "debug", "info", "warn", "error"];
     if !valid_levels.contains(&config.logging.level.as_str()) {
-        return Err(Error::generic(format!(
+        return Err(Error::config(format!(
             "Invalid log level: {}. Valid levels: {}",
             config.logging.level,
             valid_levels.join(", ")
@@ -674,7 +674,7 @@ pub async fn load_config_with_profile<P: AsRef<Path>>(
             tracing::info!("Applying profile: {}", profile);
             config = apply_profile(config, profile_config);
         } else {
-            return Err(Error::generic(format!(
+            return Err(Error::config(format!(
                 "Profile '{}' not found in configuration. Available profiles: {}",
                 profile,
                 config.profiles.keys().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")
@@ -695,13 +695,13 @@ pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig
 
     let content = fs::read_to_string(&path)
         .await
-        .map_err(|e| Error::generic(format!("Failed to read JS/TS config file: {}", e)))?;
+        .map_err(|e| Error::io_with_context("reading JS/TS config file", e.to_string()))?;
 
     // Create a JavaScript runtime
-    let runtime = Runtime::new()
-        .map_err(|e| Error::generic(format!("Failed to create JS runtime: {}", e)))?;
+    let runtime =
+        Runtime::new().map_err(|e| Error::config(format!("Failed to create JS runtime: {}", e)))?;
     let context = Context::full(&runtime)
-        .map_err(|e| Error::generic(format!("Failed to create JS context: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to create JS context: {}", e)))?;
 
     context.with(|ctx| {
         // For TypeScript files, we need to strip type annotations
@@ -721,20 +721,19 @@ pub async fn load_config_from_js<P: AsRef<Path>>(path: P) -> Result<ServerConfig
         // Evaluate the config file — uses rquickjs sandboxed JS runtime (not arbitrary code execution)
         let result: rquickjs::Value = ctx
             .eval(js_content.as_bytes())
-            .map_err(|e| Error::generic(format!("Failed to evaluate JS config: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to evaluate JS config: {}", e)))?;
 
         // Convert to JSON string
         let json_str: String = ctx
             .json_stringify(result)
-            .map_err(|e| Error::generic(format!("Failed to stringify JS config: {}", e)))?
-            .ok_or_else(|| Error::generic("JS config returned undefined"))?
+            .map_err(|e| Error::config(format!("Failed to stringify JS config: {}", e)))?
+            .ok_or_else(|| Error::config("JS config returned undefined"))?
             .get()
-            .map_err(|e| Error::generic(format!("Failed to get JSON string: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to get JSON string: {}", e)))?;
 
         // Parse JSON into ServerConfig
-        serde_json::from_str(&json_str).map_err(|e| {
-            Error::generic(format!("Failed to parse JS config as ServerConfig: {}", e))
-        })
+        serde_json::from_str(&json_str)
+            .map_err(|e| Error::config(format!("Failed to parse JS config as ServerConfig: {}", e)))
     })
 }
 
@@ -756,27 +755,27 @@ fn strip_typescript_types(content: &str) -> Result<String> {
 
     // Remove interface declarations (handles multi-line)
     let interface_re = Regex::new(r"(?ms)interface\s+\w+\s*\{[^}]*\}\s*")
-        .map_err(|e| Error::generic(format!("Failed to compile interface regex: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to compile interface regex: {}", e)))?;
     result = interface_re.replace_all(&result, "").to_string();
 
     // Remove type aliases
     let type_alias_re = Regex::new(r"(?m)^type\s+\w+\s*=\s*[^;]+;\s*")
-        .map_err(|e| Error::generic(format!("Failed to compile type alias regex: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to compile type alias regex: {}", e)))?;
     result = type_alias_re.replace_all(&result, "").to_string();
 
     // Remove type annotations (: Type)
     let type_annotation_re = Regex::new(r":\s*[A-Z]\w*(<[^>]+>)?(\[\])?")
-        .map_err(|e| Error::generic(format!("Failed to compile type annotation regex: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to compile type annotation regex: {}", e)))?;
     result = type_annotation_re.replace_all(&result, "").to_string();
 
     // Remove type imports and exports
     let type_import_re = Regex::new(r"(?m)^(import|export)\s+type\s+.*$")
-        .map_err(|e| Error::generic(format!("Failed to compile type import regex: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to compile type import regex: {}", e)))?;
     result = type_import_re.replace_all(&result, "").to_string();
 
     // Remove as Type
     let as_type_re = Regex::new(r"\s+as\s+\w+")
-        .map_err(|e| Error::generic(format!("Failed to compile 'as type' regex: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to compile 'as type' regex: {}", e)))?;
     result = as_type_re.replace_all(&result, "").to_string();
 
     Ok(result)
@@ -790,13 +789,13 @@ pub async fn load_config_auto<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
         #[cfg(feature = "scripting")]
         "ts" | "js" => load_config_from_js(&path).await,
         #[cfg(not(feature = "scripting"))]
-        "ts" | "js" => Err(Error::generic(
+        "ts" | "js" => Err(Error::config(
             "JS/TS config files require the 'scripting' feature (rquickjs). \
              Enable it with: cargo build --features scripting"
                 .to_string(),
         )),
         "yaml" | "yml" | "json" => load_config(&path).await,
-        _ => Err(Error::generic(format!(
+        _ => Err(Error::config(format!(
             "Unsupported config file format: {}. Supported: .yaml, .yml, .json{}",
             ext,
             if cfg!(feature = "scripting") {
@@ -811,7 +810,7 @@ pub async fn load_config_auto<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
 /// Discover configuration file with support for all formats
 pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
     let current_dir = std::env::current_dir()
-        .map_err(|e| Error::generic(format!("Failed to get current directory: {}", e)))?;
+        .map_err(|e| Error::config(format!("Failed to get current directory: {}", e)))?;
 
     let config_names = vec![
         "mockforge.config.ts",
@@ -846,7 +845,7 @@ pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
         }
     }
 
-    Err(Error::generic(
+    Err(Error::config(
         "No configuration file found. Expected one of: mockforge.config.ts, mockforge.config.js, mockforge.yaml, mockforge.yml",
     ))
 }

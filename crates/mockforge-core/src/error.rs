@@ -328,7 +328,7 @@ impl Error {
     }
 
     /// Create an I/O error with context
-    pub fn io_with_context<S: Into<String>>(context: S, message: S) -> Self {
+    pub fn io_with_context<S1: Into<String>, S2: Into<String>>(context: S1, message: S2) -> Self {
         Self::IoWithContext {
             context: context.into(),
             message: message.into(),

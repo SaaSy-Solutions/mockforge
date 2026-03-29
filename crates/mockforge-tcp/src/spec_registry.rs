@@ -1,10 +1,14 @@
 //! TCP spec registry for managing TCP fixtures
 
 use crate::fixtures::TcpFixture;
+use mockforge_core::fixture_store::{
+    load_fixtures_from_dir, FixtureFileFormat, FixtureFileGranularity, FixtureLoadErrorMode,
+    FixtureLoadOptions,
+};
 use mockforge_core::Result;
 use std::collections::HashMap;
 use std::path::Path;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Registry for TCP fixtures
 #[derive(Debug, Clone)]
@@ -23,68 +27,24 @@ impl TcpSpecRegistry {
     /// Load fixtures from a directory
     pub fn load_fixtures<P: AsRef<Path>>(&mut self, fixtures_dir: P) -> Result<()> {
         let fixtures_dir = fixtures_dir.as_ref();
-        if !fixtures_dir.exists() {
-            debug!("TCP fixtures directory does not exist: {:?}", fixtures_dir);
-            return Ok(());
-        }
 
         info!("Loading TCP fixtures from {:?}", fixtures_dir);
 
-        let entries = std::fs::read_dir(fixtures_dir).map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to read fixtures directory: {}", e))
-        })?;
-
-        let mut loaded_count = 0;
-
-        for entry in entries {
-            let entry = entry.map_err(|e| {
-                mockforge_core::Error::generic(format!("Failed to read directory entry: {}", e))
-            })?;
-            let path = entry.path();
-
-            if path.is_file() {
-                match path.extension().and_then(|s| s.to_str()) {
-                    Some("yaml") | Some("yml") | Some("json") => {
-                        if let Err(e) = self.load_fixture_file(&path) {
-                            warn!("Failed to load fixture from {:?}: {}", path, e);
-                        } else {
-                            loaded_count += 1;
-                        }
-                    }
-                    _ => {
-                        debug!("Skipping non-fixture file: {:?}", path);
-                    }
-                }
-            }
-        }
-
-        info!("Loaded {} TCP fixture(s)", loaded_count);
-        Ok(())
-    }
-
-    /// Load a single fixture file
-    fn load_fixture_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
-        let path = path.as_ref();
-        let content = std::fs::read_to_string(path).map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to read fixture file: {}", e))
-        })?;
-
-        let fixtures: Vec<TcpFixture> = if path.extension().and_then(|s| s.to_str()) == Some("json")
-        {
-            serde_json::from_str(&content).map_err(|e| {
-                mockforge_core::Error::generic(format!("Failed to parse JSON fixture: {}", e))
-            })?
-        } else {
-            serde_yaml::from_str(&content).map_err(|e| {
-                mockforge_core::Error::generic(format!("Failed to parse YAML fixture: {}", e))
-            })?
+        let options = FixtureLoadOptions {
+            formats: vec![FixtureFileFormat::Yaml, FixtureFileFormat::Json],
+            error_mode: FixtureLoadErrorMode::WarnAndContinue,
+            granularity: FixtureFileGranularity::Array,
         };
 
-        for fixture in fixtures {
+        let loaded: Vec<TcpFixture> = load_fixtures_from_dir(fixtures_dir, &options)?;
+
+        let count = loaded.len();
+        for fixture in loaded {
             let identifier = fixture.identifier.clone();
             self.fixtures.insert(identifier, fixture);
         }
 
+        info!("Loaded {} TCP fixture(s)", count);
         Ok(())
     }
 
