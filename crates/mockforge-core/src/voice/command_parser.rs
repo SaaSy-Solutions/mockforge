@@ -125,7 +125,7 @@ don't include it in the response."#;
         // Parse the response into ParsedCommand
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedCommand = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse LLM response as ParsedCommand: {}. Response: {}",
                 e, response_str
             ))
@@ -206,7 +206,7 @@ and include a "question" or "confirmation" field in the response."#;
         // Parse response
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedCommand = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse conversational LLM response: {}. Response: {}",
                 e, response_str
             ))
@@ -313,7 +313,7 @@ Be specific and extract all details mentioned in the command."#;
         // Parse the response into ParsedWorkspaceScenario
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedWorkspaceScenario = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse LLM response as ParsedWorkspaceScenario: {}. Response: {}",
                 e, response_str
             ))
@@ -446,7 +446,7 @@ Be specific and extract all details mentioned in the command. Ensure at least 2-
         // Parse the response into ParsedWorkspaceCreation
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedWorkspaceCreation = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse LLM response as ParsedWorkspaceCreation: {}. Response: {}",
                 e, response_str
             ))
@@ -511,7 +511,7 @@ Examples:
         // Parse the response into ParsedRealityContinuum
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedRealityContinuum = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse LLM response as ParsedRealityContinuum: {}. Response: {}",
                 e, response_str
             ))
@@ -575,7 +575,7 @@ Examples:
         // Parse the response into ParsedDriftBudget
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedDriftBudget = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::config(format!(
                 "Failed to parse LLM response as ParsedDriftBudget: {}. Response: {}",
                 e, response_str
             ))

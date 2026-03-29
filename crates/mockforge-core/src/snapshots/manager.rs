@@ -140,7 +140,7 @@ impl SnapshotManager {
                 match persistence.load_workspace(&workspace_id).await {
                     Ok(workspace) => {
                         let config_yaml = serde_yaml::to_string(&workspace).map_err(|e| {
-                            crate::Error::generic(format!("Failed to serialize workspace: {}", e))
+                            crate::Error::io_with_context("serialize workspace", e.to_string())
                         })?;
                         fs::write(&config_path, config_yaml).await?;
                         debug!("Saved workspace config to {}", config_path.display());
@@ -341,7 +341,7 @@ impl SnapshotManager {
                     let config_yaml = fs::read_to_string(&config_path).await?;
                     let workspace: crate::workspace::Workspace = serde_yaml::from_str(&config_yaml)
                         .map_err(|e| {
-                            crate::Error::generic(format!("Failed to deserialize workspace: {}", e))
+                            crate::Error::io_with_context("deserialize workspace", e.to_string())
                         })?;
                     persistence.save_workspace(&workspace).await?;
                     debug!("Restored workspace config from {}", config_path.display());
@@ -360,9 +360,8 @@ impl SnapshotManager {
             let vbr_path = snapshot_dir.join("vbr_state.json");
             if vbr_path.exists() {
                 let vbr_json = fs::read_to_string(&vbr_path).await?;
-                let state: serde_json::Value = serde_json::from_str(&vbr_json).map_err(|e| {
-                    crate::Error::generic(format!("Failed to parse VBR state: {}", e))
-                })?;
+                let state: serde_json::Value = serde_json::from_str(&vbr_json)
+                    .map_err(|e| crate::Error::io_with_context("parse VBR state", e.to_string()))?;
                 debug!("Loaded VBR state from {}", vbr_path.display());
                 Some(state)
             } else {
@@ -381,7 +380,7 @@ impl SnapshotManager {
                     let recorder_json = fs::read_to_string(&recorder_path).await?;
                     let state: serde_json::Value =
                         serde_json::from_str(&recorder_json).map_err(|e| {
-                            crate::Error::generic(format!("Failed to parse Recorder state: {}", e))
+                            crate::Error::io_with_context("parse Recorder state", e.to_string())
                         })?;
                     debug!("Loaded Recorder state from {}", recorder_path.display());
                     Some(state)

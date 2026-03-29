@@ -78,20 +78,20 @@ impl GitHubPRClient {
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to get branch: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get branch: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to get branch: {}", response.status())));
+            return Err(Error::internal(format!("Failed to get branch: {}", response.status())));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         json["object"]["sha"]
             .as_str()
-            .ok_or_else(|| Error::generic("Missing SHA in response"))?
+            .ok_or_else(|| Error::internal("Missing SHA in response"))?
             .to_string()
             .pipe(Ok)
     }
@@ -112,12 +112,12 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create branch: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create branch: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to create branch: {} - {}",
                 status, error_text
             )));
@@ -185,20 +185,20 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create blob: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create blob: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to create blob: {}", response.status())));
+            return Err(Error::internal(format!("Failed to create blob: {}", response.status())));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         json["sha"]
             .as_str()
-            .ok_or_else(|| Error::generic("Missing SHA in response"))?
+            .ok_or_else(|| Error::internal("Missing SHA in response"))?
             .to_string()
             .pipe(Ok)
     }
@@ -230,20 +230,20 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create tree: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create tree: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to create tree: {}", response.status())));
+            return Err(Error::internal(format!("Failed to create tree: {}", response.status())));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         json["sha"]
             .as_str()
-            .ok_or_else(|| Error::generic("Missing SHA in response"))?
+            .ok_or_else(|| Error::internal("Missing SHA in response"))?
             .to_string()
             .pipe(Ok)
     }
@@ -269,20 +269,20 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create tree: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create tree: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to create tree: {}", response.status())));
+            return Err(Error::internal(format!("Failed to create tree: {}", response.status())));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         json["sha"]
             .as_str()
-            .ok_or_else(|| Error::generic("Missing SHA in response"))?
+            .ok_or_else(|| Error::internal("Missing SHA in response"))?
             .to_string()
             .pipe(Ok)
     }
@@ -309,20 +309,20 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create commit: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create commit: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to create commit: {}", response.status())));
+            return Err(Error::internal(format!("Failed to create commit: {}", response.status())));
         }
 
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         json["sha"]
             .as_str()
-            .ok_or_else(|| Error::generic("Missing SHA in response"))?
+            .ok_or_else(|| Error::internal("Missing SHA in response"))?
             .to_string()
             .pipe(Ok)
     }
@@ -346,10 +346,10 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to update branch: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to update branch: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to update branch: {}", response.status())));
+            return Err(Error::internal(format!("Failed to update branch: {}", response.status())));
         }
 
         Ok(())
@@ -377,12 +377,12 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create PR: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create PR: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to create PR: {} - {}",
                 status, error_text
             )));
@@ -391,13 +391,13 @@ impl GitHubPRClient {
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         Ok(PRResult {
-            number: json["number"].as_u64().ok_or_else(|| Error::generic("Missing PR number"))?,
+            number: json["number"].as_u64().ok_or_else(|| Error::internal("Missing PR number"))?,
             url: json["html_url"]
                 .as_str()
-                .ok_or_else(|| Error::generic("Missing PR URL"))?
+                .ok_or_else(|| Error::internal("Missing PR URL"))?
                 .to_string(),
             branch: request.branch.clone(),
             title: request.title.clone(),
@@ -422,10 +422,10 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to add labels: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to add labels: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!("Failed to add labels: {}", response.status())));
+            return Err(Error::internal(format!("Failed to add labels: {}", response.status())));
         }
 
         Ok(())
@@ -449,10 +449,10 @@ impl GitHubPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to request reviewers: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to request reviewers: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to request reviewers: {}",
                 response.status()
             )));

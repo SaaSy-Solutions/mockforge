@@ -154,11 +154,11 @@ impl MultiTenantWorkspaceRegistry {
             let current_count = self
                 .workspaces
                 .read()
-                .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?
+                .map_err(|e| Error::internal(format!("Failed to read workspaces: {}", e)))?
                 .len();
 
             if current_count >= max {
-                return Err(Error::generic(format!(
+                return Err(Error::validation(format!(
                     "Maximum number of workspaces ({}) exceeded",
                     max
                 )));
@@ -175,7 +175,7 @@ impl MultiTenantWorkspaceRegistry {
 
         self.workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?
             .insert(workspace_id, tenant_workspace);
 
         Ok(())
@@ -186,12 +186,12 @@ impl MultiTenantWorkspaceRegistry {
         let workspaces = self
             .workspaces
             .read()
-            .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read workspaces: {}", e)))?;
 
         workspaces
             .get(workspace_id)
             .cloned()
-            .ok_or_else(|| Error::generic(format!("Workspace '{}' not found", workspace_id)))
+            .ok_or_else(|| Error::not_found("Workspace", workspace_id))
     }
 
     /// Get the default workspace
@@ -204,13 +204,13 @@ impl MultiTenantWorkspaceRegistry {
         let mut workspaces = self
             .workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
             tenant_workspace.workspace = workspace;
             Ok(())
         } else {
-            Err(Error::generic(format!("Workspace '{}' not found", workspace_id)))
+            Err(Error::not_found("Workspace", workspace_id))
         }
     }
 
@@ -218,14 +218,14 @@ impl MultiTenantWorkspaceRegistry {
     pub fn remove_workspace(&mut self, workspace_id: &str) -> Result<()> {
         // Prevent removing default workspace
         if workspace_id == self.default_workspace_id {
-            return Err(Error::generic("Cannot remove default workspace".to_string()));
+            return Err(Error::validation("Cannot remove default workspace"));
         }
 
         self.workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?
             .remove(workspace_id)
-            .ok_or_else(|| Error::generic(format!("Workspace '{}' not found", workspace_id)))?;
+            .ok_or_else(|| Error::not_found("Workspace", workspace_id))?;
 
         Ok(())
     }
@@ -235,7 +235,7 @@ impl MultiTenantWorkspaceRegistry {
         let workspaces = self
             .workspaces
             .read()
-            .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read workspaces: {}", e)))?;
 
         Ok(workspaces.iter().map(|(id, ws)| (id.clone(), ws.clone())).collect())
     }
@@ -254,13 +254,13 @@ impl MultiTenantWorkspaceRegistry {
         let mut workspaces = self
             .workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
             tenant_workspace.last_accessed = Utc::now();
             Ok(())
         } else {
-            Err(Error::generic(format!("Workspace '{}' not found", workspace_id)))
+            Err(Error::not_found("Workspace", workspace_id))
         }
     }
 
@@ -273,7 +273,7 @@ impl MultiTenantWorkspaceRegistry {
         let mut workspaces = self
             .workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
             tenant_workspace.stats.total_requests += 1;
@@ -286,7 +286,7 @@ impl MultiTenantWorkspaceRegistry {
 
             Ok(())
         } else {
-            Err(Error::generic(format!("Workspace '{}' not found", workspace_id)))
+            Err(Error::not_found("Workspace", workspace_id))
         }
     }
 
@@ -295,7 +295,7 @@ impl MultiTenantWorkspaceRegistry {
         let workspaces = self
             .workspaces
             .read()
-            .map_err(|e| Error::generic(format!("Failed to read workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read workspaces: {}", e)))?;
 
         Ok(workspaces.len())
     }
@@ -310,13 +310,13 @@ impl MultiTenantWorkspaceRegistry {
         let mut workspaces = self
             .workspaces
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write workspaces: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write workspaces: {}", e)))?;
 
         if let Some(tenant_workspace) = workspaces.get_mut(workspace_id) {
             tenant_workspace.enabled = enabled;
             Ok(())
         } else {
-            Err(Error::generic(format!("Workspace '{}' not found", workspace_id)))
+            Err(Error::not_found("Workspace", workspace_id))
         }
     }
 
@@ -413,7 +413,7 @@ impl TenantWorkspace {
         let mut registry = self
             .route_registry
             .write()
-            .map_err(|e| Error::generic(format!("Failed to write route registry: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write route registry: {}", e)))?;
 
         // Clear existing routes
         *registry = RouteRegistry::new();

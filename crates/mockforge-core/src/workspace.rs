@@ -407,7 +407,10 @@ impl Workspace {
     ) -> Result<EntityId> {
         // Check if environment name already exists
         if self.config.environments.iter().any(|env| env.name == name) {
-            return Err(Error::generic(format!("Environment with name '{}' already exists", name)));
+            return Err(Error::validation(format!(
+                "Environment with name '{}' already exists",
+                name
+            )));
         }
 
         let mut environment = Environment::new(name);
@@ -452,7 +455,7 @@ impl Workspace {
     pub fn set_active_environment(&mut self, environment_id: Option<String>) -> Result<()> {
         if let Some(ref id) = environment_id {
             if self.get_environment(id).is_none() {
-                return Err(Error::generic(format!("Environment with ID '{}' not found", id)));
+                return Err(Error::not_found("Environment", id));
             }
         }
         self.config.active_environment_id = environment_id;
@@ -506,7 +509,7 @@ impl Workspace {
     /// Delete an environment
     pub fn delete_environment(&mut self, id: &str) -> Result<()> {
         if id == self.config.global_environment.id {
-            return Err(Error::generic("Cannot delete global environment".to_string()));
+            return Err(Error::validation("Cannot delete global environment"));
         }
 
         let position = self.config.environments.iter().position(|env| env.id == id);
@@ -521,7 +524,7 @@ impl Workspace {
             self.updated_at = Utc::now();
             Ok(())
         } else {
-            Err(Error::generic(format!("Environment with ID '{}' not found", id)))
+            Err(Error::not_found("Environment", id))
         }
     }
 
@@ -530,7 +533,7 @@ impl Workspace {
         // Validate that all provided IDs exist
         for env_id in &environment_ids {
             if !self.config.environments.iter().any(|env| env.id == *env_id) {
-                return Err(Error::generic(format!("Environment with ID '{}' not found", env_id)));
+                return Err(Error::not_found("Environment", env_id));
             }
         }
 
@@ -1241,7 +1244,7 @@ impl WorkspaceRegistry {
             }
             Ok(())
         } else {
-            Err(Error::generic(format!("Workspace with ID '{}' not found", id)))
+            Err(Error::not_found("Workspace", id))
         }
     }
 
@@ -1249,10 +1252,7 @@ impl WorkspaceRegistry {
     pub fn set_active_workspace(&mut self, id: Option<String>) -> Result<()> {
         if let Some(ref workspace_id) = id {
             if !self.workspaces.contains_key(workspace_id) {
-                return Err(Error::generic(format!(
-                    "Workspace with ID '{}' not found",
-                    workspace_id
-                )));
+                return Err(Error::not_found("Workspace", workspace_id));
             }
         }
         self.active_workspace = id;
@@ -1286,10 +1286,7 @@ impl WorkspaceRegistry {
         // Validate that all provided IDs exist
         for workspace_id in &workspace_ids {
             if !self.workspaces.contains_key(workspace_id) {
-                return Err(Error::generic(format!(
-                    "Workspace with ID '{}' not found",
-                    workspace_id
-                )));
+                return Err(Error::not_found("Workspace", workspace_id));
             }
         }
 

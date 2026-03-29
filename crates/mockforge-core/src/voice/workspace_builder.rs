@@ -87,7 +87,7 @@ impl WorkspaceBuilder {
         if registry.get_workspace(&workspace_id).is_ok() {
             // Suggest alternative names
             let suggestions = self.suggest_workspace_names(&workspace_id, registry)?;
-            return Err(crate::Error::generic(format!(
+            return Err(crate::Error::validation(format!(
                 "Workspace '{}' already exists. Suggested alternatives: {}",
                 workspace_id,
                 suggestions.join(", ")
@@ -421,7 +421,7 @@ impl WorkspaceBuilder {
     fn parse_endpoint(endpoint: &str) -> Result<(String, String)> {
         let parts: Vec<&str> = endpoint.trim().splitn(2, ' ').collect();
         if parts.len() != 2 {
-            return Err(crate::Error::generic(format!(
+            return Err(crate::Error::config(format!(
                 "Invalid endpoint format: {}. Expected 'METHOD /path'",
                 endpoint
             )));
@@ -443,7 +443,7 @@ impl WorkspaceBuilder {
         // Validate endpoints per entity (at least 2 per entity)
         for entity in &parsed.entities {
             if entity.endpoints.len() < 2 {
-                return Err(crate::Error::generic(format!(
+                return Err(crate::Error::validation(format!(
                     "Entity '{}' must have at least 2 endpoints. Found {}.",
                     entity.name,
                     entity.endpoints.len()
@@ -453,7 +453,7 @@ impl WorkspaceBuilder {
 
         // Validate personas (at least 2)
         if parsed.personas.len() < 2 {
-            return Err(crate::Error::generic(format!(
+            return Err(crate::Error::validation(format!(
                 "Workspace must have at least 2 personas. Found {}.",
                 parsed.personas.len()
             )));
@@ -462,7 +462,7 @@ impl WorkspaceBuilder {
         // Validate persona relationships (each persona should have at least one relationship)
         for persona in &parsed.personas {
             if persona.relationships.is_empty() {
-                return Err(crate::Error::generic(format!(
+                return Err(crate::Error::validation(format!(
                     "Persona '{}' must have at least one relationship.",
                     persona.name
                 )));
@@ -471,7 +471,7 @@ impl WorkspaceBuilder {
 
         // Validate scenarios (at least 2)
         if parsed.scenarios.len() < 2 {
-            return Err(crate::Error::generic(format!(
+            return Err(crate::Error::validation(format!(
                 "Workspace must have at least 2 behavioral scenarios. Found {}.",
                 parsed.scenarios.len()
             )));
@@ -485,7 +485,7 @@ impl WorkspaceBuilder {
         let has_slow = scenario_types.contains(&"slow_path");
 
         if !has_happy && !has_failure && !has_slow {
-            return Err(crate::Error::generic(
+            return Err(crate::Error::validation(
                 "Workspace must have at least one scenario of type: happy_path, failure, or slow_path".to_string(),
             ));
         }

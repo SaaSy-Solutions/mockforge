@@ -132,7 +132,7 @@ impl RequestBody {
         match self {
             RequestBody::Json(value) => Ok(serde_json::to_vec(value)?),
             RequestBody::BinaryFile { path, .. } => tokio::fs::read(path).await.map_err(|e| {
-                Error::generic(format!("Failed to read binary file '{}': {}", path, e))
+                Error::io_with_context(format!("read binary file '{}'", path), e.to_string())
             }),
         }
     }
@@ -440,7 +440,7 @@ impl RequestChainRegistry {
     /// Register a chain from YAML string
     pub async fn register_from_yaml(&self, yaml: &str) -> Result<String> {
         let chain: ChainDefinition = serde_yaml::from_str(yaml)
-            .map_err(|e| Error::generic(format!("Failed to parse chain YAML: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse chain YAML: {}", e)))?;
         self.store.register_chain(chain.clone()).await?;
         Ok(chain.id.clone())
     }
@@ -448,7 +448,7 @@ impl RequestChainRegistry {
     /// Register a chain from JSON string
     pub async fn register_from_json(&self, json: &str) -> Result<String> {
         let chain: ChainDefinition = serde_json::from_str(json)
-            .map_err(|e| Error::generic(format!("Failed to parse chain JSON: {}", e)))?;
+            .map_err(|e| Error::config(format!("Failed to parse chain JSON: {}", e)))?;
         self.store.register_chain(chain.clone()).await?;
         Ok(chain.id.clone())
     }
@@ -471,11 +471,11 @@ impl RequestChainRegistry {
     /// Validate chain dependencies and structure
     pub async fn validate_chain(&self, chain: &ChainDefinition) -> Result<()> {
         if chain.links.is_empty() {
-            return Err(Error::generic("Chain must have at least one link"));
+            return Err(Error::validation("Chain must have at least one link"));
         }
 
         if chain.links.len() > self.store.config.max_chain_length {
-            return Err(Error::generic(format!(
+            return Err(Error::validation(format!(
                 "Chain length {} exceeds maximum allowed length {}",
                 chain.links.len(),
                 self.store.config.max_chain_length
@@ -495,7 +495,7 @@ impl RequestChainRegistry {
             chain.links.iter().map(|link| &link.request.id).collect();
 
         if request_ids.len() != chain.links.len() {
-            return Err(Error::generic("Duplicate request IDs found in chain"));
+            return Err(Error::validation("Duplicate request IDs found in chain"));
         }
 
         Ok(())
@@ -511,7 +511,7 @@ impl RequestChainRegistry {
         chain: &ChainDefinition,
     ) -> Result<()> {
         if rec_stack.contains(&link.request.id) {
-            return Err(Error::generic(format!(
+            return Err(Error::validation(format!(
                 "Circular dependency detected involving request '{}'",
                 link.request.id
             )));
@@ -527,7 +527,7 @@ impl RequestChainRegistry {
         for dep in &link.request.depends_on {
             // Check if dependency exists in the chain
             if !chain.links.iter().any(|l| &l.request.id == dep) {
-                return Err(Error::generic(format!(
+                return Err(Error::validation(format!(
                     "Request '{}' depends on '{}' which does not exist in the chain",
                     link.request.id, dep
                 )));

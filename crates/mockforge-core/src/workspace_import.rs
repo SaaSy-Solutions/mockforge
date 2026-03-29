@@ -207,7 +207,7 @@ pub fn import_postman_to_existing_workspace(
 ) -> Result<WorkspaceImportResult> {
     let workspace = registry
         .get_workspace_mut(workspace_id)
-        .ok_or_else(|| Error::generic(format!("Workspace '{}' not found", workspace_id)))?;
+        .ok_or_else(|| Error::not_found("Workspace", workspace_id))?;
 
     let warnings = Vec::new();
 
@@ -322,9 +322,9 @@ fn create_folder_hierarchy(
         } else {
             // Create new folder
             if let Some(parent_id) = &current_parent {
-                let parent = workspace.find_folder_mut(parent_id).ok_or_else(|| {
-                    Error::generic(format!("Parent folder '{}' not found", parent_id))
-                })?;
+                let parent = workspace
+                    .find_folder_mut(parent_id)
+                    .ok_or_else(|| Error::not_found("Parent folder", parent_id))?;
                 parent.add_folder(folder_name)?
             } else {
                 workspace.add_folder(folder_name)?
@@ -334,7 +334,7 @@ fn create_folder_hierarchy(
         current_parent = Some(folder_id);
     }
 
-    current_parent.ok_or_else(|| Error::generic("Failed to create folder hierarchy".to_string()))
+    current_parent.ok_or_else(|| Error::internal("Failed to create folder hierarchy"))
 }
 
 /// Add routes to a specific folder
@@ -353,7 +353,7 @@ fn add_routes_to_folder(
         // Add to specific folder
         let folder = workspace
             .find_folder_mut(&folder_id)
-            .ok_or_else(|| Error::generic(format!("Folder '{}' not found", folder_id)))?;
+            .ok_or_else(|| Error::not_found("Folder", &folder_id))?;
 
         for route in &routes {
             let request = convert_postman_route_to_request(route);

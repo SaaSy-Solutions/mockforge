@@ -81,14 +81,14 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create branch: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create branch: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             // Branch might already exist, which is okay
             if !error_text.contains("already exists") {
-                return Err(Error::generic(format!(
+                return Err(Error::internal(format!(
                     "Failed to create branch: {} - {}",
                     status, error_text
                 )));
@@ -123,7 +123,7 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to commit file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to commit file: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -133,7 +133,7 @@ impl GitLabPRClient {
             }
 
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to commit file: {} - {}",
                 status, error_text
             )));
@@ -167,12 +167,12 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create file: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to create file: {} - {}",
                 status, error_text
             )));
@@ -202,12 +202,12 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to delete file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to delete file: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to delete file: {} - {}",
                 status, error_text
             )));
@@ -241,12 +241,12 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to create MR: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create MR: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Failed to create MR: {} - {}",
                 status, error_text
             )));
@@ -255,13 +255,13 @@ impl GitLabPRClient {
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| Error::generic(format!("Failed to parse response: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse response: {}", e)))?;
 
         Ok(PRResult {
-            number: json["iid"].as_u64().ok_or_else(|| Error::generic("Missing MR number"))?,
+            number: json["iid"].as_u64().ok_or_else(|| Error::internal("Missing MR number"))?,
             url: json["web_url"]
                 .as_str()
-                .ok_or_else(|| Error::generic("Missing MR URL"))?
+                .ok_or_else(|| Error::internal("Missing MR URL"))?
                 .to_string(),
             branch: request.branch.clone(),
             title: request.title.clone(),
@@ -292,11 +292,11 @@ impl GitLabPRClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Failed to add labels: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to add labels: {}", e)))?;
 
         let status = response.status();
         if !status.is_success() {
-            return Err(Error::generic(format!("Failed to add labels: {}", status)));
+            return Err(Error::internal(format!("Failed to add labels: {}", status)));
         }
 
         Ok(())

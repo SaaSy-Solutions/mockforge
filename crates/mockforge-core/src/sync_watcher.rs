@@ -101,7 +101,7 @@ impl SyncWatcher {
         // Ensure directory exists
         if !directory_path.exists() {
             std::fs::create_dir_all(&directory_path)
-                .map_err(|e| Error::generic(format!("Failed to create sync directory: {}", e)))?;
+                .map_err(|e| Error::io_with_context("create sync directory", e.to_string()))?;
         }
 
         let (tx, mut rx) = mpsc::channel(100);
@@ -140,12 +140,12 @@ impl SyncWatcher {
             },
             config,
         )
-        .map_err(|e| Error::generic(format!("Failed to create file watcher: {}", e)))?;
+        .map_err(|e| Error::io_with_context("create file watcher", e.to_string()))?;
 
         // Watch the directory recursively
         watcher
             .watch(&directory_path, notify::RecursiveMode::Recursive)
-            .map_err(|e| Error::generic(format!("Failed to watch directory: {}", e)))?;
+            .map_err(|e| Error::io_with_context("watch directory", e.to_string()))?;
 
         // Store the watcher
         self.watchers.insert(workspace_id_for_watcher, watcher);
@@ -408,8 +408,9 @@ impl SyncWatcher {
             );
         } else {
             debug!("Content in {} is not a recognized format, skipping", path.display());
-            return Err(Error::generic(
-                "File is not a recognized format (expected MockRequest YAML)".to_string(),
+            return Err(Error::io_with_context(
+                "import YAML content",
+                "File is not a recognized format (expected MockRequest YAML)",
             ));
         }
 

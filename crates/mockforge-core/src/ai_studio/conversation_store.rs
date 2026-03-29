@@ -93,19 +93,19 @@ impl ConversationStore {
             // Ensure directory exists
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).await.map_err(|e| {
-                    crate::Error::generic(format!("Failed to create storage directory: {}", e))
+                    crate::Error::io_with_context("create storage directory", e.to_string())
                 })?;
             }
 
             // Load existing conversations if file exists
             if path.exists() {
                 let content = fs::read_to_string(path).await.map_err(|e| {
-                    crate::Error::generic(format!("Failed to read conversation store: {}", e))
+                    crate::Error::io_with_context("read conversation store", e.to_string())
                 })?;
 
                 let conversations: Vec<Conversation> =
                     serde_json::from_str(&content).map_err(|e| {
-                        crate::Error::generic(format!("Failed to parse conversation store: {}", e))
+                        crate::Error::io_with_context("parse conversation store", e.to_string())
                     })?;
 
                 let mut cache = self.cache.write().await;
@@ -125,11 +125,11 @@ impl ConversationStore {
             let conversations: Vec<&Conversation> = cache.values().collect();
 
             let content = serde_json::to_string_pretty(&conversations).map_err(|e| {
-                crate::Error::generic(format!("Failed to serialize conversations: {}", e))
+                crate::Error::io_with_context("serialize conversations", e.to_string())
             })?;
 
             fs::write(path, content).await.map_err(|e| {
-                crate::Error::generic(format!("Failed to write conversation store: {}", e))
+                crate::Error::io_with_context("write conversation store", e.to_string())
             })?;
         }
 
@@ -164,7 +164,7 @@ impl ConversationStore {
             self.persist().await?;
             Ok(())
         } else {
-            Err(crate::Error::generic(format!("Conversation not found: {}", conversation_id)))
+            Err(crate::Error::not_found("Conversation", conversation_id))
         }
     }
 

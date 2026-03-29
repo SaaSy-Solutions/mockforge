@@ -338,24 +338,19 @@ async fn execute_fixtures_command(
 ) -> Result<()> {
     match command.command {
         FixturesSubcommands::Load { dir } => {
-            use serde_yaml;
-            use std::fs;
+            use mockforge_core::fixture_store::{
+                load_fixtures_from_dir, FixtureFileFormat, FixtureFileGranularity,
+                FixtureLoadErrorMode, FixtureLoadOptions,
+            };
 
-            let mut loaded_fixtures = Vec::new();
+            let options = FixtureLoadOptions {
+                formats: vec![FixtureFileFormat::Yaml],
+                error_mode: FixtureLoadErrorMode::FailFast,
+                granularity: FixtureFileGranularity::Single,
+            };
 
-            for entry in fs::read_dir(&dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                if path.extension().and_then(|s| s.to_str()) == Some("yaml")
-                    || path.extension().and_then(|s| s.to_str()) == Some("yml")
-                {
-                    let content = fs::read_to_string(&path)?;
-                    let fixture: crate::fixtures::FtpFixture = serde_yaml::from_str(&content)?;
-                    loaded_fixtures.push(fixture);
-                    println!("Loaded fixture: {}", path.display());
-                }
-            }
+            let loaded_fixtures: Vec<crate::fixtures::FtpFixture> =
+                load_fixtures_from_dir(&dir, &options)?;
 
             if !loaded_fixtures.is_empty() {
                 // Load virtual files from fixtures into the VFS

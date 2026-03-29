@@ -908,7 +908,7 @@ impl FitnessFunctionRegistry {
                     let max_increase = rule_config
                         .max_percent_increase
                         .ok_or_else(|| {
-                            crate::Error::generic(format!(
+                            crate::Error::validation(format!(
                                 "Fitness rule '{}' (type: response_size_delta) requires 'max_percent_increase' field. \
                                 Example: max_percent_increase: 25.0",
                                 rule_config.name
@@ -917,7 +917,7 @@ impl FitnessFunctionRegistry {
 
                     // Validate value range
                     if max_increase < 0.0 {
-                        return Err(crate::Error::generic(format!(
+                        return Err(crate::Error::validation(format!(
                             "Fitness rule '{}' (type: response_size_delta): 'max_percent_increase' must be >= 0, got {}",
                             rule_config.name, max_increase
                         )));
@@ -976,7 +976,7 @@ impl FitnessFunctionRegistry {
                 FitnessRuleType::FieldCount => {
                     // Validate required field
                     let max_fields = rule_config.max_fields.ok_or_else(|| {
-                        crate::Error::generic(format!(
+                        crate::Error::validation(format!(
                             "Fitness rule '{}' (type: field_count) requires 'max_fields' field. \
                             Example: max_fields: 50",
                             rule_config.name
@@ -985,7 +985,7 @@ impl FitnessFunctionRegistry {
 
                     // Validate value range
                     if max_fields == 0 {
-                        return Err(crate::Error::generic(format!(
+                        return Err(crate::Error::validation(format!(
                             "Fitness rule '{}' (type: field_count): 'max_fields' must be > 0, got {}",
                             rule_config.name, max_fields
                         )));
@@ -1010,7 +1010,7 @@ impl FitnessFunctionRegistry {
                 FitnessRuleType::SchemaComplexity => {
                     // Validate required field
                     let max_depth = rule_config.max_depth.ok_or_else(|| {
-                        crate::Error::generic(format!(
+                        crate::Error::validation(format!(
                             "Fitness rule '{}' (type: schema_complexity) requires 'max_depth' field. \
                             Example: max_depth: 5",
                             rule_config.name
@@ -1019,7 +1019,7 @@ impl FitnessFunctionRegistry {
 
                     // Validate value range
                     if max_depth == 0 {
-                        return Err(crate::Error::generic(format!(
+                        return Err(crate::Error::validation(format!(
                             "Fitness rule '{}' (type: schema_complexity): 'max_depth' must be > 0, got {}",
                             rule_config.name, max_depth
                         )));

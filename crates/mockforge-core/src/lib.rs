@@ -572,6 +572,69 @@ pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 // Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
 // Use qualified paths: spec_parser::ValidationError, spec_parser::ValidationResult
 
+// ── Organized module facades (R10) ───────────────────────────────────────────
+// These provide a namespaced access path for new code. Existing flat re-exports
+// above remain for backward compatibility. Prefer these for new imports.
+
+/// Routing, route matching, and OpenAPI route generation
+pub mod routes {
+    pub use crate::openapi::{
+        OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSecurityRequirement, OpenApiSpec,
+    };
+    pub use crate::openapi_routes::{
+        create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry,
+        ValidationOptions,
+    };
+    pub use crate::routing::{HttpMethod, Route, RouteRegistry};
+}
+
+/// Middleware, protocol abstractions, and request processing
+pub mod middleware {
+    pub use crate::latency::LatencyInjector;
+    pub use crate::overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
+    pub use crate::protocol_abstraction::{
+        MessagePattern, MiddlewareAction, MiddlewareChain, Protocol, ProtocolMiddleware,
+        ProtocolRequest, ProtocolResponse, RequestMatcher, ResponseStatus, SpecOperation,
+        SpecRegistry,
+    };
+}
+
+/// Mock response generation and priority handling
+pub mod generation {
+    pub use crate::priority_handler::{
+        CustomFixtureStep, FailureInjectionStep, GenerationResult, MockGenerator, MockResponse,
+        PriorityHttpHandler, PriorityRequest, PriorityResponse, PriorityStep, SimpleMockGenerator,
+    };
+    pub use crate::stateful_handler::{StatefulConfig, StatefulResponse, StatefulResponseHandler};
+}
+
+/// Request/response validation
+pub mod validate {
+    pub use crate::runtime_validation::{
+        RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
+    };
+    pub use crate::spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
+    pub use crate::validation::{
+        validate_openapi_operation_security, validate_openapi_security, Validator,
+    };
+    pub use crate::verification::{
+        matches_verification_pattern, verify_at_least, verify_never, verify_requests,
+        verify_sequence, VerificationCount, VerificationRequest, VerificationResult,
+    };
+}
+
+/// Fixture loading utilities
+pub mod fixtures {
+    pub use crate::custom_fixture::{CustomFixture, CustomFixtureLoader, NestedFixture};
+    pub use crate::fixture_store::{
+        load_fixtures_from_dir, FixtureFileFormat, FixtureFileGranularity, FixtureLoadErrorMode,
+        FixtureLoadOptions,
+    };
+    pub use crate::record_replay::{
+        RecordHandler, RecordReplayHandler, RecordedRequest, ReplayHandler,
+    };
+}
+
 /// Core configuration for MockForge
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

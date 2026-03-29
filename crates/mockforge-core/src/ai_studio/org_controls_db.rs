@@ -52,7 +52,7 @@ impl OrgControlsAccessor for DbOrgControls {
         workspace_id: Option<&str>,
     ) -> Result<Option<OrgAiControlsConfig>> {
         let org_uuid = Uuid::parse_str(org_id)
-            .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
+            .map_err(|e| crate::Error::validation(format!("Invalid org_id: {}", e)))?;
         let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Load budget config
@@ -64,7 +64,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(ws_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load budget: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load budget: {}", e)))?
         } else {
             sqlx::query_as::<_, BudgetRow>(
                 "SELECT * FROM org_ai_budgets WHERE org_id = $1 AND workspace_id IS NULL",
@@ -72,7 +72,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(org_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load budget: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load budget: {}", e)))?
         };
 
         // Load rate limit config
@@ -84,7 +84,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(ws_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load rate limit: {}", e)))?
         } else {
             sqlx::query_as::<_, RateLimitRow>(
                 "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL",
@@ -92,7 +92,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(org_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load rate limit: {}", e)))?
         };
 
         // Load feature toggles
@@ -113,8 +113,9 @@ impl OrgControlsAccessor for DbOrgControls {
             .await
         };
 
-        let toggles = toggles_query
-            .map_err(|e| crate::Error::generic(format!("Failed to load feature toggles: {}", e)))?;
+        let toggles = toggles_query.map_err(|e| {
+            crate::Error::internal(format!("Failed to load feature toggles: {}", e))
+        })?;
 
         // If no config found, return None
         if budget.is_none() && rate_limit.is_none() && toggles.is_empty() {
@@ -158,7 +159,7 @@ impl OrgControlsAccessor for DbOrgControls {
         estimated_tokens: u64,
     ) -> Result<BudgetCheckResult> {
         let org_uuid = Uuid::parse_str(org_id)
-            .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
+            .map_err(|e| crate::Error::validation(format!("Invalid org_id: {}", e)))?;
         let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Get current budget
@@ -180,7 +181,7 @@ impl OrgControlsAccessor for DbOrgControls {
         };
 
         let budget =
-            budget.map_err(|e| crate::Error::generic(format!("Failed to check budget: {}", e)))?;
+            budget.map_err(|e| crate::Error::internal(format!("Failed to check budget: {}", e)))?;
 
         if let Some(b) = budget {
             // Check if period has expired and reset if needed
@@ -204,7 +205,7 @@ impl OrgControlsAccessor for DbOrgControls {
                 .bind(b.id)
                 .execute(&self.pool)
                 .await
-                .map_err(|e| crate::Error::generic(format!("Failed to reset budget period: {}", e)))?;
+                .map_err(|e| crate::Error::internal(format!("Failed to reset budget period: {}", e)))?;
                 (0u64, 0u64, Some(new_period_start))
             } else {
                 (b.current_tokens_used as u64, b.current_calls_used as u64, Some(period_start))
@@ -254,7 +255,7 @@ impl OrgControlsAccessor for DbOrgControls {
         workspace_id: Option<&str>,
     ) -> Result<RateLimitCheckResult> {
         let org_uuid = Uuid::parse_str(org_id)
-            .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
+            .map_err(|e| crate::Error::validation(format!("Invalid org_id: {}", e)))?;
         let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         // Load rate limit configuration
@@ -266,7 +267,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(ws_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load rate limit: {}", e)))?
         } else {
             sqlx::query_as::<_, RateLimitRow>(
                 "SELECT * FROM org_ai_rate_limits WHERE org_id = $1 AND workspace_id IS NULL",
@@ -274,7 +275,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(org_uuid)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to load rate limit: {}", e)))?
+            .map_err(|e| crate::Error::internal(format!("Failed to load rate limit: {}", e)))?
         };
 
         // If no rate limit config, allow the request
@@ -321,7 +322,7 @@ impl OrgControlsAccessor for DbOrgControls {
         let now = Utc::now();
         let window_start = now.timestamp() / window_seconds * window_seconds;
         let window_start_dt = DateTime::<Utc>::from_timestamp(window_start, 0)
-            .ok_or_else(|| crate::Error::generic("Invalid timestamp".to_string()))?;
+            .ok_or_else(|| crate::Error::internal("Invalid timestamp".to_string()))?;
 
         // Count requests in current window
         // We'll use a usage tracking table or create one if it doesn't exist
@@ -366,7 +367,7 @@ impl OrgControlsAccessor for DbOrgControls {
             // Calculate retry after (next window start)
             let next_window_start = window_start + window_seconds;
             let retry_after = DateTime::<Utc>::from_timestamp(next_window_start, 0)
-                .ok_or_else(|| crate::Error::generic("Invalid timestamp".to_string()))?;
+                .ok_or_else(|| crate::Error::internal("Invalid timestamp".to_string()))?;
 
             Ok(RateLimitCheckResult {
                 allowed: false,
@@ -399,7 +400,7 @@ impl OrgControlsAccessor for DbOrgControls {
         feature: &str,
     ) -> Result<bool> {
         let org_uuid = Uuid::parse_str(org_id)
-            .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
+            .map_err(|e| crate::Error::validation(format!("Invalid org_id: {}", e)))?;
         let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
 
         let result = if let Some(ws_uuid) = workspace_uuid {
@@ -424,7 +425,7 @@ impl OrgControlsAccessor for DbOrgControls {
         match result {
             Ok(Some(row)) => Ok(row.get::<bool, _>("enabled")),
             Ok(None) => Ok(true), // Default to enabled if not configured
-            Err(e) => Err(crate::Error::generic(format!("Failed to check feature: {}", e))),
+            Err(e) => Err(crate::Error::internal(format!("Failed to check feature: {}", e))),
         }
     }
 
@@ -440,7 +441,7 @@ impl OrgControlsAccessor for DbOrgControls {
         metadata: Option<Value>,
     ) -> Result<()> {
         let org_uuid = Uuid::parse_str(org_id)
-            .map_err(|e| crate::Error::generic(format!("Invalid org_id: {}", e)))?;
+            .map_err(|e| crate::Error::validation(format!("Invalid org_id: {}", e)))?;
         let workspace_uuid = workspace_id.and_then(|w| Uuid::parse_str(w).ok());
         let user_uuid = user_id.and_then(|u| Uuid::parse_str(u).ok());
 
@@ -468,7 +469,7 @@ impl OrgControlsAccessor for DbOrgControls {
         .bind(metadata.unwrap_or_else(|| serde_json::json!({})))
         .execute(&self.pool)
         .await
-        .map_err(|e| crate::Error::generic(format!("Failed to record usage: {}", e)))?;
+        .map_err(|e| crate::Error::internal(format!("Failed to record usage: {}", e)))?;
 
         // Update budget counters
         if let Some(ws_uuid) = workspace_uuid {
@@ -484,7 +485,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(ws_uuid)
             .execute(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to update budget: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("Failed to update budget: {}", e)))?;
         } else {
             sqlx::query(
                 "UPDATE org_ai_budgets
@@ -497,7 +498,7 @@ impl OrgControlsAccessor for DbOrgControls {
             .bind(org_uuid)
             .execute(&self.pool)
             .await
-            .map_err(|e| crate::Error::generic(format!("Failed to update budget: {}", e)))?;
+            .map_err(|e| crate::Error::internal(format!("Failed to update budget: {}", e)))?;
         }
 
         Ok(())
