@@ -208,18 +208,18 @@ pub async fn load_generate_config<P: AsRef<Path>>(path: P) -> crate::Result<Gene
 
     let content = tokio::fs::read_to_string(path)
         .await
-        .map_err(|e| crate::Error::generic(format!("Failed to read config file: {}", e)))?;
+        .map_err(|e| crate::Error::io_with_context("config file", e.to_string()))?;
 
     let config = if path.extension().and_then(|s| s.to_str()) == Some("toml") {
         toml::from_str(&content)
-            .map_err(|e| crate::Error::generic(format!("Failed to parse TOML config: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to parse TOML config: {}", e)))?
     } else if path.extension().and_then(|s| s.to_str()).map(|s| s == "json").unwrap_or(false) {
         serde_json::from_str(&content)
-            .map_err(|e| crate::Error::generic(format!("Failed to parse JSON config: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to parse JSON config: {}", e)))?
     } else {
         // Try YAML
         serde_yaml::from_str(&content)
-            .map_err(|e| crate::Error::generic(format!("Failed to parse YAML config: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to parse YAML config: {}", e)))?
     };
 
     Ok(config)
@@ -245,18 +245,18 @@ pub async fn save_generate_config<P: AsRef<Path>>(
 
     let content = if path.extension().and_then(|s| s.to_str()) == Some("toml") {
         toml::to_string_pretty(config)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize to TOML: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to serialize to TOML: {}", e)))?
     } else if path.extension().and_then(|s| s.to_str()).map(|s| s == "json").unwrap_or(false) {
         serde_json::to_string_pretty(config)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize to JSON: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to serialize to JSON: {}", e)))?
     } else {
         serde_yaml::to_string(config)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize to YAML: {}", e)))?
+            .map_err(|e| crate::Error::config(format!("Failed to serialize to YAML: {}", e)))?
     };
 
     tokio::fs::write(path, content)
         .await
-        .map_err(|e| crate::Error::generic(format!("Failed to write config file: {}", e)))?;
+        .map_err(|e| crate::Error::io_with_context("config file", e.to_string()))?;
 
     Ok(())
 }

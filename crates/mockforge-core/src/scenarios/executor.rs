@@ -26,7 +26,7 @@ impl ScenarioExecutor {
         let http_client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| Error::generic(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| Error::io_with_context("HTTP client", e.to_string()))?;
 
         Ok(Self {
             registry,
@@ -45,7 +45,7 @@ impl ScenarioExecutor {
             .registry
             .get(scenario_id)
             .await
-            .ok_or_else(|| Error::generic(format!("Scenario not found: {}", scenario_id)))?;
+            .ok_or_else(|| Error::internal(format!("Scenario not found: {}", scenario_id)))?;
 
         self.execute_scenario_definition(&scenario, parameters).await
     }

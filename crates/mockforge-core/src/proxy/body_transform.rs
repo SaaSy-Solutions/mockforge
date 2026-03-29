@@ -183,7 +183,7 @@ impl BodyTransformationMiddleware {
         let parts: Vec<&str> = path.split('.').collect();
 
         if parts.is_empty() {
-            return Err(crate::Error::generic("Empty JSONPath".to_string()));
+            return Err(crate::Error::internal("Empty JSONPath".to_string()));
         }
 
         // Navigate to the target location
@@ -251,13 +251,13 @@ impl BodyTransformationMiddleware {
                             if idx < arr.len() {
                                 current = &mut arr[idx];
                             } else {
-                                return Err(crate::Error::generic(format!(
+                                return Err(crate::Error::internal(format!(
                                     "Array index {} out of bounds",
                                     idx
                                 )));
                             }
                         } else {
-                            return Err(crate::Error::generic(format!(
+                            return Err(crate::Error::internal(format!(
                                 "Invalid array index: {}",
                                 part
                             )));

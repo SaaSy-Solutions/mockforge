@@ -70,14 +70,14 @@ impl PRGenerator {
                 let client = self
                     .github_client
                     .as_ref()
-                    .ok_or_else(|| crate::Error::generic("GitHub client not configured"))?;
+                    .ok_or_else(|| crate::Error::internal("GitHub client not configured"))?;
                 client.create_pr(request).await
             }
             PRProvider::GitLab => {
                 let client = self
                     .gitlab_client
                     .as_ref()
-                    .ok_or_else(|| crate::Error::generic("GitLab client not configured"))?;
+                    .ok_or_else(|| crate::Error::internal("GitLab client not configured"))?;
                 client.create_pr(request).await
             }
         }

@@ -295,7 +295,7 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", request_id.to_string()))?;
 
         if request.status != RequestStatus::PendingManager {
             return Err(Error::invalid_state("Request is not pending manager approval"));
@@ -344,7 +344,7 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", request_id.to_string()))?;
 
         if request.status != RequestStatus::PendingSecurity {
             return Err(Error::invalid_state("Request is not pending security approval"));
@@ -404,7 +404,7 @@ impl PrivilegedAccessManager {
         let mut requests = self.requests.write().await;
         let request = requests
             .get_mut(&request_id)
-            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", &request_id.to_string()))?;
+            .ok_or_else(|| Error::not_found("PrivilegedAccessRequest", request_id.to_string()))?;
 
         let user_id = request.user_id;
         request.status = RequestStatus::Denied;

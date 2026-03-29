@@ -97,7 +97,7 @@ Be thorough but concise. Focus on actionable insights."#;
         // Parse the response into FailureNarrative
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let narrative: FailureNarrative = serde_json::from_value(response).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::internal(format!(
                 "Failed to parse LLM response as FailureNarrative: {}. Response: {}",
                 e, response_str
             ))

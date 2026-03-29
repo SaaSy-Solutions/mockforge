@@ -396,7 +396,7 @@ Be thorough but practical. Focus on actionable recommendations."#
     /// Build user prompt with schema and focus areas
     fn build_user_prompt(&self, request: &CritiqueRequest) -> Result<String> {
         let schema_str = serde_json::to_string_pretty(&request.schema)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize schema: {}", e)))?;
+            .map_err(|e| crate::Error::config(format!("Failed to serialize schema: {}", e)))?;
 
         let focus_areas_text = if request.focus_areas.is_empty() {
             "all areas".to_string()
@@ -423,14 +423,14 @@ Please provide a comprehensive analysis covering all requested areas. Be specifi
         } else if response.is_object() {
             response
         } else {
-            return Err(crate::Error::generic(
+            return Err(crate::Error::internal(
                 "LLM response is not a valid JSON object".to_string(),
             ));
         };
 
         // Parse into ApiCritique struct
         let critique: ApiCritique = serde_json::from_value(critique_json.clone()).map_err(|e| {
-            crate::Error::generic(format!(
+            crate::Error::internal(format!(
                 "Failed to parse critique response: {}. Response was: {}",
                 e,
                 serde_json::to_string_pretty(&critique_json).unwrap_or_default()

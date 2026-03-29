@@ -136,7 +136,7 @@ appropriate condition structures."#;
         // Since Hook is now serde_json::Value, we can return the response directly
         // Just validate it's a valid JSON object
         if !response.is_object() {
-            return Err(crate::Error::generic(format!(
+            return Err(crate::Error::internal(format!(
                 "LLM response is not a JSON object. Response: {}",
                 serde_json::to_string(&response).unwrap_or_default()
             )));

@@ -61,7 +61,7 @@ impl ConversationManager {
         let state = self
             .conversations
             .get_mut(id)
-            .ok_or_else(|| crate::Error::generic(format!("Conversation {} not found", id)))?;
+            .ok_or_else(|| crate::Error::internal(format!("Conversation {} not found", id)))?;
 
         // Add command to history
         state.context.history.push(ConversationEntry {

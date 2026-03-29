@@ -405,7 +405,7 @@ impl RequestProcessor {
                         .ok();
                 }
 
-                return Err(Error::generic(error_msg));
+                return Err(Error::internal(error_msg));
             }
         };
 
@@ -470,7 +470,7 @@ impl RequestProcessor {
                         .ok();
                 }
 
-                return Err(Error::generic(error_msg));
+                return Err(Error::internal(error_msg));
             }
         };
 

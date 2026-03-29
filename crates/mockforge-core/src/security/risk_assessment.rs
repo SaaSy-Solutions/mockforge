@@ -402,10 +402,10 @@ impl RiskAssessmentEngine {
 
         let content = tokio::fs::read_to_string(path)
             .await
-            .map_err(|e| Error::io_with_context("reading risk register", &e.to_string()))?;
+            .map_err(|e| Error::io_with_context("reading risk register", e.to_string()))?;
 
         let risks: HashMap<String, Risk> = serde_json::from_str(&content)
-            .map_err(|e| Error::io_with_context("parsing risk register", &e.to_string()))?;
+            .map_err(|e| Error::io_with_context("parsing risk register", e.to_string()))?;
 
         // Find max risk ID to set counter
         let max_id = risks
@@ -435,17 +435,17 @@ impl RiskAssessmentEngine {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                Error::io_with_context("creating risk register directory", &e.to_string())
+                Error::io_with_context("creating risk register directory", e.to_string())
             })?;
         }
 
         let risks = self.risks.read().await;
         let content = serde_json::to_string_pretty(&*risks)
-            .map_err(|e| Error::io_with_context("serializing risk register", &e.to_string()))?;
+            .map_err(|e| Error::io_with_context("serializing risk register", e.to_string()))?;
 
         tokio::fs::write(path, content)
             .await
-            .map_err(|e| Error::io_with_context("writing risk register", &e.to_string()))?;
+            .map_err(|e| Error::io_with_context("writing risk register", e.to_string()))?;
 
         Ok(())
     }

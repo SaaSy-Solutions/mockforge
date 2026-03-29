@@ -307,7 +307,7 @@ impl ValidationGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not available"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
 
         let issue_type_str = format!("{:?}", issue.issue_type);
         let field_str =
@@ -381,7 +381,7 @@ impl ValidationGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not available"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
 
         let system_prompt = "You are an API error response generator. Generate realistic error responses in JSON format.";
         let user_prompt = format!(

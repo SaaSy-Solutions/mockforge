@@ -26,7 +26,7 @@ impl ProxyHandler {
         body: Option<&[u8]>,
     ) -> Result<ProxyResponse> {
         if !self.config.enabled {
-            return Err(Error::generic("Proxy is not enabled"));
+            return Err(Error::internal("Proxy is not enabled"));
         }
 
         // Parse method
@@ -38,7 +38,7 @@ impl ProxyHandler {
             "HEAD" => Method::HEAD,
             "OPTIONS" => Method::OPTIONS,
             "PATCH" => Method::PATCH,
-            _ => return Err(Error::generic(format!("Unsupported HTTP method: {}", method))),
+            _ => return Err(Error::internal(format!("Unsupported HTTP method: {}", method))),
         };
 
         // Prepare headers (merge with config headers)
@@ -63,7 +63,7 @@ impl ProxyHandler {
         let body_bytes = response
             .bytes()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?;
+            .map_err(|e| Error::io_with_context("response body", e.to_string()))?;
 
         Ok(ProxyResponse {
             status_code,
@@ -81,12 +81,12 @@ impl ProxyHandler {
         body: Option<&[u8]>,
     ) -> Result<ProxyResponse> {
         if !self.config.enabled {
-            return Err(Error::generic("Proxy is not enabled"));
+            return Err(Error::internal("Proxy is not enabled"));
         }
 
         // Check if this request should be proxied (with conditional evaluation)
         if !self.config.should_proxy_with_condition(method, uri, headers, body) {
-            return Err(Error::generic("Request should not be proxied"));
+            return Err(Error::internal("Request should not be proxied"));
         }
 
         // Determine the upstream URL
@@ -114,7 +114,7 @@ impl ProxyHandler {
             Method::HEAD => Method::HEAD,
             Method::OPTIONS => Method::OPTIONS,
             Method::PATCH => Method::PATCH,
-            _ => return Err(Error::generic(format!("Unsupported HTTP method: {}", method))),
+            _ => return Err(Error::internal(format!("Unsupported HTTP method: {}", method))),
         };
 
         // Create proxy client and send request
@@ -134,7 +134,7 @@ impl ProxyHandler {
         let body_bytes = response
             .bytes()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read response body: {}", e)))?;
+            .map_err(|e| Error::io_with_context("response body", e.to_string()))?;
 
         Ok(ProxyResponse {
             status_code,

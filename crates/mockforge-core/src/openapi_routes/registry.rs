@@ -1,7 +1,12 @@
-//! OpenAPI route registry and management
+//! OpenAPI route registry and management (DEPRECATED)
 //!
-//! This module provides the main OpenApiRouteRegistry struct and related
-//! functionality for managing OpenAPI-based routes.
+//! **Note:** This sub-module contains an abandoned partial refactoring.
+//! The authoritative `OpenApiRouteRegistry` is defined in the parent
+//! `openapi_routes.rs` file (with `custom_fixture_loader` support).
+//! This module's `OpenApiRouteRegistry` is a different, unused type.
+//!
+//! New code should use `crate::openapi_routes::OpenApiRouteRegistry` directly.
+//! This module will be removed in a future version.
 
 use super::validation::{ValidationMode, ValidationOptions};
 use crate::ai_response::RequestContext;

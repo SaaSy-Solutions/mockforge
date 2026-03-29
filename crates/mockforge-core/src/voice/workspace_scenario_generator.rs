@@ -262,7 +262,7 @@ impl WorkspaceScenarioGenerator {
 
         // Convert to YAML string
         serde_yaml::to_string(&config).map_err(|e| {
-            crate::Error::generic(format!("Failed to serialize chaos config to YAML: {}", e))
+            crate::Error::config(format!("Failed to serialize chaos config to YAML: {}", e))
         })
     }
 

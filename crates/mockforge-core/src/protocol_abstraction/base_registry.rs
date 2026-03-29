@@ -122,20 +122,20 @@ impl<F: ProtocolFixture + DeserializeOwned> BaseSpecRegistry<F> {
     /// The file must deserialize to `Vec<F>`.
     pub fn load_fixtures(&mut self, path: &std::path::Path) -> Result<usize> {
         let content = std::fs::read_to_string(path).map_err(|e| {
-            crate::Error::generic(format!("Failed to read fixture file {}: {}", path.display(), e))
+            crate::Error::internal(format!("Failed to read fixture file {}: {}", path.display(), e))
         })?;
 
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         let fixtures: Vec<F> = match ext {
             "yaml" | "yml" => serde_yaml::from_str(&content).map_err(|e| {
-                crate::Error::generic(format!("Failed to parse YAML fixtures: {}", e))
+                crate::Error::config(format!("Failed to parse YAML fixtures: {}", e))
             })?,
             "json" => serde_json::from_str(&content).map_err(|e| {
-                crate::Error::generic(format!("Failed to parse JSON fixtures: {}", e))
+                crate::Error::config(format!("Failed to parse JSON fixtures: {}", e))
             })?,
             _ => {
-                return Err(crate::Error::generic(format!(
+                return Err(crate::Error::internal(format!(
                     "Unsupported fixture file extension: {ext}"
                 )));
             }

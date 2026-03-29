@@ -320,7 +320,7 @@ impl PaginationIntelligence {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not available"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
 
         // Build context about the request
         let context_summary = context.build_context_summary().await;

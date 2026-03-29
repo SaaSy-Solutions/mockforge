@@ -83,7 +83,7 @@ impl DriftGitOpsHandler {
             if let Some(ref pr_config) = config.pr_config {
                 if pr_config.enabled {
                     let token = pr_config.token.clone().ok_or_else(|| {
-                        crate::Error::generic("PR token not configured".to_string())
+                        crate::Error::internal("PR token not configured".to_string())
                     })?;
 
                     let generator = match pr_config.provider {
@@ -139,7 +139,7 @@ impl DriftGitOpsHandler {
         let pr_generator = self
             .pr_generator
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("PR generator not configured"))?;
+            .ok_or_else(|| crate::Error::internal("PR generator not configured"))?;
 
         // Collect file changes from incidents
         let mut file_changes = Vec::new();
@@ -296,7 +296,7 @@ impl DriftGitOpsHandler {
         });
 
         let spec_content = serde_json::to_string_pretty(&patch_document)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize patch: {}", e)))?;
+            .map_err(|e| crate::Error::config(format!("Failed to serialize patch: {}", e)))?;
 
         // The patch file sits alongside the spec so reviewers can inspect it
         let patch_path = spec_path.with_extension("patch.json");
@@ -335,7 +335,7 @@ impl DriftGitOpsHandler {
             fixtures_dir.join("http").join(&method).join(format!("{}.json", path_hash));
 
         let fixture_content = serde_json::to_string_pretty(&fixture_data)
-            .map_err(|e| crate::Error::generic(format!("Failed to serialize fixture: {}", e)))?;
+            .map_err(|e| crate::Error::config(format!("Failed to serialize fixture: {}", e)))?;
 
         // Determine if this is a create or update based on file existence
         let change_type = if fixture_path.exists() {

@@ -351,7 +351,7 @@ impl TrafficShaper {
             drop(bucket);
 
             if wait_time.is_zero() {
-                return Err(Error::generic(format!(
+                return Err(Error::internal(format!(
                     "Failed to acquire bandwidth tokens for {} bytes",
                     data_size
                 )));
@@ -364,7 +364,7 @@ impl TrafficShaper {
         if bucket.try_consume(data_size) {
             Ok(())
         } else {
-            Err(Error::generic(format!(
+            Err(Error::internal(format!(
                 "Failed to acquire bandwidth tokens for {} bytes",
                 data_size
             )))

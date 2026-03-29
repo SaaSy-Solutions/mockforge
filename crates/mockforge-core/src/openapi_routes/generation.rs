@@ -193,7 +193,7 @@ pub fn generate_parameter_validation_code(route: &OpenApiRoute) -> String {
     for param in &route.parameters {
         if param.starts_with(':') {
             code.push_str(&format!(
-                "if {}.is_empty() {{ return Err(Error::generic(\"Missing parameter: {}\")); }}\n",
+                "if {}.is_empty() {{ return Err(Error::internal(\"Missing parameter: {}\")); }}\n",
                 param.trim_start_matches(':'),
                 param.trim_start_matches(':')
             ));

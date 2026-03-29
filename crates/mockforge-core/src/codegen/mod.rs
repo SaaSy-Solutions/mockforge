@@ -58,7 +58,7 @@ pub fn generate_mock_server_code(
         "rs" | "rust" => rust_generator::generate(spec, config),
         "ts" | "typescript" => typescript_generator::generate(spec, config),
         "js" | "javascript" => typescript_generator::generate(spec, config),
-        _ => Err(crate::Error::generic(format!(
+        _ => Err(crate::Error::internal(format!(
             "Unsupported language: {}. Supported: rust, typescript, javascript",
             language
         ))),

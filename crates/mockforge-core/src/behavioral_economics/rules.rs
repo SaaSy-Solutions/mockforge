@@ -99,15 +99,15 @@ impl BehaviorRule {
     /// Validate the rule
     pub fn validate(&self) -> crate::Result<()> {
         if self.name.trim().is_empty() {
-            return Err(crate::Error::generic("Rule name cannot be empty"));
+            return Err(crate::Error::internal("Rule name cannot be empty"));
         }
 
         if matches!(self.rule_type, RuleType::Scriptable) {
             if self.script.is_none() {
-                return Err(crate::Error::generic("Scriptable rules must have a script"));
+                return Err(crate::Error::internal("Scriptable rules must have a script"));
             }
             if self.script_language.is_none() {
-                return Err(crate::Error::generic("Scriptable rules must have a script_language"));
+                return Err(crate::Error::internal("Scriptable rules must have a script_language"));
             }
         }
 

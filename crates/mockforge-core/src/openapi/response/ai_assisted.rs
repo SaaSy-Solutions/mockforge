@@ -26,7 +26,7 @@ impl ResponseGenerator {
         let prompt_template = ai_config
             .prompt
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("AI prompt is required"))?;
+            .ok_or_else(|| crate::Error::internal("AI prompt is required"))?;
 
         // Note: expand_prompt_template is now in mockforge-template-expansion crate
         // For now, we'll do a simple string replacement as a fallback
@@ -47,7 +47,7 @@ impl ResponseGenerator {
         tracing::warn!(
             "No AI generator provided; configure MOCKFORGE_AI_PROVIDER to enable AI responses"
         );
-        Err(crate::Error::generic(
+        Err(crate::Error::internal(
             "AI response generation is not available: no AI generator configured. \
              Set MOCKFORGE_AI_PROVIDER and MOCKFORGE_AI_API_KEY environment variables to enable AI-assisted responses.",
         ))

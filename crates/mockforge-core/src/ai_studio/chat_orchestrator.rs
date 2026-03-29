@@ -348,7 +348,7 @@ impl ChatOrchestrator {
                 // Use ContractDiffHandler to process the query
                 use crate::ai_studio::contract_diff_handler::ContractDiffHandler;
                 let handler = ContractDiffHandler::new().map_err(|e| {
-                    crate::Error::generic(format!("Failed to create ContractDiffHandler: {}", e))
+                    crate::Error::io_with_context("ContractDiffHandler", e.to_string())
                 })?;
 
                 // For now, we don't have direct access to specs/requests in the orchestrator

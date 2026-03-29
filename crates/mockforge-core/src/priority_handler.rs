@@ -316,7 +316,7 @@ impl PriorityHttpHandler {
                 let response_body = match custom_fixture.response.as_str() {
                     Some(s) => s.to_string(),
                     None => serde_json::to_string(&custom_fixture.response).map_err(|e| {
-                        Error::generic(format!(
+                        Error::internal(format!(
                             "Failed to serialize custom fixture response: {}",
                             e
                         ))
@@ -663,7 +663,7 @@ impl PriorityHttpHandler {
                             // If migration mode is Real, fail hard
                             if let Some(crate::proxy::config::MigrationMode::Real) = migration_mode
                             {
-                                return Err(Error::generic(format!(
+                                return Err(Error::internal(format!(
                                     "Proxy request failed in real mode: {}",
                                     e
                                 )));
@@ -753,7 +753,7 @@ impl PriorityHttpHandler {
                         tracing::warn!("Proxy request failed: {}", e);
                         // If migration mode is Real, fail hard (don't fall back to mock)
                         if let Some(crate::proxy::config::MigrationMode::Real) = migration_mode {
-                            return Err(Error::generic(format!(
+                            return Err(Error::internal(format!(
                                 "Proxy request failed in real mode: {}",
                                 e
                             )));
@@ -827,7 +827,7 @@ impl PriorityHttpHandler {
         }
 
         // If we reach here, no handler could process the request
-        Err(Error::generic("No handler could process the request".to_string()))
+        Err(Error::internal("No handler could process the request".to_string()))
     }
 
     /// Apply behavioral economics rules to a response
@@ -1735,7 +1735,7 @@ paths:
         #[async_trait]
         impl RouteChaosInjectorTrait for ErrorLatencyInjector {
             async fn inject_latency(&self, _method: &Method, _uri: &Uri) -> Result<()> {
-                Err(Error::generic("Latency injection failed".to_string()))
+                Err(Error::internal("Latency injection failed".to_string()))
             }
             fn get_fault_response(
                 &self,
@@ -1972,7 +1972,7 @@ paths:
                 _body: Option<&[u8]>,
                 _session_id: Option<&str>,
             ) -> Result<Option<BehavioralReplayResponse>> {
-                Err(Error::generic("Scenario replay error".to_string()))
+                Err(Error::internal("Scenario replay error".to_string()))
             }
         }
 

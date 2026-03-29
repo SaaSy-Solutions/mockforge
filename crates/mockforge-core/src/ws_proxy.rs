@@ -168,7 +168,7 @@ impl WsProxyHandler {
     /// Proxy a WebSocket connection to the upstream service
     pub async fn proxy_connection(&self, path: &str, client_socket: WebSocket) -> Result<()> {
         if !self.config.should_proxy(path) {
-            return Err(Error::generic("WebSocket connection should not be proxied".to_string()));
+            return Err(Error::internal("WebSocket connection should not be proxied".to_string()));
         }
 
         // Get the upstream URL for this path
@@ -177,7 +177,7 @@ impl WsProxyHandler {
         // Connect to upstream WebSocket server
         let (upstream_socket, _) =
             tokio_tungstenite::connect_async(&upstream_url).await.map_err(|e| {
-                Error::generic(format!("Failed to connect to upstream WebSocket: {}", e))
+                Error::internal(format!("Failed to connect to upstream WebSocket: {}", e))
             })?;
 
         info!("Connected to upstream WebSocket at {}", upstream_url);

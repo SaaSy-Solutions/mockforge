@@ -1,23 +1,20 @@
 //! OpenAPI-based route generation for MockForge
 //!
-//! This module has been refactored into sub-modules for better organization:
-//! - registry: OpenAPI route registry and management
-//! - validation: Request/response validation logic
-//! - generation: Route generation from OpenAPI specs
-//! - builder: Axum router building from OpenAPI specs
+//! The authoritative `OpenApiRouteRegistry` and all `build_router_*` methods
+//! are defined in this file. Sub-modules provide additional utilities:
+//! - `builder`: Helper functions for building routers from specs
+//! - `generation`: Route generation utilities
+//! - `validation`: Request/response validation types and logic
+//!
+//! Note: `registry` sub-module contains an abandoned partial refactoring with a
+//! duplicate `OpenApiRouteRegistry` type. Use the one from this module.
 
-// Re-export sub-modules for backward compatibility
 pub mod builder;
 pub mod generation;
+#[doc(hidden)]
 pub mod registry;
 pub mod validation;
 
-// Re-export commonly used types
-pub use builder::*;
-pub use generation::*;
-pub use validation::*;
-
-// Legacy types and functions for backward compatibility
 use crate::ai_response::RequestContext;
 use crate::openapi::response::AiGenerator;
 use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
@@ -30,13 +27,16 @@ use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::*;
 use axum::{Json, Router};
+pub use builder::*;
 use chrono::Utc;
+pub use generation::*;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use tracing;
+pub use validation::*;
 
 /// OpenAPI route registry that manages generated routes
 #[derive(Clone)]
@@ -1404,7 +1404,7 @@ impl OpenApiRouteRegistry {
                 )),
             }
         } else {
-            Err(Error::generic(format!("Route {} {} not found in OpenAPI spec", method, path)))
+            Err(Error::internal(format!("Route {} {} not found in OpenAPI spec", method, path)))
         }
     }
 
@@ -1496,8 +1496,6 @@ impl OpenApiRouteRegistry {
         &self,
         ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
     ) -> Router {
-        use axum::routing::{delete, get, patch, post, put};
-
         let mut router = Router::new();
         let deduped = self.deduplicated_routes();
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
@@ -1575,8 +1573,6 @@ impl OpenApiRouteRegistry {
         mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
     ) -> Router {
         use crate::intelligent_behavior::Request as MockAIRequest;
-
-        use axum::routing::{delete, get, patch, post, put};
 
         let mut router = Router::new();
         let deduped = self.deduplicated_routes();
@@ -1878,7 +1874,7 @@ async fn extract_multipart_from_bytes(
                 }
             })
         })
-        .ok_or_else(|| Error::generic("Missing boundary in Content-Type header"))?;
+        .ok_or_else(|| Error::internal("Missing boundary in Content-Type header"))?;
 
     let mut fields = HashMap::new();
     let mut files = HashMap::new();
@@ -1970,13 +1966,12 @@ async fn extract_multipart_from_bytes(
                 if let Some(file) = filename {
                     // This is a file upload - store to temp directory
                     let temp_dir = std::env::temp_dir().join("mockforge-uploads");
-                    std::fs::create_dir_all(&temp_dir).map_err(|e| {
-                        Error::generic(format!("Failed to create temp directory: {}", e))
-                    })?;
+                    std::fs::create_dir_all(&temp_dir)
+                        .map_err(|e| Error::io_with_context("temp directory", e.to_string()))?;
 
                     let file_path = temp_dir.join(format!("{}_{}", uuid::Uuid::new_v4(), file));
                     std::fs::write(&file_path, body_data)
-                        .map_err(|e| Error::generic(format!("Failed to write file: {}", e)))?;
+                        .map_err(|e| Error::io_with_context("file", e.to_string()))?;
 
                     let file_path_str = file_path.to_string_lossy().to_string();
                     files.insert(name.clone(), file_path_str.clone());

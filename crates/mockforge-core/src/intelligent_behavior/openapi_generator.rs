@@ -133,7 +133,9 @@ impl OpenApiSpecGenerator {
         let start_time = Utc::now();
 
         if exchanges.is_empty() {
-            return Err(crate::Error::generic("No HTTP exchanges provided for OpenAPI generation"));
+            return Err(crate::Error::internal(
+                "No HTTP exchanges provided for OpenAPI generation",
+            ));
         }
 
         tracing::info!("Analyzing {} HTTP exchanges for OpenAPI generation", exchanges.len());
@@ -527,7 +529,7 @@ impl OpenApiSpecGenerator {
         // Use the first exchange as a template
         let first = exchanges
             .first()
-            .ok_or_else(|| crate::Error::generic("No exchanges provided"))?;
+            .ok_or_else(|| crate::Error::internal("No exchanges provided"))?;
 
         let mut operation = Operation {
             summary: Some(format!("{} {}", first.method, first.path)),

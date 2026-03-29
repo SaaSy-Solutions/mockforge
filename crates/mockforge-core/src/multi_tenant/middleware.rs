@@ -54,7 +54,7 @@ impl WorkspaceRouter {
             let workspace = self.registry.get_workspace(&workspace_id)?;
 
             if !workspace.enabled {
-                return Err(Error::generic(format!("Workspace '{}' is disabled", workspace_id)));
+                return Err(Error::internal(format!("Workspace '{}' is disabled", workspace_id)));
             }
 
             let stripped_path = self.registry.strip_workspace_prefix(path, &workspace_id);

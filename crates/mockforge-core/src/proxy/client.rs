@@ -39,7 +39,7 @@ impl ProxyClient {
         request
             .send()
             .await
-            .map_err(|e| Error::generic(format!("Proxy request failed: {}", e)))
+            .map_err(|e| Error::internal(format!("Proxy request failed: {}", e)))
     }
 }
 

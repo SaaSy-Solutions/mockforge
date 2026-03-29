@@ -201,7 +201,7 @@ impl EcosystemGenerator {
             raw.clone()
         } else {
             serde_json::to_value(&spec.spec).map_err(|e| {
-                crate::Error::generic(format!("Failed to serialize OpenAPI spec: {}", e))
+                crate::Error::config(format!("Failed to serialize OpenAPI spec: {}", e))
             })?
         };
 

@@ -225,7 +225,7 @@ impl CaptureManager {
             }
         }
 
-        Err(crate::Error::generic(format!("Capture not found: {}", capture_id)))
+        Err(crate::Error::internal(format!("Capture not found: {}", capture_id)))
     }
 
     /// Get captures by source
@@ -374,7 +374,7 @@ pub async fn capture_request_global(request: CapturedRequest) -> Result<String> 
     if let Some(manager) = get_global_capture_manager() {
         manager.capture(request).await
     } else {
-        Err(crate::Error::generic("Capture manager not initialized"))
+        Err(crate::Error::internal("Capture manager not initialized"))
     }
 }
 

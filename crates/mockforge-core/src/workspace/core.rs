@@ -198,15 +198,15 @@ impl EnvironmentColor {
     pub fn from_hex(hex: &str) -> Result<Self> {
         let hex = hex.trim_start_matches('#');
         if hex.len() != 6 {
-            return Err(Error::generic("Invalid hex color format"));
+            return Err(Error::internal("Invalid hex color format"));
         }
 
         let red = u8::from_str_radix(&hex[0..2], 16)
-            .map_err(|_| Error::generic("Invalid hex color format"))?;
+            .map_err(|_| Error::internal("Invalid hex color format"))?;
         let green = u8::from_str_radix(&hex[2..4], 16)
-            .map_err(|_| Error::generic("Invalid hex color format"))?;
+            .map_err(|_| Error::internal("Invalid hex color format"))?;
         let blue = u8::from_str_radix(&hex[4..6], 16)
-            .map_err(|_| Error::generic("Invalid hex color format"))?;
+            .map_err(|_| Error::internal("Invalid hex color format"))?;
 
         Ok(Self::new(red, green, blue))
     }

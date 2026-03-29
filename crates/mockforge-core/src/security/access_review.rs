@@ -692,7 +692,7 @@ impl AccessReviewEngine {
 
         let item = items
             .get_mut(&user_id)
-            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
+            .ok_or_else(|| crate::Error::not_found("User in review", user_id.to_string()))?;
 
         item.status = "approved".to_string();
         item.approved_by = Some(approved_by);
@@ -731,7 +731,7 @@ impl AccessReviewEngine {
 
         let item = items
             .get_mut(&user_id)
-            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
+            .ok_or_else(|| crate::Error::not_found("User in review", user_id.to_string()))?;
 
         item.status = "revoked".to_string();
         item.rejection_reason = Some(reason.clone());
@@ -773,7 +773,7 @@ impl AccessReviewEngine {
 
         let item = items
             .get_mut(&user_id)
-            .ok_or_else(|| crate::Error::not_found("User in review", &user_id.to_string()))?;
+            .ok_or_else(|| crate::Error::not_found("User in review", user_id.to_string()))?;
 
         // Store old permissions for tracking
         let old_roles = item.access_info.roles.clone();

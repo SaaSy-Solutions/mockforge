@@ -406,7 +406,7 @@ Create a cohesive API design that makes sense for these endpoints and follows RE
         let endpoints = response
             .get("endpoints")
             .and_then(|e| e.as_array())
-            .ok_or_else(|| crate::Error::generic("No endpoints in LLM response"))?;
+            .ok_or_else(|| crate::Error::internal("No endpoints in LLM response"))?;
 
         let suggestions: Vec<EndpointSuggestion> =
             endpoints.iter().filter_map(|e| self.parse_endpoint_suggestion(e)).collect();

@@ -100,10 +100,10 @@ impl ContractDiffHandler {
                             link_to_viewer: Some(format!("/contract-diff?request_id={}", request_id.unwrap_or_default())),
                         })
                     } else {
-                        Err(crate::Error::generic("OpenAPI spec is required for analysis"))
+                        Err(crate::Error::internal("OpenAPI spec is required for analysis"))
                     }
                 } else {
-                    Err(crate::Error::generic("Captured request is required for analysis"))
+                    Err(crate::Error::internal("Captured request is required for analysis"))
                 }
             }
             ContractDiffIntent::CompareVersions { spec1_path, spec2_path, filters } => {
@@ -147,7 +147,7 @@ impl ContractDiffHandler {
                         link_to_viewer: Some("/contract-diff".to_string()),
                     })
                 } else {
-                    Err(crate::Error::generic("OpenAPI spec is required for breaking changes analysis"))
+                    Err(crate::Error::internal("OpenAPI spec is required for breaking changes analysis"))
                 }
             }
             ContractDiffIntent::Unknown => {

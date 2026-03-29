@@ -389,6 +389,13 @@ mod tests {
     }
 
     #[test]
+    fn test_internal_error() {
+        let err = Error::internal("test internal");
+        assert!(err.to_string().contains("Internal error"));
+        assert!(err.to_string().contains("test internal"));
+    }
+
+    #[test]
     #[allow(deprecated)]
     fn test_generic_error() {
         let err = Error::generic("test generic");
@@ -433,12 +440,6 @@ mod tests {
     }
 
     #[test]
-    fn test_internal_error() {
-        let err = Error::internal("unexpected failure");
-        assert_eq!(err.to_string(), "Internal error: unexpected failure");
-    }
-
-    #[test]
     fn test_from_string() {
         let err: Error = "test message".to_string().into();
         assert!(matches!(err, Error::Generic(_)));
@@ -479,7 +480,7 @@ mod tests {
             (Error::proxy("msg"), "Proxy error: msg"),
             (Error::latency("msg"), "Latency simulation error: msg"),
             (Error::config("msg"), "Configuration error: msg"),
-            (Error::generic("msg"), "Generic error: msg"),
+            (Error::internal("msg"), "Internal error: msg"),
         ];
 
         for (err, expected) in errors {

@@ -53,7 +53,7 @@ pub fn load_fixtures_from_dir<T: DeserializeOwned>(
             debug!("Fixtures directory does not exist: {:?}", dir);
             return Ok(Vec::new());
         }
-        return Err(crate::Error::generic(format!(
+        return Err(crate::Error::internal(format!(
             "Fixtures directory does not exist: {}",
             dir.display()
         )));
@@ -108,7 +108,7 @@ pub fn load_fixture_list_from_dir<T: DeserializeOwned>(
             debug!("Fixtures directory does not exist: {:?}", dir);
             return Ok(Vec::new());
         }
-        return Err(crate::Error::generic(format!(
+        return Err(crate::Error::internal(format!(
             "Fixtures directory does not exist: {}",
             dir.display()
         )));
@@ -149,11 +149,11 @@ fn load_fixture_file<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let extension = path.extension().and_then(|s| s.to_str());
     let fixture: T = if extension == Some("json") {
         serde_json::from_str(&content).map_err(|e| {
-            crate::Error::generic(format!("Failed to parse JSON fixture {:?}: {}", path, e))
+            crate::Error::internal(format!("Failed to parse JSON fixture {:?}: {}", path, e))
         })?
     } else {
         serde_yaml::from_str(&content).map_err(|e| {
-            crate::Error::generic(format!("Failed to parse YAML fixture {:?}: {}", path, e))
+            crate::Error::internal(format!("Failed to parse YAML fixture {:?}: {}", path, e))
         })?
     };
 

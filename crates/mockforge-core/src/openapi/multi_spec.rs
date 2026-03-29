@@ -169,22 +169,21 @@ pub async fn load_specs_from_directory(dir: &Path) -> Result<Vec<(PathBuf, OpenA
     info!("Discovering OpenAPI specs in directory: {}", dir.display());
 
     if !dir.exists() {
-        return Err(Error::generic(format!("Directory does not exist: {}", dir.display())));
+        return Err(Error::internal(format!("Directory does not exist: {}", dir.display())));
     }
 
     if !dir.is_dir() {
-        return Err(Error::generic(format!("Path is not a directory: {}", dir.display())));
+        return Err(Error::internal(format!("Path is not a directory: {}", dir.display())));
     }
 
     // Discover all spec files
     let mut spec_files = Vec::new();
     let walker = GlobWalkerBuilder::from_patterns(dir, &["**/*.json", "**/*.yaml", "**/*.yml"])
         .build()
-        .map_err(|e| Error::generic(format!("Failed to walk directory: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to walk directory: {}", e)))?;
 
     for entry in walker {
-        let entry =
-            entry.map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+        let entry = entry.map_err(|e| Error::io_with_context("directory entry", e.to_string()))?;
         let path = entry.path();
         if path.is_file() {
             spec_files.push(path.to_path_buf());
@@ -232,7 +231,7 @@ pub async fn load_specs_from_files(files: Vec<PathBuf>) -> Result<Vec<(PathBuf, 
                 specs.push((file_path, spec));
             }
             Err(e) => {
-                return Err(Error::generic(format!(
+                return Err(Error::internal(format!(
                     "Failed to load spec from {}: {}",
                     file_path.display(),
                     e

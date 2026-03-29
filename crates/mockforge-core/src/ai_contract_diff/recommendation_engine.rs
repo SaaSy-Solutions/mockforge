@@ -94,7 +94,7 @@ impl RecommendationEngine {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not initialized"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not initialized"))?;
 
         // Build prompt for LLM
         let prompt = self.build_recommendation_prompt(mismatches, context);
