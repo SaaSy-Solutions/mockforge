@@ -763,7 +763,28 @@ impl NativeConformanceExecutor {
                                             .unwrap_or("unknown")
                                             .trim()
                                             .to_string(),
-                                        expected: format!("{}", err.schema_path),
+                                        expected: {
+                                            // Extract human-readable expected value from the error.
+                                            // The schema_path is like "/properties/field/type" —
+                                            // extract the last meaningful segment instead.
+                                            let schema_str = format!("{}", err.schema_path);
+                                            match &err.kind {
+                                                jsonschema::error::ValidationErrorKind::Type { kind } => {
+                                                    format!("type: {:?}", kind)
+                                                }
+                                                jsonschema::error::ValidationErrorKind::Required { property } => {
+                                                    format!("required field: {}", property)
+                                                }
+                                                _ => {
+                                                    // For other kinds, use last path segment
+                                                    schema_str
+                                                        .rsplit('/')
+                                                        .next()
+                                                        .unwrap_or(&schema_str)
+                                                        .to_string()
+                                                }
+                                            }
+                                        },
                                         actual: format!("{}", err),
                                     }
                                 })
