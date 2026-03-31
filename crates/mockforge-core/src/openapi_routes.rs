@@ -96,6 +96,51 @@ impl Default for ValidationOptions {
     }
 }
 
+/// Shared context for all route handlers, encapsulating optional features.
+///
+/// Each `build_router_*` variant constructs a `RouterContext` with the appropriate
+/// features enabled, then delegates to `build_router_with_context`.
+#[derive(Clone)]
+pub struct RouterContext {
+    /// Custom fixture loader (highest priority response source)
+    pub custom_fixture_loader: Option<Arc<crate::CustomFixtureLoader>>,
+    /// Latency injector (per-operation-tag latency simulation)
+    pub latency_injector: Option<LatencyInjector>,
+    /// Failure injector (per-tag fault injection)
+    pub failure_injector: Option<crate::FailureInjector>,
+    /// Response overrides
+    pub overrides: Option<Overrides>,
+    /// Whether overrides are active
+    pub overrides_enabled: bool,
+    /// AI response generator
+    pub ai_generator: Option<Arc<dyn crate::openapi::response::AiGenerator + Send + Sync>>,
+    /// MockAI intelligent behavior engine
+    pub mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+    /// Enable full validation (422 enhanced responses, response validation, trace)
+    pub enable_full_validation: bool,
+    /// Enable template token expansion
+    pub enable_template_expand: bool,
+    /// Whether to add /openapi.json endpoint
+    pub add_spec_endpoint: bool,
+}
+
+impl Default for RouterContext {
+    fn default() -> Self {
+        Self {
+            custom_fixture_loader: None,
+            latency_injector: None,
+            failure_injector: None,
+            overrides: None,
+            overrides_enabled: false,
+            ai_generator: None,
+            mockai: None,
+            enable_full_validation: false,
+            enable_template_expand: false,
+            add_spec_endpoint: true,
+        }
+    }
+}
+
 impl OpenApiRouteRegistry {
     /// Create a new registry from an OpenAPI spec
     pub fn new(spec: OpenApiSpec) -> Self {
@@ -314,11 +359,26 @@ impl OpenApiRouteRegistry {
 
     /// Build an Axum router from the OpenAPI spec (simplified)
     pub fn build_router(self) -> Router {
+        let ctx = RouterContext {
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
+            enable_full_validation: true,
+            enable_template_expand: true,
+            add_spec_endpoint: true,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
+    }
+
+    /// Build an Axum router using a shared RouterContext.
+    ///
+    /// This is the unified router builder that all `build_router_*` variants
+    /// delegate to. The RouterContext controls which features are active.
+    fn build_router_with_context(self, ctx: RouterContext) -> Router {
         let mut router = Router::new();
         tracing::debug!("Building router from {} routes", self.routes.len());
 
         let deduped = self.deduplicated_routes();
-        let custom_loader = self.custom_fixture_loader.clone();
+        let ctx = Arc::new(ctx);
         for (axum_path, route) in &deduped {
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let operation = route.operation.clone();
@@ -326,17 +386,23 @@ impl OpenApiRouteRegistry {
             let path_template = route.path.clone();
             let validator = self.clone_for_validation();
             let route_clone = (*route).clone();
-            let custom_loader_clone = custom_loader.clone();
+            let ctx = ctx.clone();
 
-            // Handler: check custom fixtures, then validate path/query/header/cookie/body, then return mock
+            // Extract tags from operation for latency and failure injection
+            let mut operation_tags = operation.tags.clone();
+            if let Some(operation_id) = &operation.operation_id {
+                operation_tags.push(operation_id.clone());
+            }
+
+            // Unified handler: fixture -> failure -> latency -> scenario/override -> mock -> validate -> expand -> overrides -> trace -> response
             let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
                                 RawQuery(raw_query): RawQuery,
                                 headers: HeaderMap,
                                 body: axum::body::Bytes| async move {
                 tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
 
-                // Check for custom fixture first (highest priority)
-                if let Some(ref loader) = custom_loader_clone {
+                // (a) Check for custom fixture first (highest priority)
+                if let Some(ref loader) = ctx.custom_fixture_loader {
                     use crate::RequestFingerprint;
                     use axum::http::{Method, Uri};
 
@@ -355,8 +421,6 @@ impl OpenApiRouteRegistry {
                         raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
 
                     // Create URI for fingerprint
-                    // Note: RequestFingerprint only uses the path, not the full URI with query
-                    // So we can create a simple URI from just the path
                     // IMPORTANT: Use normalized path to match fixture paths
                     let uri_str = if query_string.is_empty() {
                         normalized_request_path.clone()
@@ -443,192 +507,275 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // Determine scenario from header or environment variable
-                // Header takes precedence over environment variable
+                // (b) Failure injection (if configured)
+                if let Some(ref failure_injector) = ctx.failure_injector {
+                    if let Some((status_code, error_message)) =
+                        failure_injector.process_request(&operation_tags)
+                    {
+                        let payload = serde_json::json!({
+                            "error": error_message,
+                            "injected_failure": true
+                        });
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"injected failure"}"#.to_vec());
+                        return axum::http::Response::builder()
+                            .status(
+                                axum::http::StatusCode::from_u16(status_code)
+                                    .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+                            )
+                            .header(axum::http::header::CONTENT_TYPE, "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .expect("Response builder should create valid response");
+                    }
+                }
+
+                // (c) Latency injection (if configured)
+                if let Some(ref injector) = ctx.latency_injector {
+                    if let Err(e) = injector.inject_latency(&operation_tags).await {
+                        tracing::warn!("Failed to inject latency: {}", e);
+                    }
+                }
+
+                // (d) Scenario/status override from headers
                 let scenario = headers
                     .get("X-Mockforge-Scenario")
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.to_string())
                     .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
 
-                // Check for status code override header
                 let status_override = headers
                     .get("X-Mockforge-Response-Status")
                     .and_then(|v| v.to_str().ok())
                     .and_then(|s| s.parse::<u16>().ok());
 
-                // Generate mock response for this request with scenario support
+                // (e) Generate mock response for this request with scenario support
                 let (selected_status, mock_response) = route_clone
                     .mock_response_with_status_and_scenario_and_override(
                         scenario.as_deref(),
                         status_override,
                     );
-                // Admin routes are mounted separately; no validation skip needed here.
-                // Build params maps
-                let mut path_map = Map::new();
-                for (k, v) in path_params {
-                    path_map.insert(k, Value::String(v));
-                }
 
-                // Query
-                let mut query_map = Map::new();
-                if let Some(q) = raw_query {
-                    for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
-                        query_map.insert(k.to_string(), Value::String(v.to_string()));
+                // (f) Validation (if full validation is enabled)
+                if ctx.enable_full_validation {
+                    // Build params maps
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
                     }
-                }
 
-                // Headers: only capture those declared on this operation
-                let mut header_map = Map::new();
-                for p_ref in &operation.parameters {
-                    if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
-                        p_ref.as_item()
-                    {
-                        let name_lc = parameter_data.name.to_ascii_lowercase();
-                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
-                            if let Some(val) = headers.get(hn) {
-                                if let Ok(s) = val.to_str() {
-                                    header_map.insert(
-                                        parameter_data.name.clone(),
-                                        Value::String(s.to_string()),
-                                    );
+                    // Query
+                    let mut query_map = Map::new();
+                    if let Some(ref q) = raw_query {
+                        for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+                            query_map.insert(k.to_string(), Value::String(v.to_string()));
+                        }
+                    }
+
+                    // Headers: only capture those declared on this operation
+                    let mut header_map = Map::new();
+                    for p_ref in &operation.parameters {
+                        if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
+                            p_ref.as_item()
+                        {
+                            let name_lc = parameter_data.name.to_ascii_lowercase();
+                            if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                                if let Some(val) = headers.get(hn) {
+                                    if let Ok(s) = val.to_str() {
+                                        header_map.insert(
+                                            parameter_data.name.clone(),
+                                            Value::String(s.to_string()),
+                                        );
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                // Cookies: parse Cookie header
-                let mut cookie_map = Map::new();
-                if let Some(val) = headers.get(axum::http::header::COOKIE) {
-                    if let Ok(s) = val.to_str() {
-                        for part in s.split(';') {
-                            let part = part.trim();
-                            if let Some((k, v)) = part.split_once('=') {
-                                cookie_map.insert(k.to_string(), Value::String(v.to_string()));
+                    // Cookies: parse Cookie header
+                    let mut cookie_map = Map::new();
+                    if let Some(val) = headers.get(axum::http::header::COOKIE) {
+                        if let Ok(s) = val.to_str() {
+                            for part in s.split(';') {
+                                let part = part.trim();
+                                if let Some((k, v)) = part.split_once('=') {
+                                    cookie_map.insert(k.to_string(), Value::String(v.to_string()));
+                                }
                             }
                         }
                     }
-                }
 
-                // Check if this is a multipart request
-                let is_multipart = headers
-                    .get(axum::http::header::CONTENT_TYPE)
-                    .and_then(|v| v.to_str().ok())
-                    .map(|ct| ct.starts_with("multipart/form-data"))
-                    .unwrap_or(false);
+                    // Check if this is a multipart request
+                    let is_multipart = headers
+                        .get(axum::http::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|ct| ct.starts_with("multipart/form-data"))
+                        .unwrap_or(false);
 
-                // Extract multipart data if applicable
-                #[allow(unused_assignments)]
-                let mut multipart_fields = HashMap::new();
-                let mut _multipart_files = HashMap::new();
-                let mut body_json: Option<Value> = None;
+                    // Extract multipart data if applicable
+                    #[allow(unused_assignments)]
+                    let mut multipart_fields = HashMap::new();
+                    let mut _multipart_files = HashMap::new();
+                    let mut body_json: Option<Value> = None;
 
-                if is_multipart {
-                    // For multipart requests, extract fields and files
-                    match extract_multipart_from_bytes(&body, &headers).await {
-                        Ok((fields, files)) => {
-                            multipart_fields = fields;
-                            _multipart_files = files;
-                            // Also create a JSON representation for validation
-                            let mut body_obj = Map::new();
-                            for (k, v) in &multipart_fields {
-                                body_obj.insert(k.clone(), v.clone());
+                    if is_multipart {
+                        // For multipart requests, extract fields and files
+                        match extract_multipart_from_bytes(&body, &headers).await {
+                            Ok((fields, files)) => {
+                                multipart_fields = fields;
+                                _multipart_files = files;
+                                // Also create a JSON representation for validation
+                                let mut body_obj = Map::new();
+                                for (k, v) in &multipart_fields {
+                                    body_obj.insert(k.clone(), v.clone());
+                                }
+                                if !body_obj.is_empty() {
+                                    body_json = Some(Value::Object(body_obj));
+                                }
                             }
-                            if !body_obj.is_empty() {
-                                body_json = Some(Value::Object(body_obj));
+                            Err(e) => {
+                                tracing::warn!("Failed to parse multipart data: {}", e);
                             }
                         }
-                        Err(e) => {
-                            tracing::warn!("Failed to parse multipart data: {}", e);
-                        }
+                    } else {
+                        // Body: try JSON when present
+                        body_json = if !body.is_empty() {
+                            serde_json::from_slice(&body).ok()
+                        } else {
+                            None
+                        };
                     }
-                } else {
-                    // Body: try JSON when present
-                    body_json = if !body.is_empty() {
-                        serde_json::from_slice(&body).ok()
-                    } else {
-                        None
-                    };
+
+                    if let Err(e) = validator.validate_request_with_all(
+                        &path_template,
+                        &method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &cookie_map,
+                        body_json.as_ref(),
+                    ) {
+                        // Choose status: prefer options.validation_status, fallback to env, else 400
+                        let status_code =
+                            validator.options.validation_status.unwrap_or_else(|| {
+                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                    .ok()
+                                    .and_then(|s| s.parse::<u16>().ok())
+                                    .unwrap_or(400)
+                            });
+
+                        let payload = if status_code == 422 {
+                            // For 422 responses, use enhanced schema validation with detailed errors
+                            generate_enhanced_422_response(
+                                &validator,
+                                &path_template,
+                                &method,
+                                body_json.as_ref(),
+                                &path_map,
+                                &query_map,
+                                &header_map,
+                                &cookie_map,
+                            )
+                        } else {
+                            // For other status codes, use generic error format
+                            let msg = format!("{}", e);
+                            let detail_val = serde_json::from_str::<Value>(&msg)
+                                .unwrap_or(serde_json::json!(msg));
+                            json!({
+                                "error": "request validation failed",
+                                "detail": detail_val,
+                                "method": method,
+                                "path": path_template,
+                                "timestamp": Utc::now().to_rfc3339(),
+                            })
+                        };
+
+                        record_validation_error(&payload);
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+
+                        // Serialize payload with fallback for serialization errors
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
+
+                        return axum::http::Response::builder()
+                            .status(status)
+                            .header(axum::http::header::CONTENT_TYPE, "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .expect("Response builder should create valid response with valid headers and body");
+                    }
                 }
 
-                if let Err(e) = validator.validate_request_with_all(
-                    &path_template,
-                    &method,
-                    &path_map,
-                    &query_map,
-                    &header_map,
-                    &cookie_map,
-                    body_json.as_ref(),
-                ) {
-                    // Choose status: prefer options.validation_status, fallback to env, else 400
-                    let status_code = validator.options.validation_status.unwrap_or_else(|| {
-                        std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                            .ok()
-                            .and_then(|s| s.parse::<u16>().ok())
-                            .unwrap_or(400)
-                    });
-
-                    let payload = if status_code == 422 {
-                        // For 422 responses, use enhanced schema validation with detailed errors
-                        generate_enhanced_422_response(
-                            &validator,
-                            &path_template,
-                            &method,
-                            body_json.as_ref(),
-                            &path_map,
-                            &query_map,
-                            &header_map,
-                            &cookie_map,
-                        )
-                    } else {
-                        // For other status codes, use generic error format
-                        let msg = format!("{}", e);
-                        let detail_val =
-                            serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
-                        json!({
-                            "error": "request validation failed",
-                            "detail": detail_val,
-                            "method": method,
-                            "path": path_template,
-                            "timestamp": Utc::now().to_rfc3339(),
-                        })
-                    };
-
-                    record_validation_error(&payload);
-                    let status = axum::http::StatusCode::from_u16(status_code)
-                        .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
-
-                    // Serialize payload with fallback for serialization errors
-                    let body_bytes = serde_json::to_vec(&payload)
-                        .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
-
-                    return axum::http::Response::builder()
-                        .status(status)
-                        .header(axum::http::header::CONTENT_TYPE, "application/json")
-                        .body(axum::body::Body::from(body_bytes))
-                        .expect("Response builder should create valid response with valid headers and body");
-                }
-
-                // Expand tokens in the response if enabled (options or env)
+                // (g) Template expansion (if enabled via context or env var)
                 let mut final_response = mock_response.clone();
                 let env_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
                     .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                     .unwrap_or(false);
-                let expand = validator.options.response_template_expand || env_expand;
+                let expand = ctx.enable_template_expand
+                    || validator.options.response_template_expand
+                    || env_expand;
                 if expand {
                     final_response = core_expand_tokens(&final_response);
                 }
 
-                // Optional response validation
-                if validator.options.validate_responses {
-                    // Find the first 2xx response in the operation
-                    if let Some((status_code, _response)) = operation
+                // (h) Apply overrides if provided and enabled
+                if let Some(ref overrides) = ctx.overrides {
+                    if ctx.overrides_enabled {
+                        let op_tags =
+                            operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+                        overrides.apply(
+                            &operation.operation_id.clone().unwrap_or_default(),
+                            &op_tags,
+                            &path_template,
+                            &mut final_response,
+                        );
+                    }
+                }
+
+                // (i) Response validation and trace (if full validation is enabled)
+                if ctx.enable_full_validation {
+                    // Optional response validation
+                    if validator.options.validate_responses {
+                        // Find the first 2xx response in the operation
+                        if let Some((status_code, _response)) = operation
+                            .responses
+                            .responses
+                            .iter()
+                            .filter_map(|(status, resp)| match status {
+                                openapiv3::StatusCode::Code(code)
+                                    if *code >= 200 && *code < 300 =>
+                                {
+                                    resp.as_item().map(|r| ((*code), r))
+                                }
+                                openapiv3::StatusCode::Range(range)
+                                    if *range >= 200 && *range < 300 =>
+                                {
+                                    resp.as_item().map(|r| (200, r))
+                                }
+                                _ => None,
+                            })
+                            .next()
+                        {
+                            // Basic response validation - check if response is valid JSON
+                            if serde_json::from_value::<Value>(final_response.clone()).is_err() {
+                                tracing::warn!(
+                                    "Response validation failed: invalid JSON for status {}",
+                                    status_code
+                                );
+                            }
+                        }
+                    }
+
+                    // Capture final payload and run schema validation for trace
+                    let mut trace = ResponseGenerationTrace::new();
+                    trace.set_final_payload(final_response.clone());
+
+                    // Extract response schema and run validation diff
+                    if let Some((_status_code, response_ref)) = operation
                         .responses
                         .responses
                         .iter()
                         .filter_map(|(status, resp)| match status {
-                            openapiv3::StatusCode::Code(code) if *code >= 200 && *code < 300 => {
+                            openapiv3::StatusCode::Code(code) if *code == selected_status => {
                                 resp.as_item().map(|r| ((*code), r))
                             }
                             openapiv3::StatusCode::Range(range)
@@ -639,77 +786,51 @@ impl OpenApiRouteRegistry {
                             _ => None,
                         })
                         .next()
+                        .or_else(|| {
+                            // Fallback to first 2xx response
+                            operation
+                                .responses
+                                .responses
+                                .iter()
+                                .filter_map(|(status, resp)| match status {
+                                    openapiv3::StatusCode::Code(code)
+                                        if *code >= 200 && *code < 300 =>
+                                    {
+                                        resp.as_item().map(|r| ((*code), r))
+                                    }
+                                    _ => None,
+                                })
+                                .next()
+                        })
                     {
-                        // Basic response validation - check if response is valid JSON
-                        if serde_json::from_value::<Value>(final_response.clone()).is_err() {
-                            tracing::warn!(
-                                "Response validation failed: invalid JSON for status {}",
-                                status_code
-                            );
-                        }
-                    }
-                }
-
-                // Capture final payload and run schema validation for trace
-                let mut trace = ResponseGenerationTrace::new();
-                trace.set_final_payload(final_response.clone());
-
-                // Extract response schema and run validation diff
-                if let Some((_status_code, response_ref)) = operation
-                    .responses
-                    .responses
-                    .iter()
-                    .filter_map(|(status, resp)| match status {
-                        openapiv3::StatusCode::Code(code) if *code == selected_status => {
-                            resp.as_item().map(|r| ((*code), r))
-                        }
-                        openapiv3::StatusCode::Range(range) if *range >= 200 && *range < 300 => {
-                            resp.as_item().map(|r| (200, r))
-                        }
-                        _ => None,
-                    })
-                    .next()
-                    .or_else(|| {
-                        // Fallback to first 2xx response
-                        operation
-                            .responses
-                            .responses
-                            .iter()
-                            .filter_map(|(status, resp)| match status {
-                                openapiv3::StatusCode::Code(code)
-                                    if *code >= 200 && *code < 300 =>
-                                {
-                                    resp.as_item().map(|r| ((*code), r))
-                                }
-                                _ => None,
-                            })
-                            .next()
-                    })
-                {
-                    // response_ref is already a Response, not a ReferenceOr
-                    let response_item = response_ref;
-                    // Extract schema from application/json content
-                    if let Some(content) = response_item.content.get("application/json") {
-                        if let Some(schema_ref) = &content.schema {
-                            // Convert OpenAPI schema to JSON Schema Value
-                            // Try to convert the schema to JSON Schema format
-                            if let Some(schema) = schema_ref.as_item() {
-                                // Convert OpenAPI Schema to JSON Schema Value
-                                // Use serde_json::to_value as a starting point
-                                if let Ok(schema_json) = serde_json::to_value(schema) {
-                                    // Run validation diff
-                                    let validation_errors =
-                                        validation_diff(&schema_json, &final_response);
-                                    trace.set_schema_validation_diff(validation_errors);
+                        // response_ref is already a Response, not a ReferenceOr
+                        let response_item = response_ref;
+                        // Extract schema from application/json content
+                        if let Some(content) = response_item.content.get("application/json") {
+                            if let Some(schema_ref) = &content.schema {
+                                // Convert OpenAPI schema to JSON Schema Value
+                                if let Some(schema) = schema_ref.as_item() {
+                                    if let Ok(schema_json) = serde_json::to_value(schema) {
+                                        // Run validation diff
+                                        let validation_errors =
+                                            validation_diff(&schema_json, &final_response);
+                                        trace.set_schema_validation_diff(validation_errors);
+                                    }
                                 }
                             }
                         }
                     }
+
+                    // Store trace in response extensions for later retrieval by logging middleware
+                    let mut response = Json(final_response).into_response();
+                    response.extensions_mut().insert(trace);
+                    *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
+                        .unwrap_or(axum::http::StatusCode::OK);
+                    return response;
                 }
 
-                // Store trace in response extensions for later retrieval by logging middleware
+                // (j) Return response (non-full-validation path)
                 let mut response = Json(final_response).into_response();
-                response.extensions_mut().insert(trace);
                 *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
                     .unwrap_or(axum::http::StatusCode::OK);
                 response
@@ -718,9 +839,11 @@ impl OpenApiRouteRegistry {
             router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
-        // Add OpenAPI documentation endpoint
-        let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
-        router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
+        // Add OpenAPI documentation endpoint if configured
+        if ctx.add_spec_endpoint {
+            let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
+            router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
+        }
 
         router
     }
@@ -752,378 +875,17 @@ impl OpenApiRouteRegistry {
         overrides: Option<Overrides>,
         overrides_enabled: bool,
     ) -> Router {
-        let mut router = Router::new();
-
-        let deduped = self.deduplicated_routes();
-        let custom_loader = self.custom_fixture_loader.clone();
-        for (axum_path, route) in &deduped {
-            let operation = route.operation.clone();
-            let method = route.method.clone();
-            let method_str = method.clone();
-            let path_template = route.path.clone();
-            let validator = self.clone_for_validation();
-            let route_clone = (*route).clone();
-            let injector = latency_injector.clone();
-            let failure_injector = failure_injector.clone();
-            let route_overrides = overrides.clone();
-            let custom_loader_clone = custom_loader.clone();
-
-            // Extract tags from operation for latency and failure injection
-            let mut operation_tags = operation.tags.clone();
-            if let Some(operation_id) = &operation.operation_id {
-                operation_tags.push(operation_id.clone());
-            }
-
-            // Handler: check custom fixtures, inject latency, validate path/query/header/cookie/body, then return mock
-            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
-                                RawQuery(raw_query): RawQuery,
-                                headers: HeaderMap,
-                                body: axum::body::Bytes| async move {
-                // Check for custom fixture first (highest priority)
-                tracing::info!(
-                    "[FIXTURE DEBUG] Starting fixture check for {} {} (custom_loader available: {})",
-                    method_str,
-                    path_template,
-                    custom_loader_clone.is_some()
-                );
-
-                if let Some(ref loader) = custom_loader_clone {
-                    use crate::RequestFingerprint;
-                    use axum::http::{Method, Uri};
-
-                    // Reconstruct the full path from template and params
-                    let mut request_path = path_template.clone();
-                    for (key, value) in &path_params {
-                        request_path = request_path.replace(&format!("{{{}}}", key), value);
-                    }
-
-                    tracing::info!(
-                        "[FIXTURE DEBUG] Path reconstruction: template='{}', params={:?}, reconstructed='{}'",
-                        path_template,
-                        path_params,
-                        request_path
-                    );
-
-                    // Normalize the path to match fixture normalization
-                    let normalized_request_path =
-                        crate::CustomFixtureLoader::normalize_path(&request_path);
-
-                    tracing::info!(
-                        "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
-                        request_path,
-                        normalized_request_path
-                    );
-
-                    // Build query string
-                    let query_string =
-                        raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
-
-                    // Create URI for fingerprint
-                    // IMPORTANT: Use normalized path to match fixture paths
-                    let uri_str = if query_string.is_empty() {
-                        normalized_request_path.clone()
-                    } else {
-                        format!("{}?{}", normalized_request_path, query_string)
-                    };
-
-                    tracing::info!(
-                        "[FIXTURE DEBUG] URI construction: uri_str='{}', query_string='{}'",
-                        uri_str,
-                        query_string
-                    );
-
-                    if let Ok(uri) = uri_str.parse::<Uri>() {
-                        let http_method =
-                            Method::from_bytes(method_str.as_bytes()).unwrap_or(Method::GET);
-                        let body_slice = if body.is_empty() {
-                            None
-                        } else {
-                            Some(body.as_ref())
-                        };
-                        let fingerprint =
-                            RequestFingerprint::new(http_method, &uri, &headers, body_slice);
-
-                        tracing::info!(
-                            "[FIXTURE DEBUG] RequestFingerprint created: method='{}', path='{}', query='{}', body_hash={:?}",
-                            fingerprint.method,
-                            fingerprint.path,
-                            fingerprint.query,
-                            fingerprint.body_hash
-                        );
-
-                        // Check what fixtures are available for this method
-                        let available_fixtures = loader.has_fixture(&fingerprint);
-                        tracing::info!(
-                            "[FIXTURE DEBUG] Fixture check result: has_fixture={}",
-                            available_fixtures
-                        );
-
-                        if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
-                            tracing::info!(
-                                "[FIXTURE DEBUG] ✅ FIXTURE MATCHED! Using custom fixture for {} {} (status: {}, path: '{}')",
-                                method_str,
-                                path_template,
-                                custom_fixture.status,
-                                custom_fixture.path
-                            );
-                            tracing::debug!(
-                                "Using custom fixture for {} {}",
-                                method_str,
-                                path_template
-                            );
-
-                            // Apply delay if specified
-                            if custom_fixture.delay_ms > 0 {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(
-                                    custom_fixture.delay_ms,
-                                ))
-                                .await;
-                            }
-
-                            // Convert response to JSON string if needed
-                            let response_body = if custom_fixture.response.is_string() {
-                                custom_fixture.response.as_str().unwrap().to_string()
-                            } else {
-                                serde_json::to_string(&custom_fixture.response)
-                                    .unwrap_or_else(|_| "{}".to_string())
-                            };
-
-                            // Parse response body as JSON
-                            let json_value: Value = serde_json::from_str(&response_body)
-                                .unwrap_or_else(|_| serde_json::json!({}));
-
-                            // Build response with status and JSON body
-                            let status = axum::http::StatusCode::from_u16(custom_fixture.status)
-                                .unwrap_or(axum::http::StatusCode::OK);
-
-                            // Return as tuple (StatusCode, Json) to match handler signature
-                            return (status, Json(json_value));
-                        } else {
-                            tracing::warn!(
-                                "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
-                                method_str,
-                                path_template,
-                                fingerprint.path,
-                                normalized_request_path
-                            );
-                        }
-                    } else {
-                        tracing::warn!("[FIXTURE DEBUG] Failed to parse URI: '{}'", uri_str);
-                    }
-                } else {
-                    tracing::warn!(
-                        "[FIXTURE DEBUG] Custom fixture loader not available for {} {}",
-                        method_str,
-                        path_template
-                    );
-                }
-
-                // Check for failure injection first
-                if let Some(ref failure_injector) = failure_injector {
-                    if let Some((status_code, error_message)) =
-                        failure_injector.process_request(&operation_tags)
-                    {
-                        return (
-                            axum::http::StatusCode::from_u16(status_code)
-                                .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
-                            Json(serde_json::json!({
-                                "error": error_message,
-                                "injected_failure": true
-                            })),
-                        );
-                    }
-                }
-
-                // Inject latency before processing the request
-                if let Err(e) = injector.inject_latency(&operation_tags).await {
-                    tracing::warn!("Failed to inject latency: {}", e);
-                }
-
-                // Determine scenario from header or environment variable
-                // Header takes precedence over environment variable
-                let scenario = headers
-                    .get("X-Mockforge-Scenario")
-                    .and_then(|v| v.to_str().ok())
-                    .map(|s| s.to_string())
-                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
-
-                // Check for status code override header
-                let status_override = headers
-                    .get("X-Mockforge-Response-Status")
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.parse::<u16>().ok());
-
-                // Admin routes are mounted separately; no validation skip needed here.
-                // Build params maps
-                let mut path_map = Map::new();
-                for (k, v) in path_params {
-                    path_map.insert(k, Value::String(v));
-                }
-
-                // Query
-                let mut query_map = Map::new();
-                if let Some(q) = raw_query {
-                    for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
-                        query_map.insert(k.to_string(), Value::String(v.to_string()));
-                    }
-                }
-
-                // Headers: only capture those declared on this operation
-                let mut header_map = Map::new();
-                for p_ref in &operation.parameters {
-                    if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
-                        p_ref.as_item()
-                    {
-                        let name_lc = parameter_data.name.to_ascii_lowercase();
-                        if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
-                            if let Some(val) = headers.get(hn) {
-                                if let Ok(s) = val.to_str() {
-                                    header_map.insert(
-                                        parameter_data.name.clone(),
-                                        Value::String(s.to_string()),
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Cookies: parse Cookie header
-                let mut cookie_map = Map::new();
-                if let Some(val) = headers.get(axum::http::header::COOKIE) {
-                    if let Ok(s) = val.to_str() {
-                        for part in s.split(';') {
-                            let part = part.trim();
-                            if let Some((k, v)) = part.split_once('=') {
-                                cookie_map.insert(k.to_string(), Value::String(v.to_string()));
-                            }
-                        }
-                    }
-                }
-
-                // Check if this is a multipart request
-                let is_multipart = headers
-                    .get(axum::http::header::CONTENT_TYPE)
-                    .and_then(|v| v.to_str().ok())
-                    .map(|ct| ct.starts_with("multipart/form-data"))
-                    .unwrap_or(false);
-
-                // Extract multipart data if applicable
-                #[allow(unused_assignments)]
-                let mut multipart_fields = HashMap::new();
-                let mut _multipart_files = HashMap::new();
-                let mut body_json: Option<Value> = None;
-
-                if is_multipart {
-                    // For multipart requests, extract fields and files
-                    match extract_multipart_from_bytes(&body, &headers).await {
-                        Ok((fields, files)) => {
-                            multipart_fields = fields;
-                            _multipart_files = files;
-                            // Also create a JSON representation for validation
-                            let mut body_obj = Map::new();
-                            for (k, v) in &multipart_fields {
-                                body_obj.insert(k.clone(), v.clone());
-                            }
-                            if !body_obj.is_empty() {
-                                body_json = Some(Value::Object(body_obj));
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to parse multipart data: {}", e);
-                        }
-                    }
-                } else {
-                    // Body: try JSON when present
-                    body_json = if !body.is_empty() {
-                        serde_json::from_slice(&body).ok()
-                    } else {
-                        None
-                    };
-                }
-
-                if let Err(e) = validator.validate_request_with_all(
-                    &path_template,
-                    &method_str,
-                    &path_map,
-                    &query_map,
-                    &header_map,
-                    &cookie_map,
-                    body_json.as_ref(),
-                ) {
-                    let msg = format!("{}", e);
-                    let detail_val =
-                        serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
-                    let payload = serde_json::json!({
-                        "error": "request validation failed",
-                        "detail": detail_val,
-                        "method": method_str,
-                        "path": path_template,
-                        "timestamp": Utc::now().to_rfc3339(),
-                    });
-                    record_validation_error(&payload);
-                    // Choose status: prefer options.validation_status, fallback to env, else 400
-                    let status_code = validator.options.validation_status.unwrap_or_else(|| {
-                        std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                            .ok()
-                            .and_then(|s| s.parse::<u16>().ok())
-                            .unwrap_or(400)
-                    });
-                    return (
-                        axum::http::StatusCode::from_u16(status_code)
-                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST),
-                        Json(payload),
-                    );
-                }
-
-                // Generate mock response with scenario support
-                let (selected_status, mock_response) = route_clone
-                    .mock_response_with_status_and_scenario_and_override(
-                        scenario.as_deref(),
-                        status_override,
-                    );
-
-                // Expand templating tokens in response if enabled (options or env)
-                let mut response = mock_response.clone();
-                let env_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false);
-                let expand = validator.options.response_template_expand || env_expand;
-                if expand {
-                    response = core_expand_tokens(&response);
-                }
-
-                // Apply overrides if provided and enabled
-                if let Some(ref overrides) = route_overrides {
-                    if overrides_enabled {
-                        // Extract tags from operation for override matching
-                        let operation_tags =
-                            operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
-                        overrides.apply(
-                            &operation.operation_id.unwrap_or_default(),
-                            &operation_tags,
-                            &path_template,
-                            &mut response,
-                        );
-                    }
-                }
-
-                // Return the mock response
-                (
-                    axum::http::StatusCode::from_u16(selected_status)
-                        .unwrap_or(axum::http::StatusCode::OK),
-                    Json(response),
-                )
-            };
-
-            router = Self::route_for_method(router, axum_path, &route.method, handler);
-        }
-
-        // Add OpenAPI documentation endpoint
-        let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
-        router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
-
-        router
+        let ctx = RouterContext {
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
+            latency_injector: Some(latency_injector),
+            failure_injector,
+            overrides,
+            overrides_enabled,
+            enable_template_expand: true,
+            add_spec_endpoint: true,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
     }
 
     /// Get route by path and method
