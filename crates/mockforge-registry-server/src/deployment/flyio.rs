@@ -127,6 +127,13 @@ impl FlyioClient {
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+
+            // Handle "Name has already been taken" (422) — the app exists, fetch it instead
+            if status.as_u16() == 422 && error_text.contains("already been taken") {
+                tracing::info!("Fly.io app '{}' already exists, fetching existing app", app_name);
+                return self.get_app(app_name).await;
+            }
+
             anyhow::bail!("Failed to create Fly.io app: {} - {}", status, error_text);
         }
 

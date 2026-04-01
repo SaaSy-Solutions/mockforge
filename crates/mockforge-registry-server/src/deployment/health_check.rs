@@ -3,9 +3,12 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::{interval, Duration};
-use tracing::{error, warn};
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::models::{DeploymentLog, HealthStatus, HostedMock};
 
@@ -13,6 +16,8 @@ use crate::models::{DeploymentLog, HealthStatus, HostedMock};
 pub struct HealthCheckWorker {
     db: Arc<PgPool>,
     client: reqwest::Client,
+    /// Tracks when each deployment first became unhealthy (cleared on healthy check)
+    unhealthy_since: Mutex<HashMap<Uuid, chrono::DateTime<Utc>>>,
 }
 
 impl HealthCheckWorker {
@@ -23,6 +28,7 @@ impl HealthCheckWorker {
                 .timeout(Duration::from_secs(5))
                 .build()
                 .expect("Failed to create HTTP client"),
+            unhealthy_since: Mutex::new(HashMap::new()),
         }
     }
 
@@ -71,7 +77,7 @@ impl HealthCheckWorker {
                     }
                 };
 
-                // Update health status
+                // Update health status and last check time
                 sqlx::query(
                     r#"
                     UPDATE hosted_mocks
@@ -87,9 +93,17 @@ impl HealthCheckWorker {
                 .execute(pool)
                 .await?;
 
-                // If unhealthy for too long, mark as failed
-                if matches!(status, HealthStatus::Unhealthy) {
-                    self.handle_unhealthy_deployment(&deployment).await?;
+                match status {
+                    HealthStatus::Healthy => {
+                        // Clear unhealthy tracking when service recovers
+                        let mut tracker = self.unhealthy_since.lock().await;
+                        if tracker.remove(&deployment.id).is_some() {
+                            info!("Deployment {} recovered to healthy status", deployment.id);
+                        }
+                    }
+                    HealthStatus::Unhealthy | HealthStatus::Unknown => {
+                        self.handle_unhealthy_deployment(&deployment).await?;
+                    }
                 }
             }
         }
@@ -109,55 +123,59 @@ impl HealthCheckWorker {
         Ok(response.status().is_success())
     }
 
-    /// Handle unhealthy deployment
+    /// Handle unhealthy deployment — track duration and escalate if prolonged
     async fn handle_unhealthy_deployment(&self, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();
+        let now = Utc::now();
 
-        // Check if it's been unhealthy for more than 5 minutes
-        if let Some(last_check) = deployment.last_health_check {
-            let unhealthy_duration = Utc::now() - last_check;
-            if unhealthy_duration.num_minutes() > 5 {
-                warn!(
-                    "Deployment {} has been unhealthy for {} minutes",
+        // Record the first unhealthy timestamp (don't overwrite if already tracking)
+        let mut tracker = self.unhealthy_since.lock().await;
+        let first_unhealthy = *tracker.entry(deployment.id).or_insert(now);
+        drop(tracker); // Release lock before async operations
+
+        let unhealthy_duration = now - first_unhealthy;
+        let unhealthy_minutes = unhealthy_duration.num_minutes();
+
+        if unhealthy_minutes > 5 {
+            warn!(
+                "Deployment {} has been unhealthy for {} minutes",
+                deployment.id, unhealthy_minutes
+            );
+
+            DeploymentLog::create(
+                pool,
+                deployment.id,
+                "warning",
+                &format!("Service has been unhealthy for {} minutes", unhealthy_minutes),
+                None,
+            )
+            .await?;
+
+            // Mark as failed if unhealthy for more than 15 minutes
+            if unhealthy_minutes > 15 {
+                use crate::models::hosted_mock::HostedMock;
+                use crate::models::DeploymentStatus;
+
+                HostedMock::update_status(
+                    pool,
                     deployment.id,
-                    unhealthy_duration.num_minutes()
-                );
+                    DeploymentStatus::Failed,
+                    Some("Service unhealthy for more than 15 minutes"),
+                )
+                .await?;
 
-                // Log warning
                 DeploymentLog::create(
                     pool,
                     deployment.id,
-                    "warning",
-                    &format!(
-                        "Service has been unhealthy for {} minutes",
-                        unhealthy_duration.num_minutes()
-                    ),
+                    "error",
+                    "Service marked as failed due to prolonged unhealthy status",
                     None,
                 )
                 .await?;
 
-                // Optionally: mark as failed if unhealthy for too long
-                if unhealthy_duration.num_minutes() > 15 {
-                    use crate::models::hosted_mock::HostedMock;
-                    use crate::models::DeploymentStatus;
-
-                    HostedMock::update_status(
-                        pool,
-                        deployment.id,
-                        DeploymentStatus::Failed,
-                        Some("Service unhealthy for more than 15 minutes"),
-                    )
-                    .await?;
-
-                    DeploymentLog::create(
-                        pool,
-                        deployment.id,
-                        "error",
-                        "Service marked as failed due to prolonged unhealthy status",
-                        None,
-                    )
-                    .await?;
-                }
+                // Stop tracking — it's been escalated
+                let mut tracker = self.unhealthy_since.lock().await;
+                tracker.remove(&deployment.id);
             }
         }
 

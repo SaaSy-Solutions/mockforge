@@ -281,6 +281,22 @@ impl DeploymentOrchestrator {
                 username: "x".to_string(),
                 password: client.api_token().to_string(),
             })
+        } else if machine_config.image.starts_with("ghcr.io/") {
+            // Auto-detect GitHub Container Registry images
+            if let Ok(token) = std::env::var("GHCR_TOKEN") {
+                Some(FlyioRegistryAuth {
+                    server: "ghcr.io".to_string(),
+                    username: std::env::var("GHCR_USERNAME")
+                        .unwrap_or_else(|_| "mockforge".to_string()),
+                    password: token,
+                })
+            } else {
+                tracing::warn!(
+                    "GHCR image '{}' requires GHCR_TOKEN env var for authentication",
+                    machine_config.image
+                );
+                None
+            }
         } else {
             None
         };
@@ -486,6 +502,21 @@ impl DeploymentOrchestrator {
                 username: "x".to_string(),
                 password: client.api_token().to_string(),
             })
+        } else if machine_config.image.starts_with("ghcr.io/") {
+            if let Ok(token) = std::env::var("GHCR_TOKEN") {
+                Some(FlyioRegistryAuth {
+                    server: "ghcr.io".to_string(),
+                    username: std::env::var("GHCR_USERNAME")
+                        .unwrap_or_else(|_| "mockforge".to_string()),
+                    password: token,
+                })
+            } else {
+                tracing::warn!(
+                    "GHCR image '{}' requires GHCR_TOKEN env var for authentication",
+                    machine_config.image
+                );
+                None
+            }
         } else {
             None
         };
