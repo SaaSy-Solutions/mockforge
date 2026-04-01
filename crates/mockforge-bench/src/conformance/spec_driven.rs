@@ -691,7 +691,8 @@ impl SpecDrivenConformanceGenerator {
 
         // Failure detail collector — logs req/res info for failed checks via console.log
         // (k6's handleSummary runs in a separate JS context, so we can't use module-level arrays)
-        script.push_str("function __captureFailure(checkName, res, expected) {\n");
+        script
+            .push_str("function __captureFailure(checkName, res, expected, schemaViolations) {\n");
         script.push_str("  let bodyStr = '';\n");
         script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
         script.push_str("  let reqHeaders = {};\n");
@@ -700,7 +701,7 @@ impl SpecDrivenConformanceGenerator {
         );
         script.push_str("  let reqBody = '';\n");
         script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
-        script.push_str("  console.log('MOCKFORGE_FAILURE:' + JSON.stringify({\n");
+        script.push_str("  let payload = {\n");
         script.push_str("    check: checkName,\n");
         script.push_str("    request: {\n");
         script.push_str("      method: res.request ? res.request.method : 'unknown',\n");
@@ -714,7 +715,9 @@ impl SpecDrivenConformanceGenerator {
         script.push_str("      body: bodyStr,\n");
         script.push_str("    },\n");
         script.push_str("    expected: expected,\n");
-        script.push_str("  }));\n");
+        script.push_str("  };\n");
+        script.push_str("  if (schemaViolations && schemaViolations.length > 0) { payload.schema_violations = schemaViolations; }\n");
+        script.push_str("  console.log('MOCKFORGE_FAILURE:' + JSON.stringify(payload));\n");
         script.push_str("}\n\n");
 
         // Default function
@@ -938,11 +941,56 @@ impl SpecDrivenConformanceGenerator {
             ));
         } else if matches!(feature, ConformanceFeature::ResponseValidation) {
             // Response schema validation — validate the response body against the schema
+            // Uses inline field-level error collection so failure details include
+            // which specific fields violated the schema (field_path, violation_type,
+            // expected, actual) — matching the Ajv `errors` array structure.
             if let Some(schema) = &op.response_schema {
                 let validation_js = SchemaValidatorGenerator::generate_validation(schema);
+                let schema_json = serde_json::to_string(schema).unwrap_or_default();
+                // Escape backticks and backslashes for JS template literal safety
+                let schema_json_escaped = schema_json.replace('\\', "\\\\").replace('`', "\\`");
                 script.push_str(&format!(
-                    "      try {{ let body = res.json(); {{ let ok = check(res, {{ '{}': (r) => ( {} ) }}); if (!ok) __captureFailure('{}', res, 'schema validation'); }} }} catch(e) {{ check(res, {{ '{}': () => false }}); __captureFailure('{}', res, 'JSON parse failed: ' + e.message); }}\n",
-                    check_name, validation_js, check_name, check_name, check_name
+                    concat!(
+                        "      try {{\n",
+                        "        let body = res.json();\n",
+                        "        let ok = check(res, {{ '{check}': (r) => ( {validation} ) }});\n",
+                        "        if (!ok) {{\n",
+                        "          let __violations = [];\n",
+                        "          try {{\n",
+                        "            let __schema = JSON.parse(`{schema}`);\n",
+                        "            function __collectErrors(schema, data, path) {{\n",
+                        "              if (!schema || typeof schema !== 'object') return;\n",
+                        "              let st = schema.type || (schema.schema_kind && schema.schema_kind.Type && Object.keys(schema.schema_kind.Type)[0]);\n",
+                        "              if (st) {{ st = st.toLowerCase(); }}\n",
+                        "              if (st === 'object') {{\n",
+                        "                if (typeof data !== 'object' || data === null) {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'object', actual: typeof data }}); return; }}\n",
+                        "                let props = schema.properties || (schema.schema_kind && schema.schema_kind.Type && schema.schema_kind.Type.Object && schema.schema_kind.Type.Object.properties) || {{}};\n",
+                        "                let req = schema.required || (schema.schema_kind && schema.schema_kind.Type && schema.schema_kind.Type.Object && schema.schema_kind.Type.Object.required) || [];\n",
+                        "                for (let f of req) {{ if (!(f in data)) {{ __violations.push({{ field_path: path + '/' + f, violation_type: 'required', expected: 'present', actual: 'missing' }}); }} }}\n",
+                        "                for (let [k, v] of Object.entries(props)) {{ if (data[k] !== undefined) {{ let ps = v.Item || v; __collectErrors(ps, data[k], path + '/' + k); }} }}\n",
+                        "              }} else if (st === 'array') {{\n",
+                        "                if (!Array.isArray(data)) {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'array', actual: typeof data }}); return; }}\n",
+                        "                let items = schema.items || (schema.schema_kind && schema.schema_kind.Type && schema.schema_kind.Type.Array && schema.schema_kind.Type.Array.items);\n",
+                        "                if (items) {{ let is = items.Item || items; for (let i = 0; i < Math.min(data.length, 5); i++) {{ __collectErrors(is, data[i], path + '/' + i); }} }}\n",
+                        "              }} else if (st === 'string') {{\n",
+                        "                if (typeof data !== 'string') {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'string', actual: typeof data }}); }}\n",
+                        "              }} else if (st === 'integer') {{\n",
+                        "                if (typeof data !== 'number' || !Number.isInteger(data)) {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'integer', actual: typeof data }}); }}\n",
+                        "              }} else if (st === 'number') {{\n",
+                        "                if (typeof data !== 'number') {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'number', actual: typeof data }}); }}\n",
+                        "              }} else if (st === 'boolean') {{\n",
+                        "                if (typeof data !== 'boolean') {{ __violations.push({{ field_path: path || '/', violation_type: 'type', expected: 'boolean', actual: typeof data }}); }}\n",
+                        "              }}\n",
+                        "            }}\n",
+                        "            __collectErrors(__schema, body, '');\n",
+                        "          }} catch(_e) {{}}\n",
+                        "          __captureFailure('{check}', res, 'schema validation', __violations);\n",
+                        "        }}\n",
+                        "      }} catch(e) {{ check(res, {{ '{check}': () => false }}); __captureFailure('{check}', res, 'JSON parse failed: ' + e.message); }}\n",
+                    ),
+                    check = check_name,
+                    validation = validation_js,
+                    schema = schema_json_escaped,
                 ));
             }
         } else if matches!(

@@ -5,6 +5,7 @@
 //! checks from recorded traffic.
 
 use crate::error::{BenchError, Result};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -191,8 +192,7 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
         None => detect_base_url(&archive.log.entries)?,
     };
 
-    let include_headers_lower: Vec<String> =
-        options.include_headers.iter().map(|h| h.to_lowercase()).collect();
+    let header_matchers = build_header_matchers(&options.include_headers);
 
     let mut checks = Vec::new();
 
@@ -212,13 +212,13 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
 
         // Build expected_headers (filtered)
         let mut expected_headers = HashMap::new();
-        if !include_headers_lower.is_empty() {
+        if !header_matchers.is_empty() {
             for h in &entry.response.headers {
                 let lower = h.name.to_lowercase();
                 if SKIP_HEADERS.contains(&lower.as_str()) {
                     continue;
                 }
-                if include_headers_lower.contains(&lower) {
+                if header_matches(&lower, &header_matchers) {
                     // Escape regex special chars in the value for a literal match
                     expected_headers.insert(h.name.clone(), regex_escape(&h.value));
                 }
@@ -297,6 +297,47 @@ fn is_static_asset(path: &str) -> bool {
     STATIC_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
 }
 
+/// Regex metacharacters that, when present in a header pattern, indicate it
+/// should be compiled as a regex rather than matched as a literal string.
+const REGEX_META: &[char] = &['*', '+', '?', '[', '|', '^', '$', '.'];
+
+/// A compiled header matcher — either a regex pattern or an exact lowercase string.
+enum HeaderMatcher {
+    Regex(Regex),
+    Exact(String),
+}
+
+/// Build header matchers from the user-supplied include-headers list.
+/// Each entry is treated as a regex if it contains any regex metacharacter,
+/// otherwise as an exact case-insensitive match.
+fn build_header_matchers(include_headers: &[String]) -> Vec<HeaderMatcher> {
+    include_headers
+        .iter()
+        .map(|h| {
+            let lower = h.to_lowercase();
+            if lower.contains(REGEX_META) {
+                // Anchor the pattern so it must match the full header name
+                let anchored = format!("^(?:{})$", lower);
+                match Regex::new(&anchored) {
+                    Ok(re) => HeaderMatcher::Regex(re),
+                    // If the regex is invalid, fall back to exact match
+                    Err(_) => HeaderMatcher::Exact(lower),
+                }
+            } else {
+                HeaderMatcher::Exact(lower)
+            }
+        })
+        .collect()
+}
+
+/// Check whether a lowercase header name matches any of the matchers.
+fn header_matches(lower_name: &str, matchers: &[HeaderMatcher]) -> bool {
+    matchers.iter().any(|m| match m {
+        HeaderMatcher::Exact(exact) => lower_name == exact,
+        HeaderMatcher::Regex(re) => re.is_match(lower_name),
+    })
+}
+
 /// Escape regex metacharacters so the value is matched literally.
 fn regex_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 8);
@@ -309,7 +350,15 @@ fn regex_escape(s: &str) -> String {
     out
 }
 
-/// Extract top-level field names + JSON types from the response body (if JSON).
+/// Maximum recursion depth for nested body field extraction.
+const MAX_BODY_FIELD_DEPTH: usize = 3;
+
+/// Extract field names + JSON types from the response body (if JSON).
+///
+/// Recursively descends into nested objects and arrays (up to
+/// [`MAX_BODY_FIELD_DEPTH`] levels) producing dot-notation paths:
+///   - Nested objects: `parent.child`
+///   - Arrays of objects: inspects the first element and uses `parent[].child`
 fn extract_body_fields(entry: &HarEntry) -> Vec<OutputBodyField> {
     let content = match &entry.response.content {
         Some(c) => c,
@@ -332,28 +381,66 @@ fn extract_body_fields(entry: &HarEntry) -> Vec<OutputBodyField> {
         Err(_) => return Vec::new(),
     };
 
+    let mut fields = Vec::new();
+    collect_body_fields(&value, "", &mut fields, 0);
+    fields
+}
+
+/// Recursively collect body fields from a JSON value.
+///
+/// `prefix` is the dot-notation path accumulated so far (empty at root).
+/// `depth` tracks the current recursion level (0 at root).
+fn collect_body_fields(
+    value: &serde_json::Value,
+    prefix: &str,
+    out: &mut Vec<OutputBodyField>,
+    depth: usize,
+) {
     match value {
-        serde_json::Value::Object(map) => map
-            .iter()
-            .map(|(k, v)| OutputBodyField {
-                name: k.clone(),
-                field_type: json_type_name(v),
-            })
-            .collect(),
-        // If the response is an array, check the first element's fields
-        serde_json::Value::Array(arr) => {
-            if let Some(serde_json::Value::Object(map)) = arr.first() {
-                map.iter()
-                    .map(|(k, v)| OutputBodyField {
-                        name: k.clone(),
-                        field_type: json_type_name(v),
-                    })
-                    .collect()
-            } else {
-                Vec::new()
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                let name = if prefix.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{}.{}", prefix, k)
+                };
+                out.push(OutputBodyField {
+                    name: name.clone(),
+                    field_type: json_type_name(v),
+                });
+                // Recurse into nested objects/arrays if within depth limit
+                if depth < MAX_BODY_FIELD_DEPTH {
+                    match v {
+                        serde_json::Value::Object(_) => {
+                            collect_body_fields(v, &name, out, depth + 1);
+                        }
+                        serde_json::Value::Array(arr) => {
+                            // Inspect first element of arrays
+                            if let Some(serde_json::Value::Object(_)) = arr.first() {
+                                let arr_prefix = format!("{}[]", name);
+                                collect_body_fields(
+                                    arr.first().unwrap(),
+                                    &arr_prefix,
+                                    out,
+                                    depth + 1,
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
-        _ => Vec::new(),
+        // Array: inspect the first element
+        serde_json::Value::Array(arr) => {
+            if let Some(serde_json::Value::Object(_)) = arr.first() {
+                // For top-level arrays (empty prefix), extract fields without a
+                // prefix to maintain backward compatibility. For nested arrays
+                // the caller already appended `[]` to the prefix before recursing.
+                collect_body_fields(arr.first().unwrap(), prefix, out, depth);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -589,6 +676,188 @@ mod tests {
             "http://localhost:3000",
         );
         assert_eq!(path, "/api/users");
+    }
+
+    #[test]
+    fn test_include_headers_regex_pattern() {
+        let har = HarArchive {
+            log: HarLog {
+                entries: vec![HarEntry {
+                    request: HarRequest {
+                        method: "GET".to_string(),
+                        url: "http://localhost:3000/api/data".to_string(),
+                        headers: vec![],
+                    },
+                    response: HarResponse {
+                        status: 200,
+                        headers: vec![
+                            HarHeader {
+                                name: "content-type".to_string(),
+                                value: "application/json".to_string(),
+                            },
+                            HarHeader {
+                                name: "content-length".to_string(),
+                                value: "42".to_string(),
+                            },
+                            HarHeader {
+                                name: "x-api-version".to_string(),
+                                value: "2".to_string(),
+                            },
+                            HarHeader {
+                                name: "x-api-request-id".to_string(),
+                                value: "abc".to_string(),
+                            },
+                            HarHeader {
+                                name: "x-other".to_string(),
+                                value: "ignored".to_string(),
+                            },
+                            HarHeader {
+                                name: "cache-control".to_string(),
+                                value: "no-cache".to_string(),
+                            },
+                        ],
+                        content: None,
+                    },
+                }],
+            },
+        };
+
+        let options = HarToCustomOptions {
+            // "content-.*" is a regex pattern, "cache-control" is exact
+            include_headers: vec![
+                "content-.*".to_string(),
+                "x-api-.*".to_string(),
+                "cache-control".to_string(),
+            ],
+            ..Default::default()
+        };
+        let yaml = generate_custom_yaml(&har, &options).unwrap();
+        let config: super::super::custom::CustomConformanceConfig =
+            serde_yaml::from_str(&yaml).unwrap();
+
+        let headers = &config.custom_checks[0].expected_headers;
+        // content-type matches "content-.*" pattern
+        assert!(headers.contains_key("content-type"), "content-type should match content-.*");
+        // content-length is in SKIP_HEADERS, so it should NOT appear
+        assert!(!headers.contains_key("content-length"), "content-length is in skip list");
+        // x-api-version and x-api-request-id match "x-api-.*"
+        assert!(headers.contains_key("x-api-version"), "x-api-version should match x-api-.*");
+        assert!(
+            headers.contains_key("x-api-request-id"),
+            "x-api-request-id should match x-api-.*"
+        );
+        // x-other should NOT match any pattern
+        assert!(!headers.contains_key("x-other"), "x-other should not match");
+        // cache-control is exact match
+        assert!(headers.contains_key("cache-control"), "cache-control exact match");
+    }
+
+    #[test]
+    fn test_include_headers_exact_no_regex() {
+        // Patterns without metacharacters should work as exact case-insensitive matches
+        let matchers = build_header_matchers(&["x-custom".to_string()]);
+        assert!(header_matches("x-custom", &matchers));
+        assert!(!header_matches("x-custom-extra", &matchers));
+        assert!(!header_matches("x-custo", &matchers));
+    }
+
+    #[test]
+    fn test_nested_body_field_extraction() {
+        let entry = HarEntry {
+            request: HarRequest {
+                method: "GET".to_string(),
+                url: "http://localhost:3000/api/data".to_string(),
+                headers: vec![],
+            },
+            response: HarResponse {
+                status: 200,
+                headers: vec![],
+                content: Some(HarContent {
+                    mime_type: Some("application/json".to_string()),
+                    text: Some(
+                        r#"{"total": 10, "results": {"name": "Alice", "count": 5}, "tags": ["a"]}"#
+                            .to_string(),
+                    ),
+                }),
+            },
+        };
+
+        let fields = extract_body_fields(&entry);
+        let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+
+        // Top-level fields
+        assert!(names.contains(&"total"));
+        assert!(names.contains(&"results"));
+        assert!(names.contains(&"tags"));
+        // Nested object fields
+        assert!(names.contains(&"results.name"));
+        assert!(names.contains(&"results.count"));
+
+        // Check types
+        let results_name = fields.iter().find(|f| f.name == "results.name").unwrap();
+        assert_eq!(results_name.field_type, "string");
+        let results_count = fields.iter().find(|f| f.name == "results.count").unwrap();
+        assert_eq!(results_count.field_type, "integer");
+    }
+
+    #[test]
+    fn test_nested_array_body_field_extraction() {
+        let entry = HarEntry {
+            request: HarRequest {
+                method: "GET".to_string(),
+                url: "http://localhost:3000/api/data".to_string(),
+                headers: vec![],
+            },
+            response: HarResponse {
+                status: 200,
+                headers: vec![],
+                content: Some(HarContent {
+                    mime_type: Some("application/json".to_string()),
+                    text: Some(r#"{"items": [{"id": 1, "label": "foo"}]}"#.to_string()),
+                }),
+            },
+        };
+
+        let fields = extract_body_fields(&entry);
+        let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+
+        assert!(names.contains(&"items"));
+        assert!(names.contains(&"items[].id"));
+        assert!(names.contains(&"items[].label"));
+    }
+
+    #[test]
+    fn test_nested_depth_limit() {
+        // Build a deeply nested JSON: {a: {b: {c: {d: {e: 1}}}}}
+        let entry = HarEntry {
+            request: HarRequest {
+                method: "GET".to_string(),
+                url: "http://localhost:3000/deep".to_string(),
+                headers: vec![],
+            },
+            response: HarResponse {
+                status: 200,
+                headers: vec![],
+                content: Some(HarContent {
+                    mime_type: Some("application/json".to_string()),
+                    text: Some(r#"{"a": {"b": {"c": {"d": {"e": 1}}}}}"#.to_string()),
+                }),
+            },
+        };
+
+        let fields = extract_body_fields(&entry);
+        let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+
+        // depth 0: a (object)
+        assert!(names.contains(&"a"));
+        // depth 1: a.b (object)
+        assert!(names.contains(&"a.b"));
+        // depth 2: a.b.c (object)
+        assert!(names.contains(&"a.b.c"));
+        // depth 3: a.b.c.d (object) — at MAX_BODY_FIELD_DEPTH, so its children are NOT expanded
+        assert!(names.contains(&"a.b.c.d"));
+        // a.b.c.d.e should NOT be present (depth limit reached)
+        assert!(!names.contains(&"a.b.c.d.e"), "should not recurse beyond depth 3");
     }
 
     #[test]

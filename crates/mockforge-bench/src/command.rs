@@ -2224,6 +2224,7 @@ impl BenchCommand {
             failed: usize,
             elapsed: std::time::Duration,
             report_json: serde_json::Value,
+            owasp_coverage: Vec<crate::conformance::report::OwaspCoverageEntry>,
         }
 
         let mut target_results: Vec<TargetResult> = Vec::with_capacity(num_targets);
@@ -2339,12 +2340,16 @@ impl BenchCommand {
                 }
             }
 
+            // Compute OWASP coverage for this target
+            let owasp_coverage = report.owasp_coverage_data();
+
             target_results.push(TargetResult {
                 url: target.url.clone(),
                 passed,
                 failed,
                 elapsed: target_elapsed,
                 report_json,
+                owasp_coverage,
             });
         }
 
@@ -2409,6 +2414,26 @@ impl BenchCommand {
         );
         println!("{}", "=".repeat(80));
 
+        // Print per-target OWASP coverage
+        for result in &target_results {
+            println!("\n  OWASP API Security Top 10 Coverage for {}:", result.url);
+            for entry in &result.owasp_coverage {
+                let status = if !entry.tested {
+                    "-"
+                } else if entry.all_passed {
+                    "pass"
+                } else {
+                    "FAIL"
+                };
+                let via = if entry.via_categories.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (via {})", entry.via_categories.join(", "))
+                };
+                println!("    {:<12} {:<40} {}{}", entry.id, entry.name, status, via);
+            }
+        }
+
         // Save combined summary
         let per_target_summaries: Vec<serde_json::Value> = target_results
             .iter()
@@ -2420,6 +2445,19 @@ impl BenchCommand {
                 } else {
                     (r.passed as f64 / total_checks as f64) * 100.0
                 };
+                let owasp_json: Vec<serde_json::Value> = r
+                    .owasp_coverage
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "id": e.id,
+                            "name": e.name,
+                            "tested": e.tested,
+                            "all_passed": e.all_passed,
+                            "via_categories": e.via_categories,
+                        })
+                    })
+                    .collect();
                 serde_json::json!({
                     "target_url": r.url,
                     "target_index": idx,
@@ -2429,6 +2467,7 @@ impl BenchCommand {
                     "pass_rate": rate,
                     "elapsed_seconds": r.elapsed.as_secs_f64(),
                     "report": r.report_json,
+                    "owasp_coverage": owasp_json,
                 })
             })
             .collect();

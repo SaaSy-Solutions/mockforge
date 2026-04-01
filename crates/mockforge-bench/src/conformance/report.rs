@@ -8,6 +8,21 @@ use colored::*;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+/// OWASP API Security Top 10 coverage entry for a single OWASP category
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct OwaspCoverageEntry {
+    /// OWASP identifier (e.g., "API1:2023")
+    pub id: String,
+    /// Short name (e.g., "Broken Object Level Authorization")
+    pub name: String,
+    /// Whether any conformance checks mapped to this category were tested
+    pub tested: bool,
+    /// Whether all related checks passed (only meaningful if `tested` is true)
+    pub all_passed: bool,
+    /// Which conformance categories contributed to this OWASP category's coverage
+    pub via_categories: Vec<String>,
+}
+
 /// Per-category conformance result
 #[derive(Debug, Clone, Default)]
 pub struct CategoryResult {
@@ -619,13 +634,13 @@ impl ConformanceReport {
         println!();
     }
 
-    /// Print OWASP API Security Top 10 coverage based on tested features
-    fn print_owasp_coverage(&self) {
-        println!();
-        println!("{}", "OWASP API Security Top 10 Coverage".bold());
-        println!("{}", "=".repeat(64).bright_green());
-
-        // Build a map of feature check_name → passed/failed status
+    /// Compute OWASP API Security Top 10 coverage as structured data.
+    ///
+    /// Returns a vector of `OwaspCoverageEntry` items, one per OWASP category,
+    /// indicating whether it was tested, whether all related checks passed,
+    /// and which conformance categories contributed to the coverage.
+    pub fn owasp_coverage_data(&self) -> Vec<OwaspCoverageEntry> {
+        // Build a map of feature check_name -> passed/failed status
         let mut feature_status: HashMap<&str, bool> = HashMap::new(); // true = all passed
         for feature in ConformanceFeature::all() {
             let check_name = feature.check_name();
@@ -652,11 +667,11 @@ impl ConformanceReport {
             }
         }
 
+        let mut entries = Vec::new();
         for category in OwaspCategory::all() {
             let id = category.identifier();
             let name = category.short_name();
 
-            // Find features that map to this OWASP category and were tested
             let mut tested = false;
             let mut all_passed = true;
             let mut via_categories: HashSet<&str> = HashSet::new();
@@ -674,20 +689,40 @@ impl ConformanceReport {
                 }
             }
 
-            let (status, via) = if !tested {
+            let mut cats: Vec<String> = via_categories.into_iter().map(String::from).collect();
+            cats.sort();
+
+            entries.push(OwaspCoverageEntry {
+                id: id.to_string(),
+                name: name.to_string(),
+                tested,
+                all_passed: tested && all_passed,
+                via_categories: cats,
+            });
+        }
+
+        entries
+    }
+
+    /// Print OWASP API Security Top 10 coverage based on tested features
+    fn print_owasp_coverage(&self) {
+        println!();
+        println!("{}", "OWASP API Security Top 10 Coverage".bold());
+        println!("{}", "=".repeat(64).bright_green());
+
+        for entry in self.owasp_coverage_data() {
+            let (status, via) = if !entry.tested {
                 ("-".bright_black(), String::new())
             } else {
-                let mut cats: Vec<&str> = via_categories.into_iter().collect();
-                cats.sort();
-                let via_str = format!(" (via {})", cats.join(", "));
-                if all_passed {
+                let via_str = format!(" (via {})", entry.via_categories.join(", "));
+                if entry.all_passed {
                     ("✓".green(), via_str)
                 } else {
                     ("⚠".yellow(), format!("{} — has failures", via_str))
                 }
             };
 
-            println!("  {:<12} {:<40} {}{}", id, name, status, via);
+            println!("  {:<12} {:<40} {}{}", entry.id, entry.name, status, via);
         }
     }
 
