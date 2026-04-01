@@ -33,7 +33,7 @@ pub fn generate_id(
         AutoGenerationRule::Realistic { prefix, length } => generate_realistic_id(prefix, *length),
         AutoGenerationRule::AutoIncrement => {
             // Auto-increment should be handled by database
-            Err(Error::generic("AutoIncrement should be handled by database".to_string()))
+            Err(Error::internal("AutoIncrement should be handled by database".to_string()))
         }
         AutoGenerationRule::Custom(expr) => evaluate_custom_expression(expr),
     }

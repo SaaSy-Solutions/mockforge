@@ -22,28 +22,28 @@ const TAG_SEQUENCE: u8 = 0x30;
 /// Read a DER tag + length, returning (tag, length, rest).
 fn read_der_tl(data: &[u8]) -> Result<(u8, usize, &[u8]), Error> {
     if data.is_empty() {
-        return Err(Error::generic("DER: unexpected end of data"));
+        return Err(Error::internal("DER: unexpected end of data"));
     }
     let tag = data[0];
     if data.len() < 2 {
-        return Err(Error::generic("DER: truncated length"));
+        return Err(Error::internal("DER: truncated length"));
     }
     let (len, header_len) = if data[1] & 0x80 == 0 {
         (data[1] as usize, 2)
     } else {
         let num_bytes = (data[1] & 0x7f) as usize;
         if num_bytes == 0 || num_bytes > 4 || data.len() < 2 + num_bytes {
-            return Err(Error::generic("DER: invalid length encoding"));
+            return Err(Error::internal("DER: invalid length encoding"));
         }
         let mut len: usize = 0;
         for &b in &data[2..2 + num_bytes] {
-            len = len.checked_shl(8).ok_or_else(|| Error::generic("DER: length overflow"))?
+            len = len.checked_shl(8).ok_or_else(|| Error::internal("DER: length overflow"))?
                 | b as usize;
         }
         (len, 2 + num_bytes)
     };
     if data.len() < header_len + len {
-        return Err(Error::generic("DER: content exceeds buffer"));
+        return Err(Error::internal("DER: content exceeds buffer"));
     }
     Ok((tag, len, &data[header_len..]))
 }
@@ -52,7 +52,9 @@ fn read_der_tl(data: &[u8]) -> Result<(u8, usize, &[u8]), Error> {
 fn expect_tag(data: &[u8], expected: u8) -> Result<(&[u8], &[u8]), Error> {
     let (tag, len, rest) = read_der_tl(data)?;
     if tag != expected {
-        return Err(Error::generic(format!("DER: expected tag 0x{expected:02x}, got 0x{tag:02x}")));
+        return Err(Error::internal(format!(
+            "DER: expected tag 0x{expected:02x}, got 0x{tag:02x}"
+        )));
     }
     Ok((&rest[..len], &rest[len..]))
 }
@@ -85,7 +87,7 @@ fn decode_pem(pem: &str) -> Result<Vec<u8>, Error> {
 
     // Validate that it has PEM markers
     if !pem.starts_with("-----BEGIN") || !pem.contains("-----END") {
-        return Err(Error::generic("Invalid PEM format: missing BEGIN/END markers"));
+        return Err(Error::internal("Invalid PEM format: missing BEGIN/END markers"));
     }
 
     // Strip header and footer lines, join base64 body
@@ -93,7 +95,7 @@ fn decode_pem(pem: &str) -> Result<Vec<u8>, Error> {
 
     general_purpose::STANDARD
         .decode(b64)
-        .map_err(|e| Error::generic(format!("PEM base64 decode error: {e}")))
+        .map_err(|e| Error::internal(format!("PEM base64 decode error: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +118,7 @@ fn parse_rsa_public_key_der(der: &[u8]) -> Result<(String, String), Error> {
 
         // BIT STRING has a leading "unused bits" byte (should be 0)
         if bit_string.is_empty() {
-            return Err(Error::generic("DER: empty BIT STRING"));
+            return Err(Error::internal("DER: empty BIT STRING"));
         }
         let pkcs1_der = &bit_string[1..]; // skip unused-bits byte
         return parse_rsa_pkcs1(pkcs1_der);
@@ -186,7 +188,7 @@ fn identify_ec_curve(alg_id_bytes: &[u8]) -> Result<&'static str, Error> {
     } else if contains_oid(alg_id_bytes, OID_P521) {
         Ok("P-521")
     } else {
-        Err(Error::generic("Unsupported EC curve OID in SPKI AlgorithmIdentifier"))
+        Err(Error::internal("Unsupported EC curve OID in SPKI AlgorithmIdentifier"))
     }
 }
 
@@ -207,12 +209,12 @@ fn parse_ec_public_key_der(der: &[u8]) -> Result<(String, String, String), Error
     // BIT STRING containing the uncompressed EC point
     let (bit_string, _) = expect_tag(after_alg, TAG_BIT_STRING)?;
     if bit_string.is_empty() {
-        return Err(Error::generic("DER: empty BIT STRING in EC key"));
+        return Err(Error::internal("DER: empty BIT STRING in EC key"));
     }
 
     let point = &bit_string[1..]; // skip unused-bits byte
     if point.is_empty() || point[0] != 0x04 {
-        return Err(Error::generic(
+        return Err(Error::internal(
             "EC public key is not in uncompressed point format (expected 0x04 prefix)",
         ));
     }
@@ -220,7 +222,7 @@ fn parse_ec_public_key_der(der: &[u8]) -> Result<(String, String, String), Error
     let coord_bytes = &point[1..]; // skip 0x04
     let coord_size = ec_coord_size(crv);
     if coord_bytes.len() < coord_size * 2 {
-        return Err(Error::generic(format!(
+        return Err(Error::internal(format!(
             "EC point too short for {crv}: expected {expected} bytes, got {got}",
             expected = coord_size * 2,
             got = coord_bytes.len()
@@ -288,7 +290,7 @@ pub fn jwk_key_to_public(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
         "RSA" => rsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         "EC" => ecdsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         "oct" => hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
-        _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
+        _ => Err(Error::internal(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }
 
@@ -332,7 +334,7 @@ pub fn convert_jwk_key_simple(jwk_key: &JwkKey) -> Result<JwkPublicKey, Error> {
         "RSA" => rsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         "EC" => ecdsa_pem_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
         "oct" => hmac_to_jwk(&jwk_key.public_key, &jwk_key.kid, &jwk_key.alg),
-        _ => Err(Error::generic(format!("Unsupported key type: {}", jwk_key.kty))),
+        _ => Err(Error::internal(format!("Unsupported key type: {}", jwk_key.kty))),
     }
 }
 

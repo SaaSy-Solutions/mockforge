@@ -47,14 +47,12 @@ impl SmtpServer {
         use std::fs::File;
         use std::io::BufReader;
 
-        let cert_path = config
-            .tls_cert_path
-            .as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("TLS certificate path not configured"))?;
-        let key_path = config
-            .tls_key_path
-            .as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("TLS private key path not configured"))?;
+        let cert_path = config.tls_cert_path.as_ref().ok_or_else(|| {
+            mockforge_core::Error::internal("TLS certificate path not configured")
+        })?;
+        let key_path = config.tls_key_path.as_ref().ok_or_else(|| {
+            mockforge_core::Error::internal("TLS private key path not configured")
+        })?;
 
         // Load certificate
         let cert_file = File::open(cert_path)?;
@@ -69,7 +67,7 @@ impl SmtpServer {
         let mut keys: Vec<Vec<u8>> = pkcs8_private_keys(&mut key_reader)?;
 
         if keys.is_empty() {
-            return Err(mockforge_core::Error::generic("No private keys found"));
+            return Err(mockforge_core::Error::internal("No private keys found"));
         }
 
         // Use rustls from tokio-rustls which has compatible API
@@ -77,7 +75,7 @@ impl SmtpServer {
             .with_safe_defaults()
             .with_no_client_auth()
             .with_single_cert(certs, rustls::PrivateKey(keys.remove(0)))
-            .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?;
+            .map_err(|e| mockforge_core::Error::internal(format!("TLS config error: {}", e)))?;
 
         server_config.alpn_protocols = vec![b"smtp".to_vec()];
 
@@ -321,7 +319,7 @@ async fn process_email(
     let from = state
         .mail_from
         .as_ref()
-        .ok_or_else(|| mockforge_core::Error::generic("Missing MAIL FROM"))?;
+        .ok_or_else(|| mockforge_core::Error::internal("Missing MAIL FROM"))?;
     let to = state.rcpt_to.join(", ");
 
     // Extract subject from data

@@ -84,7 +84,7 @@ impl SqliteDatabase {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                Error::generic(format!("Failed to create database directory: {}", e))
+                Error::internal(format!("Failed to create database directory: {}", e))
             })?;
         }
 
@@ -93,19 +93,19 @@ impl SqliteDatabase {
             .max_connections(10)
             .connect(&db_url)
             .await
-            .map_err(|e| Error::generic(format!("Failed to connect to SQLite database: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to connect to SQLite database: {}", e)))?;
 
         // Enable WAL mode for better concurrency
         sqlx::query("PRAGMA journal_mode = WAL")
             .execute(&pool)
             .await
-            .map_err(|e| Error::generic(format!("Failed to enable WAL mode: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to enable WAL mode: {}", e)))?;
 
         // Enable foreign keys
         sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&pool)
             .await
-            .map_err(|e| Error::generic(format!("Failed to enable foreign keys: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to enable foreign keys: {}", e)))?;
 
         Ok(Self { pool, path })
     }
@@ -152,7 +152,7 @@ impl VirtualDatabase for SqliteDatabase {
         let rows = query_builder
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| Error::generic(format!("Query execution failed: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Query execution failed: {}", e)))?;
 
         // Convert rows to HashMap
         let mut results = Vec::new();
@@ -198,7 +198,7 @@ impl VirtualDatabase for SqliteDatabase {
         let result = query_builder
             .execute(&self.pool)
             .await
-            .map_err(|e| Error::generic(format!("Execute failed: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Execute failed: {}", e)))?;
 
         Ok(result.rows_affected())
     }
@@ -232,7 +232,7 @@ impl VirtualDatabase for SqliteDatabase {
         let result = query_builder
             .execute(&self.pool)
             .await
-            .map_err(|e| Error::generic(format!("Execute failed: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Execute failed: {}", e)))?;
 
         // Get last inserted row ID
         let last_id = result.last_insert_rowid();
@@ -245,7 +245,7 @@ impl VirtualDatabase for SqliteDatabase {
             .bind(table_name)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| Error::generic(format!("Failed to check table existence: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to check table existence: {}", e)))?;
 
         Ok(result.is_some())
     }
@@ -254,7 +254,7 @@ impl VirtualDatabase for SqliteDatabase {
         sqlx::query(create_statement)
             .execute(&self.pool)
             .await
-            .map_err(|e| Error::generic(format!("Failed to create table: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create table: {}", e)))?;
 
         Ok(())
     }
@@ -311,7 +311,7 @@ impl JsonDatabase {
         let data = if path.exists() {
             let content = tokio::fs::read_to_string(&path)
                 .await
-                .map_err(|e| Error::generic(format!("Failed to read JSON database: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read JSON database: {}", e)))?;
             serde_json::from_str(&content).unwrap_or_default()
         } else {
             HashMap::new()
@@ -330,17 +330,17 @@ impl JsonDatabase {
         // Ensure parent directory exists
         if let Some(parent) = self.path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                Error::generic(format!("Failed to create database directory: {}", e))
+                Error::internal(format!("Failed to create database directory: {}", e))
             })?;
         }
 
         // Serialize the data (not the RwLock wrapper)
         let content = serde_json::to_string_pretty(&*data)
-            .map_err(|e| Error::generic(format!("Failed to serialize JSON database: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to serialize JSON database: {}", e)))?;
 
         tokio::fs::write(&self.path, content)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write JSON database: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write JSON database: {}", e)))?;
 
         Ok(())
     }
@@ -714,7 +714,7 @@ fn extract_table_name_from_select(query: &str) -> Result<&str> {
             return Ok(table_name);
         }
     }
-    Err(Error::generic("Invalid SELECT query: missing FROM clause".to_string()))
+    Err(Error::internal("Invalid SELECT query: missing FROM clause".to_string()))
 }
 
 /// Extract table name from COUNT query
@@ -878,7 +878,7 @@ fn parse_insert_query(query: &str, params: &[Value]) -> Result<(String, HashMap<
         }
     }
 
-    Err(Error::generic("Invalid INSERT query format".to_string()))
+    Err(Error::internal("Invalid INSERT query format".to_string()))
 }
 
 /// Parse UPDATE query
@@ -891,7 +891,7 @@ fn parse_update_query(
     let parts: Vec<&str> = query.split_whitespace().collect();
 
     if parts.len() < 4 || parts[0].to_uppercase() != "UPDATE" {
-        return Err(Error::generic("Invalid UPDATE query".to_string()));
+        return Err(Error::internal("Invalid UPDATE query".to_string()));
     }
 
     let table_name = parts[1].to_string();
@@ -930,7 +930,7 @@ fn parse_update_query(
         return Ok((table_name, updates, where_clause_str, where_params));
     }
 
-    Err(Error::generic("Invalid UPDATE query: missing SET clause".to_string()))
+    Err(Error::internal("Invalid UPDATE query: missing SET clause".to_string()))
 }
 
 /// Parse DELETE query
@@ -952,7 +952,7 @@ fn parse_delete_query(query: &str, params: &[Value]) -> Result<(String, String, 
         }
     }
 
-    Err(Error::generic("Invalid DELETE query".to_string()))
+    Err(Error::internal("Invalid DELETE query".to_string()))
 }
 
 #[cfg(test)]

@@ -163,11 +163,11 @@ impl SpecRegistry for AmqpSpecRegistry {
                 let exchange_name = request
                     .metadata
                     .get("exchange")
-                    .ok_or_else(|| mockforge_core::Error::generic("Missing exchange"))?;
+                    .ok_or_else(|| mockforge_core::Error::internal("Missing exchange"))?;
                 let routing_key = request
                     .routing_key
                     .as_ref()
-                    .ok_or_else(|| mockforge_core::Error::generic("Missing routing key"))?;
+                    .ok_or_else(|| mockforge_core::Error::internal("Missing routing key"))?;
 
                 let body_bytes = request.body.clone().unwrap_or_default();
 
@@ -262,9 +262,10 @@ impl SpecRegistry for AmqpSpecRegistry {
                     content_type: "application/json".to_string(),
                 })
             }
-            _ => {
-                Err(mockforge_core::Error::generic(format!("Unsupported operation: {}", operation)))
-            }
+            _ => Err(mockforge_core::Error::internal(format!(
+                "Unsupported operation: {}",
+                operation
+            ))),
         }
     }
 }

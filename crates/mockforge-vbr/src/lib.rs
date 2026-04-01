@@ -157,19 +157,19 @@ impl VbrEngine {
         // Parse OpenAPI content (JSON or YAML)
         let json_value: serde_json::Value = if openapi_content.trim_start().starts_with('{') {
             serde_json::from_str(openapi_content)
-                .map_err(|e| Error::generic(format!("Failed to parse OpenAPI JSON: {}", e)))?
+                .map_err(|e| Error::internal(format!("Failed to parse OpenAPI JSON: {}", e)))?
         } else {
             serde_yaml::from_str(openapi_content)
-                .map_err(|e| Error::generic(format!("Failed to parse OpenAPI YAML: {}", e)))?
+                .map_err(|e| Error::internal(format!("Failed to parse OpenAPI YAML: {}", e)))?
         };
 
         // Load OpenAPI spec
         let spec = mockforge_core::openapi::OpenApiSpec::from_json(json_value)
-            .map_err(|e| Error::generic(format!("Failed to load OpenAPI spec: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to load OpenAPI spec: {}", e)))?;
 
         // Validate spec
         spec.validate()
-            .map_err(|e| Error::generic(format!("Invalid OpenAPI specification: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Invalid OpenAPI specification: {}", e)))?;
 
         // Convert OpenAPI to VBR entities
         let conversion_result = openapi::convert_openapi_to_vbr(&spec)?;
@@ -203,7 +203,7 @@ impl VbrEngine {
     ) -> Result<(Self, openapi::OpenApiConversionResult)> {
         let content = tokio::fs::read_to_string(file_path.as_ref())
             .await
-            .map_err(|e| Error::generic(format!("Failed to read OpenAPI file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read OpenAPI file: {}", e)))?;
 
         Self::from_openapi(config, &content).await
     }
@@ -419,12 +419,12 @@ impl VbrEngine {
         let entities = state
             .get("entities")
             .and_then(|e| e.as_object())
-            .ok_or_else(|| Error::generic("Invalid state format: missing entities"))?;
+            .ok_or_else(|| Error::internal("Invalid state format: missing entities"))?;
 
         // Import each entity
         for (entity_name, records_value) in entities {
             let records = records_value.as_array().ok_or_else(|| {
-                Error::generic(format!("Invalid records for entity {}", entity_name))
+                Error::internal(format!("Invalid records for entity {}", entity_name))
             })?;
 
             if let Some(entity) = self.registry.get(entity_name) {
@@ -433,7 +433,7 @@ impl VbrEngine {
                 for record in records {
                     let record_obj = record
                         .as_object()
-                        .ok_or_else(|| Error::generic("Invalid record format"))?;
+                        .ok_or_else(|| Error::internal("Invalid record format"))?;
 
                     let fields: Vec<String> = record_obj.keys().cloned().collect();
                     let placeholders: Vec<String> =

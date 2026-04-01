@@ -46,7 +46,7 @@ impl SessionDataManager {
         // Check if session exists in SessionManager
         let session_state = self.session_manager.get_session(session_id).await;
         if session_state.is_none() {
-            return Err(crate::Error::generic(format!("Session '{}' not found", session_id)));
+            return Err(crate::Error::internal(format!("Session '{}' not found", session_id)));
         }
 
         // Check if we already have a database for this session

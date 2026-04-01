@@ -77,7 +77,7 @@ impl Topic {
         if let Some(partition) = self.partitions.get_mut(partition as usize) {
             Ok(partition.append(record))
         } else {
-            Err(mockforge_core::Error::generic(format!(
+            Err(mockforge_core::Error::internal(format!(
                 "Partition {} does not exist",
                 partition
             )))

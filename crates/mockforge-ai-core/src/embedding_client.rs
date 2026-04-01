@@ -45,7 +45,7 @@ impl EmbeddingClient {
     pub async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         match self.provider.as_str() {
             "openai" | "openai-compatible" => self.generate_openai_embedding(text).await,
-            _ => Err(crate::Error::generic(format!(
+            _ => Err(crate::Error::internal(format!(
                 "Unsupported embedding provider: {}",
                 self.provider
             ))),
@@ -68,7 +68,7 @@ impl EmbeddingClient {
             .api_key
             .clone()
             .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .ok_or_else(|| crate::Error::generic("OpenAI API key not found"))?;
+            .ok_or_else(|| crate::Error::internal("OpenAI API key not found"))?;
 
         let request_body = serde_json::json!({
             "model": self.model,
@@ -84,28 +84,28 @@ impl EmbeddingClient {
 
         let response =
             request.json(&request_body).send().await.map_err(|e| {
-                crate::Error::generic(format!("Embedding API request failed: {}", e))
+                crate::Error::internal(format!("Embedding API request failed: {}", e))
             })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::generic(format!("Embedding API error: {}", error_text)));
+            return Err(crate::Error::internal(format!("Embedding API error: {}", error_text)));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::generic(format!("Failed to parse embedding response: {}", e))
+            crate::Error::internal(format!("Failed to parse embedding response: {}", e))
         })?;
 
         // Extract embedding vector
         let embedding: Vec<f32> = response_json["data"][0]["embedding"]
             .as_array()
-            .ok_or_else(|| crate::Error::generic("Invalid embedding response format"))?
+            .ok_or_else(|| crate::Error::internal("Invalid embedding response format"))?
             .iter()
             .filter_map(|v| v.as_f64().map(|f| f as f32))
             .collect();
 
         if embedding.is_empty() {
-            return Err(crate::Error::generic("Empty embedding returned"));
+            return Err(crate::Error::internal("Empty embedding returned"));
         }
 
         Ok(embedding)

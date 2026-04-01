@@ -73,7 +73,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
 
     // Load certificate chain
     let cert_file = File::open(&config.cert_file).map_err(|e| {
-        mockforge_core::Error::generic(format!(
+        mockforge_core::Error::internal(format!(
             "Failed to open certificate file {}: {}",
             config.cert_file, e
         ))
@@ -82,14 +82,14 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
     let server_certs: Vec<rustls::pki_types::CertificateDer<'static>> = certs(&mut cert_reader)
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| {
-            mockforge_core::Error::generic(format!(
+            mockforge_core::Error::internal(format!(
                 "Failed to parse certificate file {}: {}",
                 config.cert_file, e
             ))
         })?;
 
     if server_certs.is_empty() {
-        return Err(mockforge_core::Error::generic(format!(
+        return Err(mockforge_core::Error::internal(format!(
             "No certificates found in {}",
             config.cert_file
         )));
@@ -97,7 +97,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
 
     // Load private key
     let key_file = File::open(&config.key_file).map_err(|e| {
-        mockforge_core::Error::generic(format!(
+        mockforge_core::Error::internal(format!(
             "Failed to open private key file {}: {}",
             config.key_file, e
         ))
@@ -107,7 +107,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
         pkcs8_private_keys(&mut key_reader)
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(|e| {
-                mockforge_core::Error::generic(format!(
+                mockforge_core::Error::internal(format!(
                     "Failed to parse private key file {}: {}",
                     config.key_file, e
                 ))
@@ -116,7 +116,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
         pkcs8_keys.into_iter().map(rustls::pki_types::PrivateKeyDer::Pkcs8).collect();
 
     if keys.is_empty() {
-        return Err(mockforge_core::Error::generic(format!(
+        return Err(mockforge_core::Error::internal(format!(
             "No private keys found in {}",
             config.key_file
         )));
@@ -142,7 +142,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
             if let Some(ref ca_file_path) = config.ca_file {
                 // Load CA certificate for client verification
                 let ca_file = File::open(ca_file_path).map_err(|e| {
-                    mockforge_core::Error::generic(format!(
+                    mockforge_core::Error::internal(format!(
                         "Failed to open CA certificate file {}: {}",
                         ca_file_path, e
                     ))
@@ -151,7 +151,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
                     certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
                         |e| {
-                            mockforge_core::Error::generic(format!(
+                            mockforge_core::Error::internal(format!(
                                 "Failed to parse CA certificate file {}: {}",
                                 ca_file_path, e
                             ))
@@ -161,7 +161,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
                     root_store.add(cert.clone()).map_err(|e| {
-                        mockforge_core::Error::generic(format!(
+                        mockforge_core::Error::internal(format!(
                             "Failed to add CA certificate to root store: {}",
                             e
                         ))
@@ -172,7 +172,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
                         .build()
                         .map_err(|e| {
-                            mockforge_core::Error::generic(format!(
+                            mockforge_core::Error::internal(format!(
                                 "Failed to build client verifier: {}",
                                 e
                             ))
@@ -185,13 +185,13 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
-                        mockforge_core::Error::generic(format!(
+                        mockforge_core::Error::internal(format!(
                             "TLS config error (mTLS required): {}",
                             e
                         ))
                     })?
             } else {
-                return Err(mockforge_core::Error::generic(
+                return Err(mockforge_core::Error::internal(
                     "mTLS mode 'required' requires --tls-ca (CA certificate file)",
                 ));
             }
@@ -201,7 +201,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
             if let Some(ref ca_file_path) = config.ca_file {
                 // Load CA certificate for client verification
                 let ca_file = File::open(ca_file_path).map_err(|e| {
-                    mockforge_core::Error::generic(format!(
+                    mockforge_core::Error::internal(format!(
                         "Failed to open CA certificate file {}: {}",
                         ca_file_path, e
                     ))
@@ -210,7 +210,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 let ca_certs: Vec<rustls::pki_types::CertificateDer<'static>> =
                     certs(&mut ca_reader).collect::<std::result::Result<Vec<_>, _>>().map_err(
                         |e| {
-                            mockforge_core::Error::generic(format!(
+                            mockforge_core::Error::internal(format!(
                                 "Failed to parse CA certificate file {}: {}",
                                 ca_file_path, e
                             ))
@@ -220,7 +220,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                 let mut root_store = rustls::RootCertStore::empty();
                 for cert in &ca_certs {
                     root_store.add(cert.clone()).map_err(|e| {
-                        mockforge_core::Error::generic(format!(
+                        mockforge_core::Error::internal(format!(
                             "Failed to add CA certificate to root store: {}",
                             e
                         ))
@@ -231,7 +231,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     rustls::server::WebPkiClientVerifier::builder(Arc::new(root_store))
                         .build()
                         .map_err(|e| {
-                            mockforge_core::Error::generic(format!(
+                            mockforge_core::Error::internal(format!(
                                 "Failed to build client verifier: {}",
                                 e
                             ))
@@ -248,7 +248,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     .with_client_cert_verifier(client_verifier)
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
-                        mockforge_core::Error::generic(format!(
+                        mockforge_core::Error::internal(format!(
                             "TLS config error (mTLS optional): {}",
                             e
                         ))
@@ -261,7 +261,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
                     .with_no_client_auth()
                     .with_single_cert(server_certs, key)
                     .map_err(|e| {
-                        mockforge_core::Error::generic(format!("TLS config error: {}", e))
+                        mockforge_core::Error::internal(format!("TLS config error: {}", e))
                     })?
             }
         }
@@ -271,7 +271,7 @@ pub fn load_tls_acceptor(config: &HttpTlsConfig) -> Result<TlsAcceptor> {
             tls_config_builder(tls13_only)
                 .with_no_client_auth()
                 .with_single_cert(server_certs, key)
-                .map_err(|e| mockforge_core::Error::generic(format!("TLS config error: {}", e)))?
+                .map_err(|e| mockforge_core::Error::internal(format!("TLS config error: {}", e)))?
         }
     };
 

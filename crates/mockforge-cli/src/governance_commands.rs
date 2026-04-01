@@ -255,7 +255,7 @@ async fn query_drift_incidents(
     let rows = query_builder
         .fetch_all(pool)
         .await
-        .map_err(|e| Error::generic(format!("Failed to query drift incidents: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to query drift incidents: {}", e)))?;
 
     let mut incidents = Vec::new();
     for row in rows {
@@ -277,33 +277,33 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
 
     let id: Uuid = row
         .try_get("id")
-        .map_err(|e| Error::generic(format!("Failed to get id: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get id: {}", e)))?;
     let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
     let endpoint: String = row
         .try_get("endpoint")
-        .map_err(|e| Error::generic(format!("Failed to get endpoint: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get endpoint: {}", e)))?;
     let method: String = row
         .try_get("method")
-        .map_err(|e| Error::generic(format!("Failed to get method: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get method: {}", e)))?;
     let incident_type_str: String = row
         .try_get("incident_type")
-        .map_err(|e| Error::generic(format!("Failed to get incident_type: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get incident_type: {}", e)))?;
     let severity_str: String = row
         .try_get("severity")
-        .map_err(|e| Error::generic(format!("Failed to get severity: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get severity: {}", e)))?;
     let status_str: String = row
         .try_get("status")
-        .map_err(|e| Error::generic(format!("Failed to get status: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get status: {}", e)))?;
     let detected_at: DateTime<Utc> = row
         .try_get("detected_at")
-        .map_err(|e| Error::generic(format!("Failed to get detected_at: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get detected_at: {}", e)))?;
     let details: serde_json::Value = row.try_get("details").unwrap_or_default();
     let created_at: DateTime<Utc> = row
         .try_get("created_at")
-        .map_err(|e| Error::generic(format!("Failed to get created_at: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get created_at: {}", e)))?;
     let updated_at: DateTime<Utc> = row
         .try_get("updated_at")
-        .map_err(|e| Error::generic(format!("Failed to get updated_at: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get updated_at: {}", e)))?;
     let resolved_at: Option<DateTime<Utc>> = row.try_get("resolved_at").ok();
     let budget_id: Option<Uuid> = row.try_get("budget_id").ok();
     let sync_cycle_id: Option<String> = row.try_get("sync_cycle_id").ok();
@@ -317,7 +317,7 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
     let incident_type = match incident_type_str.as_str() {
         "breaking_change" => IncidentType::BreakingChange,
         "threshold_exceeded" => IncidentType::ThresholdExceeded,
-        _ => return Err(Error::generic(format!("Invalid incident_type: {}", incident_type_str))),
+        _ => return Err(Error::internal(format!("Invalid incident_type: {}", incident_type_str))),
     };
 
     let severity = match severity_str.as_str() {
@@ -325,7 +325,7 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
         "medium" => IncidentSeverity::Medium,
         "high" => IncidentSeverity::High,
         "critical" => IncidentSeverity::Critical,
-        _ => return Err(Error::generic(format!("Invalid severity: {}", severity_str))),
+        _ => return Err(Error::internal(format!("Invalid severity: {}", severity_str))),
     };
 
     let status = match status_str.as_str() {
@@ -333,7 +333,7 @@ fn map_row_to_drift_incident(row: &sqlx::postgres::PgRow) -> Result<DriftInciden
         "acknowledged" => IncidentStatus::Acknowledged,
         "resolved" => IncidentStatus::Resolved,
         "closed" => IncidentStatus::Closed,
-        _ => return Err(Error::generic(format!("Invalid status: {}", status_str))),
+        _ => return Err(Error::internal(format!("Invalid status: {}", status_str))),
     };
 
     // Parse fitness_test_results JSONB array
@@ -398,7 +398,7 @@ pub async fn handle_forecast_generate(
 
     let window = window_days.unwrap_or(90);
     if !matches!(window, 30 | 90 | 180) {
-        return Err(Error::generic("Window must be 30, 90, or 180 days"));
+        return Err(Error::internal("Window must be 30, 90, or 180 days"));
     }
 
     let config = ForecastingConfig::default();
@@ -646,7 +646,7 @@ async fn query_semantic_incidents(
     let rows = query_builder
         .fetch_all(pool)
         .await
-        .map_err(|e| Error::generic(format!("Failed to query semantic incidents: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to query semantic incidents: {}", e)))?;
 
     let mut incidents = Vec::new();
     for row in rows {
@@ -654,29 +654,29 @@ async fn query_semantic_incidents(
 
         let id: Uuid = row
             .try_get("id")
-            .map_err(|e| Error::generic(format!("Failed to get id: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get id: {}", e)))?;
         let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
         let endpoint: String = row
             .try_get("endpoint")
-            .map_err(|e| Error::generic(format!("Failed to get endpoint: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get endpoint: {}", e)))?;
         let method: String = row
             .try_get("method")
-            .map_err(|e| Error::generic(format!("Failed to get method: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get method: {}", e)))?;
         let change_type_str: String = row
             .try_get("semantic_change_type")
-            .map_err(|e| Error::generic(format!("Failed to get semantic_change_type: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get semantic_change_type: {}", e)))?;
         let severity_str: String = row
             .try_get("severity")
-            .map_err(|e| Error::generic(format!("Failed to get severity: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get severity: {}", e)))?;
         let status_str: String = row
             .try_get("status")
-            .map_err(|e| Error::generic(format!("Failed to get status: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get status: {}", e)))?;
         let semantic_confidence: f64 = row
             .try_get("semantic_confidence")
-            .map_err(|e| Error::generic(format!("Failed to get semantic_confidence: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get semantic_confidence: {}", e)))?;
         let soft_breaking_score: f64 = row
             .try_get("soft_breaking_score")
-            .map_err(|e| Error::generic(format!("Failed to get soft_breaking_score: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get soft_breaking_score: {}", e)))?;
         let llm_analysis: serde_json::Value = row.try_get("llm_analysis").unwrap_or_default();
         let before_state: serde_json::Value =
             row.try_get("before_semantic_state").unwrap_or_default();
@@ -689,16 +689,16 @@ async fn query_semantic_incidents(
         let external_ticket_url: Option<String> = row.try_get("external_ticket_url").ok();
         let detected_at: DateTime<Utc> = row
             .try_get("detected_at")
-            .map_err(|e| Error::generic(format!("Failed to get detected_at: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get detected_at: {}", e)))?;
         let created_at: DateTime<Utc> = row
             .try_get("created_at")
-            .map_err(|e| Error::generic(format!("Failed to get created_at: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get created_at: {}", e)))?;
         let acknowledged_at: Option<DateTime<Utc>> = row.try_get("acknowledged_at").ok();
         let resolved_at: Option<DateTime<Utc>> = row.try_get("resolved_at").ok();
         let closed_at: Option<DateTime<Utc>> = row.try_get("closed_at").ok();
         let updated_at: DateTime<Utc> = row
             .try_get("updated_at")
-            .map_err(|e| Error::generic(format!("Failed to get updated_at: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to get updated_at: {}", e)))?;
 
         let change_type = match change_type_str.as_str() {
             "description_change" => SemanticChangeType::DescriptionChange,
@@ -800,7 +800,7 @@ async fn query_threat_assessments(
     let rows = query_builder
         .fetch_all(pool)
         .await
-        .map_err(|e| Error::generic(format!("Failed to query threat assessments: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to query threat assessments: {}", e)))?;
 
     let mut assessments = Vec::new();
     for row in rows {
@@ -830,13 +830,13 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
     let method: Option<String> = row.try_get("method").ok();
     let aggregation_level_str: String = row
         .try_get("aggregation_level")
-        .map_err(|e| Error::generic(format!("Failed to get aggregation_level: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get aggregation_level: {}", e)))?;
     let threat_level_str: String = row
         .try_get("threat_level")
-        .map_err(|e| Error::generic(format!("Failed to get threat_level: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get threat_level: {}", e)))?;
     let threat_score: f64 = row
         .try_get("threat_score")
-        .map_err(|e| Error::generic(format!("Failed to get threat_score: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get threat_score: {}", e)))?;
     let threat_categories_json: serde_json::Value =
         row.try_get("threat_categories").unwrap_or_default();
     let findings_json: serde_json::Value = row.try_get("findings").unwrap_or_default();
@@ -844,14 +844,14 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
         row.try_get("remediation_suggestions").unwrap_or_default();
     let assessed_at: DateTime<Utc> = row
         .try_get("assessed_at")
-        .map_err(|e| Error::generic(format!("Failed to get assessed_at: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get assessed_at: {}", e)))?;
 
     let aggregation_level = match aggregation_level_str.as_str() {
         "workspace" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Workspace,
         "service" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Service,
         "endpoint" => mockforge_core::contract_drift::threat_modeling::AggregationLevel::Endpoint,
         _ => {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Invalid aggregation_level: {}",
                 aggregation_level_str
             )))
@@ -863,7 +863,7 @@ fn map_row_to_threat_assessment(row: &sqlx::postgres::PgRow) -> Result<ThreatAss
         "medium" => ThreatLevel::Medium,
         "high" => ThreatLevel::High,
         "critical" => ThreatLevel::Critical,
-        _ => return Err(Error::generic(format!("Invalid threat_level: {}", threat_level_str))),
+        _ => return Err(Error::internal(format!("Invalid threat_level: {}", threat_level_str))),
     };
 
     let threat_categories: Vec<ThreatCategory> =

@@ -92,14 +92,14 @@ impl AmqpBroker {
     pub async fn start(&self) -> Result<()> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to bind to {}: {}", addr, e))
+            mockforge_core::Error::internal(format!("Failed to bind to {}: {}", addr, e))
         })?;
 
         tracing::info!("Starting AMQP broker on {}", addr);
 
         loop {
             let (socket, peer_addr) = listener.accept().await.map_err(|e| {
-                mockforge_core::Error::generic(format!("Failed to accept connection: {}", e))
+                mockforge_core::Error::internal(format!("Failed to accept connection: {}", e))
             })?;
 
             tracing::debug!("New AMQP connection from {:?}", peer_addr);
@@ -122,11 +122,11 @@ impl AmqpBroker {
     pub async fn start_with_addr(&self) -> Result<std::net::SocketAddr> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
         let listener = TcpListener::bind(&addr).await.map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to bind to {}: {}", addr, e))
+            mockforge_core::Error::internal(format!("Failed to bind to {}: {}", addr, e))
         })?;
 
         let local_addr = listener.local_addr().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to get local address: {}", e))
+            mockforge_core::Error::internal(format!("Failed to get local address: {}", e))
         })?;
 
         tracing::info!("Starting AMQP broker on {}", local_addr);

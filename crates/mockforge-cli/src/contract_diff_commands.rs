@@ -245,20 +245,20 @@ pub async fn handle_contract_diff_analyze(
         // Load request from file
         let request_json = std::fs::read_to_string(&req_path)?;
         let request: CapturedRequest = serde_json::from_str(&request_json)
-            .map_err(|e| Error::generic(format!("Failed to parse request file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse request file: {}", e)))?;
         request
     } else if let Some(id) = capture_id {
         // Get request from capture manager
         init_global_capture_manager(1000);
         let manager = get_global_capture_manager()
-            .ok_or_else(|| Error::generic("Capture manager not initialized"))?;
+            .ok_or_else(|| Error::internal("Capture manager not initialized"))?;
         let (request, _) = manager
             .get_capture(&id)
             .await
-            .ok_or_else(|| Error::generic(format!("Capture not found: {}", id)))?;
+            .ok_or_else(|| Error::internal(format!("Capture not found: {}", id)))?;
         request
     } else {
-        return Err(Error::generic("Either --request-path or --capture-id must be provided"));
+        return Err(Error::internal("Either --request-path or --capture-id must be provided"));
     };
 
     // Create analyzer
@@ -345,19 +345,19 @@ pub async fn handle_contract_diff_generate_patch(
     let request = if let Some(req_path) = request_path {
         let request_json = std::fs::read_to_string(&req_path)?;
         let request: CapturedRequest = serde_json::from_str(&request_json)
-            .map_err(|e| Error::generic(format!("Failed to parse request file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse request file: {}", e)))?;
         request
     } else if let Some(id) = capture_id {
         init_global_capture_manager(1000);
         let manager = get_global_capture_manager()
-            .ok_or_else(|| Error::generic("Capture manager not initialized"))?;
+            .ok_or_else(|| Error::internal("Capture manager not initialized"))?;
         let (request, _) = manager
             .get_capture(&id)
             .await
-            .ok_or_else(|| Error::generic(format!("Capture not found: {}", id)))?;
+            .ok_or_else(|| Error::internal(format!("Capture not found: {}", id)))?;
         request
     } else {
-        return Err(Error::generic("Either --request-path or --capture-id must be provided"));
+        return Err(Error::internal("Either --request-path or --capture-id must be provided"));
     };
 
     // Analyze
@@ -399,12 +399,12 @@ pub async fn handle_contract_diff_apply_patch(
     let spec = OpenApiSpec::from_file(&spec_path).await?;
     let mut spec_json = spec
         .raw_document
-        .ok_or_else(|| Error::generic("Spec does not have raw document"))?;
+        .ok_or_else(|| Error::internal("Spec does not have raw document"))?;
 
     // Load patch file
     let patch_content = std::fs::read_to_string(&patch_path)?;
     let patch_file: serde_json::Value = serde_json::from_str(&patch_content)
-        .map_err(|e| Error::generic(format!("Failed to parse patch file: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to parse patch file: {}", e)))?;
 
     // Apply patch operations
     if let Some(operations) = patch_file.get("operations").and_then(|v| v.as_array()) {
@@ -412,7 +412,7 @@ pub async fn handle_contract_diff_apply_patch(
             apply_patch_operation(&mut spec_json, op)?;
         }
     } else {
-        return Err(Error::generic("Invalid patch file format"));
+        return Err(Error::internal("Invalid patch file format"));
     }
 
     // Write updated spec
@@ -429,12 +429,12 @@ fn apply_patch_operation(spec: &mut serde_json::Value, op: &serde_json::Value) -
     let op_type = op
         .get("op")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::generic("Missing 'op' field in patch operation"))?;
+        .ok_or_else(|| Error::internal("Missing 'op' field in patch operation"))?;
 
     let path = op
         .get("path")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::generic("Missing 'path' field in patch operation"))?;
+        .ok_or_else(|| Error::internal("Missing 'path' field in patch operation"))?;
 
     // Parse JSON Pointer path
     let path_parts: Vec<String> = path
@@ -447,7 +447,7 @@ fn apply_patch_operation(spec: &mut serde_json::Value, op: &serde_json::Value) -
         "add" => {
             let value = op
                 .get("value")
-                .ok_or_else(|| Error::generic("Missing 'value' for add operation"))?;
+                .ok_or_else(|| Error::internal("Missing 'value' for add operation"))?;
             add_to_path(spec, &path_parts, value)?;
         }
         "remove" => {
@@ -456,11 +456,11 @@ fn apply_patch_operation(spec: &mut serde_json::Value, op: &serde_json::Value) -
         "replace" => {
             let value = op
                 .get("value")
-                .ok_or_else(|| Error::generic("Missing 'value' for replace operation"))?;
+                .ok_or_else(|| Error::internal("Missing 'value' for replace operation"))?;
             replace_at_path(spec, &path_parts, value)?;
         }
         _ => {
-            return Err(Error::generic(format!("Unsupported patch operation: {}", op_type)));
+            return Err(Error::internal(format!("Unsupported patch operation: {}", op_type)));
         }
     }
 
@@ -480,13 +480,13 @@ fn add_to_path(
             if let Some(obj) = current.as_object_mut() {
                 obj.insert(part.clone(), value.clone());
             } else {
-                return Err(Error::generic("Cannot add to non-object"));
+                return Err(Error::internal("Cannot add to non-object"));
             }
         } else {
             // Navigate deeper
             current = current
                 .get_mut(part)
-                .ok_or_else(|| Error::generic(format!("Path not found: {}", part)))?;
+                .ok_or_else(|| Error::internal(format!("Path not found: {}", part)))?;
         }
     }
     Ok(())
@@ -501,12 +501,12 @@ fn remove_from_path(spec: &mut serde_json::Value, path_parts: &[String]) -> Resu
             if let Some(obj) = current.as_object_mut() {
                 obj.remove(part);
             } else {
-                return Err(Error::generic("Cannot remove from non-object"));
+                return Err(Error::internal("Cannot remove from non-object"));
             }
         } else {
             current = current
                 .get_mut(part)
-                .ok_or_else(|| Error::generic(format!("Path not found: {}", part)))?;
+                .ok_or_else(|| Error::internal(format!("Path not found: {}", part)))?;
         }
     }
     Ok(())
@@ -525,12 +525,12 @@ fn replace_at_path(
             if let Some(obj) = current.as_object_mut() {
                 obj.insert(part.clone(), value.clone());
             } else {
-                return Err(Error::generic("Cannot replace in non-object"));
+                return Err(Error::internal("Cannot replace in non-object"));
             }
         } else {
             current = current
                 .get_mut(part)
-                .ok_or_else(|| Error::generic(format!("Path not found: {}", part)))?;
+                .ok_or_else(|| Error::internal(format!("Path not found: {}", part)))?;
         }
     }
     Ok(())

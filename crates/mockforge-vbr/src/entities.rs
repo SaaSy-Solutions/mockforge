@@ -131,7 +131,7 @@ impl Entity {
                 ],
             )
             .await
-            .map_err(|e| Error::generic(format!("Failed to update entity state: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to update entity state: {}", e)))?;
 
         Ok(())
     }
@@ -152,7 +152,7 @@ impl Entity {
         let results = database
             .query(&query, &[serde_json::Value::String(record_id.to_string())])
             .await
-            .map_err(|e| Error::generic(format!("Failed to query entity state: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to query entity state: {}", e)))?;
 
         if let Some(row) = results.first() {
             if let Some(value) = row.get(field_name) {
@@ -179,14 +179,14 @@ impl Entity {
         let state_machine = self
             .state_machine
             .as_ref()
-            .ok_or_else(|| Error::generic("Entity does not have a state machine configured"))?;
+            .ok_or_else(|| Error::internal("Entity does not have a state machine configured"))?;
 
         // Get current state
         let current_state = self
             .get_current_state(database, record_id, state_field_name)
             .await?
             .ok_or_else(|| {
-                Error::generic(format!("Record '{}' not found or has no state", record_id))
+                Error::internal(format!("Record '{}' not found or has no state", record_id))
             })?;
 
         // Check if transition is allowed
@@ -223,7 +223,7 @@ impl EntityRegistry {
     pub fn register(&mut self, entity: Entity) -> Result<()> {
         let name = entity.name.clone();
         if self.entities.contains_key(&name) {
-            return Err(Error::generic(format!("Entity '{}' already registered", name)));
+            return Err(Error::internal(format!("Entity '{}' already registered", name)));
         }
         self.entities.insert(name, entity);
         Ok(())
@@ -248,7 +248,7 @@ impl EntityRegistry {
     pub fn remove(&mut self, name: &str) -> Result<()> {
         self.entities
             .remove(name)
-            .ok_or_else(|| Error::generic(format!("Entity '{}' not found", name)))?;
+            .ok_or_else(|| Error::internal(format!("Entity '{}' not found", name)))?;
         Ok(())
     }
 }

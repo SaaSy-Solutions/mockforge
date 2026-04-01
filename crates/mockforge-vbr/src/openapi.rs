@@ -191,7 +191,7 @@ fn convert_schema_to_vbr(
             }
         }
     } else {
-        return Err(Error::generic(format!(
+        return Err(Error::internal(format!(
             "Schema '{}' is not an object type, cannot convert to entity",
             schema_name
         )));

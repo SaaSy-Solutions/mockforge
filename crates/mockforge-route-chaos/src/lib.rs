@@ -53,7 +53,7 @@ impl RouteMatcher {
             // Convert path pattern to regex (e.g., /users/{id} -> /users/([^/]+))
             let path_pattern = Self::compile_path_pattern(&route.path)?;
             let method = route.method.parse::<Method>().map_err(|e| {
-                Error::generic(format!("Invalid HTTP method '{}': {}", route.method, e))
+                Error::internal(format!("Invalid HTTP method '{}': {}", route.method, e))
             })?;
 
             compiled_routes.push(CompiledRoute {
@@ -134,7 +134,7 @@ impl RouteMatcher {
         // Anchor to start and end
         let full_pattern = format!("^{regex_pattern}$");
         Regex::new(&full_pattern)
-            .map_err(|e| Error::generic(format!("Invalid route pattern '{pattern}': {e}")))
+            .map_err(|e| Error::internal(format!("Invalid route pattern '{pattern}': {e}")))
     }
 }
 

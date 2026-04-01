@@ -118,7 +118,7 @@ impl SessionManager {
                     self.create_session(new_id.clone()).await?;
                     new_id
                 } else {
-                    return Err(crate::Error::generic(format!("Session '{}' not found", id)));
+                    return Err(crate::Error::internal(format!("Session '{}' not found", id)));
                 }
             }
             None => {
@@ -127,7 +127,7 @@ impl SessionManager {
                     self.create_session(new_id.clone()).await?;
                     new_id
                 } else {
-                    return Err(crate::Error::generic(
+                    return Err(crate::Error::internal(
                         "No session ID provided and auto-create is disabled",
                     ));
                 }
@@ -142,7 +142,7 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
 
         if sessions.contains_key(&session_id) {
-            return Err(crate::Error::generic(format!("Session '{}' already exists", session_id)));
+            return Err(crate::Error::internal(format!("Session '{}' already exists", session_id)));
         }
 
         let state = SessionState::new(session_id.clone());
@@ -162,7 +162,7 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
 
         if !sessions.contains_key(session_id) {
-            return Err(crate::Error::generic(format!("Session '{}' not found", session_id)));
+            return Err(crate::Error::internal(format!("Session '{}' not found", session_id)));
         }
 
         sessions.insert(session_id.to_string(), state);

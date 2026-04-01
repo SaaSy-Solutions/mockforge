@@ -846,7 +846,7 @@ impl PromotionServiceTrait for PromotionService {
         // Auto-complete the promotion (no approval needed for auto-promotions)
         self.record_promotion(&request, promoted_by, PromotionStatus::Completed, None)
             .await
-            .map_err(|e| mockforge_core::Error::generic(format!("Promotion failed: {e}")))
+            .map_err(|e| mockforge_core::Error::internal(format!("Promotion failed: {e}")))
     }
 }
 

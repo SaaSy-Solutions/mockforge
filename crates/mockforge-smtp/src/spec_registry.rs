@@ -104,7 +104,7 @@ impl SmtpSpecRegistry {
     /// Store an email in the mailbox
     pub fn store_email(&self, email: StoredEmail) -> Result<()> {
         let mut mailbox = self.mailbox.write().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         // Check mailbox size limit
@@ -120,7 +120,7 @@ impl SmtpSpecRegistry {
     /// Get all emails from the mailbox
     pub fn get_emails(&self) -> Result<Vec<StoredEmail>> {
         let mailbox = self.mailbox.read().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         Ok(mailbox.clone())
@@ -129,7 +129,7 @@ impl SmtpSpecRegistry {
     /// Get a specific email by ID
     pub fn get_email_by_id(&self, id: &str) -> Result<Option<StoredEmail>> {
         let mailbox = self.mailbox.read().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         Ok(mailbox.iter().find(|e| e.id == id).cloned())
@@ -138,7 +138,7 @@ impl SmtpSpecRegistry {
     /// Clear all emails from the mailbox
     pub fn clear_mailbox(&self) -> Result<()> {
         let mut mailbox = self.mailbox.write().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         mailbox.clear();
@@ -149,7 +149,7 @@ impl SmtpSpecRegistry {
     /// Get mailbox statistics
     pub fn get_mailbox_stats(&self) -> Result<MailboxStats> {
         let mailbox = self.mailbox.read().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         Ok(MailboxStats {
@@ -161,7 +161,7 @@ impl SmtpSpecRegistry {
     /// Search emails with filters
     pub fn search_emails(&self, filters: EmailSearchFilters) -> Result<Vec<StoredEmail>> {
         let mailbox = self.mailbox.read().map_err(|e| {
-            mockforge_core::Error::generic(format!("Failed to acquire mailbox lock: {}", e))
+            mockforge_core::Error::internal(format!("Failed to acquire mailbox lock: {}", e))
         })?;
 
         let mut results: Vec<StoredEmail> = mailbox
@@ -337,9 +337,9 @@ impl SpecRegistry for SmtpSpecRegistry {
         let subject = request.metadata.get("subject").unwrap_or(&String::new()).clone();
 
         // Find matching fixture
-        let fixture = self
-            .find_matching_fixture(&from, &to, &subject)
-            .ok_or_else(|| mockforge_core::Error::generic("No matching fixture found for email"))?;
+        let fixture = self.find_matching_fixture(&from, &to, &subject).ok_or_else(|| {
+            mockforge_core::Error::internal("No matching fixture found for email")
+        })?;
 
         // Store email if configured
         if fixture.storage.save_to_mailbox {

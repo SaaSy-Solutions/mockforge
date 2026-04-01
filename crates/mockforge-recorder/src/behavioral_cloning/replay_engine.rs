@@ -460,7 +460,7 @@ impl mockforge_core::priority_handler::BehavioralScenarioReplay for BehavioralSc
                 }))
             }
             Ok(None) => Ok(None),
-            Err(e) => Err(mockforge_core::Error::generic(format!("Replay error: {}", e))),
+            Err(e) => Err(mockforge_core::Error::internal(format!("Replay error: {}", e))),
         }
     }
 }

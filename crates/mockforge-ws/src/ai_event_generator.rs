@@ -21,7 +21,7 @@ impl AiEventGenerator {
     pub fn new(config: ReplayAugmentationConfig) -> mockforge_core::Result<Self> {
         debug!("Creating AI event generator");
         let engine = ReplayAugmentationEngine::new(config)
-            .map_err(|e| mockforge_core::Error::generic(e.to_string()))?;
+            .map_err(|e| mockforge_core::Error::internal(e.to_string()))?;
         Ok(Self {
             engine: Arc::new(RwLock::new(engine)),
         })

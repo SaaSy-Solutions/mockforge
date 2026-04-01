@@ -124,12 +124,12 @@ impl VbrAuthService {
         let users = self.users.read().await;
         let user = users
             .get(username)
-            .ok_or_else(|| Error::generic("User not found".to_string()))?;
+            .ok_or_else(|| Error::internal("User not found".to_string()))?;
 
         // Verify password
         if let Some(ref hash) = user.password_hash {
             if !self.verify_password(password, hash) {
-                return Err(Error::generic("Invalid password".to_string()));
+                return Err(Error::internal("Invalid password".to_string()));
             }
         }
 
@@ -144,7 +144,7 @@ impl VbrAuthService {
         let now = time_travel_now();
         let exp = now
             .checked_add_signed(Duration::seconds(self.token_expiration as i64))
-            .ok_or_else(|| Error::generic("Invalid expiration time".to_string()))?
+            .ok_or_else(|| Error::internal("Invalid expiration time".to_string()))?
             .timestamp() as usize;
 
         let claims = JwtClaims {
@@ -165,7 +165,7 @@ impl VbrAuthService {
                 &claims,
                 &EncodingKey::from_secret(self.jwt_secret.as_bytes()),
             )
-            .map_err(|e| Error::generic(format!("Token generation failed: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Token generation failed: {}", e)))?;
             Ok(token)
         }
 
@@ -173,7 +173,7 @@ impl VbrAuthService {
         {
             // Fallback: return a simple token format (not secure, for testing only)
             let token_data = serde_json::to_string(&claims)
-                .map_err(|e| Error::generic(format!("Serialization failed: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Serialization failed: {}", e)))?;
             Ok(format!("vbr.{}", base64::encode(&token_data)))
         }
     }
@@ -189,15 +189,15 @@ impl VbrAuthService {
                 &DecodingKey::from_secret(self.jwt_secret.as_bytes()),
                 &validation,
             )
-            .map_err(|e| Error::generic(format!("Token validation failed: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Token validation failed: {}", e)))?;
 
             if token_data.claims.is_expired() {
-                return Err(Error::generic("Token expired".to_string()));
+                return Err(Error::internal("Token expired".to_string()));
             }
 
             Ok(VirtualUser {
                 id: Uuid::parse_str(&token_data.claims.sub)
-                    .map_err(|e| Error::generic(format!("Invalid user ID: {}", e)))?,
+                    .map_err(|e| Error::internal(format!("Invalid user ID: {}", e)))?,
                 username: token_data.claims.username,
                 email: token_data.claims.email,
                 password_hash: None,
@@ -210,24 +210,24 @@ impl VbrAuthService {
             // Fallback: decode simple token format
             if let Some(token_data) = token.strip_prefix("vbr.") {
                 let decoded = base64::decode(token_data)
-                    .map_err(|e| Error::generic(format!("Token decode failed: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Token decode failed: {}", e)))?;
                 let claims: JwtClaims = serde_json::from_slice(&decoded)
-                    .map_err(|e| Error::generic(format!("Token parse failed: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Token parse failed: {}", e)))?;
 
                 if claims.is_expired() {
-                    return Err(Error::generic("Token expired".to_string()));
+                    return Err(Error::internal("Token expired".to_string()));
                 }
 
                 Ok(VirtualUser {
                     id: Uuid::parse_str(&claims.sub)
-                        .map_err(|e| Error::generic(format!("Invalid user ID: {}", e)))?,
+                        .map_err(|e| Error::internal(format!("Invalid user ID: {}", e)))?,
                     username: claims.username,
                     email: claims.email,
                     password_hash: None,
                     roles: claims.roles,
                 })
             } else {
-                Err(Error::generic("Invalid token format".to_string()))
+                Err(Error::internal("Invalid token format".to_string()))
             }
         }
     }

@@ -164,27 +164,27 @@ async fn handle_tcp_connection(
 fn generate_response_data(response: &crate::fixtures::TcpResponse) -> Result<Vec<u8>> {
     match response.encoding.as_str() {
         "hex" => hex::decode(&response.data)
-            .map_err(|e| mockforge_core::Error::generic(format!("Invalid hex data: {}", e))),
+            .map_err(|e| mockforge_core::Error::internal(format!("Invalid hex data: {}", e))),
         "base64" => {
             use base64::Engine;
             base64::engine::general_purpose::STANDARD
                 .decode(&response.data)
-                .map_err(|e| mockforge_core::Error::generic(format!("Invalid base64 data: {e}")))
+                .map_err(|e| mockforge_core::Error::internal(format!("Invalid base64 data: {e}")))
         }
         "text" => Ok(response.data.as_bytes().to_vec()),
         "file" => {
             let file_path = response.file_path.as_ref().ok_or_else(|| {
-                mockforge_core::Error::generic("file_path not specified for file encoding")
+                mockforge_core::Error::internal("file_path not specified for file encoding")
             })?;
 
             std::fs::read(file_path).map_err(|e| {
-                mockforge_core::Error::generic(format!(
+                mockforge_core::Error::internal(format!(
                     "Failed to read file {:?}: {}",
                     file_path, e
                 ))
             })
         }
-        _ => Err(mockforge_core::Error::generic(format!(
+        _ => Err(mockforge_core::Error::internal(format!(
             "Unknown encoding: {}. Supported: hex, base64, text, file",
             response.encoding
         ))),

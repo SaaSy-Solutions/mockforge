@@ -118,7 +118,7 @@ impl SnapshotManager {
         let snapshot_dir = self.snapshot_path(name);
         fs::create_dir_all(&snapshot_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to create snapshot directory: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create snapshot directory: {}", e)))?;
 
         // Get entity counts
         let mut entity_counts = HashMap::new();
@@ -158,10 +158,10 @@ impl SnapshotManager {
 
         // Save metadata
         let metadata_json = serde_json::to_string_pretty(&metadata)
-            .map_err(|e| Error::generic(format!("Failed to serialize metadata: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to serialize metadata: {}", e)))?;
         fs::write(self.metadata_path(name), metadata_json)
             .await
-            .map_err(|e| Error::generic(format!("Failed to write metadata: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to write metadata: {}", e)))?;
 
         Ok(metadata)
     }
@@ -202,7 +202,7 @@ impl SnapshotManager {
         let data_dir = snapshot_dir.join("data");
         fs::create_dir_all(&data_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to create data directory: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to create data directory: {}", e)))?;
 
         // Export each entity table to JSON
         for entity_name in registry.list() {
@@ -213,10 +213,10 @@ impl SnapshotManager {
 
                 let json_file = data_dir.join(format!("{}.json", entity_name.to_lowercase()));
                 let json_content = serde_json::to_string_pretty(&records)
-                    .map_err(|e| Error::generic(format!("Failed to serialize data: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to serialize data: {}", e)))?;
                 fs::write(&json_file, json_content)
                     .await
-                    .map_err(|e| Error::generic(format!("Failed to write data file: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to write data file: {}", e)))?;
             }
         }
 
@@ -312,7 +312,7 @@ impl SnapshotManager {
         let data_dir = snapshot_dir.join("data");
 
         if !data_dir.exists() {
-            return Err(Error::generic("Snapshot data directory not found".to_string()));
+            return Err(Error::internal("Snapshot data directory not found".to_string()));
         }
 
         // Import each entity
@@ -326,10 +326,10 @@ impl SnapshotManager {
             {
                 let content = fs::read_to_string(&json_file)
                     .await
-                    .map_err(|e| Error::generic(format!("Failed to read data file: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to read data file: {}", e)))?;
 
                 let records: Vec<HashMap<String, Value>> = serde_json::from_str(&content)
-                    .map_err(|e| Error::generic(format!("Failed to parse data file: {}", e)))?;
+                    .map_err(|e| Error::internal(format!("Failed to parse data file: {}", e)))?;
 
                 if let Some(entity) = registry.get(&entity_name) {
                     let table_name = entity.table_name();
@@ -403,12 +403,12 @@ impl SnapshotManager {
 
         let mut entries = fs::read_dir(&self.snapshots_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read snapshots directory: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read snapshots directory: {}", e)))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| Error::internal(format!("Failed to read directory entry: {}", e)))?
         {
             let path = entry.path();
             if path.is_dir() {
@@ -431,10 +431,10 @@ impl SnapshotManager {
         let metadata_path = self.metadata_path(name);
         let content = fs::read_to_string(&metadata_path)
             .await
-            .map_err(|e| Error::generic(format!("Failed to read snapshot metadata: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read snapshot metadata: {}", e)))?;
 
         let metadata: SnapshotMetadata = serde_json::from_str(&content)
-            .map_err(|e| Error::generic(format!("Failed to parse snapshot metadata: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to parse snapshot metadata: {}", e)))?;
 
         Ok(metadata)
     }
@@ -444,12 +444,12 @@ impl SnapshotManager {
         let snapshot_dir = self.snapshot_path(name);
 
         if !snapshot_dir.exists() {
-            return Err(Error::generic(format!("Snapshot '{}' not found", name)));
+            return Err(Error::internal(format!("Snapshot '{}' not found", name)));
         }
 
         fs::remove_dir_all(&snapshot_dir)
             .await
-            .map_err(|e| Error::generic(format!("Failed to delete snapshot: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to delete snapshot: {}", e)))?;
 
         Ok(())
     }

@@ -182,7 +182,7 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                     println!("✓ Snapshot '{}' is valid", name);
                 } else {
                     println!("✗ Snapshot '{}' failed validation", name);
-                    return Err(mockforge_core::Error::generic("Snapshot validation failed"));
+                    return Err(mockforge_core::Error::internal("Snapshot validation failed"));
                 }
             } else {
                 info!("Loading snapshot '{}' for workspace '{}'", name, workspace);
@@ -276,7 +276,7 @@ pub async fn handle_snapshot_command(command: SnapshotCommands) -> Result<()> {
                 println!("✓ Snapshot '{}' is valid", name);
             } else {
                 println!("✗ Snapshot '{}' failed validation (checksum mismatch)", name);
-                return Err(mockforge_core::Error::generic("Snapshot validation failed"));
+                return Err(mockforge_core::Error::internal("Snapshot validation failed"));
             }
         }
     }

@@ -89,7 +89,7 @@ impl MigrationManager {
         let junction_table = m2m
             .junction_table
             .as_ref()
-            .ok_or_else(|| Error::generic("Junction table name is required".to_string()))?;
+            .ok_or_else(|| Error::internal("Junction table name is required".to_string()))?;
 
         // Get table names for entities (assuming pluralization)
         let table_a = m2m.entity_a.to_lowercase() + "s";
@@ -149,7 +149,7 @@ impl MigrationManager {
                             .junction_table
                             .as_ref()
                             .ok_or_else(|| {
-                                Error::generic("Junction table name is required".to_string())
+                                Error::internal("Junction table name is required".to_string())
                             })?
                             .clone();
                         let create_sql = self.generate_junction_table(m2m)?;
@@ -333,7 +333,7 @@ fn value_to_sql_default(value: &serde_json::Value) -> Result<String> {
         serde_json::Value::Number(n) => Ok(n.to_string()),
         serde_json::Value::Bool(b) => Ok(if *b { "1" } else { "0" }.to_string()),
         serde_json::Value::Null => Ok("NULL".to_string()),
-        _ => Err(Error::generic("Unsupported default value type".to_string())),
+        _ => Err(Error::internal("Unsupported default value type".to_string())),
     }
 }
 

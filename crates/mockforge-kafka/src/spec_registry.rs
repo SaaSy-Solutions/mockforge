@@ -76,7 +76,7 @@ impl KafkaSpecRegistry {
         let offset = topic_entry
             .get_partition_mut(partition_id)
             .ok_or_else(|| {
-                mockforge_core::Error::generic(format!("Partition {} not found", partition_id))
+                mockforge_core::Error::internal(format!("Partition {} not found", partition_id))
             })?
             .append(message);
 
@@ -98,13 +98,13 @@ impl KafkaSpecRegistry {
                 let messages = partition_entry.fetch(offset, 1000); // Max 1000 messages
                 Ok(messages.into_iter().cloned().collect())
             } else {
-                Err(mockforge_core::Error::generic(format!(
+                Err(mockforge_core::Error::internal(format!(
                     "Partition {} not found in topic {}",
                     partition, topic
                 )))
             }
         } else {
-            Err(mockforge_core::Error::generic(format!("Topic {} not found", topic)))
+            Err(mockforge_core::Error::internal(format!("Topic {} not found", topic)))
         }
     }
 }
@@ -172,12 +172,12 @@ impl SpecRegistry for KafkaSpecRegistry {
         let topic = request
             .topic
             .as_ref()
-            .ok_or_else(|| mockforge_core::Error::generic("Missing topic"))?;
+            .ok_or_else(|| mockforge_core::Error::internal("Missing topic"))?;
 
         match operation.as_str() {
             "PRODUCE" => {
                 let fixture = self.find_fixture_by_topic(topic).ok_or_else(|| {
-                    mockforge_core::Error::generic(format!("No fixture found for topic {}", topic))
+                    mockforge_core::Error::internal(format!("No fixture found for topic {}", topic))
                 })?;
 
                 // Generate message using template
@@ -231,7 +231,7 @@ impl SpecRegistry for KafkaSpecRegistry {
             "FETCH" => {
                 let partition = request
                     .partition
-                    .ok_or_else(|| mockforge_core::Error::generic("Missing partition"))?;
+                    .ok_or_else(|| mockforge_core::Error::internal("Missing partition"))?;
                 let offset: i64 =
                     request.metadata.get("offset").and_then(|s| s.parse().ok()).unwrap_or(0);
 
@@ -262,9 +262,10 @@ impl SpecRegistry for KafkaSpecRegistry {
                     content_type: "application/json".to_string(),
                 })
             }
-            _ => {
-                Err(mockforge_core::Error::generic(format!("Unsupported operation: {}", operation)))
-            }
+            _ => Err(mockforge_core::Error::internal(format!(
+                "Unsupported operation: {}",
+                operation
+            ))),
         }
     }
 }

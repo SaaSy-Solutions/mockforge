@@ -186,16 +186,16 @@ impl OidcState {
                 let encoding_key = match key.alg.as_str() {
                     "RS256" | "RS384" | "RS512" => {
                         EncodingKey::from_rsa_pem(private_key.as_bytes()).map_err(|e| {
-                            Error::generic(format!("Failed to load RSA key {}: {}", key.kid, e))
+                            Error::internal(format!("Failed to load RSA key {}: {}", key.kid, e))
                         })?
                     }
                     "ES256" | "ES384" | "ES512" => EncodingKey::from_ec_pem(private_key.as_bytes())
                         .map_err(|e| {
-                            Error::generic(format!("Failed to load EC key {}: {}", key.kid, e))
+                            Error::internal(format!("Failed to load EC key {}: {}", key.kid, e))
                         })?,
                     "HS256" | "HS384" | "HS512" => EncodingKey::from_secret(private_key.as_bytes()),
                     _ => {
-                        return Err(Error::generic(format!("Unsupported algorithm: {}", key.alg)));
+                        return Err(Error::internal(format!("Unsupported algorithm: {}", key.alg)));
                     }
                 };
                 signing_keys.insert(key.kid.clone(), encoding_key);
@@ -412,7 +412,7 @@ pub fn generate_signed_jwt(
     }
 
     let token = jsonwebtoken::encode(&header, &claims, encoding_key)
-        .map_err(|e| Error::generic(format!("Failed to sign JWT: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to sign JWT: {}", e)))?;
 
     Ok(token)
 }
@@ -507,7 +507,7 @@ pub fn generate_oidc_token(
     let (kid, encoding_key) = signing_keys
         .iter()
         .next()
-        .ok_or_else(|| Error::generic("No signing keys available".to_string()))?;
+        .ok_or_else(|| Error::internal("No signing keys available".to_string()))?;
 
     // Determine algorithm from key configuration
     // Default to HS256 if algorithm not specified in key config

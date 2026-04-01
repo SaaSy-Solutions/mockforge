@@ -131,7 +131,7 @@ async fn execute_reload_command(command: &str, spec_files: &[PathBuf]) -> Result
     // Parse command (simple split on spaces for now)
     let parts: Vec<&str> = command.split_whitespace().collect();
     if parts.is_empty() {
-        return Err(Error::generic("Empty reload command".to_string()));
+        return Err(Error::internal("Empty reload command".to_string()));
     }
 
     let program = parts[0];
@@ -142,18 +142,18 @@ async fn execute_reload_command(command: &str, spec_files: &[PathBuf]) -> Result
     for spec_file in spec_files {
         let path_str = spec_file
             .to_str()
-            .ok_or_else(|| Error::generic(format!("Non-UTF8 path: {}", spec_file.display())))?;
+            .ok_or_else(|| Error::internal(format!("Non-UTF8 path: {}", spec_file.display())))?;
         all_args.push(path_str);
     }
 
     let output = Command::new(program)
         .args(&all_args)
         .output()
-        .map_err(|e| Error::generic(format!("Failed to execute reload command: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to execute reload command: {}", e)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(Error::generic(format!("Reload command failed: {}", stderr)));
+        return Err(Error::internal(format!("Reload command failed: {}", stderr)));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

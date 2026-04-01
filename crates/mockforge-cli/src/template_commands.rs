@@ -316,7 +316,7 @@ async fn handle_get_template(
             println!("\nContent:\n{}", content);
             Ok(())
         }
-        None => Err(Error::generic(format!("Template '{}' not found", id))),
+        None => Err(Error::internal(format!("Template '{}' not found", id))),
     }
 }
 

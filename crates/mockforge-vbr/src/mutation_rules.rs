@@ -284,7 +284,7 @@ impl MutationRuleManager {
             info!("Mutation rule '{}' {}", rule_id, if enabled { "enabled" } else { "disabled" });
             Ok(())
         } else {
-            Err(Error::generic(format!("Mutation rule '{}' not found", rule_id)))
+            Err(Error::internal(format!("Mutation rule '{}' not found", rule_id)))
         }
     }
 
@@ -350,7 +350,7 @@ impl MutationRuleManager {
 
         // Substitute variables in expression (e.g., "{{field}}" -> actual value)
         let re = Regex::new(r"\{\{([^}]+)\}\}")
-            .map_err(|e| Error::generic(format!("Failed to compile regex: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to compile regex: {}", e)))?;
 
         let substituted = re.replace_all(expression, |caps: &regex::Captures| {
             let var_name = caps.get(1).unwrap().as_str().trim();
@@ -442,7 +442,7 @@ impl MutationRuleManager {
                 '+' | '-' | '*' | '/' => {
                     if !current_num.is_empty() {
                         let num: f64 = current_num.parse().map_err(|_| {
-                            Error::generic(format!("Invalid number: {}", current_num))
+                            Error::internal(format!("Invalid number: {}", current_num))
                         })?;
 
                         match last_op {
@@ -451,7 +451,7 @@ impl MutationRuleManager {
                             '*' => result *= num,
                             '/' => {
                                 if num == 0.0 {
-                                    return Err(Error::generic("Division by zero".to_string()));
+                                    return Err(Error::internal("Division by zero".to_string()));
                                 }
                                 result /= num;
                             }
@@ -466,7 +466,10 @@ impl MutationRuleManager {
                     current_num.push(ch);
                 }
                 _ => {
-                    return Err(Error::generic(format!("Invalid character in expression: {}", ch)));
+                    return Err(Error::internal(format!(
+                        "Invalid character in expression: {}",
+                        ch
+                    )));
                 }
             }
         }
@@ -475,7 +478,7 @@ impl MutationRuleManager {
         if !current_num.is_empty() {
             let num: f64 = current_num
                 .parse()
-                .map_err(|_| Error::generic(format!("Invalid number: {}", current_num)))?;
+                .map_err(|_| Error::internal(format!("Invalid number: {}", current_num)))?;
 
             match last_op {
                 '+' => result += num,
@@ -483,7 +486,7 @@ impl MutationRuleManager {
                 '*' => result *= num,
                 '/' => {
                     if num == 0.0 {
-                        return Err(Error::generic("Division by zero".to_string()));
+                        return Err(Error::internal("Division by zero".to_string()));
                     }
                     result /= num;
                 }
@@ -618,14 +621,14 @@ impl MutationRuleManager {
             let rules = self.rules.read().await;
             rules
                 .get(rule_id)
-                .ok_or_else(|| Error::generic(format!("Mutation rule '{}' not found", rule_id)))?
+                .ok_or_else(|| Error::internal(format!("Mutation rule '{}' not found", rule_id)))?
                 .clone()
         };
 
         // Get entity info
         let entity = registry
             .get(&rule.entity_name)
-            .ok_or_else(|| Error::generic(format!("Entity '{}' not found", rule.entity_name)))?;
+            .ok_or_else(|| Error::internal(format!("Entity '{}' not found", rule.entity_name)))?;
 
         let table_name = entity.table_name();
 
@@ -655,7 +658,7 @@ impl MutationRuleManager {
             // Get primary key value
             let pk_value = record
                 .get(pk_field)
-                .ok_or_else(|| Error::generic(format!("Primary key '{}' not found", pk_field)))?;
+                .ok_or_else(|| Error::internal(format!("Primary key '{}' not found", pk_field)))?;
 
             // Apply mutation operation
             match &rule.operation {

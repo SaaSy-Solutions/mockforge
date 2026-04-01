@@ -35,7 +35,7 @@ impl ConstraintValidator {
             .unwrap_or(0);
 
         if results.is_empty() || count == 0 {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Foreign key constraint violation: {} = {:?} does not exist in {}.{}",
                 field, value, target_table, target_field
             )));
@@ -85,7 +85,7 @@ impl ConstraintValidator {
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
             if count > 0 {
-                return Err(Error::generic(format!(
+                return Err(Error::internal(format!(
                     "Unique constraint violation: combination of {:?} already exists",
                     fields
                 )));

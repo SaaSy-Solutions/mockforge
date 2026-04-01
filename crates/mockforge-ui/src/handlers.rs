@@ -645,7 +645,7 @@ impl AdminState {
         let mut status = self.restart_status.write().await;
 
         if status.in_progress {
-            return Err(Error::generic("Restart already in progress".to_string()));
+            return Err(Error::internal("Restart already in progress".to_string()));
         }
 
         status.in_progress = true;
@@ -1614,15 +1614,15 @@ async fn get_parent_process_id(pid: u32) -> Result<u32> {
         let stat_path = format!("/proc/{}/stat", pid);
         if let Ok(ppid) = tokio::task::spawn_blocking(move || -> Result<u32> {
             let content = std::fs::read_to_string(&stat_path)
-                .map_err(|e| Error::generic(format!("Failed to read {}: {}", stat_path, e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read {}: {}", stat_path, e)))?;
 
             let fields: Vec<&str> = content.split_whitespace().collect();
             if fields.len() > 3 {
                 fields[3]
                     .parse::<u32>()
-                    .map_err(|e| Error::generic(format!("Failed to parse PPID: {}", e)))
+                    .map_err(|e| Error::internal(format!("Failed to parse PPID: {}", e)))
             } else {
-                Err(Error::generic("Insufficient fields in /proc/pid/stat".to_string()))
+                Err(Error::internal("Insufficient fields in /proc/pid/stat".to_string()))
             }
         })
         .await
@@ -1645,10 +1645,10 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
         let output = Command::new("kill")
             .args(["-TERM", &parent_pid.to_string()])
             .output()
-            .map_err(|e| Error::generic(format!("Failed to send signal: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to send signal: {}", e)))?;
 
         if !output.status.success() {
-            return Err(Error::generic(
+            return Err(Error::internal(
                 "Failed to send restart signal to parent process".to_string(),
             ));
         }
@@ -1660,7 +1660,7 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
 
     #[cfg(not(unix))]
     {
-        Err(Error::generic(
+        Err(Error::internal(
             "Signal-based restart not supported on this platform".to_string(),
         ))
     }
@@ -1670,7 +1670,7 @@ async fn restart_via_parent_signal(parent_pid: u32) -> Result<()> {
 async fn restart_via_process_replacement() -> Result<()> {
     // Get the current executable path
     let current_exe = std::env::current_exe()
-        .map_err(|e| Error::generic(format!("Failed to get current executable: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get current executable: {}", e)))?;
 
     // Get current command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -1683,7 +1683,7 @@ async fn restart_via_process_replacement() -> Result<()> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|e| Error::generic(format!("Failed to start new process: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to start new process: {}", e)))?;
 
     // Give the new process a moment to start
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1695,7 +1695,7 @@ async fn restart_via_process_replacement() -> Result<()> {
                 tracing::info!("New process started successfully");
                 Ok(())
             } else {
-                Err(Error::generic("New process exited with error".to_string()))
+                Err(Error::internal("New process exited with error".to_string()))
             }
         }
         Ok(None) => {
@@ -1703,7 +1703,7 @@ async fn restart_via_process_replacement() -> Result<()> {
             // Exit current process
             std::process::exit(0);
         }
-        Err(e) => Err(Error::generic(format!("Failed to check new process status: {}", e))),
+        Err(e) => Err(Error::internal(format!("Failed to check new process status: {}", e))),
     }
 }
 
@@ -1719,7 +1719,7 @@ async fn restart_via_script() -> Result<()> {
             let output = Command::new("bash")
                 .arg(script_path)
                 .output()
-                .map_err(|e| Error::generic(format!("Failed to execute restart script: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to execute restart script: {}", e)))?;
 
             if output.status.success() {
                 return Ok(());
@@ -1740,7 +1740,7 @@ async fn restart_via_script() -> Result<()> {
         let _ = Command::new("bash").arg(clear_script).output();
     }
 
-    Err(Error::generic(
+    Err(Error::internal(
         "No restart mechanism available. Please restart manually.".to_string(),
     ))
 }
@@ -1874,7 +1874,7 @@ fn count_fixtures_in_directory(dir_path: &std::path::Path) -> Result<usize> {
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
             let entry = entry
-                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -2060,7 +2060,7 @@ fn scan_protocol_fixtures(
     if let Ok(entries) = std::fs::read_dir(&protocol_path) {
         for entry in entries {
             let entry = entry
-                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -2089,7 +2089,7 @@ fn scan_directory_recursive(
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
             let entry = entry
-                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -2112,21 +2112,21 @@ fn scan_directory_recursive(
 fn parse_fixture_file_sync(file_path: &std::path::Path, protocol: &str) -> Result<FixtureInfo> {
     // Get file metadata
     let metadata = std::fs::metadata(file_path)
-        .map_err(|e| Error::generic(format!("Failed to read file metadata: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to read file metadata: {}", e)))?;
 
     let file_size = metadata.len();
     let modified_time = metadata
         .modified()
-        .map_err(|e| Error::generic(format!("Failed to get file modification time: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to get file modification time: {}", e)))?;
 
     let saved_at = chrono::DateTime::from(modified_time);
 
     // Read and parse the fixture file (blocking - called from spawn_blocking context)
     let content = std::fs::read_to_string(file_path)
-        .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to read fixture file: {}", e)))?;
 
     let fixture_data: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| Error::generic(format!("Failed to parse fixture JSON: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to parse fixture JSON: {}", e)))?;
 
     // Extract method and path from the fixture data
     let (method, path) = extract_method_and_path(&fixture_data, protocol)?;
@@ -2324,7 +2324,10 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
-        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+        return Err(Error::internal(format!(
+            "Fixtures directory does not exist: {}",
+            fixtures_dir
+        )));
     }
 
     // Search for the fixture file by ID across all protocols
@@ -2335,18 +2338,21 @@ async fn delete_fixture_by_id(fixture_id: &str) -> Result<()> {
     tokio::task::spawn_blocking(move || {
         if file_path_clone.exists() {
             std::fs::remove_file(&file_path_clone).map_err(|e| {
-                Error::generic(format!(
+                Error::internal(format!(
                     "Failed to delete fixture file {}: {}",
                     file_path_clone.display(),
                     e
                 ))
             })
         } else {
-            Err(Error::generic(format!("Fixture file not found: {}", file_path_clone.display())))
+            Err(Error::internal(format!(
+                "Fixture file not found: {}",
+                file_path_clone.display()
+            )))
         }
     })
     .await
-    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
 
     tracing::info!("Deleted fixture file: {}", file_path.display());
 
@@ -2371,7 +2377,7 @@ fn find_fixture_file_by_id(
         }
     }
 
-    Err(Error::generic(format!(
+    Err(Error::internal(format!(
         "Fixture with ID '{}' not found in any protocol directory",
         fixture_id
     )))
@@ -2383,13 +2389,13 @@ fn search_fixture_in_directory(
     fixture_id: &str,
 ) -> Result<std::path::PathBuf> {
     if !dir_path.exists() {
-        return Err(Error::generic(format!("Directory does not exist: {}", dir_path.display())));
+        return Err(Error::internal(format!("Directory does not exist: {}", dir_path.display())));
     }
 
     if let Ok(entries) = std::fs::read_dir(dir_path) {
         for entry in entries {
             let entry = entry
-                .map_err(|e| Error::generic(format!("Failed to read directory entry: {}", e)))?;
+                .map_err(|e| Error::internal(format!("Failed to read directory entry: {}", e)))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -2408,7 +2414,7 @@ fn search_fixture_in_directory(
         }
     }
 
-    Err(Error::generic(format!(
+    Err(Error::internal(format!(
         "Fixture not found in directory: {}",
         dir_path.display()
     )))
@@ -2495,7 +2501,10 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
-        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+        return Err(Error::internal(format!(
+            "Fixtures directory does not exist: {}",
+            fixtures_dir
+        )));
     }
 
     let file_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
@@ -2504,7 +2513,7 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
     let file_path_clone = file_path.clone();
     let (content, file_name) = tokio::task::spawn_blocking(move || {
         let content = std::fs::read_to_string(&file_path_clone)
-            .map_err(|e| Error::generic(format!("Failed to read fixture file: {}", e)))?;
+            .map_err(|e| Error::internal(format!("Failed to read fixture file: {}", e)))?;
 
         let file_name = file_path_clone
             .file_name()
@@ -2515,7 +2524,7 @@ async fn download_fixture_by_id(fixture_id: &str) -> Result<(String, String)> {
         Ok::<_, Error>((content, file_name))
     })
     .await
-    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
 
     tracing::info!("Downloaded fixture file: {} ({} bytes)", file_path.display(), content.len());
     Ok((content, file_name))
@@ -2542,7 +2551,7 @@ pub async fn rename_fixture(
 async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String> {
     // Validate new name
     if new_name.is_empty() {
-        return Err(Error::generic("New name cannot be empty".to_string()));
+        return Err(Error::internal("New name cannot be empty".to_string()));
     }
 
     // Ensure new name ends with .json
@@ -2558,7 +2567,10 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
-        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+        return Err(Error::internal(format!(
+            "Fixtures directory does not exist: {}",
+            fixtures_dir
+        )));
     }
 
     let old_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
@@ -2566,13 +2578,13 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
     // Get the parent directory and construct new path
     let parent = old_path
         .parent()
-        .ok_or_else(|| Error::generic("Could not determine parent directory".to_string()))?;
+        .ok_or_else(|| Error::internal("Could not determine parent directory".to_string()))?;
 
     let new_path = parent.join(&new_name);
 
     // Check if target already exists
     if new_path.exists() {
-        return Err(Error::generic(format!(
+        return Err(Error::internal(format!(
             "A fixture with name '{}' already exists in the same directory",
             new_name
         )));
@@ -2583,10 +2595,10 @@ async fn rename_fixture_by_id(fixture_id: &str, new_name: &str) -> Result<String
     let new_path_clone = new_path.clone();
     tokio::task::spawn_blocking(move || {
         std::fs::rename(&old_path_clone, &new_path_clone)
-            .map_err(|e| Error::generic(format!("Failed to rename fixture file: {}", e)))
+            .map_err(|e| Error::internal(format!("Failed to rename fixture file: {}", e)))
     })
     .await
-    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
 
     tracing::info!("Renamed fixture file: {} -> {}", old_path.display(), new_path.display());
 
@@ -2619,7 +2631,7 @@ pub async fn move_fixture(
 async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> {
     // Validate new path
     if new_path.is_empty() {
-        return Err(Error::generic("New path cannot be empty".to_string()));
+        return Err(Error::internal("New path cannot be empty".to_string()));
     }
 
     // Find the fixture file
@@ -2628,7 +2640,10 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
     let fixtures_path = std::path::Path::new(&fixtures_dir);
 
     if !fixtures_path.exists() {
-        return Err(Error::generic(format!("Fixtures directory does not exist: {}", fixtures_dir)));
+        return Err(Error::internal(format!(
+            "Fixtures directory does not exist: {}",
+            fixtures_dir
+        )));
     }
 
     let old_path = find_fixture_file_by_id(fixtures_path, fixture_id)?;
@@ -2649,7 +2664,7 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
         // If the path is a directory or doesn't have .json extension, append the original filename
         if new_full_path.is_dir() || !new_path.contains('.') {
             let file_name = old_path.file_name().ok_or_else(|| {
-                Error::generic("Could not determine original file name".to_string())
+                Error::internal("Could not determine original file name".to_string())
             })?;
             new_full_path.join(file_name)
         } else {
@@ -2659,7 +2674,7 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
 
     // Check if target already exists
     if new_full_path.exists() {
-        return Err(Error::generic(format!(
+        return Err(Error::internal(format!(
             "A fixture already exists at path: {}",
             new_full_path.display()
         )));
@@ -2671,16 +2686,17 @@ async fn move_fixture_by_id(fixture_id: &str, new_path: &str) -> Result<String> 
     tokio::task::spawn_blocking(move || {
         // Create parent directories if they don't exist
         if let Some(parent) = new_full_path_clone.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| Error::generic(format!("Failed to create target directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                Error::internal(format!("Failed to create target directory: {}", e))
+            })?;
         }
 
         // Move the file
         std::fs::rename(&old_path_clone, &new_full_path_clone)
-            .map_err(|e| Error::generic(format!("Failed to move fixture file: {}", e)))
+            .map_err(|e| Error::internal(format!("Failed to move fixture file: {}", e)))
     })
     .await
-    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
 
     tracing::info!("Moved fixture file: {} -> {}", old_path.display(), new_full_path.display());
 
@@ -2867,22 +2883,26 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
         // Create parent directories if they don't exist
         if let Some(parent) = path_clone.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                Error::generic(format!("Failed to create directory {}: {}", parent.display(), e))
+                Error::internal(format!("Failed to create directory {}: {}", parent.display(), e))
             })?;
         }
 
         // Write the content to the file
         std::fs::write(&path_clone, &content_clone).map_err(|e| {
-            Error::generic(format!("Failed to write file {}: {}", path_clone.display(), e))
+            Error::internal(format!("Failed to write file {}: {}", path_clone.display(), e))
         })?;
 
         // Verify the file was written correctly
         let written_content = std::fs::read_to_string(&path_clone).map_err(|e| {
-            Error::generic(format!("Failed to verify written file {}: {}", path_clone.display(), e))
+            Error::internal(format!(
+                "Failed to verify written file {}: {}",
+                path_clone.display(),
+                e
+            ))
         })?;
 
         if written_content != content_clone {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "File content verification failed for {}",
                 path_clone.display()
             )));
@@ -2891,7 +2911,7 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
         Ok::<_, Error>(())
     })
     .await
-    .map_err(|e| Error::generic(format!("Task join error: {}", e)))??;
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
 
     tracing::info!("File saved successfully: {} ({} bytes)", path.display(), content.len());
     Ok(())
@@ -2901,7 +2921,7 @@ async fn save_file_to_filesystem(file_path: &str, content: &str) -> Result<()> {
 fn validate_file_path(file_path: &str) -> Result<()> {
     // Check for path traversal attacks
     if file_path.contains("..") {
-        return Err(Error::generic("Path traversal detected in file path".to_string()));
+        return Err(Error::internal("Path traversal detected in file path".to_string()));
     }
 
     // Check for absolute paths that might be outside allowed directories
@@ -2924,7 +2944,7 @@ fn validate_file_path(file_path: &str) -> Result<()> {
         }
 
         if !is_allowed {
-            return Err(Error::generic("File path is outside allowed directories".to_string()));
+            return Err(Error::internal("File path is outside allowed directories".to_string()));
         }
     }
 
@@ -2932,7 +2952,7 @@ fn validate_file_path(file_path: &str) -> Result<()> {
     let dangerous_extensions = ["exe", "bat", "cmd", "sh", "ps1", "scr", "com"];
     if let Some(extension) = path.extension().and_then(|ext| ext.to_str()) {
         if dangerous_extensions.contains(&extension.to_lowercase().as_str()) {
-            return Err(Error::generic(format!(
+            return Err(Error::internal(format!(
                 "Dangerous file extension not allowed: {}",
                 extension
             )));
@@ -2947,12 +2967,12 @@ fn validate_file_content(content: &str) -> Result<()> {
     // Check for reasonable file size (prevent DoS)
     if content.len() > 10 * 1024 * 1024 {
         // 10MB limit
-        return Err(Error::generic("File content too large (max 10MB)".to_string()));
+        return Err(Error::internal("File content too large (max 10MB)".to_string()));
     }
 
     // Check for null bytes (potential security issue)
     if content.contains('\0') {
-        return Err(Error::generic("File content contains null bytes".to_string()));
+        return Err(Error::internal("File content contains null bytes".to_string()));
     }
 
     Ok(())
@@ -3139,7 +3159,7 @@ async fn execute_single_smoke_test(
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(context.timeout_seconds))
         .build()
-        .map_err(|e| Error::generic(format!("Failed to create HTTP client: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to create HTTP client: {}", e)))?;
 
     let start_time = std::time::Instant::now();
 
@@ -3152,7 +3172,7 @@ async fn execute_single_smoke_test(
         "HEAD" => client.head(&url).send().await,
         "OPTIONS" => client.request(reqwest::Method::OPTIONS, &url).send().await,
         _ => {
-            return Err(Error::generic(format!("Unsupported HTTP method: {}", test.method)));
+            return Err(Error::internal(format!("Unsupported HTTP method: {}", test.method)));
         }
     };
 
@@ -3165,14 +3185,14 @@ async fn execute_single_smoke_test(
             if (200..400).contains(&status_code) {
                 Ok((status_code, response_time_ms))
             } else {
-                Err(Error::generic(format!(
+                Err(Error::internal(format!(
                     "HTTP error: {} {}",
                     status_code,
                     resp.status().canonical_reason().unwrap_or("Unknown")
                 )))
             }
         }
-        Err(e) => Err(Error::generic(format!("Request failed: {}", e))),
+        Err(e) => Err(Error::internal(format!("Request failed: {}", e))),
     }
 }
 

@@ -29,7 +29,7 @@ pub async fn seed_entity(
 ) -> Result<usize> {
     let entity = registry
         .get(entity_name)
-        .ok_or_else(|| Error::generic(format!("Entity '{}' not found", entity_name)))?;
+        .ok_or_else(|| Error::internal(format!("Entity '{}' not found", entity_name)))?;
 
     let table_name = entity.table_name();
     let mut inserted_count = 0;
@@ -94,10 +94,10 @@ pub async fn seed_all(
 pub async fn load_seed_file_json<P: AsRef<Path>>(path: P) -> Result<SeedData> {
     let content = tokio::fs::read_to_string(path.as_ref())
         .await
-        .map_err(|e| Error::generic(format!("Failed to read seed file: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to read seed file: {}", e)))?;
 
     let json: Value = serde_json::from_str(&content)
-        .map_err(|e| Error::generic(format!("Failed to parse JSON: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to parse JSON: {}", e)))?;
 
     parse_seed_data(json)
 }
@@ -106,10 +106,10 @@ pub async fn load_seed_file_json<P: AsRef<Path>>(path: P) -> Result<SeedData> {
 pub async fn load_seed_file_yaml<P: AsRef<Path>>(path: P) -> Result<SeedData> {
     let content = tokio::fs::read_to_string(path.as_ref())
         .await
-        .map_err(|e| Error::generic(format!("Failed to read seed file: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to read seed file: {}", e)))?;
 
     let yaml: Value = serde_yaml::from_str(&content)
-        .map_err(|e| Error::generic(format!("Failed to parse YAML: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Failed to parse YAML: {}", e)))?;
 
     parse_seed_data(yaml)
 }
@@ -136,7 +136,7 @@ pub async fn load_seed_file<P: AsRef<Path>>(path: P) -> Result<SeedData> {
 fn parse_seed_data(value: Value) -> Result<SeedData> {
     let obj = value
         .as_object()
-        .ok_or_else(|| Error::generic("Seed data must be an object".to_string()))?;
+        .ok_or_else(|| Error::internal("Seed data must be an object".to_string()))?;
 
     let mut seed_data = HashMap::new();
 
@@ -144,13 +144,13 @@ fn parse_seed_data(value: Value) -> Result<SeedData> {
         let records = records_value
             .as_array()
             .ok_or_else(|| {
-                Error::generic(format!("Entity '{}' seed data must be an array", entity_name))
+                Error::internal(format!("Entity '{}' seed data must be an array", entity_name))
             })?
             .iter()
             .map(|v| {
                 v.as_object()
                     .ok_or_else(|| {
-                        Error::generic(format!(
+                        Error::internal(format!(
                             "Record in entity '{}' must be an object",
                             entity_name
                         ))
@@ -179,7 +179,7 @@ fn validate_foreign_keys(
         if let Some(fk_value) = record.get(&fk.field) {
             // Check if the referenced entity exists
             let target_entity = registry.get(&fk.target_entity).ok_or_else(|| {
-                Error::generic(format!(
+                Error::internal(format!(
                     "Target entity '{}' not found for foreign key '{}'",
                     fk.target_entity, fk.field
                 ))
@@ -199,7 +199,7 @@ fn validate_foreign_keys(
                     .map(|f| !f.required)
                     .unwrap_or(false)
             {
-                return Err(Error::generic(format!("Foreign key '{}' cannot be null", fk.field)));
+                return Err(Error::internal(format!("Foreign key '{}' cannot be null", fk.field)));
             }
         }
     }
@@ -259,7 +259,7 @@ fn topological_sort(registry: &EntityRegistry, seed_data: &SeedData) -> Result<V
 
     // Check for cycles
     if result.len() != seed_data.len() {
-        return Err(Error::generic(
+        return Err(Error::internal(
             "Circular dependency detected in foreign key relationships".to_string(),
         ));
     }
@@ -275,7 +275,7 @@ pub async fn clear_entity(
 ) -> Result<()> {
     let entity = registry
         .get(entity_name)
-        .ok_or_else(|| Error::generic(format!("Entity '{}' not found", entity_name)))?;
+        .ok_or_else(|| Error::internal(format!("Entity '{}' not found", entity_name)))?;
 
     let table_name = entity.table_name();
     let query = format!("DELETE FROM {}", table_name);

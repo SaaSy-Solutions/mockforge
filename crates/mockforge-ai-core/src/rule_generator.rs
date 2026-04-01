@@ -797,7 +797,7 @@ impl RuleGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not available"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
 
         // Build prompt with examples
         let examples_json = serde_json::to_string(examples)?;
@@ -871,7 +871,7 @@ impl RuleGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::generic("LLM client not available"))?;
+            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
 
         let examples_summary: Vec<String> = examples
             .iter()

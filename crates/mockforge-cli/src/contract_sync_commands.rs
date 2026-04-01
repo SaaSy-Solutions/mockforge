@@ -55,7 +55,7 @@ pub async fn handle_contract_sync(
     // Get OpenAPI spec files from Git
     let spec_files = git_service.get_spec_files()?;
     if spec_files.is_empty() {
-        return Err(Error::generic("No OpenAPI spec files found in repository".to_string()));
+        return Err(Error::internal("No OpenAPI spec files found in repository".to_string()));
     }
 
     info!("Found {} OpenAPI spec file(s) in Git repository", spec_files.len());
@@ -89,7 +89,7 @@ pub async fn handle_contract_sync(
     // Save report to file if output path specified
     if let Some(ref output_path) = output {
         tokio::fs::write(output_path, &report).await.map_err(|e| {
-            Error::generic(format!("Failed to write report to {}: {}", output_path.display(), e))
+            Error::internal(format!("Failed to write report to {}: {}", output_path.display(), e))
         })?;
         info!("Validation report saved to: {}", output_path.display());
     }
@@ -113,7 +113,7 @@ pub async fn handle_contract_sync(
         info!("Contract sync completed successfully");
         Ok(())
     } else {
-        Err(Error::generic(format!(
+        Err(Error::internal(format!(
             "Contract validation failed: {} errors, {} breaking changes",
             overall_result.errors.len(),
             overall_result.breaking_changes.len()
@@ -124,7 +124,7 @@ pub async fn handle_contract_sync(
 /// Load an OpenAPI spec from a file
 async fn load_openapi_spec(path: &Path) -> Result<OpenApiSpec> {
     OpenApiSpec::from_file(path).await.map_err(|e| {
-        Error::generic(format!("Failed to load OpenAPI spec from {}: {}", path.display(), e))
+        Error::internal(format!("Failed to load OpenAPI spec from {}: {}", path.display(), e))
     })
 }
 
@@ -147,7 +147,7 @@ async fn update_mocks_from_git_specs(
     mock_config_path: Option<&Path>,
 ) -> Result<()> {
     if spec_files.is_empty() {
-        return Err(Error::generic("No spec files to update from".to_string()));
+        return Err(Error::internal("No spec files to update from".to_string()));
     }
 
     // Use the first spec file as the primary source
@@ -158,7 +158,7 @@ async fn update_mocks_from_git_specs(
     if let Some(mock_path) = mock_config_path {
         // Copy the Git spec to the mock config location
         tokio::fs::copy(primary_spec, mock_path).await.map_err(|e| {
-            Error::generic(format!("Failed to copy spec to {}: {}", mock_path.display(), e))
+            Error::internal(format!("Failed to copy spec to {}: {}", mock_path.display(), e))
         })?;
         info!("Mock configuration updated: {}", mock_path.display());
     } else {
@@ -194,7 +194,7 @@ pub async fn validate_mock_against_git_spec(
     // Get spec file
     let spec_files = git_service.get_spec_files()?;
     if spec_files.is_empty() {
-        return Err(Error::generic("No spec file found in Git repository".to_string()));
+        return Err(Error::internal("No spec file found in Git repository".to_string()));
     }
 
     let git_spec_file = &spec_files[0];

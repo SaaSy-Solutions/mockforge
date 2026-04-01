@@ -13,16 +13,16 @@ pub fn create_oauth2_client(config: &OAuth2Config) -> Result<oauth2::basic::Basi
     let auth_url_str = config
         .auth_url
         .clone()
-        .ok_or_else(|| Error::generic("OAuth2 auth_url must be configured".to_string()))?;
+        .ok_or_else(|| Error::internal("OAuth2 auth_url must be configured".to_string()))?;
     let auth_url = oauth2::AuthUrl::new(auth_url_str)
-        .map_err(|e| Error::generic(format!("Invalid auth URL: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Invalid auth URL: {}", e)))?;
 
     let token_url_str = config
         .token_url
         .clone()
-        .ok_or_else(|| Error::generic("OAuth2 token_url must be configured".to_string()))?;
+        .ok_or_else(|| Error::internal("OAuth2 token_url must be configured".to_string()))?;
     let token_url = oauth2::TokenUrl::new(token_url_str)
-        .map_err(|e| Error::generic(format!("Invalid token URL: {}", e)))?;
+        .map_err(|e| Error::internal(format!("Invalid token URL: {}", e)))?;
 
     Ok(oauth2::basic::BasicClient::new(
         client_id,

@@ -114,11 +114,11 @@ impl BehaviorModel {
                         if !state.state.contains_key("auth_token")
                             && !state.state.contains_key("user_id")
                         {
-                            return Err(crate::Error::generic(message.clone()));
+                            return Err(crate::Error::internal(message.clone()));
                         }
                     }
                     crate::rules::RuleAction::Error { status, message } => {
-                        return Err(crate::Error::generic(format!(
+                        return Err(crate::Error::internal(format!(
                             "Rule '{}' failed: {} (status {})",
                             rule.name, message, status
                         )));
