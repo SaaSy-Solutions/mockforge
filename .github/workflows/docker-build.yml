@@ -105,6 +105,10 @@ jobs:
           name: sbom
           path: sbom.json
 
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
       - name: Sign container image with Cosign
         if: github.event_name != 'pull_request'
         env:

@@ -107,7 +107,7 @@ jobs:
 
       - name: Build MockForge
         run: |
-          cargo build --release --bin mockforge
+          cargo build --release --bin mockforge --features all-protocols
 
       - name: Run E2E tests
         env:

@@ -398,7 +398,9 @@ jobs:
     - name: Check MSRV compatibility
       run: |
         # MSRV 1.91 supports edition2024 and all current dependency requirements
-        cargo check --workspace  typos:
+        cargo check --workspace
+
+  typos:
     name: Spell Check
     runs-on: ubuntu-latest
     steps:
