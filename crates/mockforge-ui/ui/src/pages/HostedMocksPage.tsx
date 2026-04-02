@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useHostedMockStream } from '@/hooks/useHostedMockStream';
 import {
   Box,
   Card,
@@ -124,6 +125,15 @@ export const HostedMocksPage: React.FC = () => {
     openapi_spec_url: '',
   });
   const [creating, setCreating] = useState(false);
+
+  // Real-time stream for the selected hosted mock deployment
+  const streamEnabled = detailsOpen && selectedDeployment?.status === 'active';
+  const streamUrl = streamEnabled ? selectedDeployment?.deployment_url : undefined;
+  const {
+    connected: streamConnected,
+    logs: streamLogs,
+    metrics: streamMetrics,
+  } = useHostedMockStream(streamUrl, { enabled: !!streamEnabled });
 
   useEffect(() => {
     loadDeployments();
@@ -678,113 +688,237 @@ export const HostedMocksPage: React.FC = () => {
 
               {detailsTab === 1 && (
                 <Box>
+                  {streamConnected && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Live streaming connected — new requests will appear automatically
+                    </Alert>
+                  )}
+                  {streamLogs.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        Live Requests
+                      </Typography>
+                      <List dense>
+                        {streamLogs.slice(0, 50).map((entry, index) => (
+                          <React.Fragment key={`stream-${entry.request_id || index}`}>
+                            <ListItem>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                    <Chip
+                                      label={entry.method}
+                                      size="small"
+                                      color="primary"
+                                      variant="outlined"
+                                    />
+                                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                                      {entry.path}
+                                    </Typography>
+                                    <Chip
+                                      label={entry.status}
+                                      size="small"
+                                      color={entry.status >= 500 ? 'error' : entry.status >= 400 ? 'warning' : 'success'}
+                                    />
+                                    <Typography variant="caption" color="text.secondary">
+                                      {entry.latency_ms}ms
+                                    </Typography>
+                                  </Box>
+                                }
+                                secondary={new Date(entry.timestamp).toLocaleString()}
+                              />
+                            </ListItem>
+                            {index < Math.min(streamLogs.length, 50) - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </Box>
+                  )}
                   {logsLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                       <CircularProgress />
                     </Box>
-                  ) : logs.length === 0 ? (
-                    <Alert severity="info">No logs available</Alert>
-                  ) : (
-                    <List>
-                      {logs.map((log, index) => (
-                        <React.Fragment key={log.id}>
-                          <ListItem>
-                            <ListItemText
-                              primary={
-                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                  <Chip
-                                    label={log.level}
-                                    size="small"
-                                    color={
-                                      log.level === 'error'
-                                        ? 'error'
-                                        : log.level === 'warning'
-                                        ? 'warning'
-                                        : 'default'
-                                    }
-                                  />
-                                  <Typography variant="body2">{log.message}</Typography>
-                                </Box>
-                              }
-                              secondary={new Date(log.created_at).toLocaleString()}
-                            />
-                          </ListItem>
-                          {index < logs.length - 1 && <Divider />}
-                        </React.Fragment>
-                      ))}
-                    </List>
-                  )}
+                  ) : logs.length === 0 && streamLogs.length === 0 ? (
+                    <Alert severity="info">
+                      {streamConnected ? 'Waiting for requests...' : 'No logs available'}
+                    </Alert>
+                  ) : logs.length > 0 ? (
+                    <>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        Historical Logs
+                      </Typography>
+                      <List>
+                        {logs.map((log, index) => (
+                          <React.Fragment key={log.id}>
+                            <ListItem>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                    <Chip
+                                      label={log.level}
+                                      size="small"
+                                      color={
+                                        log.level === 'error'
+                                          ? 'error'
+                                          : log.level === 'warning'
+                                          ? 'warning'
+                                          : 'default'
+                                      }
+                                    />
+                                    <Typography variant="body2">{log.message}</Typography>
+                                  </Box>
+                                }
+                                secondary={new Date(log.created_at).toLocaleString()}
+                              />
+                            </ListItem>
+                            {index < logs.length - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    </>
+                  ) : null}
                 </Box>
               )}
 
               {detailsTab === 2 && (
                 <Box>
+                  {streamConnected && streamMetrics && (
+                    <Box sx={{ mb: 3 }}>
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        Live metrics — updating in real time
+                      </Alert>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Requests / sec
+                            </Typography>
+                            <Typography variant="h6">{streamMetrics.requests_per_second.toFixed(1)}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Avg Latency
+                            </Typography>
+                            <Typography variant="h6">{streamMetrics.avg_latency_ms.toFixed(0)} ms</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              P95 Latency
+                            </Typography>
+                            <Typography variant="h6">{streamMetrics.p95_latency_ms.toFixed(0)} ms</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Error Rate
+                            </Typography>
+                            <Typography variant="h6" color={streamMetrics.error_rate > 0.05 ? 'error.main' : 'success.main'}>
+                              {(streamMetrics.error_rate * 100).toFixed(1)}%
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Active Connections
+                            </Typography>
+                            <Typography variant="h6">{streamMetrics.active_connections}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Total Requests
+                            </Typography>
+                            <Typography variant="h6">{streamMetrics.total_requests.toLocaleString()}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Total Errors
+                            </Typography>
+                            <Typography variant="h6" color="error.main">{streamMetrics.total_errors.toLocaleString()}</Typography>
+                          </Paper>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  )}
                   {metricsLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
                       <CircularProgress />
                     </Box>
-                  ) : !metrics ? (
+                  ) : !metrics && !streamMetrics ? (
                     <Alert severity="info">No metrics available</Alert>
-                  ) : (
-                    <Grid container spacing={2}>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Total Requests
-                          </Typography>
-                          <Typography variant="h6">{metrics.requests.toLocaleString()}</Typography>
-                        </Paper>
+                  ) : metrics ? (
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        Aggregated Metrics
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Total Requests
+                            </Typography>
+                            <Typography variant="h6">{metrics.requests.toLocaleString()}</Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              2xx Responses
+                            </Typography>
+                            <Typography variant="h6" color="success.main">
+                              {metrics.requests_2xx.toLocaleString()}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              4xx Responses
+                            </Typography>
+                            <Typography variant="h6" color="warning.main">
+                              {metrics.requests_4xx.toLocaleString()}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              5xx Responses
+                            </Typography>
+                            <Typography variant="h6" color="error.main">
+                              {metrics.requests_5xx.toLocaleString()}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Egress (bytes)
+                            </Typography>
+                            <Typography variant="h6">
+                              {(metrics.egress_bytes / 1024 / 1024).toFixed(2)} MB
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                          <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Avg Response Time
+                            </Typography>
+                            <Typography variant="h6">{metrics.avg_response_time_ms} ms</Typography>
+                          </Paper>
+                        </Grid>
                       </Grid>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            2xx Responses
-                          </Typography>
-                          <Typography variant="h6" color="success.main">
-                            {metrics.requests_2xx.toLocaleString()}
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            4xx Responses
-                          </Typography>
-                          <Typography variant="h6" color="warning.main">
-                            {metrics.requests_4xx.toLocaleString()}
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            5xx Responses
-                          </Typography>
-                          <Typography variant="h6" color="error.main">
-                            {metrics.requests_5xx.toLocaleString()}
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Egress (bytes)
-                          </Typography>
-                          <Typography variant="h6">
-                            {(metrics.egress_bytes / 1024 / 1024).toFixed(2)} MB
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={6} md={3}>
-                        <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Avg Response Time
-                          </Typography>
-                          <Typography variant="h6">{metrics.avg_response_time_ms} ms</Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-                  )}
+                    </Box>
+                  ) : null}
                 </Box>
               )}
             </DialogContent>

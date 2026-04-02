@@ -10,6 +10,11 @@ const isCloud = (() => {
   return !!apiBase && apiBase !== '';
 })();
 
+/** Returns true if the URL is absolute (starts with http:// or https://). */
+function isAbsoluteUrl(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
 export interface SSEHookOptions {
   /**
    * Whether to automatically connect when the hook is mounted
@@ -94,8 +99,9 @@ export function useSSE<T = unknown>(
   }, [url]);
 
   const connect = useCallback(() => {
-    // Skip SSE connections in cloud mode — these endpoints don't exist
-    if (isCloud) return;
+    // Skip relative SSE paths in cloud mode — they don't exist on the registry
+    // server. Absolute URLs targeting hosted mock deployments are still allowed.
+    if (isCloud && !isAbsoluteUrl(url)) return;
 
     // Prevent multiple connections
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {

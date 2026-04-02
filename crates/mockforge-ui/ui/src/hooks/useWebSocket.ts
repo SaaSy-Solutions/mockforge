@@ -6,11 +6,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { logger } from '@/utils/logger';
 
-// Detect cloud mode — WebSocket connections don't work on Vercel
+// Detect cloud mode — relative WebSocket paths don't work on Vercel
+// because /__mockforge/ws doesn't exist on the registry server.
+// However, absolute URLs to hosted mock deployments ARE allowed.
 const isCloud = (() => {
   const apiBase = import.meta.env.VITE_API_BASE_URL;
   return !!apiBase && apiBase !== '';
 })();
+
+/** Returns true if the URL is an absolute ws:// or wss:// URL (not a relative path). */
+function isAbsoluteWsUrl(url: string): boolean {
+  return url.startsWith('ws://') || url.startsWith('wss://');
+}
 
 interface UseWebSocketOptions {
   autoConnect?: boolean;
@@ -51,8 +58,9 @@ export function useWebSocket(
   const mountedRef = useRef(true);
 
   const connect = useCallback(() => {
-    // In cloud mode, WebSocket endpoints don't exist — skip connection entirely
-    if (isCloud) return;
+    // In cloud mode, skip relative WS paths (they don't exist on the registry
+    // server). Absolute URLs targeting hosted mock deployments are still allowed.
+    if (isCloud && !isAbsoluteWsUrl(url)) return;
 
     shouldReconnectRef.current = true;
 

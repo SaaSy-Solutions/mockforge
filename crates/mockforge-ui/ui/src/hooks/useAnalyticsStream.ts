@@ -29,6 +29,10 @@ export interface StreamConfig {
 export interface UseAnalyticsStreamOptions {
   enabled?: boolean;
   config?: StreamConfig;
+  /** Absolute WebSocket URL to connect to (e.g. a hosted mock deployment).
+   *  When set, the stream connects to this URL instead of the local server
+   *  and is allowed even in cloud mode. */
+  targetUrl?: string;
   onMessage?: (update: MetricsUpdate) => void;
   onError?: (error: Event) => void;
   onConnect?: () => void;
@@ -60,6 +64,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const {
     enabled: userEnabled = true,
     config,
+    targetUrl,
     onMessage,
     onError,
     onConnect,
@@ -69,8 +74,9 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
     reconnectMaxRetries = 10,
   } = options;
 
-  // Disable WebSocket in cloud mode — the WS endpoint is not available on the remote host
-  const enabled = userEnabled && !isCloudMode;
+  // Disable WebSocket in cloud mode for local endpoints, but allow when
+  // an explicit targetUrl is provided (e.g. connecting to a hosted mock).
+  const enabled = userEnabled && (!isCloudMode || !!targetUrl);
 
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<MetricsUpdate | null>(null);
@@ -140,9 +146,15 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
       wsRef.current.close();
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const url = `${protocol}//${host}/api/v2/analytics/stream`;
+    let url: string;
+    if (targetUrl) {
+      // Connect to an explicit hosted mock deployment URL
+      url = targetUrl;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      url = `${protocol}//${host}/api/v2/analytics/stream`;
+    }
 
     const ws = new WebSocket(url);
 

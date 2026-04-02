@@ -10,10 +10,10 @@
  */
 
 import React from 'react';
-import { Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, Cloud } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
-export type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'reconnecting';
+export type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'cloud';
 
 interface ConnectionStatusProps {
   state: ConnectionState;
@@ -24,7 +24,7 @@ interface ConnectionStatusProps {
   lastConnected?: Date;
 }
 
-const stateConfig: Record<ConnectionState, { color: string; label: string; icon: 'wifi' | 'wifi-off' | 'loader' }> = {
+const stateConfig: Record<ConnectionState, { color: string; label: string; icon: 'wifi' | 'wifi-off' | 'loader' | 'cloud' }> = {
   connected: {
     color: 'bg-green-500',
     label: 'Connected',
@@ -45,6 +45,11 @@ const stateConfig: Record<ConnectionState, { color: string; label: string; icon:
     label: 'Disconnected',
     icon: 'wifi-off',
   },
+  cloud: {
+    color: 'bg-blue-500',
+    label: 'Cloud',
+    icon: 'cloud',
+  },
 };
 
 export function ConnectionStatus({
@@ -55,7 +60,7 @@ export function ConnectionStatus({
 }: ConnectionStatusProps) {
   const config = stateConfig[state];
 
-  const Icon = config.icon === 'wifi' ? Wifi : config.icon === 'wifi-off' ? WifiOff : Loader2;
+  const Icon = config.icon === 'wifi' ? Wifi : config.icon === 'wifi-off' ? WifiOff : config.icon === 'cloud' ? Cloud : Loader2;
 
   return (
     <div
@@ -89,18 +94,29 @@ export function ConnectionStatus({
  */
 import { create } from 'zustand';
 
+// Detect cloud mode — in cloud mode WebSocket to a local server is not expected
+const isCloudMode = (() => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+  return !!apiBase && apiBase !== '';
+})();
+
 interface ConnectionStore {
   backendState: ConnectionState;
   wsState: ConnectionState;
+  /** Number of active hosted mock streams connected */
+  hostedMockStreams: number;
   lastBackendConnected?: Date;
   lastWsConnected?: Date;
   setBackendState: (state: ConnectionState) => void;
   setWsState: (state: ConnectionState) => void;
+  incrementHostedMockStreams: () => void;
+  decrementHostedMockStreams: () => void;
 }
 
 export const useConnectionStore = create<ConnectionStore>((set) => ({
-  backendState: 'connecting',
-  wsState: 'disconnected',
+  backendState: isCloudMode ? 'connected' : 'connecting',
+  wsState: isCloudMode ? 'cloud' : 'disconnected',
+  hostedMockStreams: 0,
   setBackendState: (state) => set({
     backendState: state,
     lastBackendConnected: state === 'connected' ? new Date() : undefined,
@@ -109,22 +125,36 @@ export const useConnectionStore = create<ConnectionStore>((set) => ({
     wsState: state,
     lastWsConnected: state === 'connected' ? new Date() : undefined,
   }),
+  incrementHostedMockStreams: () => set((s) => ({ hostedMockStreams: s.hostedMockStreams + 1 })),
+  decrementHostedMockStreams: () => set((s) => ({ hostedMockStreams: Math.max(0, s.hostedMockStreams - 1) })),
 }));
 
 /**
  * GlobalConnectionStatus - Shows overall connection health
+ *
+ * In cloud mode the local WebSocket is intentionally disabled, so we
+ * show a neutral "Cloud" indicator instead of a misleading red
+ * "Disconnected". When any hosted-mock stream is active we upgrade
+ * the indicator to green "Connected".
  */
 export function GlobalConnectionStatus({ className }: { className?: string }) {
-  const { backendState, wsState } = useConnectionStore();
+  const { backendState, wsState, hostedMockStreams } = useConnectionStore();
 
-  // Determine overall status (worst of the two)
+  // In cloud mode, the wsState starts as 'cloud'. If we have active
+  // hosted mock streams, treat the WS layer as connected.
+  const effectiveWsState: ConnectionState =
+    wsState === 'cloud' && hostedMockStreams > 0 ? 'connected' : wsState;
+
+  // Determine overall status (worst of the two, but 'cloud' is neutral)
   const overallState: ConnectionState =
-    backendState === 'disconnected' || wsState === 'disconnected'
+    backendState === 'disconnected' || effectiveWsState === 'disconnected'
       ? 'disconnected'
-      : backendState === 'connecting' || wsState === 'connecting'
+      : backendState === 'connecting' || effectiveWsState === 'connecting'
       ? 'connecting'
-      : backendState === 'reconnecting' || wsState === 'reconnecting'
+      : backendState === 'reconnecting' || effectiveWsState === 'reconnecting'
       ? 'reconnecting'
+      : effectiveWsState === 'cloud'
+      ? 'cloud'
       : 'connected';
 
   return (

@@ -12,7 +12,7 @@ import {
   OpenInNew as OpenInNewIcon,
   ContentCopy as ContentCopyIcon,
 } from '@mui/icons-material';
-import { ApiReference } from '@scalar/api-reference-react';
+import { ApiReferenceReact as ApiReference } from '@scalar/api-reference-react';
 import '@scalar/api-reference-react/style.css';
 
 interface DeploymentContext {
