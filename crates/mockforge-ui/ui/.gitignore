@@ -28,6 +28,7 @@ dist-ssr
 /playwright-report/
 /playwright/.cache/
 /e2e/screenshots/
+/.auth/
 
 # Coverage
 /coverage/
