@@ -147,6 +147,18 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/workspaces/{id}", get(handlers::cloud_workspaces::get_workspace))
         .route("/api/v1/workspaces/{id}", patch(handlers::cloud_workspaces::update_workspace))
         .route("/api/v1/workspaces/{id}", delete(handlers::cloud_workspaces::delete_workspace))
+        // Service routes
+        .route("/api/v1/services", get(handlers::cloud_services::list_services))
+        .route("/api/v1/services", post(handlers::cloud_services::create_service))
+        .route("/api/v1/services/{id}", get(handlers::cloud_services::get_service))
+        .route("/api/v1/services/{id}", patch(handlers::cloud_services::update_service))
+        .route("/api/v1/services/{id}", delete(handlers::cloud_services::delete_service))
+        // Fixture routes
+        .route("/api/v1/fixtures", get(handlers::cloud_fixtures::list_fixtures))
+        .route("/api/v1/fixtures", post(handlers::cloud_fixtures::create_fixture))
+        .route("/api/v1/fixtures/{id}", get(handlers::cloud_fixtures::get_fixture))
+        .route("/api/v1/fixtures/{id}", patch(handlers::cloud_fixtures::update_fixture))
+        .route("/api/v1/fixtures/{id}", delete(handlers::cloud_fixtures::delete_fixture))
         // Federation routes
         .route("/api/v1/federation", get(handlers::federations::list_federations))
         .route("/api/v1/federation", post(handlers::federations::create_federation))

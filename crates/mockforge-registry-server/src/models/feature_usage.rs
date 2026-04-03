@@ -34,6 +34,12 @@ pub enum FeatureType {
     WorkspaceCreate,
     WorkspaceUpdate,
     WorkspaceDelete,
+    ServiceCreate,
+    ServiceUpdate,
+    ServiceDelete,
+    FixtureCreate,
+    FixtureUpdate,
+    FixtureDelete,
 }
 
 /// Feature usage event

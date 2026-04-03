@@ -5,6 +5,9 @@ import type { FixtureInfo } from '../../types';
 import { FixturesResponseSchema } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation, authenticatedFetch } from './client';
 
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const FIXTURE_API_BASE = isCloud ? '/api/v1/fixtures' : FIXTURE_API_BASE;
+
 class FixturesApiService {
   constructor() {
     // Bind all methods to ensure 'this' context is preserved
@@ -18,13 +21,13 @@ class FixturesApiService {
 
   async getFixtures(): Promise<FixtureInfo[]> {
     return fetchJsonWithValidation<FixtureInfo[]>(
-      '/__mockforge/fixtures',
+      FIXTURE_API_BASE,
       FixturesResponseSchema
     );
   }
 
   async deleteFixture(fixtureId: string): Promise<void> {
-    return fetchJson(`/__mockforge/fixtures/${fixtureId}`, {
+    return fetchJson(`${FIXTURE_API_BASE}/${fixtureId}`, {
       method: 'DELETE',
     }) as Promise<void>;
   }
@@ -38,7 +41,7 @@ class FixturesApiService {
   }
 
   async downloadFixture(fixtureId: string): Promise<Blob> {
-    const response = await authenticatedFetch(`/__mockforge/fixtures/${fixtureId}/download`);
+    const response = await authenticatedFetch(`${FIXTURE_API_BASE}/${fixtureId}/download`);
     if (!response.ok) {
       if (response.status === 401) {
         throw new Error('Authentication required');
@@ -52,7 +55,7 @@ class FixturesApiService {
   }
 
   async renameFixture(fixtureId: string, newName: string): Promise<void> {
-    return fetchJson(`/__mockforge/fixtures/${fixtureId}/rename`, {
+    return fetchJson(`${FIXTURE_API_BASE}/${fixtureId}/rename`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_name: newName }),
@@ -60,7 +63,7 @@ class FixturesApiService {
   }
 
   async moveFixture(fixtureId: string, newPath: string): Promise<void> {
-    return fetchJson(`/__mockforge/fixtures/${fixtureId}/move`, {
+    return fetchJson(`${FIXTURE_API_BASE}/${fixtureId}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ new_path: newPath }),

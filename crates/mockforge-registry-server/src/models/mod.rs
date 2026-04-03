@@ -2,6 +2,8 @@
 
 pub mod api_token;
 pub mod audit_log;
+pub mod cloud_fixture;
+pub mod cloud_service;
 pub mod cloud_workspace;
 pub mod feature_usage;
 pub mod federation;

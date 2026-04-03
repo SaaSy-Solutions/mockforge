@@ -54,6 +54,14 @@ pub enum AuditEventType {
     WorkspaceCreated,
     WorkspaceUpdated,
     WorkspaceDeleted,
+    // Services
+    ServiceCreated,
+    ServiceUpdated,
+    ServiceDeleted,
+    // Fixtures
+    FixtureCreated,
+    FixtureUpdated,
+    FixtureDeleted,
     // Admin actions
     AdminImpersonation,
 }
