@@ -39,7 +39,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
     try {
       setLoading(true);
       const response = await apiService.listChains();
-      setChains(response.chains);
+      setChains(response?.chains || []);
       setError(null);
     } catch (err) {
       logger.error('Failed to fetch chains',err);

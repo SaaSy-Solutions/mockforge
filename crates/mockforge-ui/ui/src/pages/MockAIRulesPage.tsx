@@ -75,8 +75,8 @@ export function MockAIRulesPage() {
       }
 
       const response = await apiService.listRuleExplanations(filters);
-      setExplanations(response.explanations);
-      setFilteredExplanations(response.explanations);
+      setExplanations(response?.explanations || []);
+      setFilteredExplanations(response?.explanations || []);
     } catch (err) {
       const errorMessage =
         err instanceof Error

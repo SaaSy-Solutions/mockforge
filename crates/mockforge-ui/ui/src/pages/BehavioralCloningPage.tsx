@@ -43,7 +43,7 @@ export function BehavioralCloningPage() {
       setLoading(true);
       setError(null);
       const response = await apiService.getFlows({ limit: 100 });
-      setFlows(response.flows);
+      setFlows(response?.flows || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load flows';
       setError(errorMessage);
@@ -58,7 +58,7 @@ export function BehavioralCloningPage() {
       setLoading(true);
       setError(null);
       const response = await apiService.getScenarios({ limit: 100 });
-      setScenarios(response.scenarios);
+      setScenarios(response?.scenarios || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load scenarios';
       setError(errorMessage);
@@ -200,4 +200,3 @@ export function BehavioralCloningPage() {
     </div>
   );
 }
-
