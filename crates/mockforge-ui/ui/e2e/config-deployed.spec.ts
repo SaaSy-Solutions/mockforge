@@ -220,7 +220,71 @@ test.describe('Config — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Navigation
+  // 5. Tab Content Depth
+  // ---------------------------------------------------------------------------
+  test.describe('Tab Content Depth', () => {
+    test('should display Latency tab with Base Latency and Jitter fields', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Latency/ }).click();
+      await page.waitForTimeout(500);
+
+      await expect(main.getByText('Base Latency')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Jitter')).toBeVisible();
+    });
+
+    test('should display Proxy tab with upstream configuration', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Proxy/ }).click();
+      await page.waitForTimeout(500);
+
+      const hasProxyContent = await main.getByText(/Proxy|Upstream|upstream/i).first()
+        .isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasProxyContent).toBeTruthy();
+    });
+
+    test('should display Validation tab with mode settings', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Validation/ }).click();
+      await page.waitForTimeout(500);
+
+      const hasValidationContent = await main.getByText(/Validation|mode|request|response/i).first()
+        .isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasValidationContent).toBeTruthy();
+    });
+
+    test('should display Environment tab', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Environment/ }).click();
+      await page.waitForTimeout(500);
+
+      const hasEnvContent = await main.getByText(/Environment|variable/i).first()
+        .isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasEnvContent).toBeTruthy();
+    });
+
+    test('should display Fault Injection tab', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Fault Injection/ }).click();
+      await page.waitForTimeout(500);
+
+      const hasFaultContent = await main.getByText(/Fault|Error|failure/i).first()
+        .isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasFaultContent).toBeTruthy();
+    });
+
+    test('should display Traffic Shaping tab', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: /Traffic Shaping/ }).click();
+      await page.waitForTimeout(500);
+
+      const hasTrafficContent = await main.getByText(/Traffic|Bandwidth|network/i).first()
+        .isVisible({ timeout: 3000 }).catch(() => false);
+      expect(hasTrafficContent).toBeTruthy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Navigation
   // ---------------------------------------------------------------------------
   test.describe('Navigation', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {

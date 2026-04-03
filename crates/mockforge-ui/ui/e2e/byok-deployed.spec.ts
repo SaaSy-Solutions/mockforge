@@ -84,12 +84,49 @@ test.describe('BYOK Keys — Deployed Site', () => {
 
       await main.getByText('Anthropic').click();
       await page.waitForTimeout(300);
-      // Verify provider changed — placeholder or link should update
       const apiKeyInput = main.getByRole('textbox', { name: 'API Key' });
       await expect(apiKeyInput).toBeVisible();
 
       // Switch back to OpenAI
       await main.getByText('OpenAI').click();
+      await page.waitForTimeout(300);
+    });
+
+    test('should update docs link when switching providers', async ({ page }) => {
+      const main = mainContent(page);
+
+      // Start with OpenAI — docs link should point to OpenAI
+      await main.getByText('OpenAI').click();
+      await page.waitForTimeout(300);
+      const openaiLink = main.getByRole('link', { name: /View API documentation/i });
+      const openaiHref = await openaiLink.getAttribute('href');
+      expect(openaiHref).toContain('openai');
+
+      // Switch to Anthropic — docs link should change
+      await main.getByText('Anthropic').click();
+      await page.waitForTimeout(300);
+      const anthropicHref = await openaiLink.getAttribute('href');
+      expect(anthropicHref).toContain('anthropic');
+
+      // Switch back
+      await main.getByText('OpenAI').click();
+    });
+
+    test('should toggle Enable BYOK button', async ({ page }) => {
+      const main = mainContent(page);
+      const toggleBtn = main.getByRole('button', { name: /Enabled|Disabled/ });
+      await expect(toggleBtn).toBeVisible();
+
+      const initialText = await toggleBtn.textContent();
+      await toggleBtn.click();
+      await page.waitForTimeout(500);
+
+      const newText = await toggleBtn.textContent();
+      // Text should change between Enabled/Disabled
+      expect(newText).not.toBe(initialText);
+
+      // Toggle back to restore state
+      await toggleBtn.click();
       await page.waitForTimeout(300);
     });
 

@@ -281,7 +281,69 @@ test.describe('Hosted Mocks — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Navigation
+  // 5. Deploy Lifecycle CRUD Flow
+  // ---------------------------------------------------------------------------
+  test.describe('Deploy Lifecycle Flow', () => {
+    test('should deploy a mock, verify in table, and delete it', async ({ page }) => {
+      const main = mainContent(page);
+      const deployName = `E2E Mock ${Date.now()}`;
+
+      // Step 1: Open deploy dialog
+      await main.getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+
+      // Step 2: Fill in form
+      await dialog.getByRole('textbox', { name: 'Name' }).fill(deployName);
+      await dialog.getByRole('textbox', { name: 'Description' }).fill('E2E test deployment');
+      await page.waitForTimeout(500);
+
+      // Step 3: Submit
+      const deployButton = dialog.getByRole('button', { name: 'Deploy' });
+      await expect(deployButton).toBeEnabled();
+      await deployButton.click();
+      await page.waitForTimeout(5000);
+
+      // Step 4: Verify deployment via API
+      const token = await page.evaluate(() => localStorage.getItem('auth_token'));
+      const listResponse = await page.evaluate(async (authToken) => {
+        const res = await fetch('/api/v1/hosted-mocks', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        return res.json();
+      }, token);
+
+      const deployed = (listResponse as Array<{ name: string; id: string }>)
+        .find(d => d.name === deployName);
+      expect(deployed).toBeTruthy();
+
+      // Step 5: Delete via API
+      if (deployed) {
+        await page.evaluate(async ({ id, authToken }) => {
+          await fetch(`/api/v1/hosted-mocks/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+        }, { id: deployed.id, authToken: token });
+      }
+
+      // Step 6: Verify deleted
+      const afterDelete = await page.evaluate(async (authToken) => {
+        const res = await fetch('/api/v1/hosted-mocks', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        return res.json();
+      }, token);
+
+      const stillExists = (afterDelete as Array<{ name: string }>)
+        .find(d => d.name === deployName);
+      expect(stillExists).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Navigation
   // ---------------------------------------------------------------------------
   test.describe('Navigation', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {

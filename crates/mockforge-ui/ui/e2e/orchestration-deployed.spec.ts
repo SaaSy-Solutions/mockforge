@@ -27,20 +27,30 @@ test.describe('Request Chains — Deployed Site', () => {
     await expect(page.getByRole('banner').getByText('Chains')).toBeVisible();
   });
 
-  test('should display page content or error boundary', async ({ page }) => {
-    const main = mainContent(page);
-    // Chains page may crash due to missing cloud API — verify it either loads or shows error boundary
-    const hasContent = await main.getByText('Request Chains').isVisible({ timeout: 3000 }).catch(() => false);
-    const hasError = await main.getByText('Something went wrong').isVisible({ timeout: 3000 }).catch(() => false);
-    expect(hasContent || hasError).toBeTruthy();
+  test('should display Request Chains heading', async ({ page }) => {
+    await expect(mainContent(page).getByText('Request Chains')).toBeVisible({ timeout: 5000 });
   });
 
-  test('should show Try Again button if error boundary triggered', async ({ page }) => {
+  test('should display subtitle', async ({ page }) => {
+    await expect(mainContent(page).getByText(/Manage and execute request chains/)).toBeVisible();
+  });
+
+  test('should display Create Chain button', async ({ page }) => {
+    await expect(mainContent(page).getByRole('button', { name: /Create Chain/i }).first()).toBeVisible();
+  });
+
+  test('should show chains or empty state', async ({ page }) => {
     const main = mainContent(page);
-    const hasError = await main.getByText('Something went wrong').isVisible({ timeout: 3000 }).catch(() => false);
-    if (hasError) {
-      await expect(main.getByRole('button', { name: /Try Again/i })).toBeVisible();
-      await expect(main.getByRole('button', { name: /Go Home/i }).or(main.getByRole('link', { name: /Go Home/i }))).toBeVisible();
+    const hasEmpty = await main.getByText('No Chains Found').isVisible({ timeout: 3000 }).catch(() => false);
+    const hasChains = await main.getByText('Available Chains').isVisible({ timeout: 3000 }).catch(() => false);
+    expect(hasEmpty || hasChains).toBeTruthy();
+  });
+
+  test('should display empty state CTA button', async ({ page }) => {
+    const main = mainContent(page);
+    const hasEmpty = await main.getByText('No Chains Found').isVisible({ timeout: 3000 }).catch(() => false);
+    if (hasEmpty) {
+      await expect(main.getByRole('button', { name: /Create First Chain/i })).toBeVisible();
     }
   });
 });

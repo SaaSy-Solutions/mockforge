@@ -369,7 +369,69 @@ test.describe('Workspaces — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Open from Directory Dialog
+  // 5. Workspace CRUD Flow
+  // ---------------------------------------------------------------------------
+  test.describe('Workspace CRUD Flow', () => {
+    const testWorkspaceName = `E2E Workspace ${Date.now()}`;
+
+    test('should create a workspace, verify it appears in list, and delete it', async ({ page }) => {
+      const main = mainContent(page);
+
+      // Step 1: Open create dialog
+      await main.getByRole('button', { name: 'New Workspace' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+
+      // Step 2: Fill in name and description
+      await dialog.getByRole('textbox', { name: 'Name' }).fill(testWorkspaceName);
+      await dialog.getByRole('textbox', { name: 'Description' }).fill('Created by E2E test');
+      await page.waitForTimeout(300);
+
+      // Step 3: Submit
+      await dialog.getByRole('button', { name: 'Create Workspace' }).click();
+      await page.waitForTimeout(3000);
+
+      // Step 4: Verify workspace appears (page may show list or stay on empty state)
+      // Check via API since the UI may not auto-refresh
+      const token = await page.evaluate(() => localStorage.getItem('auth_token'));
+      const listResponse = await page.evaluate(async (authToken) => {
+        const res = await fetch('/api/v1/workspaces', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        return res.json();
+      }, token);
+
+      const created = (listResponse as Array<{ name: string; id: string }>)
+        .find(w => w.name === testWorkspaceName);
+      expect(created).toBeTruthy();
+
+      // Step 5: Delete the workspace via API
+      if (created) {
+        await page.evaluate(async ({ id, authToken }) => {
+          await fetch(`/api/v1/workspaces/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+        }, { id: created.id, authToken: token });
+      }
+
+      // Step 6: Verify it's gone
+      const afterDelete = await page.evaluate(async (authToken) => {
+        const res = await fetch('/api/v1/workspaces', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        return res.json();
+      }, token);
+
+      const stillExists = (afterDelete as Array<{ name: string }>)
+        .find(w => w.name === testWorkspaceName);
+      expect(stillExists).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Open from Directory Dialog
   // ---------------------------------------------------------------------------
   test.describe('Open from Directory Dialog', () => {
     test('should open Open from Directory dialog from header button', async ({ page }) => {

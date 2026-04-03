@@ -92,6 +92,34 @@ test.describe('Organization — Deployed Site', () => {
 
       await expect(main.getByText('Owner')).toBeVisible({ timeout: 5000 });
     });
+
+    test('should display member email address', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText(/Free|Pro|Team/).first().click();
+      await page.waitForTimeout(1000);
+
+      // Should show member email
+      await expect(main.getByText(/@/).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should display org slug', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText(/Free|Pro|Team/).first().click();
+      await page.waitForTimeout(1000);
+
+      // Org detail shows slug like "@orgname-personal"
+      await expect(main.getByText(/@\w+-/).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('should display org name in detail view', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText(/Free|Pro|Team/).first().click();
+      await page.waitForTimeout(1000);
+
+      // Detail view shows the org name as H3
+      const h3s = main.getByRole('heading', { level: 3 });
+      expect(await h3s.count()).toBeGreaterThanOrEqual(1);
+    });
   });
 
   test.describe('Navigation', () => {

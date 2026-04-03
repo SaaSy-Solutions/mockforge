@@ -124,6 +124,48 @@ test.describe('API Tokens — Deployed Site', () => {
       await expect(checkbox).not.toBeChecked();
     });
 
+    test('should allow checking multiple scope checkboxes', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const checkboxes = dialog.getByRole('checkbox');
+      const count = await checkboxes.count();
+
+      // Check all scopes
+      for (let i = 0; i < count; i++) {
+        await checkboxes.nth(i).check();
+      }
+
+      // Verify all checked
+      for (let i = 0; i < count; i++) {
+        await expect(checkboxes.nth(i)).toBeChecked();
+      }
+
+      // Uncheck all
+      for (let i = 0; i < count; i++) {
+        await checkboxes.nth(i).uncheck();
+      }
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('should allow setting expiry days', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const expiryInput = dialog.getByRole('spinbutton', { name: 'Expires In (Days)' });
+
+      await expiryInput.fill('30');
+      await expect(expiryInput).toHaveValue('30');
+
+      await expiryInput.fill('90');
+      await expect(expiryInput).toHaveValue('90');
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
     test('should close dialog on Cancel', async ({ page }) => {
       await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
       await page.waitForTimeout(500);
