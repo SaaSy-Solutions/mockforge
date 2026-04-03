@@ -174,26 +174,27 @@ test.describe('Workspaces — Deployed Site', () => {
       await expect(dialog.getByRole('heading', { name: 'Create New Workspace' })).toBeVisible();
     });
 
-    test('should open Create Workspace dialog from empty state button', async ({ page }) => {
+    test('should open Create Workspace dialog from empty state or header button', async ({ page }) => {
       const main = mainContent(page);
       const hasEmptyState = await main.getByRole('heading', { name: 'No Workspaces Yet' })
         .isVisible({ timeout: 3000 }).catch(() => false);
 
-      if (!hasEmptyState) {
-        test.skip();
-        return;
+      if (hasEmptyState) {
+        // Click the empty state "Create Workspace" button
+        const emptySection = main.locator('div').filter({
+          has: page.getByRole('heading', { name: 'No Workspaces Yet' }),
+        }).first();
+        await emptySection.getByRole('button', { name: 'Create Workspace' }).click();
+      } else {
+        // Workspaces exist — use the header "New Workspace" button instead
+        await main.getByRole('button', { name: 'New Workspace' }).click();
       }
-
-      // Click the empty state "Create Workspace" button
-      const emptySection = main.locator('div').filter({
-        has: page.getByRole('heading', { name: 'No Workspaces Yet' }),
-      }).first();
-      await emptySection.getByRole('button', { name: 'Create Workspace' }).click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible({ timeout: 5000 });
       await expect(dialog.getByRole('heading', { name: 'Create New Workspace' })).toBeVisible();
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
     });
 
     test('should display the dialog description', async ({ page }) => {
@@ -382,18 +383,12 @@ test.describe('Workspaces — Deployed Site', () => {
       ).toBeVisible();
     });
 
-    test('should open Open from Directory dialog from empty state button', async ({ page }) => {
+    test('should open Open from Directory dialog from empty state or header button', async ({ page }) => {
       const main = mainContent(page);
-      const hasEmptyState = await main.getByRole('heading', { name: 'No Workspaces Yet' })
-        .isVisible({ timeout: 3000 }).catch(() => false);
 
-      if (!hasEmptyState) {
-        test.skip();
-        return;
-      }
-
-      // Click the last "Open from Directory" button (the one in the empty state CTA area)
-      await main.getByRole('button', { name: 'Open from Directory' }).last().click();
+      // Click whichever "Open from Directory" button is available
+      // (header button is always visible, empty state button only when no workspaces)
+      await main.getByRole('button', { name: 'Open from Directory' }).first().click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
@@ -401,6 +396,7 @@ test.describe('Workspaces — Deployed Site', () => {
       await expect(
         dialog.getByRole('heading', { name: 'Open Workspace from Directory' })
       ).toBeVisible();
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
     });
 
     test('should display the dialog description', async ({ page }) => {
