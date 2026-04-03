@@ -13,10 +13,59 @@ const isCloud = (() => {
 })();
 
 // In cloud mode, /__mockforge/ endpoints don't exist on the registry server.
-// The main API services (dashboard.ts, workspaces.ts, fixtures.ts, etc.) now use
-// /api/v1/ endpoints directly, but some components may still reference /__mockforge/
-// paths. Return a generic empty response to prevent 404 errors.
-function createCloudStubResponse(_url: string): Response {
+// The main API services (dashboard, workspaces, services, fixtures, federation)
+// now use /api/v1/ endpoints directly. Components that still reference /__mockforge/
+// paths get shaped stub responses to prevent crashes.
+function createCloudStubResponse(url: string): Response {
+  const path = new URL(url, window.location.origin).pathname;
+
+  // Reality level — needed by RealitySlider component
+  if (path === '/__mockforge/reality/level') {
+    return new Response(JSON.stringify({ success: true, data: {
+      level: 1, level_name: 'Cloud', description: 'Cloud-hosted mock',
+      chaos: { enabled: false, error_rate: 0, delay_rate: 0 },
+      latency: { base_ms: 0, jitter_ms: 0 },
+      mockai: { enabled: false },
+    }}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Config — needed by Config page components
+  if (path === '/__mockforge/config') {
+    return new Response(JSON.stringify({ success: true, data: {
+      latency: { enabled: false, base_ms: 0, jitter_ms: 0, tag_overrides: {} },
+      faults: { enabled: false, failure_rate: 0, status_codes: [] },
+      proxy: { enabled: false, upstream_url: null, timeout_seconds: 30 },
+      validation: { mode: 'disabled', aggregate_errors: false, validate_responses: false, overrides: {} },
+    }}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Time travel — needed by TimeTravelWidget
+  if (path.startsWith('/__mockforge/time-travel')) {
+    return new Response(JSON.stringify({ success: true, data: {
+      enabled: false, current_time: new Date().toISOString(), scale: 1.0,
+      mutations: [], cron_jobs: [],
+    }}), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Reality presets
+  if (path.startsWith('/__mockforge/reality/presets')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Logs — needed by RequestLog component
+  if (path === '/__mockforge/logs' || path.startsWith('/__mockforge/logs?')) {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Routes — needed by Services page in local mode
+  if (path === '/__mockforge/routes') {
+    return new Response(JSON.stringify({ success: true, data: [] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Generic fallback for any other /__mockforge/ paths
   return new Response(JSON.stringify({ success: true, data: {} }),
     { status: 200, headers: { 'Content-Type': 'application/json' } });
 }
