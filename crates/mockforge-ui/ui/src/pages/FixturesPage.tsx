@@ -24,11 +24,15 @@ import {
 import { toast } from 'sonner';
 
 
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+
 export function FixturesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<string>('all');
   const [selectedFixture, setSelectedFixture] = useState<FixtureInfo | null>(null);
   const [isViewingFixture, setIsViewingFixture] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newFixture, setNewFixture] = useState({ name: '', path: '', method: 'GET', description: '' });
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [fixtureToRename, setFixtureToRename] = useState<FixtureInfo | null>(null);
   const [newFixtureName, setNewFixtureName] = useState('');
@@ -37,6 +41,32 @@ export function FixturesPage() {
   const [newFixturePath, setNewFixturePath] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [fixtureToDelete, setFixtureToDelete] = useState<FixtureInfo | null>(null);
+
+  const handleCreateFixture = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const apiBase = isCloud ? '/api/v1/fixtures' : '/__mockforge/fixtures';
+      const response = await fetch(apiBase, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(newFixture),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to create fixture: ${response.status}`);
+      }
+      toast.success('Fixture created successfully');
+      setIsCreateDialogOpen(false);
+      setNewFixture({ name: '', path: '', method: 'GET', description: '' });
+      refetch();
+    } catch (error) {
+      logger.error('Error creating fixture', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create fixture');
+    }
+  };
 
   const { data: fixtures, isLoading, error, refetch } = useFixtures();
 
@@ -162,6 +192,7 @@ export function FixturesPage() {
             <Button
               variant="default"
               size="sm"
+              onClick={() => setIsCreateDialogOpen(true)}
               className="flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -258,7 +289,10 @@ export function FixturesPage() {
                   : "No fixtures match your current search criteria. Try adjusting your filters."
               }
               action={
-                <Button className="flex items-center gap-2">
+                <Button
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
                   <Plus className="h-4 w-4" />
                   Create First Fixture
                 </Button>
@@ -369,6 +403,79 @@ export function FixturesPage() {
           )}
         </ModernCard>
       </Section>
+
+      {/* Create Fixture Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Fixture</DialogTitle>
+            <DialogClose onClick={() => setIsCreateDialogOpen(false)} />
+          </DialogHeader>
+          <DialogDescription>
+            Create a new mock response fixture for your API endpoints.
+          </DialogDescription>
+
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Fixture Name</label>
+              <Input
+                value={newFixture.name}
+                onChange={(e) => setNewFixture({ ...newFixture, name: e.target.value })}
+                placeholder="e.g., Get Users Response"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Path</label>
+              <Input
+                value={newFixture.path}
+                onChange={(e) => setNewFixture({ ...newFixture, path: e.target.value })}
+                placeholder="e.g., /api/users"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">HTTP Method</label>
+              <select
+                value={newFixture.method}
+                onChange={(e) => setNewFixture({ ...newFixture, method: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+                <option value="PATCH">PATCH</option>
+                <option value="HEAD">HEAD</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Description</label>
+              <Input
+                value={newFixture.description}
+                onChange={(e) => setNewFixture({ ...newFixture, description: e.target.value })}
+                placeholder="Optional description"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateFixture}
+              disabled={!newFixture.name.trim()}
+            >
+              Create Fixture
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Fixture Viewer Dialog */}
       <Dialog open={isViewingFixture} onOpenChange={setIsViewingFixture}>

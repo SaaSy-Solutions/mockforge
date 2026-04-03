@@ -238,7 +238,151 @@ test.describe('Fixtures — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Navigation
+  // 5. Create Fixture Dialog
+  // ---------------------------------------------------------------------------
+  test.describe('Create Fixture Dialog', () => {
+    test('should open the Create Fixture dialog from "New Fixture" button', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('Create New Fixture')).toBeVisible();
+    });
+
+    test('should open the Create Fixture dialog from empty state button', async ({ page }) => {
+      const main = mainContent(page);
+      const hasEmpty = await main.getByRole('heading', { name: 'No fixtures found' })
+        .isVisible({ timeout: 3000 }).catch(() => false);
+
+      // Use empty state CTA or header button
+      if (hasEmpty) {
+        await main.getByRole('button', { name: 'Create First Fixture' }).click();
+      } else {
+        await main.getByRole('button', { name: 'New Fixture' }).click();
+      }
+      await page.waitForTimeout(500);
+
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('Create New Fixture')).toBeVisible();
+    });
+
+    test('should display all form fields in the dialog', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByText('Fixture Name')).toBeVisible();
+      await expect(dialog.getByPlaceholder('e.g., Get Users Response')).toBeVisible();
+      await expect(dialog.getByText('Path')).toBeVisible();
+      await expect(dialog.getByPlaceholder('e.g., /api/users')).toBeVisible();
+      await expect(dialog.getByText('HTTP Method')).toBeVisible();
+      await expect(dialog.getByText('Description')).toBeVisible();
+    });
+
+    test('should disable Create button when name is empty', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      await expect(
+        page.getByRole('dialog').getByRole('button', { name: 'Create Fixture' })
+      ).toBeDisabled();
+    });
+
+    test('should enable Create button when name is filled', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await dialog.getByPlaceholder('e.g., Get Users Response').fill('Test Fixture');
+      await page.waitForTimeout(300);
+
+      await expect(
+        dialog.getByRole('button', { name: 'Create Fixture' })
+      ).toBeEnabled();
+    });
+
+    test('should close dialog when Cancel is clicked', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.waitForTimeout(500);
+
+      await expect(dialog).not.toBeVisible();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Fixture CRUD Flow
+  // ---------------------------------------------------------------------------
+  test.describe('Fixture CRUD Flow', () => {
+    const testFixtureName = `E2E Test Fixture ${Date.now()}`;
+
+    test('should create a fixture, see it in the list, and delete it', async ({ page }) => {
+      const main = mainContent(page);
+
+      // Step 1: Open create dialog
+      await main.getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+
+      // Step 2: Fill in form
+      await dialog.getByPlaceholder('e.g., Get Users Response').fill(testFixtureName);
+      await dialog.getByPlaceholder('e.g., /api/users').fill('/api/e2e-test');
+      await dialog.getByPlaceholder('Optional description').fill('Created by E2E test');
+      await page.waitForTimeout(300);
+
+      // Step 3: Submit
+      await dialog.getByRole('button', { name: 'Create Fixture' }).click();
+      await page.waitForTimeout(3000);
+
+      // Step 4: Verify fixture appears in the list
+      // The fixtures count should be > 0
+      await expect(
+        main.getByText(testFixtureName)
+      ).toBeVisible({ timeout: 10000 });
+
+      // Step 5: Delete the fixture via the API directly (since the delete button
+      // is in a row that requires finding the right fixture entry)
+      // First get the fixture ID from the API
+      const token = await page.evaluate(() => localStorage.getItem('auth_token'));
+      const listResponse = await page.evaluate(async (authToken) => {
+        const res = await fetch('/api/v1/fixtures', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+        return res.json();
+      }, token);
+
+      const testFixture = listResponse.find(
+        (f: { name: string }) => f.name === testFixtureName
+      );
+
+      if (testFixture) {
+        await page.evaluate(async ({ id, authToken }) => {
+          await fetch(`/api/v1/fixtures/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` },
+          });
+        }, { id: testFixture.id, authToken: token });
+      }
+
+      // Step 6: Refresh and verify it's gone
+      await main.getByRole('button', { name: 'Refresh' }).click();
+      await page.waitForTimeout(2000);
+
+      const stillVisible = await main.getByText(testFixtureName)
+        .isVisible({ timeout: 2000 }).catch(() => false);
+      expect(stillVisible).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. Navigation
   // ---------------------------------------------------------------------------
   test.describe('Navigation', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {
