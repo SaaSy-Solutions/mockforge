@@ -20,6 +20,9 @@ class FixturesApiService {
   }
 
   async getFixtures(): Promise<FixtureInfo[]> {
+    if (isCloud) {
+      return fetchJson(FIXTURE_API_BASE) as Promise<FixtureInfo[]>;
+    }
     return fetchJsonWithValidation<FixtureInfo[]>(
       FIXTURE_API_BASE,
       FixturesResponseSchema

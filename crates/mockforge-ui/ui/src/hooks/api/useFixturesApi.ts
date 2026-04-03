@@ -33,15 +33,10 @@ export function useFixtures() {
     queryKey: ['fixtures-v2'],
     queryFn: async () => {
       try {
-        const response = await fetch('/__mockforge/fixtures');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        // Ensure we return an array - data.data is the array from the API response
-        return Array.isArray(data.data) ? data.data : [];
+        const fixtures = await fixturesApi.getFixtures();
+        return Array.isArray(fixtures) ? fixtures : [];
       } catch (error) {
-        logger.error('[FIXTURES ERROR] Failed to fetch fixtures',error);
+        logger.error('[FIXTURES ERROR] Failed to fetch fixtures', error);
         throw error;
       }
     },
