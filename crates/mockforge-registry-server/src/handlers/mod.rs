@@ -5,6 +5,7 @@ pub mod analytics;
 pub mod auth;
 pub mod billing;
 pub mod faq;
+pub mod federations;
 pub mod health;
 pub mod hosted_mocks;
 pub mod legal;

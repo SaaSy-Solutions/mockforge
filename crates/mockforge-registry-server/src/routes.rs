@@ -141,6 +141,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Token rotation
         .route("/api/v1/tokens/{token_id}/rotate", post(handlers::token_rotation::rotate_token))
         .route("/api/v1/tokens/rotation-status", get(handlers::token_rotation::get_tokens_needing_rotation))
+        // Federation routes
+        .route("/api/v1/federation", get(handlers::federations::list_federations))
+        .route("/api/v1/federation", post(handlers::federations::create_federation))
+        .route("/api/v1/federation/{id}", get(handlers::federations::get_federation))
+        .route("/api/v1/federation/{id}", patch(handlers::federations::update_federation))
+        .route("/api/v1/federation/{id}", delete(handlers::federations::delete_federation))
         // Marketplace: scenarios (authenticated)
         .route("/api/v1/marketplace/scenarios/publish", post(handlers::scenarios::publish_scenario))
         .route("/api/v1/marketplace/scenarios/{name}/reviews", post(handlers::scenario_reviews::submit_scenario_review))

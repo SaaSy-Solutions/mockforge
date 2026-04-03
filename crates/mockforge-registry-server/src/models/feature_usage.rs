@@ -28,6 +28,9 @@ pub enum FeatureType {
     OrgInvite,
     MarketplaceSearch,
     MarketplaceDownload,
+    FederationCreate,
+    FederationUpdate,
+    FederationDelete,
 }
 
 /// Feature usage event

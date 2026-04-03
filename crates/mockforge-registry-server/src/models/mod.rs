@@ -3,6 +3,7 @@
 pub mod api_token;
 pub mod audit_log;
 pub mod feature_usage;
+pub mod federation;
 pub mod hosted_mock;
 pub mod login_attempt;
 pub mod mock_environment;
@@ -29,6 +30,7 @@ pub use verification_token::VerificationToken;
 
 pub use api_token::{ApiToken, TokenScope};
 pub use audit_log::{record_audit_event, AuditEventType};
+pub use federation::Federation;
 pub use hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 pub use org_template::OrgTemplate;
 pub use organization::{OrgMember, OrgRole, Organization, Plan};

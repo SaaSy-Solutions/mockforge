@@ -2,6 +2,14 @@ import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack
 
 const API_BASE = '/api/v1/federation';
 
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('auth_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export interface Federation {
   id: string;
   name: string;
@@ -17,7 +25,7 @@ export interface FederationService {
   workspace_id: string;
   base_path: string;
   reality_level: 'real' | 'mock_v3' | 'blended' | 'chaos_driven';
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
   dependencies?: string[];
 }
 
@@ -38,7 +46,7 @@ export interface RouteRequest {
   path: string;
   method: string;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
 }
 
 export interface RouteResponse {
@@ -54,15 +62,17 @@ export const useFederations = (
   return useQuery<Federation[], Error>({
     queryKey: ['federations', orgId],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}?org_id=${orgId}`);
+      const response = await fetch(`${API_BASE}?org_id=${orgId}`, {
+        headers: authHeaders(),
+      });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to fetch federations');
       }
-      const data = await response.json();
-      return data;
+      return response.json();
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !!orgId,
+    refetchInterval: 30000,
   });
 };
 
@@ -71,14 +81,16 @@ export const useFederation = (id: string): UseQueryResult<Federation, Error> => 
   return useQuery<Federation, Error>({
     queryKey: ['federation', id],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${id}`);
+      const response = await fetch(`${API_BASE}/${id}`, {
+        headers: authHeaders(),
+      });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to fetch federation');
       }
-      const data = await response.json();
-      return data;
+      return response.json();
     },
+    enabled: !!id,
   });
 };
 
@@ -90,17 +102,17 @@ export const useCreateFederation = () => {
     mutationFn: async (request) => {
       const response = await fetch(API_BASE, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(request),
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to create federation');
       }
       return response.json();
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['federations', variables.org_id] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['federations'] });
     },
   });
 };
@@ -113,11 +125,11 @@ export const useUpdateFederation = () => {
     mutationFn: async ({ id, data }) => {
       const response = await fetch(`${API_BASE}/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(data),
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to update federation');
       }
       return response.json();
@@ -137,9 +149,10 @@ export const useDeleteFederation = () => {
     mutationFn: async (id) => {
       const response = await fetch(`${API_BASE}/${id}`, {
         method: 'DELETE',
+        headers: authHeaders(),
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to delete federation');
       }
     },
@@ -155,11 +168,11 @@ export const useRouteRequest = () => {
     mutationFn: async ({ federationId, request }) => {
       const response = await fetch(`${API_BASE}/${federationId}/route`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify(request),
       });
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to route request');
       }
       return response.json();

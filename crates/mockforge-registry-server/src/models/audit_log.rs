@@ -46,6 +46,10 @@ pub enum AuditEventType {
     EmailChanged,
     TwoFactorEnabled,
     TwoFactorDisabled,
+    // Federation
+    FederationCreated,
+    FederationUpdated,
+    FederationDeleted,
     // Admin actions
     AdminImpersonation,
 }
