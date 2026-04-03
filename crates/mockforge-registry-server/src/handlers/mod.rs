@@ -4,6 +4,7 @@ pub mod admin;
 pub mod analytics;
 pub mod auth;
 pub mod billing;
+pub mod cloud_workspaces;
 pub mod faq;
 pub mod federations;
 pub mod health;

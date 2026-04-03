@@ -31,6 +31,9 @@ pub enum FeatureType {
     FederationCreate,
     FederationUpdate,
     FederationDelete,
+    WorkspaceCreate,
+    WorkspaceUpdate,
+    WorkspaceDelete,
 }
 
 /// Feature usage event

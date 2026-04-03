@@ -37,7 +37,8 @@ import {
 } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation } from './client';
 
-const WORKSPACE_API_BASE = '/__mockforge/workspaces';
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const WORKSPACE_API_BASE = isCloud ? '/api/v1/workspaces' : '/__mockforge/workspaces';
 
 class WorkspacesApiMixin {
   // ==================== WORKSPACE CRUD ====================

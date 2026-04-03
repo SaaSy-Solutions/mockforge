@@ -141,6 +141,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Token rotation
         .route("/api/v1/tokens/{token_id}/rotate", post(handlers::token_rotation::rotate_token))
         .route("/api/v1/tokens/rotation-status", get(handlers::token_rotation::get_tokens_needing_rotation))
+        // Workspace routes
+        .route("/api/v1/workspaces", get(handlers::cloud_workspaces::list_workspaces))
+        .route("/api/v1/workspaces", post(handlers::cloud_workspaces::create_workspace))
+        .route("/api/v1/workspaces/{id}", get(handlers::cloud_workspaces::get_workspace))
+        .route("/api/v1/workspaces/{id}", patch(handlers::cloud_workspaces::update_workspace))
+        .route("/api/v1/workspaces/{id}", delete(handlers::cloud_workspaces::delete_workspace))
         // Federation routes
         .route("/api/v1/federation", get(handlers::federations::list_federations))
         .route("/api/v1/federation", post(handlers::federations::create_federation))
