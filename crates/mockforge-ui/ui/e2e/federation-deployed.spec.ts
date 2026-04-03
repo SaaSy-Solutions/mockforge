@@ -250,7 +250,7 @@ test.describe('Federation — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       // Should show service fields: Service Name, Workspace ID, Base Path, Reality Level
-      await expect(main.getByText('Service Name')).toBeVisible();
+      await expect(main.getByText('Service Name', { exact: true })).toBeVisible();
       await expect(main.getByText('Base Path')).toBeVisible();
       await expect(main.getByText('Reality Level')).toBeVisible();
     });
