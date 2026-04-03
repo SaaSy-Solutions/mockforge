@@ -190,13 +190,18 @@ const isCloudMode = !!import.meta.env.VITE_API_BASE_URL;
 const cloudNavItemIds = new Set([
   'dashboard',
   'workspaces',
+  'federation',
   'services',
   'fixtures',
   'hosted-mocks',
+  'template-marketplace',
+  'plugin-registry',
+  'pillar-analytics',
   'config',
   'organization',
   'billing',
   'api-tokens',
+  'byok',
   'usage',
 ]);
 
