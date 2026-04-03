@@ -4,6 +4,7 @@ pub mod admin;
 pub mod analytics;
 pub mod auth;
 pub mod billing;
+pub mod cloud_dashboard;
 pub mod cloud_fixtures;
 pub mod cloud_services;
 pub mod cloud_workspaces;

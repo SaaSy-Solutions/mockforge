@@ -141,6 +141,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Token rotation
         .route("/api/v1/tokens/{token_id}/rotate", post(handlers::token_rotation::rotate_token))
         .route("/api/v1/tokens/rotation-status", get(handlers::token_rotation::get_tokens_needing_rotation))
+        // Cloud dashboard routes
+        .route("/api/v1/dashboard", get(handlers::cloud_dashboard::get_dashboard))
+        .route("/api/v1/dashboard/health", get(handlers::cloud_dashboard::get_health))
+        .route("/api/v1/dashboard/logs", get(handlers::cloud_dashboard::get_logs))
         // Workspace routes
         .route("/api/v1/workspaces", get(handlers::cloud_workspaces::list_workspaces))
         .route("/api/v1/workspaces", post(handlers::cloud_workspaces::create_workspace))
