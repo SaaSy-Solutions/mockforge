@@ -80,13 +80,13 @@ test.describe('Time Travel — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Time Travel')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Time Travel').first()).toBeVisible();
     });
 
     test('should display the status card', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Time Travel Status')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Time Travel Status').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the tabs section', async ({ page }) => {
@@ -104,7 +104,7 @@ test.describe('Time Travel — Deployed Site', () => {
     test('should display the status card with icon', async ({ page }) => {
       const main = mainContent(page);
       // The status card contains the Clock icon and "Time Travel Status" heading
-      await expect(main.getByText('Time Travel Status')).toBeVisible();
+      await expect(main.getByText('Time Travel Status').first()).toBeVisible();
 
       // Should show either "Virtual time is active" or "Using real time"
       const hasActive = await main
@@ -127,7 +127,7 @@ test.describe('Time Travel — Deployed Site', () => {
         .catch(() => false);
 
       if (isActive) {
-        await expect(main.getByText('Active')).toBeVisible();
+        await expect(main.getByText('Active').first()).toBeVisible();
       }
     });
 
@@ -140,12 +140,12 @@ test.describe('Time Travel — Deployed Site', () => {
 
       if (isActive) {
         // When active, should show Virtual Time, Time Scale, and Real Time cards
-        await expect(main.getByText('Virtual Time')).toBeVisible({ timeout: 5000 });
-        await expect(main.getByText('Time Scale')).toBeVisible();
-        await expect(main.getByText('Real Time')).toBeVisible();
+        await expect(main.getByText('Virtual Time').first()).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText('Time Scale').first()).toBeVisible();
+        await expect(main.getByText('Real Time').first()).toBeVisible();
       } else {
         // When disabled, should show Real Time card
-        await expect(main.getByText('Real Time')).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText('Real Time').first()).toBeVisible({ timeout: 5000 });
       }
     });
 
@@ -193,7 +193,7 @@ test.describe('Time Travel — Deployed Site', () => {
         .catch(() => false);
 
       if (isDisabled) {
-        await expect(main.getByText('Initial Time (ISO 8601, optional)')).toBeVisible();
+        await expect(main.getByText('Initial Time (ISO 8601, optional)').first()).toBeVisible();
         await expect(
           main.getByPlaceholder('2025-01-01T00:00:00Z')
         ).toBeVisible();
@@ -208,7 +208,7 @@ test.describe('Time Travel — Deployed Site', () => {
         .catch(() => false);
 
       if (isDisabled) {
-        await expect(main.getByText('Time Scale (1.0 = real time)')).toBeVisible();
+        await expect(main.getByText('Time Scale (1.0 = real time)').first()).toBeVisible();
         await expect(main.getByPlaceholder('1.0')).toBeVisible();
       }
     });
@@ -239,7 +239,7 @@ test.describe('Time Travel — Deployed Site', () => {
 
       if (isActive) {
         // Advance Duration input and button
-        await expect(main.getByText('Advance Duration')).toBeVisible();
+        await expect(main.getByText('Advance Duration').first()).toBeVisible();
         await expect(main.getByPlaceholder('1h')).toBeVisible();
         await expect(
           main.getByRole('button', { name: /Advance/i })
@@ -302,7 +302,7 @@ test.describe('Time Travel — Deployed Site', () => {
     test('should default to Cron Jobs tab', async ({ page }) => {
       const main = mainContent(page);
       // Cron Jobs tab content should be visible by default
-      await expect(main.getByText('Scheduled Cron Jobs')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Scheduled Cron Jobs').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to Mutation Rules tab', async ({ page }) => {
@@ -310,7 +310,7 @@ test.describe('Time Travel — Deployed Site', () => {
       await main.getByRole('button', { name: /Mutation Rules/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Data Mutation Rules')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Data Mutation Rules').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to Scenarios tab', async ({ page }) => {
@@ -318,7 +318,7 @@ test.describe('Time Travel — Deployed Site', () => {
       await main.getByRole('button', { name: /Scenarios/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Time Travel Scenarios')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Time Travel Scenarios').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch back to Cron Jobs tab after visiting other tabs', async ({ page }) => {
@@ -327,12 +327,12 @@ test.describe('Time Travel — Deployed Site', () => {
       // Switch to Scenarios
       await main.getByRole('button', { name: /Scenarios/i }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Time Travel Scenarios')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Time Travel Scenarios').first()).toBeVisible({ timeout: 5000 });
 
       // Switch back to Cron Jobs
       await main.getByRole('button', { name: /Cron Jobs/i }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Scheduled Cron Jobs')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Scheduled Cron Jobs').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -342,7 +342,7 @@ test.describe('Time Travel — Deployed Site', () => {
   test.describe('Cron Jobs Tab', () => {
     test('should display the Scheduled Cron Jobs heading', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Scheduled Cron Jobs')).toBeVisible();
+      await expect(main.getByText('Scheduled Cron Jobs').first()).toBeVisible();
     });
 
     test('should show cron job cards or empty state', async ({ page }) => {
@@ -412,7 +412,7 @@ test.describe('Time Travel — Deployed Site', () => {
 
       if (hasEmpty) {
         await expect(
-          main.getByText('Create cron jobs to schedule recurring events.')
+          main.getByText('Create cron jobs to schedule recurring events.').first()
         ).toBeVisible();
       }
     });
@@ -427,7 +427,7 @@ test.describe('Time Travel — Deployed Site', () => {
       await main.getByRole('button', { name: /Mutation Rules/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Data Mutation Rules')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Data Mutation Rules').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should show mutation rule cards or empty state', async ({ page }) => {
@@ -492,7 +492,7 @@ test.describe('Time Travel — Deployed Site', () => {
 
       if (hasEmpty) {
         await expect(
-          main.getByText('Create mutation rules to automatically modify data based on time triggers.')
+          main.getByText('Create mutation rules to automatically modify data based on time triggers.').first()
         ).toBeVisible();
       }
     });
@@ -609,8 +609,8 @@ test.describe('Time Travel — Deployed Site', () => {
 
       if (isDisabled) {
         // Check that the form inputs have associated labels
-        await expect(main.getByText('Initial Time (ISO 8601, optional)')).toBeVisible();
-        await expect(main.getByText('Time Scale (1.0 = real time)')).toBeVisible();
+        await expect(main.getByText('Initial Time (ISO 8601, optional)').first()).toBeVisible();
+        await expect(main.getByText('Time Scale (1.0 = real time)').first()).toBeVisible();
       }
     });
   });
@@ -677,7 +677,7 @@ test.describe('Time Travel — Deployed Site', () => {
       await expect(
         main.getByRole('heading', { name: 'Time Travel', level: 1 })
       ).toBeVisible();
-      await expect(main.getByText('Scheduled Cron Jobs')).toBeVisible();
+      await expect(main.getByText('Scheduled Cron Jobs').first()).toBeVisible();
     });
   });
 });

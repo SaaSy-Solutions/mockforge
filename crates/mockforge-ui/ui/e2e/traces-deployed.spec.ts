@@ -82,8 +82,8 @@ test.describe('Distributed Traces — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Traces')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Traces').first()).toBeVisible();
     });
 
     test('should display the Refresh button or error retry', async ({ page }) => {
@@ -190,7 +190,7 @@ test.describe('Distributed Traces — Deployed Site', () => {
           .catch(() => false);
 
         if (hasZeroTraces) {
-          await expect(main.getByText('0 traces found')).toBeVisible();
+          await expect(main.getByText('0 traces found').first()).toBeVisible();
         }
 
         // Clear search
@@ -371,7 +371,7 @@ test.describe('Distributed Traces — Deployed Site', () => {
 
       if (!hasError) {
         await expect(
-          main.getByText('Select a trace to view details')
+          main.getByText('Select a trace to view details').first()
         ).toBeVisible({ timeout: 5000 });
       }
     });
@@ -443,10 +443,10 @@ test.describe('Distributed Traces — Deployed Site', () => {
           expect(hasSelectText).toBeFalsy();
 
           // Trace Info fields should be visible
-          await expect(main.getByText('Trace ID')).toBeVisible({ timeout: 5000 });
-          await expect(main.getByText('Duration')).toBeVisible();
-          await expect(main.getByText('Service')).toBeVisible();
-          await expect(main.getByText('Status')).toBeVisible();
+          await expect(main.getByText('Trace ID').first()).toBeVisible({ timeout: 5000 });
+          await expect(main.getByText('Duration').first()).toBeVisible();
+          await expect(main.getByText('Service').first()).toBeVisible();
+          await expect(main.getByText('Status').first()).toBeVisible();
         }
       }
     });
@@ -472,7 +472,7 @@ test.describe('Distributed Traces — Deployed Site', () => {
 
           // Span Tree heading should appear
           await expect(
-            main.getByText('Span Tree')
+            main.getByText('Span Tree').first()
           ).toBeVisible({ timeout: 5000 });
         }
       }

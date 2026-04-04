@@ -67,29 +67,29 @@ test.describe('Import API Collections — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Import routes from Postman, Insomnia, or cURL commands')
+        mainContent(page).getByText('Import routes from Postman, Insomnia, or cURL commands').first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Import')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Import').first()).toBeVisible();
     });
 
     test('should display the Upload File section by default', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Upload File')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Upload File').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Preview Import section', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Preview Import')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Preview Import').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Import Routes section', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Import Routes')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Import Routes').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -108,7 +108,7 @@ test.describe('Import API Collections — Deployed Site', () => {
     test('should default to Postman tab', async ({ page }) => {
       const main = mainContent(page);
       // The Postman tab should be active by default with a file upload zone
-      await expect(main.getByText('Drop Postman Collection here')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Drop Postman Collection here').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to Insomnia tab', async ({ page }) => {
@@ -116,7 +116,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /Insomnia/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Drop Insomnia Export here')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Drop Insomnia Export here').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to cURL tab', async ({ page }) => {
@@ -124,7 +124,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /cURL/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Drop cURL Commands here')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Drop cURL Commands here').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to History tab', async ({ page }) => {
@@ -132,7 +132,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /History/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Import History')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Import History').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch back to Postman tab after visiting other tabs', async ({ page }) => {
@@ -141,12 +141,12 @@ test.describe('Import API Collections — Deployed Site', () => {
       // Switch to History
       await main.getByRole('button', { name: /History/i }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Import History')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Import History').first()).toBeVisible({ timeout: 5000 });
 
       // Switch back to Postman
       await main.getByRole('button', { name: /Postman/i }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Drop Postman Collection here')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Drop Postman Collection here').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -156,8 +156,8 @@ test.describe('Import API Collections — Deployed Site', () => {
   test.describe('File Upload Section', () => {
     test('should display the file upload zone on Postman tab', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Drop Postman Collection here')).toBeVisible();
-      await expect(main.getByText('or click to browse files')).toBeVisible();
+      await expect(main.getByText('Drop Postman Collection here').first()).toBeVisible();
+      await expect(main.getByText('or click to browse files').first()).toBeVisible();
     });
 
     test('should display Choose File button on Postman tab', async ({ page }) => {
@@ -172,7 +172,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /Insomnia/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Drop Insomnia Export here')).toBeVisible();
+      await expect(main.getByText('Drop Insomnia Export here').first()).toBeVisible();
       await expect(
         main.getByRole('button', { name: /Choose File/i })
       ).toBeVisible();
@@ -183,7 +183,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /cURL/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Drop cURL Commands here')).toBeVisible();
+      await expect(main.getByText('Drop cURL Commands here').first()).toBeVisible();
       await expect(
         main.getByRole('button', { name: /Choose File/i })
       ).toBeVisible();
@@ -211,14 +211,14 @@ test.describe('Import API Collections — Deployed Site', () => {
 
       // Postman tab
       await expect(
-        main.getByText('Upload your postman collection or export file')
+        main.getByText('Upload your postman collection or export file').first()
       ).toBeVisible();
 
       // Insomnia tab
       await main.getByRole('button', { name: /Insomnia/i }).click();
       await page.waitForTimeout(500);
       await expect(
-        main.getByText('Upload your insomnia collection or export file')
+        main.getByText('Upload your insomnia collection or export file').first()
       ).toBeVisible();
     });
   });
@@ -229,15 +229,15 @@ test.describe('Import API Collections — Deployed Site', () => {
   test.describe('Configuration Options', () => {
     test('should display Configuration section on Postman tab', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Configuration')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Configuration').first()).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Optional settings for import processing')
+        main.getByText('Optional settings for import processing').first()
       ).toBeVisible();
     });
 
     test('should display Base URL Override field on Postman tab', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Base URL Override (optional)')).toBeVisible();
+      await expect(main.getByText('Base URL Override (optional)').first()).toBeVisible();
       await expect(
         main.getByPlaceholder('e.g., https://api.example.com')
       ).toBeVisible();
@@ -248,7 +248,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /Insomnia/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Configuration')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Configuration').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display Environment field on Insomnia tab', async ({ page }) => {
@@ -256,7 +256,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /Insomnia/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Environment (optional)')).toBeVisible();
+      await expect(main.getByText('Environment (optional)').first()).toBeVisible();
       await expect(
         main.getByPlaceholder('e.g., dev, staging, prod')
       ).toBeVisible();
@@ -371,7 +371,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await main.getByRole('button', { name: /History/i }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Import History')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Import History').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display history subtitle', async ({ page }) => {
@@ -380,7 +380,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       await expect(
-        main.getByText('View and manage your previous import activities')
+        main.getByText('View and manage your previous import activities').first()
       ).toBeVisible();
     });
 
@@ -422,7 +422,7 @@ test.describe('Import API Collections — Deployed Site', () => {
 
       if (hasEmpty) {
         await expect(
-          main.getByText('Your import history will appear here after you import collections.')
+          main.getByText('Your import history will appear here after you import collections.').first()
         ).toBeVisible();
       }
     });
@@ -604,7 +604,7 @@ test.describe('Import API Collections — Deployed Site', () => {
     test('should have labeled form inputs', async ({ page }) => {
       const main = mainContent(page);
       // The Configuration section has labeled inputs
-      await expect(main.getByText('Base URL Override (optional)')).toBeVisible();
+      await expect(main.getByText('Base URL Override (optional)').first()).toBeVisible();
     });
 
     test('should have accessible buttons with descriptive text', async ({ page }) => {
@@ -685,7 +685,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       await expect(
         main.getByRole('heading', { name: 'Import API Collections', level: 1 })
       ).toBeVisible();
-      await expect(main.getByText('Drop Postman Collection here')).toBeVisible();
+      await expect(main.getByText('Drop Postman Collection here').first()).toBeVisible();
     });
 
     test('should handle page reload gracefully', async ({ page }) => {

@@ -65,14 +65,14 @@ test.describe('Service Status — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Real-time status of MockForge Cloud services')
+        mainContent(page).getByText('Real-time status of MockForge Cloud services').first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Status')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Status').first()).toBeVisible();
     });
 
     test('should display the overall status card or loading/error state', async ({ page }) => {

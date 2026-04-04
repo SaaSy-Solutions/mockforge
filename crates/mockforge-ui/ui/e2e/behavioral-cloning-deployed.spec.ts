@@ -65,7 +65,7 @@ test.describe('Behavioral Cloning — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Record multi-step API flows and replay them as named scenarios'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 

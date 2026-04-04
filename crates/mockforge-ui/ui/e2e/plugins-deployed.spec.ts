@@ -67,13 +67,13 @@ test.describe('Plugins — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Manage authentication, template, response, and datasource plugins'
-        )
+        ).first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
       const hasPlugins = await banner
         .getByText('Plugins')
         .isVisible({ timeout: 3000 })

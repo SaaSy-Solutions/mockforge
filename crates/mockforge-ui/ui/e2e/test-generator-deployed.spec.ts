@@ -44,7 +44,7 @@ test.describe('Test Generator — Deployed Site', () => {
     // Wait for the Test Generator heading to confirm content loaded
     // This page uses MUI Typography h4, which renders as an h4 element
     await expect(
-      mainContent(page).getByText('Test Generator')
+      mainContent(page).getByText('Test Generator').first()
     ).toBeVisible({ timeout: 10000 });
 
     // Small stabilization delay for dynamic content
@@ -62,13 +62,13 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should display the page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Test Generator')
+        mainContent(page).getByText('Test Generator').first()
       ).toBeVisible();
     });
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Generate test cases from recorded API interactions with AI-powered insights')
+        mainContent(page).getByText('Generate test cases from recorded API interactions with AI-powered insights').first()
       ).toBeVisible();
     });
 
@@ -83,19 +83,19 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should display the Configuration panel', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Configuration')
+        mainContent(page).getByText('Configuration').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the empty state when no tests are generated', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Configure and generate tests')
+        mainContent(page).getByText('Configure and generate tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the empty state description', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Select your preferences and click "Generate Tests" to get started')
+        mainContent(page).getByText('Select your preferences and click "Generate Tests" to get started').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -106,7 +106,7 @@ test.describe('Test Generator — Deployed Site', () => {
   test.describe('Configuration Form', () => {
     test('should display the Test Format select', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Test Format')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Test Format').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should have Rust (reqwest) as the default format', async ({ page }) => {
@@ -122,7 +122,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should display the Protocol select', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Protocol')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Protocol').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should have HTTP as the default protocol', async ({ page }) => {
@@ -136,7 +136,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should display the Max Tests input', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Max Tests')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Max Tests').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should have default max tests value of 50', async ({ page }) => {
@@ -189,8 +189,8 @@ test.describe('Test Generator — Deployed Site', () => {
 
         if (hasListbox) {
           // Should display format options
-          await expect(page.getByText('Python (pytest)')).toBeVisible({ timeout: 3000 });
-          await expect(page.getByText('JavaScript (Jest)')).toBeVisible({ timeout: 3000 });
+          await expect(page.getByText('Python (pytest)').first()).toBeVisible({ timeout: 3000 });
+          await expect(page.getByText('JavaScript (Jest)').first()).toBeVisible({ timeout: 3000 });
         }
 
         // Close the dropdown by pressing Escape
@@ -218,9 +218,9 @@ test.describe('Test Generator — Deployed Site', () => {
           .catch(() => false);
 
         if (hasListbox) {
-          await expect(page.getByText('gRPC')).toBeVisible({ timeout: 3000 });
-          await expect(page.getByText('GraphQL')).toBeVisible({ timeout: 3000 });
-          await expect(page.getByText('WebSocket')).toBeVisible({ timeout: 3000 });
+          await expect(page.getByText('gRPC').first()).toBeVisible({ timeout: 3000 });
+          await expect(page.getByText('GraphQL').first()).toBeVisible({ timeout: 3000 });
+          await expect(page.getByText('WebSocket').first()).toBeVisible({ timeout: 3000 });
         }
 
         await page.keyboard.press('Escape');
@@ -234,49 +234,49 @@ test.describe('Test Generator — Deployed Site', () => {
   test.describe('AI Feature Toggles', () => {
     test('should display the AI Features subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('AI Features')
+        mainContent(page).getByText('AI Features').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the AI Descriptions toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('AI Descriptions')
+        mainContent(page).getByText('AI Descriptions').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Generate Fixtures toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Generate Fixtures')
+        mainContent(page).getByText('Generate Fixtures').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Suggest Edge Cases toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Suggest Edge Cases')
+        mainContent(page).getByText('Suggest Edge Cases').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Analyze Test Gaps toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Analyze Test Gaps')
+        mainContent(page).getByText('Analyze Test Gaps').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Optimization subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Optimization')
+        mainContent(page).getByText('Optimization').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Deduplicate Tests toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Deduplicate Tests')
+        mainContent(page).getByText('Deduplicate Tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Optimize Order toggle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Optimize Order')
+        mainContent(page).getByText('Optimize Order').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -364,7 +364,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
       // Page should remain functional — may show loading, results, or error
       await expect(
-        main.getByText('Test Generator')
+        main.getByText('Test Generator').first()
       ).toBeVisible();
     });
 
@@ -384,7 +384,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
       // Either a progress bar or immediate completion/error — both are acceptable
       await expect(
-        main.getByText('Test Generator')
+        main.getByText('Test Generator').first()
       ).toBeVisible();
     });
   });
@@ -395,7 +395,7 @@ test.describe('Test Generator — Deployed Site', () => {
   test.describe('Results Display', () => {
     test('should show empty state when no tests have been generated', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Configure and generate tests')
+        mainContent(page).getByText('Configure and generate tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -412,7 +412,7 @@ test.describe('Test Generator — Deployed Site', () => {
         .catch(() => false);
 
       if (hasGeneratedTests) {
-        await expect(main.getByText('Generated Tests')).toBeVisible();
+        await expect(main.getByText('Generated Tests').first()).toBeVisible();
       }
       // If generation failed, the empty state or error is shown — acceptable
     });
@@ -477,8 +477,8 @@ test.describe('Test Generator — Deployed Site', () => {
         .catch(() => false);
 
       if (hasMetadata) {
-        await expect(main.getByText('Tests Generated')).toBeVisible();
-        await expect(main.getByText('Endpoints Covered')).toBeVisible();
+        await expect(main.getByText('Tests Generated').first()).toBeVisible();
+        await expect(main.getByText('Endpoints Covered').first()).toBeVisible();
       }
     });
   });
@@ -524,7 +524,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
         // Page should remain functional regardless
         await expect(
-          main.getByText('Test Generator')
+          main.getByText('Test Generator').first()
         ).toBeVisible();
       }
     });
@@ -561,7 +561,7 @@ test.describe('Test Generator — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByText('Test Generator')
+        mainContent(page).getByText('Test Generator').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -592,7 +592,7 @@ test.describe('Test Generator — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByText('Test Generator')
+        mainContent(page).getByText('Test Generator').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -620,9 +620,9 @@ test.describe('Test Generator — Deployed Site', () => {
 
     test('should have labeled form controls', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Test Format')).toBeVisible();
-      await expect(main.getByText('Protocol')).toBeVisible();
-      await expect(main.getByText('Max Tests')).toBeVisible();
+      await expect(main.getByText('Test Format').first()).toBeVisible();
+      await expect(main.getByText('Protocol').first()).toBeVisible();
+      await expect(main.getByText('Max Tests').first()).toBeVisible();
     });
 
     test('should have accessible toggle switches with labels', async ({ page }) => {
@@ -637,7 +637,7 @@ test.describe('Test Generator — Deployed Site', () => {
       ];
 
       for (const label of toggleLabels) {
-        await expect(main.getByText(label)).toBeVisible({ timeout: 3000 });
+        await expect(main.getByText(label).first()).toBeVisible({ timeout: 3000 });
       }
     });
 
@@ -703,7 +703,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
       // Page should remain functional
       await expect(
-        main.getByText('Test Generator')
+        main.getByText('Test Generator').first()
       ).toBeVisible();
     });
 
@@ -722,7 +722,7 @@ test.describe('Test Generator — Deployed Site', () => {
 
       // Page should remain functional
       await expect(
-        main.getByText('Test Generator')
+        main.getByText('Test Generator').first()
       ).toBeVisible();
     });
 

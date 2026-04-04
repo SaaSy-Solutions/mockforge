@@ -66,7 +66,7 @@ test.describe('API Flight Recorder — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Record, replay, and analyze API interactions')
+        mainContent(page).getByText('Record, replay, and analyze API interactions').first()
       ).toBeVisible();
     });
 
@@ -78,8 +78,8 @@ test.describe('API Flight Recorder — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Recorder')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Recorder').first()).toBeVisible();
     });
   });
 
@@ -114,10 +114,10 @@ test.describe('API Flight Recorder — Deployed Site', () => {
       if (isRecording) {
         // The recording-in-progress alert should be visible
         await expect(
-          main.getByText('Recording in Progress')
+          main.getByText('Recording in Progress').first()
         ).toBeVisible({ timeout: 3000 });
         await expect(
-          main.getByText('All API requests are being recorded')
+          main.getByText('All API requests are being recorded').first()
         ).toBeVisible();
       }
     });
@@ -379,7 +379,7 @@ test.describe('API Flight Recorder — Deployed Site', () => {
         .catch(() => false);
 
       if (hasPlaceholder) {
-        await expect(main.getByText('Select a request to view details')).toBeVisible();
+        await expect(main.getByText('Select a request to view details').first()).toBeVisible();
       }
     });
 

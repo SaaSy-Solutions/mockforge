@@ -70,20 +70,20 @@ test.describe('Integration Test Builder — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Build multi-step integration tests with state management and variable extraction'
-        )
+        ).first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Integration Test Builder')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Integration Test Builder').first()).toBeVisible();
     });
 
     test('should display the Workflow Configuration section', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Workflow Configuration')
+        main.getByText('Workflow Configuration').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -104,7 +104,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
     test('should display the empty state when no steps exist', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('No steps added yet')
+        main.getByText('No steps added yet').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -179,7 +179,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
     test('should display the Generate Code section', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Generate Code')
+        main.getByText('Generate Code').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -195,7 +195,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
 
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
       await expect(
-        page.getByRole('dialog').getByText('Add Step')
+        page.getByRole('dialog').getByText('Add Step').first()
       ).toBeVisible();
 
       // Clean up — close dialog
@@ -222,7 +222,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       // Step should appear in the list
-      await expect(main.getByText('Get Users')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Get Users').first()).toBeVisible({ timeout: 5000 });
 
       // Empty state should be gone
       const hasEmptyState = await main
@@ -265,7 +265,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
 
       if (hasEmptyState) {
         await expect(
-          main.getByText('Click "Add Step" to create your first test step')
+          main.getByText('Click "Add Step" to create your first test step').first()
         ).toBeVisible();
       }
     });
@@ -295,8 +295,8 @@ test.describe('Integration Test Builder — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       // Verify the step is displayed with method chip
-      await expect(main.getByText('Create User')).toBeVisible();
-      await expect(main.getByText('POST')).toBeVisible();
+      await expect(main.getByText('Create User').first()).toBeVisible();
+      await expect(main.getByText('POST').first()).toBeVisible();
     });
 
     test('should display step endpoint path', async ({ page }) => {
@@ -314,7 +314,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
       await dialog.getByRole('button', { name: 'Save' }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('/api/items')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('/api/items').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display edit and delete buttons for each step', async ({ page }) => {
@@ -370,7 +370,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
-      await expect(dialog.getByText('Extract Variables')).toBeVisible();
+      await expect(dialog.getByText('Extract Variables').first()).toBeVisible();
 
       // Clean up
       await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -384,7 +384,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
 
       const dialog = page.getByRole('dialog');
       // MUI Select shows the selected value as text
-      await expect(dialog.getByText('GET')).toBeVisible();
+      await expect(dialog.getByText('GET').first()).toBeVisible();
 
       // Clean up
       await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -486,7 +486,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
         // Dialog should show Edit Step
         await expect(page.getByRole('dialog')).toBeVisible();
         await expect(
-          page.getByRole('dialog').getByText('Edit Step')
+          page.getByRole('dialog').getByText('Edit Step').first()
         ).toBeVisible();
 
         // Clean up
@@ -692,7 +692,7 @@ test.describe('Integration Test Builder — Deployed Site', () => {
 
       // Dialog should have a title
       await expect(
-        dialog.getByText('Add Step')
+        dialog.getByText('Add Step').first()
       ).toBeVisible();
 
       // Clean up

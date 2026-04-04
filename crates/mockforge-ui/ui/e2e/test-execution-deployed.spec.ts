@@ -44,7 +44,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
     // Wait for the Test Execution Dashboard heading to confirm content loaded
     // This page uses MUI Typography h4, not a standard h1
     await expect(
-      mainContent(page).getByText('Test Execution Dashboard')
+      mainContent(page).getByText('Test Execution Dashboard').first()
     ).toBeVisible({ timeout: 10000 });
 
     // Small stabilization delay for dynamic content
@@ -62,7 +62,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
     test('should display the page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Test Execution Dashboard')
+        mainContent(page).getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
 
@@ -118,7 +118,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
   test.describe('Metrics Cards', () => {
     test('should display the Total Executions card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Total Executions')
+        mainContent(page).getByText('Total Executions').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -132,7 +132,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
     test('should display the Success Rate card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Success Rate')
+        mainContent(page).getByText('Success Rate').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -146,7 +146,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
     test('should display the Failed Tests card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Failed Tests')
+        mainContent(page).getByText('Failed Tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -159,7 +159,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
     test('should display the Avg Duration card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Avg Duration')
+        mainContent(page).getByText('Avg Duration').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -178,13 +178,13 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
   test.describe('Charts', () => {
     test('should display the Executions Over Time chart heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Executions Over Time')
+        mainContent(page).getByText('Executions Over Time').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Status Distribution chart heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Status Distribution')
+        mainContent(page).getByText('Status Distribution').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -305,13 +305,13 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
       const main = mainContent(page);
       const table = main.locator('table');
 
-      await expect(table.getByText('Status', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Workflow', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Started', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Duration', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Progress', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Success Rate', { exact: true })).toBeVisible({ timeout: 5000 });
-      await expect(table.getByText('Actions', { exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Status', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Workflow', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Started', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Duration', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Progress', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Success Rate', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+      await expect(table.getByText('Actions', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display execution rows with workflow names', async ({ page }) => {
@@ -452,7 +452,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
       // Page should remain functional after refresh
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
 
@@ -473,7 +473,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
       // Progress bar may appear briefly — page should remain functional
       await page.waitForTimeout(2000);
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
 
@@ -522,7 +522,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
         // Page should remain functional
         await expect(
-          main.getByText('Test Execution Dashboard')
+          main.getByText('Test Execution Dashboard').first()
         ).toBeVisible();
       }
     });
@@ -542,7 +542,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
         // Page should remain functional
         await expect(
-          main.getByText('Test Execution Dashboard')
+          main.getByText('Test Execution Dashboard').first()
         ).toBeVisible();
       }
     });
@@ -560,7 +560,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
       // Either way the page should function
       await page.waitForTimeout(2000);
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
   });
@@ -596,7 +596,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByText('Test Execution Dashboard')
+        mainContent(page).getByText('Test Execution Dashboard').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -627,7 +627,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByText('Test Execution Dashboard')
+        mainContent(page).getByText('Test Execution Dashboard').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -742,12 +742,12 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
       // Page should remain functional
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
 
       // All sections should still be present
-      await expect(main.getByText('Total Executions')).toBeVisible();
-      await expect(main.getByText('Executions Over Time')).toBeVisible();
+      await expect(main.getByText('Total Executions').first()).toBeVisible();
+      await expect(main.getByText('Executions Over Time').first()).toBeVisible();
     });
 
     test('should remain functional after searching and clearing', async ({ page }) => {
@@ -772,7 +772,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
       // Page should remain functional
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
 
@@ -799,7 +799,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
       // Page should remain functional
       await expect(
-        main.getByText('Test Execution Dashboard')
+        main.getByText('Test Execution Dashboard').first()
       ).toBeVisible();
     });
   });

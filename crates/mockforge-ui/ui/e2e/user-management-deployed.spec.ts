@@ -58,13 +58,13 @@ test.describe('User Management — Deployed Site', () => {
     test('should display heading and subtitle', async ({ page }) => {
       const main = mainContent(page);
       await expect(main.getByRole('heading', { name: 'User Management', level: 1 })).toBeVisible();
-      await expect(main.getByText('Manage users, teams, invitations, and quotas')).toBeVisible();
+      await expect(main.getByText('Manage users, teams, invitations, and quotas').first()).toBeVisible();
     });
 
     test('should display breadcrumbs', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('User Management')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('User Management').first()).toBeVisible();
     });
   });
 
@@ -81,14 +81,14 @@ test.describe('User Management — Deployed Site', () => {
     test('should default to the Users tab', async ({ page }) => {
       const main = mainContent(page);
       // Users tab content should be visible by default
-      await expect(main.getByText('Manage user accounts and permissions')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Manage user accounts and permissions').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to the Teams tab', async ({ page }) => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Teams' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Manage team workspaces and members')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Manage team workspaces and members').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to the Invitations tab', async ({ page }) => {
@@ -102,14 +102,14 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Quotas' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Usage Quotas')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Usage Quotas').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch to the Analytics tab', async ({ page }) => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Analytics' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Total Users')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Total Users').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should switch back to Users tab from another tab', async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe('User Management — Deployed Site', () => {
       await page.waitForTimeout(500);
       await main.getByRole('button', { name: 'Users' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Manage user accounts and permissions')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Manage user accounts and permissions').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -126,7 +126,7 @@ test.describe('User Management — Deployed Site', () => {
     test('should display the Users card heading', async ({ page }) => {
       const main = mainContent(page);
       await expect(main.getByText('Users').first()).toBeVisible();
-      await expect(main.getByText('Manage user accounts and permissions')).toBeVisible();
+      await expect(main.getByText('Manage user accounts and permissions').first()).toBeVisible();
     });
 
     test('should display user cards or loading state', async ({ page }) => {
@@ -188,7 +188,7 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Teams' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Manage team workspaces and members')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Manage team workspaces and members').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display team cards or loading state', async ({ page }) => {
@@ -231,7 +231,7 @@ test.describe('User Management — Deployed Site', () => {
       await main.getByRole('button', { name: 'Invitations' }).click();
       await page.waitForTimeout(500);
       await expect(main.getByText('Send Invitation').first()).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Invite new users to join your workspace')).toBeVisible();
+      await expect(main.getByText('Invite new users to join your workspace').first()).toBeVisible();
     });
 
     test('should display the Email Address input', async ({ page }) => {
@@ -286,8 +286,8 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Invitations' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Pending Invitations')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Manage sent invitations')).toBeVisible();
+      await expect(main.getByText('Pending Invitations').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Manage sent invitations').first()).toBeVisible();
     });
 
     test('should display pending invitation cards or empty state', async ({ page }) => {
@@ -320,8 +320,8 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Quotas' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Usage Quotas')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Monitor your current usage against limits')).toBeVisible();
+      await expect(main.getByText('Usage Quotas').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Monitor your current usage against limits').first()).toBeVisible();
     });
 
     test('should display the Users progress bar', async ({ page }) => {
@@ -332,7 +332,7 @@ test.describe('User Management — Deployed Site', () => {
       const hasUsersQuota = await main.getByText('Users', { exact: true })
         .isVisible({ timeout: 5000 }).catch(() => false);
       if (hasUsersQuota) {
-        await expect(main.getByText('Users', { exact: true })).toBeVisible();
+        await expect(main.getByText('Users', { exact: true }).first()).toBeVisible();
       }
     });
 
@@ -343,7 +343,7 @@ test.describe('User Management — Deployed Site', () => {
       const hasTeamsQuota = await main.getByText('Teams', { exact: true })
         .isVisible({ timeout: 5000 }).catch(() => false);
       if (hasTeamsQuota) {
-        await expect(main.getByText('Teams', { exact: true })).toBeVisible();
+        await expect(main.getByText('Teams', { exact: true }).first()).toBeVisible();
       }
     });
 
@@ -354,7 +354,7 @@ test.describe('User Management — Deployed Site', () => {
       const hasRequestsQuota = await main.getByText('Requests This Month')
         .isVisible({ timeout: 5000 }).catch(() => false);
       if (hasRequestsQuota) {
-        await expect(main.getByText('Requests This Month')).toBeVisible();
+        await expect(main.getByText('Requests This Month').first()).toBeVisible();
       }
     });
 
@@ -365,7 +365,7 @@ test.describe('User Management — Deployed Site', () => {
       const hasStorageQuota = await main.getByText('Storage', { exact: true })
         .isVisible({ timeout: 5000 }).catch(() => false);
       if (hasStorageQuota) {
-        await expect(main.getByText('Storage', { exact: true })).toBeVisible();
+        await expect(main.getByText('Storage', { exact: true }).first()).toBeVisible();
       }
     });
 
@@ -387,10 +387,10 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Analytics' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Total Users')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Active Users')).toBeVisible();
-      await expect(main.getByText('New This Month')).toBeVisible();
-      await expect(main.getByText('Total Teams')).toBeVisible();
+      await expect(main.getByText('Total Users').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Active Users').first()).toBeVisible();
+      await expect(main.getByText('New This Month').first()).toBeVisible();
+      await expect(main.getByText('Total Teams').first()).toBeVisible();
     });
 
     test('should display numeric values in stat cards', async ({ page }) => {
@@ -410,21 +410,21 @@ test.describe('User Management — Deployed Site', () => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Analytics' }).click();
       await page.waitForTimeout(500);
-      await expect(main.getByText('Invitation Statistics')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Invitation Statistics').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display Invitations Sent metric', async ({ page }) => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Analytics' }).click();
       await page.waitForTimeout(1000);
-      await expect(main.getByText('Invitations Sent')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Invitations Sent').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display Invitations Accepted metric', async ({ page }) => {
       const main = mainContent(page);
       await main.getByRole('button', { name: 'Analytics' }).click();
       await page.waitForTimeout(1000);
-      await expect(main.getByText('Invitations Accepted')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Invitations Accepted').first()).toBeVisible({ timeout: 5000 });
     });
   });
 

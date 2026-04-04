@@ -79,7 +79,7 @@ test.describe('Resilience Dashboard — Deployed Site', () => {
 
     test('should display the Auto-refresh checkbox', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Auto-refresh (3s)')
+        mainContent(page).getByText('Auto-refresh (3s)').first()
       ).toBeVisible();
     });
   });
@@ -98,10 +98,10 @@ test.describe('Resilience Dashboard — Deployed Site', () => {
 
       if (hasCbSummary) {
         // Verify stats labels are present
-        await expect(main.getByText('Total:')).toBeVisible();
-        await expect(main.getByText('Closed:')).toBeVisible();
-        await expect(main.getByText('Half-Open:')).toBeVisible();
-        await expect(main.getByText('Open:')).toBeVisible();
+        await expect(main.getByText('Total:').first()).toBeVisible();
+        await expect(main.getByText('Closed:').first()).toBeVisible();
+        await expect(main.getByText('Half-Open:').first()).toBeVisible();
+        await expect(main.getByText('Open:').first()).toBeVisible();
       }
       // Summary may not render if API returns null — page should still function
       await expect(
@@ -117,9 +117,9 @@ test.describe('Resilience Dashboard — Deployed Site', () => {
         .catch(() => false);
 
       if (hasBhSummary) {
-        await expect(main.getByText('Total Services:')).toBeVisible();
-        await expect(main.getByText('Active Requests:')).toBeVisible();
-        await expect(main.getByText('Queued Requests:')).toBeVisible();
+        await expect(main.getByText('Total Services:').first()).toBeVisible();
+        await expect(main.getByText('Active Requests:').first()).toBeVisible();
+        await expect(main.getByText('Queued Requests:').first()).toBeVisible();
       }
       // Summary may not render if API returns null
       await expect(
@@ -212,7 +212,7 @@ test.describe('Resilience Dashboard — Deployed Site', () => {
         .catch(() => false);
 
       if (hasEmpty) {
-        await expect(main.getByText('No circuit breakers configured')).toBeVisible();
+        await expect(main.getByText('No circuit breakers configured').first()).toBeVisible();
       } else {
         // Should show stats columns for circuit breaker cards
         await expect(main.getByText('Total Requests').first()).toBeVisible({ timeout: 5000 });
@@ -301,7 +301,7 @@ test.describe('Resilience Dashboard — Deployed Site', () => {
         .catch(() => false);
 
       if (hasEmpty) {
-        await expect(main.getByText('No bulkheads configured')).toBeVisible();
+        await expect(main.getByText('No bulkheads configured').first()).toBeVisible();
       } else {
         // Should show bulkhead stat columns
         await expect(main.getByText('Active').first()).toBeVisible({ timeout: 5000 });

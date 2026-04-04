@@ -180,28 +180,28 @@ test.describe('MockAI — Deployed Site', () => {
     test('should display the OpenAPI Generation feature card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('OpenAPI Generation')
+        main.getByText('OpenAPI Generation').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Rules Dashboard feature card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Rules Dashboard')
+        main.getByText('Rules Dashboard').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Intelligent Responses API feature card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Intelligent Responses API')
+        main.getByText('Intelligent Responses API').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Learning API feature card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Learning API')
+        main.getByText('Learning API').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -229,17 +229,17 @@ test.describe('MockAI — Deployed Site', () => {
     test('should display the Getting Started card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Getting Started')
+        main.getByText('Getting Started').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display numbered steps in Getting Started', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Record API traffic using the')
+        main.getByText('Record API traffic using the').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Generate OpenAPI specs from recorded traffic')
+        main.getByText('Generate OpenAPI specs from recorded traffic').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -257,37 +257,37 @@ test.describe('MockAI — Deployed Site', () => {
     test('should display Documentation & Resources card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Documentation & Resources')
+        main.getByText('Documentation & Resources').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display documentation guide links', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('OpenAPI Generation Guide')
+        main.getByText('OpenAPI Generation Guide').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Rule Explanations Guide')
+        main.getByText('Rule Explanations Guide').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display Tips & Best Practices card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Tips & Best Practices')
+        main.getByText('Tips & Best Practices').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display 3 tips in the Tips card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Record Comprehensive Traffic')
+        main.getByText('Record Comprehensive Traffic').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Review Confidence Scores')
+        main.getByText('Review Confidence Scores').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Use Time Filters')
+        main.getByText('Use Time Filters').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });

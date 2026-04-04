@@ -66,14 +66,14 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Run automated tests and validate MockForge functionality')
+        mainContent(page).getByText('Run automated tests and validate MockForge functionality').first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Testing')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Testing').first()).toBeVisible();
     });
 
     test('should display the Test Overview section', async ({ page }) => {
@@ -162,13 +162,13 @@ test.describe('Testing Suite — Deployed Site', () => {
   test.describe('Overview Cards', () => {
     test('should display the Test Overview subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Summary of test execution results')
+        mainContent(page).getByText('Summary of test execution results').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Total Tests card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Total Tests')
+        mainContent(page).getByText('Total Tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -188,7 +188,7 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the Total Time card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Total Time')
+        mainContent(page).getByText('Total Time').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -196,7 +196,7 @@ test.describe('Testing Suite — Deployed Site', () => {
       const main = mainContent(page);
       const labels = ['Total Tests', 'Total Time'];
       for (const label of labels) {
-        await expect(main.getByText(label)).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText(label).first()).toBeVisible({ timeout: 5000 });
       }
       // Passed and Failed also present
       await expect(main.getByText('Passed', { exact: true }).first()).toBeVisible();
@@ -224,38 +224,38 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the Test Suites subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Organized collections of automated tests')
+        mainContent(page).getByText('Organized collections of automated tests').first()
       ).toBeVisible();
     });
 
     test('should display the Smoke Tests suite card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Smoke Tests')
+        mainContent(page).getByText('Smoke Tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Health Check suite card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Health Check')
+        mainContent(page).getByText('Health Check').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Integration Tests suite card', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Integration Tests')
+        mainContent(page).getByText('Integration Tests').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display suite descriptions', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Basic functionality and endpoint availability tests')
+        main.getByText('Basic functionality and endpoint availability tests').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('System health and service availability check')
+        main.getByText('System health and service availability check').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Custom integration tests for API endpoints')
+        main.getByText('Custom integration tests for API endpoints').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -340,13 +340,13 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the Test Configuration subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Configure test execution settings')
+        mainContent(page).getByText('Configure test execution settings').first()
       ).toBeVisible();
     });
 
     test('should display the Test Timeout input', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Test Timeout (seconds)')).toBeVisible();
+      await expect(main.getByText('Test Timeout (seconds)').first()).toBeVisible();
       const timeoutInput = main.locator('input[type="number"]');
       await expect(timeoutInput).toBeVisible();
     });
@@ -366,7 +366,7 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the Parallel Execution select', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Parallel Execution')).toBeVisible();
+      await expect(main.getByText('Parallel Execution').first()).toBeVisible();
       const select = main.locator('select');
       await expect(select).toBeVisible();
     });
@@ -389,10 +389,10 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should display the Test Environment radio buttons', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Test Environment')).toBeVisible();
-      await expect(main.getByText('Development')).toBeVisible();
-      await expect(main.getByText('Staging')).toBeVisible();
-      await expect(main.getByText('Production')).toBeVisible();
+      await expect(main.getByText('Test Environment').first()).toBeVisible();
+      await expect(main.getByText('Development').first()).toBeVisible();
+      await expect(main.getByText('Staging').first()).toBeVisible();
+      await expect(main.getByText('Production').first()).toBeVisible();
     });
 
     test('should have Development radio selected by default', async ({ page }) => {
@@ -529,9 +529,9 @@ test.describe('Testing Suite — Deployed Site', () => {
 
     test('should have accessible form labels', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Test Timeout (seconds)')).toBeVisible();
-      await expect(main.getByText('Parallel Execution')).toBeVisible();
-      await expect(main.getByText('Test Environment')).toBeVisible();
+      await expect(main.getByText('Test Timeout (seconds)').first()).toBeVisible();
+      await expect(main.getByText('Parallel Execution').first()).toBeVisible();
+      await expect(main.getByText('Test Environment').first()).toBeVisible();
     });
 
     test('should have accessible radio buttons', async ({ page }) => {

@@ -54,8 +54,8 @@ test.describe('Orchestration Execution — Deployed Site', () => {
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Orchestration Execution')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Orchestration Execution').first()).toBeVisible();
     });
 
     test('should display the orchestration name heading', async ({ page }) => {
@@ -245,7 +245,7 @@ test.describe('Orchestration Execution — Deployed Site', () => {
     test('should display Execution Steps heading', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Execution Steps')
+        main.getByText('Execution Steps').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -361,7 +361,7 @@ test.describe('Orchestration Execution — Deployed Site', () => {
 
       await expect(page).toHaveURL(/\/orchestration-execution/);
       await expect(
-        page.getByRole('banner').getByText('Orchestration Execution')
+        page.getByRole('banner').getByText('Orchestration Execution').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -379,7 +379,7 @@ test.describe('Orchestration Execution — Deployed Site', () => {
 
         await expect(page).toHaveURL(/\/orchestration-builder/);
         await expect(
-          page.getByRole('banner').getByText('Orchestration Builder')
+          page.getByRole('banner').getByText('Orchestration Builder').first()
         ).toBeVisible({ timeout: 5000 });
 
         // Navigate back

@@ -67,21 +67,21 @@ test.describe('Contract Diff — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Analyze front-end requests against backend contract specifications')
+        mainContent(page).getByText('Analyze front-end requests against backend contract specifications').first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Contract Diff')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Contract Diff').first()).toBeVisible();
     });
 
     test('should display the two-column layout sections', async ({ page }) => {
       const main = mainContent(page);
 
-      await expect(main.getByText('Captured Requests')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Analysis Configuration')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Captured Requests').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Analysis Configuration').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -92,7 +92,7 @@ test.describe('Contract Diff — Deployed Site', () => {
     test('should display the protocol selector dropdown', async ({ page }) => {
       const main = mainContent(page);
       // The protocol selector shows HTTP/REST by default
-      await expect(main.getByText('HTTP/REST')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('HTTP/REST').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should default to HTTP/REST protocol', async ({ page }) => {
@@ -235,13 +235,13 @@ test.describe('Contract Diff — Deployed Site', () => {
   test.describe('Captured Requests Section', () => {
     test('should display the Captured Requests section heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Captured Requests')
+        mainContent(page).getByText('Captured Requests').first()
       ).toBeVisible();
     });
 
     test('should display the Source filter dropdown', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Source')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Source').first()).toBeVisible({ timeout: 5000 });
 
       // The source dropdown should show "All Sources" by default
       const hasAllSources = await main
@@ -254,7 +254,7 @@ test.describe('Contract Diff — Deployed Site', () => {
 
     test('should display the Method filter dropdown', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Method')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Method').first()).toBeVisible({ timeout: 5000 });
 
       // The method dropdown should show "All Methods" by default
       const hasAllMethods = await main
@@ -279,7 +279,7 @@ test.describe('Contract Diff — Deployed Site', () => {
 
       // Should show either empty state, loading, or actual request items
       // The page should render without crashing regardless
-      await expect(main.getByText('Captured Requests')).toBeVisible();
+      await expect(main.getByText('Captured Requests').first()).toBeVisible();
     });
 
     test('should display the Refresh button', async ({ page }) => {
@@ -345,13 +345,13 @@ test.describe('Contract Diff — Deployed Site', () => {
   test.describe('Analysis Configuration', () => {
     test('should display the Analysis Configuration section heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Analysis Configuration')
+        mainContent(page).getByText('Analysis Configuration').first()
       ).toBeVisible();
     });
 
     test('should display the Contract Spec Path input', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Contract Spec Path')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Contract Spec Path').first()).toBeVisible({ timeout: 5000 });
 
       const input = main.getByPlaceholder('/path/to/openapi.yaml');
       await expect(input).toBeVisible({ timeout: 5000 });
@@ -371,7 +371,7 @@ test.describe('Contract Diff — Deployed Site', () => {
     test('should display the spec content textarea', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Or Contract Spec Content (YAML/JSON)')
+        main.getByText('Or Contract Spec Content (YAML/JSON)').first()
       ).toBeVisible({ timeout: 5000 });
 
       const textarea = main.getByPlaceholder('Paste OpenAPI spec content here...');
@@ -588,15 +588,15 @@ test.describe('Contract Diff — Deployed Site', () => {
       const main = mainContent(page);
 
       // Verify labels exist for form inputs
-      await expect(main.getByText('Contract Spec Path')).toBeVisible();
-      await expect(main.getByText('Or Contract Spec Content (YAML/JSON)')).toBeVisible();
+      await expect(main.getByText('Contract Spec Path').first()).toBeVisible();
+      await expect(main.getByText('Or Contract Spec Content (YAML/JSON)').first()).toBeVisible();
     });
 
     test('should have labeled filter dropdowns in Captured Requests', async ({ page }) => {
       const main = mainContent(page);
 
-      await expect(main.getByText('Source')).toBeVisible();
-      await expect(main.getByText('Method')).toBeVisible();
+      await expect(main.getByText('Source').first()).toBeVisible();
+      await expect(main.getByText('Method').first()).toBeVisible();
     });
 
     test('should have accessible buttons with descriptive text', async ({ page }) => {

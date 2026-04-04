@@ -164,7 +164,7 @@ test.describe('MockAI Rules Dashboard — Deployed Site', () => {
       await page.waitForTimeout(300);
 
       await expect(
-        main.getByText('≥50%')
+        main.getByText('≥50%').first()
       ).toBeVisible({ timeout: 3000 });
 
       // Reset
@@ -227,7 +227,7 @@ test.describe('MockAI Rules Dashboard — Deployed Site', () => {
 
     test('should display Show/Hide Flow toggle button when rules exist', async ({ page }) => {
       const main = mainContent(page);
-      const hasFlowSection = await main.getByText('Rule Generation Flow')
+      const hasFlowSection = await main.getByText('Rule Generation Flow').first()
         .isVisible({ timeout: 3000 }).catch(() => false);
 
       if (hasFlowSection) {

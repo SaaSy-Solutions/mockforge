@@ -65,7 +65,7 @@ test.describe('Community Showcase — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Discover amazing projects built with MockForge and learn from real-world success stories'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 

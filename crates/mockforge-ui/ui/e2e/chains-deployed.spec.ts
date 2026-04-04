@@ -63,14 +63,14 @@ test.describe('Chains — Deployed Site', () => {
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Manage and execute request chains for complex API workflows')
+        mainContent(page).getByText('Manage and execute request chains for complex API workflows').first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Chains')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Chains').first()).toBeVisible();
     });
   });
 
@@ -114,13 +114,13 @@ test.describe('Chains — Deployed Site', () => {
 
     test('should display "No Chains Found" heading in empty state', async ({ page }) => {
       const main = mainContent(page);
-      const hasEmpty = await main.getByText('No Chains Found')
+      const hasEmpty = await main.getByText('No Chains Found').first()
         .isVisible({ timeout: 3000 }).catch(() => false);
 
       if (hasEmpty) {
-        await expect(main.getByText('No Chains Found')).toBeVisible();
+        await expect(main.getByText('No Chains Found').first()).toBeVisible();
         await expect(
-          main.getByText('Create your first request chain to get started with complex API workflow testing.')
+          main.getByText('Create your first request chain to get started with complex API workflow testing.').first()
         ).toBeVisible();
       }
     });
@@ -175,7 +175,7 @@ test.describe('Chains — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
-      await expect(page.getByRole('dialog').getByText('Create Chain')).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('heading', { name: 'Create Chain' })).toBeVisible();
     });
 
     test('should open the Create Chain dialog from empty state button', async ({ page }) => {
@@ -191,7 +191,7 @@ test.describe('Chains — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
-      await expect(page.getByRole('dialog').getByText('Create Chain')).toBeVisible();
+      await expect(page.getByRole('dialog').getByRole('heading', { name: 'Create Chain' })).toBeVisible();
     });
 
     test('should display YAML Definition textarea in the dialog', async ({ page }) => {
@@ -199,7 +199,7 @@ test.describe('Chains — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
-      await expect(dialog.getByText('YAML Definition')).toBeVisible();
+      await expect(dialog.getByText('YAML Definition').first()).toBeVisible();
       await expect(dialog.locator('textarea')).toBeVisible();
     });
 
@@ -242,7 +242,7 @@ test.describe('Chains — Deployed Site', () => {
 
       const dialog = page.getByRole('dialog');
       await expect(
-        dialog.getByText('Create a new request chain using YAML definition.')
+        dialog.getByText('Create a new request chain using YAML definition.').first()
       ).toBeVisible();
     });
 
@@ -347,7 +347,7 @@ links:
           await expect(viewDialog).toBeVisible({ timeout: 5000 });
 
           // Verify view dialog content
-          await expect(viewDialog.getByText('Overview')).toBeVisible({ timeout: 5000 });
+          await expect(viewDialog.getByText('Overview').first()).toBeVisible({ timeout: 5000 });
           await expect(viewDialog.getByRole('button', { name: 'Close' })).toBeVisible();
           await expect(viewDialog.getByRole('button', { name: /Execute Chain/i })).toBeVisible();
 
@@ -407,7 +407,7 @@ links:
       await expect(dialog).toBeVisible({ timeout: 5000 });
 
       // Verify dialog content
-      await expect(dialog.getByText('Delete Chain')).toBeVisible();
+      await expect(dialog.getByText('Delete Chain').first()).toBeVisible();
       await expect(dialog.getByText(/Are you sure you want to delete/)).toBeVisible();
       await expect(dialog.getByText(/This action cannot be undone/)).toBeVisible();
 
@@ -444,7 +444,7 @@ links:
       await expect(dialog).not.toBeVisible();
 
       // Verify the chain still exists in the table
-      await expect(main.getByText('Available Chains')).toBeVisible();
+      await expect(main.getByText('Available Chains').first()).toBeVisible();
     });
   });
 

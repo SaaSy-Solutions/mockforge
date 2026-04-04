@@ -67,14 +67,14 @@ test.describe('Performance Mode — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Lightweight load simulation with RPS control and bottleneck simulation'
-        )
+        ).first()
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
       const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Performance')).toBeVisible();
+      await expect(banner.getByText('Home').first()).toBeVisible();
+      await expect(banner.getByText('Performance').first()).toBeVisible();
     });
 
     test('should not show loading skeleton after content loads', async ({ page }) => {
@@ -102,7 +102,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the About Performance Mode card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('About Performance Mode')
+        main.getByText('About Performance Mode').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -202,7 +202,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the About Performance Mode heading', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('About Performance Mode')
+        main.getByText('About Performance Mode').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -216,7 +216,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the RPS Control feature', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('RPS Control:')
+        main.getByText('RPS Control:').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
         main.getByText(/Maintain a target requests-per-second rate/)
@@ -226,7 +226,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the Bottleneck Simulation feature', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Bottleneck Simulation:')
+        main.getByText('Bottleneck Simulation:').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
         main.getByText(/Simulate CPU, Memory, Network, I\/O, and Database bottlenecks/)
@@ -236,7 +236,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the Latency Recording feature', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Latency Recording:')
+        main.getByText('Latency Recording:').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
         main.getByText(/Track request latencies with detailed statistics/)
@@ -246,7 +246,7 @@ test.describe('Performance Mode — Deployed Site', () => {
     test('should display the Real-time Metrics feature', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Real-time Metrics:')
+        main.getByText('Real-time Metrics:').first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
         main.getByText(/Monitor performance metrics as they change/)
@@ -268,7 +268,7 @@ test.describe('Performance Mode — Deployed Site', () => {
 
       if (isRunning) {
         await expect(
-          main.getByText('Performance mode is running')
+          main.getByText('Performance mode is running').first()
         ).toBeVisible();
       }
     });
@@ -320,7 +320,7 @@ test.describe('Performance Mode — Deployed Site', () => {
         await expect(pulsingDot).toBeVisible();
 
         // "Active" label next to the dot
-        await expect(main.getByText('Active')).toBeVisible();
+        await expect(main.getByText('Active').first()).toBeVisible();
       }
     });
 
@@ -494,7 +494,7 @@ test.describe('Performance Mode — Deployed Site', () => {
 
       // About card should still be visible
       await expect(
-        main.getByText('About Performance Mode')
+        main.getByText('About Performance Mode').first()
       ).toBeVisible();
     });
 

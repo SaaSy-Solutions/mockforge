@@ -65,7 +65,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Analyze recorded HTTP traffic and generate OpenAPI 3.0 specifications using AI-powered pattern detection'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -81,7 +81,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the Generation Filters card', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Generation Filters')
+        main.getByText('Generation Filters').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -93,7 +93,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the Database Path input', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Database Path')
+        main.getByText('Database Path').first()
       ).toBeVisible({ timeout: 5000 });
 
       const input = main.locator('input[placeholder="./recordings.db"]');
@@ -103,7 +103,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the Start Time input', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Start Time')
+        main.getByText('Start Time').first()
       ).toBeVisible({ timeout: 5000 });
 
       const input = main.locator('input[type="datetime-local"]').first();
@@ -113,7 +113,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the End Time input', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('End Time')
+        main.getByText('End Time').first()
       ).toBeVisible({ timeout: 5000 });
 
       const input = main.locator('input[type="datetime-local"]').nth(1);
@@ -123,7 +123,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the Path Pattern input', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Path Pattern')
+        main.getByText('Path Pattern').first()
       ).toBeVisible({ timeout: 5000 });
 
       const input = main.locator('input[placeholder="/api/*"]');
@@ -143,7 +143,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the default confidence value as 70%', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('70%')
+        main.getByText('70%').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -178,15 +178,15 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
       await page.waitForTimeout(300);
 
       await expect(
-        main.getByText('50%')
+        main.getByText('50%').first()
       ).toBeVisible({ timeout: 3000 });
     });
 
     test('should display confidence scale labels (0%, 50%, 100%)', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('0%')).toBeVisible({ timeout: 3000 });
-      await expect(main.getByText('50%')).toBeVisible({ timeout: 3000 });
-      await expect(main.getByText('100%')).toBeVisible({ timeout: 3000 });
+      await expect(main.getByText('0%').first()).toBeVisible({ timeout: 3000 });
+      await expect(main.getByText('50%').first()).toBeVisible({ timeout: 3000 });
+      await expect(main.getByText('100%').first()).toBeVisible({ timeout: 3000 });
     });
   });
 
@@ -215,7 +215,7 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the empty state when no spec has been generated', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('No OpenAPI Specification Generated')
+        main.getByText('No OpenAPI Specification Generated').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -229,21 +229,21 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
     test('should display the Record Traffic First checklist item', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Record Traffic First')
+        main.getByText('Record Traffic First').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Configure Filters checklist item', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Configure Filters')
+        main.getByText('Configure Filters').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should display the Review & Download checklist item', async ({ page }) => {
       const main = mainContent(page);
       await expect(
-        main.getByText('Review & Download')
+        main.getByText('Review & Download').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -385,10 +385,10 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
 
     test('should have labeled form inputs', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Database Path')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Start Time')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('End Time')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Path Pattern')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Database Path').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Start Time').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('End Time').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Path Pattern').first()).toBeVisible({ timeout: 5000 });
       await expect(main.getByText(/Minimum Confidence/)).toBeVisible({ timeout: 5000 });
     });
 

@@ -69,12 +69,12 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           "Build mocks conversationally using natural language commands powered by AI."
-        )
+        ).first()
       ).toBeVisible();
       await expect(
         mainContent(page).getByText(
           "Speak or type your requirements, and we'll generate an OpenAPI specification."
-        )
+        ).first()
       ).toBeVisible();
     });
 
@@ -160,9 +160,9 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       // Should show the feature cards from API Generation tab
-      await expect(main.getByText('Voice Input')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('AI-Powered')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('OpenAPI Output')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Voice Input').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('AI-Powered').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('OpenAPI Output').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -172,16 +172,16 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
   test.describe('API Generation Tab', () => {
     test('should display the three feature cards', async ({ page }) => {
       const main = mainContent(page);
-      await expect(main.getByText('Voice Input')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('AI-Powered')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('OpenAPI Output')).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Voice Input').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('AI-Powered').first()).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('OpenAPI Output').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('should display Voice Input feature card description', async ({ page }) => {
       await expect(
         mainContent(page).getByText(
           'Use your microphone to speak commands naturally. Works with Chrome, Edge, and Safari.'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -189,7 +189,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'LLM interprets your commands and extracts API requirements automatically.'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -197,7 +197,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Generates valid OpenAPI 3.0 specifications ready to use with MockForge.'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -321,7 +321,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         main.getByText(
           'Describe hook logic in natural language and get transpiled hook configurations ready to use in chaos orchestration scenarios.'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -340,7 +340,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       await expect(
-        main.getByText('Describe your hook logic in natural language')
+        main.getByText('Describe your hook logic in natural language').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -412,7 +412,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
 
       const examples = ['VIP User Hook', 'Conditional Logging', 'Metric Recording', 'Complex Condition'];
       for (const example of examples) {
-        await expect(main.getByText(example, { exact: true })).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText(example, { exact: true }).first()).toBeVisible({ timeout: 5000 });
       }
     });
 
@@ -452,7 +452,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         main.getByText(
           'Create complete workspace scenarios with APIs, chaos configurations, and initial data from natural language descriptions.'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -471,7 +471,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       await expect(
-        main.getByText('Describe your workspace scenario')
+        main.getByText('Describe your workspace scenario').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -552,7 +552,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
         'Social Media Platform',
       ];
       for (const example of examples) {
-        await expect(main.getByText(example, { exact: true })).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText(example, { exact: true }).first()).toBeVisible({ timeout: 5000 });
       }
     });
 
@@ -586,7 +586,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       const main = mainContent(page);
       const examples = ['Simple API', 'E-commerce', 'With Models', 'Complex'];
       for (const example of examples) {
-        await expect(main.getByText(example, { exact: true })).toBeVisible({ timeout: 5000 });
+        await expect(main.getByText(example, { exact: true }).first()).toBeVisible({ timeout: 5000 });
       }
     });
 
@@ -595,12 +595,12 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       await expect(
         main.getByText(
           'Create a todo API with endpoints for listing, creating, and updating tasks'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
       await expect(
         main.getByText(
           'Create an e-commerce API with products, users, and a checkout flow'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -753,7 +753,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       const textarea = main.locator('textarea#hook-description');
       await expect(textarea).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Describe your hook logic in natural language')
+        main.getByText('Describe your hook logic in natural language').first()
       ).toBeVisible({ timeout: 5000 });
     });
 
@@ -766,7 +766,7 @@ test.describe('Voice + LLM Interface — Deployed Site', () => {
       const textarea = main.locator('textarea#scenario-description');
       await expect(textarea).toBeVisible({ timeout: 5000 });
       await expect(
-        main.getByText('Describe your workspace scenario')
+        main.getByText('Describe your workspace scenario').first()
       ).toBeVisible({ timeout: 5000 });
     });
   });

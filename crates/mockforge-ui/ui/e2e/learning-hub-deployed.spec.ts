@@ -63,7 +63,7 @@ test.describe('Learning Hub — Deployed Site', () => {
       await expect(
         mainContent(page).getByText(
           'Learn MockForge with tutorials, examples, guides, and video resources'
-        )
+        ).first()
       ).toBeVisible({ timeout: 5000 });
     });
 
