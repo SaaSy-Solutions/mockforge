@@ -37,6 +37,15 @@ pub struct HarEntry {
     pub response: HarResponse,
 }
 
+/// HAR query string parameter
+#[derive(Debug, Deserialize)]
+pub struct HarQueryParam {
+    /// Parameter name
+    pub name: String,
+    /// Parameter value
+    pub value: String,
+}
+
 /// HAR request
 #[derive(Debug, Deserialize)]
 pub struct HarRequest {
@@ -47,6 +56,9 @@ pub struct HarRequest {
     /// Request headers
     #[serde(default)]
     pub headers: Vec<HarHeader>,
+    /// Query string parameters (structured)
+    #[serde(rename = "queryString", default)]
+    pub query_string: Vec<HarQueryParam>,
 }
 
 /// HAR response
@@ -201,12 +213,18 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
             break;
         }
 
-        let path = extract_path(&entry.request.url, &base_url);
+        let path_only = extract_path(&entry.request.url, &base_url);
 
         // Skip static assets if requested
-        if options.skip_static && is_static_asset(&path) {
+        if options.skip_static && is_static_asset(&path_only) {
             continue;
         }
+
+        // Build full path with query string if present
+        let path = match extract_query_string(&entry.request) {
+            Some(qs) => format!("{}?{}", path_only, qs),
+            None => path_only.clone(),
+        };
 
         let method = entry.request.method.to_uppercase();
 
@@ -228,8 +246,8 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
         // Extract body fields from JSON response
         let expected_body_fields = extract_body_fields(entry);
 
-        // Build a human-readable check name
-        let slug = path.replace('/', "-").trim_matches('-').to_string();
+        // Build a human-readable check name (use path without query string)
+        let slug = path_only.replace('/', "-").trim_matches('-').to_string();
         let name =
             format!("custom:har:{}-{}-{}", method.to_lowercase(), slug, entry.response.status);
 
@@ -272,13 +290,12 @@ fn detect_base_url(entries: &[HarEntry]) -> Result<String> {
     Ok(base)
 }
 
-/// Strip the base URL from a full URL to get the path (with query string).
+/// Strip the base URL from a full URL to get the path only (no query string).
 fn extract_path(full_url: &str, base_url: &str) -> String {
     if let Some(rest) = full_url.strip_prefix(base_url) {
         if rest.is_empty() {
             "/".to_string()
         } else if rest.starts_with('/') {
-            // Strip query string — conformance checks match on path only
             rest.split('?').next().unwrap_or(rest).to_string()
         } else {
             format!("/{}", rest.split('?').next().unwrap_or(rest))
@@ -289,6 +306,23 @@ fn extract_path(full_url: &str, base_url: &str) -> String {
             Ok(parsed) => parsed.path().to_string(),
             Err(_) => full_url.to_string(),
         }
+    }
+}
+
+/// Build a query string from structured HAR query params, or fall back to
+/// extracting it from the raw URL.
+fn extract_query_string(request: &HarRequest) -> Option<String> {
+    if !request.query_string.is_empty() {
+        // Use structured queryString array from HAR
+        let pairs: Vec<String> = request
+            .query_string
+            .iter()
+            .map(|p| format!("{}={}", urlencoding::encode(&p.name), urlencoding::encode(&p.value)))
+            .collect();
+        Some(pairs.join("&"))
+    } else {
+        // Fall back to extracting from the URL
+        request.url.split_once('?').map(|(_, qs)| qs.to_string())
     }
 }
 
@@ -478,6 +512,7 @@ mod tests {
                             method: "GET".to_string(),
                             url: "http://localhost:3000/api/users".to_string(),
                             headers: vec![],
+                            query_string: vec![],
                         },
                         response: HarResponse {
                             status: 200,
@@ -504,6 +539,7 @@ mod tests {
                             method: "POST".to_string(),
                             url: "http://localhost:3000/api/users".to_string(),
                             headers: vec![],
+                            query_string: vec![],
                         },
                         response: HarResponse {
                             status: 201,
@@ -522,6 +558,7 @@ mod tests {
                             method: "GET".to_string(),
                             url: "http://localhost:3000/static/app.js".to_string(),
                             headers: vec![],
+                            query_string: vec![],
                         },
                         response: HarResponse {
                             status: 200,
@@ -640,6 +677,7 @@ mod tests {
                 method: "GET".to_string(),
                 url: "https://api.example.com:8443/v1/health".to_string(),
                 headers: vec![],
+                query_string: vec![],
             },
             response: HarResponse {
                 status: 200,
@@ -679,6 +717,86 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_query_string_from_structured() {
+        let request = HarRequest {
+            method: "GET".to_string(),
+            url: "http://localhost:3000/api/users?page=1&limit=10".to_string(),
+            headers: vec![],
+            query_string: vec![
+                HarQueryParam {
+                    name: "page".to_string(),
+                    value: "1".to_string(),
+                },
+                HarQueryParam {
+                    name: "limit".to_string(),
+                    value: "10".to_string(),
+                },
+            ],
+        };
+        let qs = extract_query_string(&request).unwrap();
+        assert_eq!(qs, "page=1&limit=10");
+    }
+
+    #[test]
+    fn test_extract_query_string_from_url_fallback() {
+        let request = HarRequest {
+            method: "GET".to_string(),
+            url: "http://localhost:3000/api/users?page=1&limit=10".to_string(),
+            headers: vec![],
+            query_string: vec![],
+        };
+        let qs = extract_query_string(&request).unwrap();
+        assert_eq!(qs, "page=1&limit=10");
+    }
+
+    #[test]
+    fn test_extract_query_string_none_when_absent() {
+        let request = HarRequest {
+            method: "GET".to_string(),
+            url: "http://localhost:3000/api/users".to_string(),
+            headers: vec![],
+            query_string: vec![],
+        };
+        assert!(extract_query_string(&request).is_none());
+    }
+
+    #[test]
+    fn test_har_with_query_params_in_yaml() {
+        let har = HarArchive {
+            log: HarLog {
+                entries: vec![HarEntry {
+                    request: HarRequest {
+                        method: "GET".to_string(),
+                        url: "http://localhost:3000/api/users?page=1&limit=10".to_string(),
+                        headers: vec![],
+                        query_string: vec![
+                            HarQueryParam {
+                                name: "page".to_string(),
+                                value: "1".to_string(),
+                            },
+                            HarQueryParam {
+                                name: "limit".to_string(),
+                                value: "10".to_string(),
+                            },
+                        ],
+                    },
+                    response: HarResponse {
+                        status: 200,
+                        headers: vec![],
+                        content: None,
+                    },
+                }],
+            },
+        };
+        let options = HarToCustomOptions::default();
+        let yaml = generate_custom_yaml(&har, &options).unwrap();
+
+        let config: super::super::custom::CustomConformanceConfig =
+            serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(config.custom_checks[0].path, "/api/users?page=1&limit=10");
+    }
+
+    #[test]
     fn test_include_headers_regex_pattern() {
         let har = HarArchive {
             log: HarLog {
@@ -687,6 +805,7 @@ mod tests {
                         method: "GET".to_string(),
                         url: "http://localhost:3000/api/data".to_string(),
                         headers: vec![],
+                        query_string: vec![],
                     },
                     response: HarResponse {
                         status: 200,
@@ -768,6 +887,7 @@ mod tests {
                 method: "GET".to_string(),
                 url: "http://localhost:3000/api/data".to_string(),
                 headers: vec![],
+                query_string: vec![],
             },
             response: HarResponse {
                 status: 200,
@@ -807,6 +927,7 @@ mod tests {
                 method: "GET".to_string(),
                 url: "http://localhost:3000/api/data".to_string(),
                 headers: vec![],
+                query_string: vec![],
             },
             response: HarResponse {
                 status: 200,
@@ -834,6 +955,7 @@ mod tests {
                 method: "GET".to_string(),
                 url: "http://localhost:3000/deep".to_string(),
                 headers: vec![],
+                query_string: vec![],
             },
             response: HarResponse {
                 status: 200,
