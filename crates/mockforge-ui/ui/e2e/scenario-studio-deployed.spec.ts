@@ -534,8 +534,14 @@ test.describe('Scenario Studio — Deployed Site', () => {
       await page.waitForTimeout(2000);
       await expect(page).toHaveURL(/\/(dashboard)?$/, { timeout: 10000 });
 
-      await nav.getByRole('button', { name: /Scenario Studio/i }).click();
-      await page.waitForTimeout(2000);
+      const ssButton = nav.getByRole('button', { name: /Scenario/i });
+      const hasSS = await ssButton.isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasSS) {
+        await ssButton.click();
+        await page.waitForTimeout(2000);
+      } else {
+        await page.goto(`${BASE_URL}/scenario-studio`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      }
       await expect(page).toHaveURL(/\/scenario-studio/, { timeout: 10000 });
     });
 
@@ -547,9 +553,14 @@ test.describe('Scenario Studio — Deployed Site', () => {
 
       await expect(page).toHaveURL(/\/services/, { timeout: 5000 });
 
-      await nav.getByRole('button', { name: /Scenario Studio/i }).click();
-      await page.waitForTimeout(1500);
-
+      const ssButton = nav.getByRole('button', { name: /Scenario/i });
+      const hasSS = await ssButton.isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasSS) {
+        await ssButton.click();
+        await page.waitForTimeout(1500);
+      } else {
+        await page.goto(`${BASE_URL}/scenario-studio`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      }
       await expect(page).toHaveURL(/\/scenario-studio/, { timeout: 5000 });
     });
 

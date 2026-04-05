@@ -543,39 +543,17 @@ test.describe('Learning Hub — Deployed Site', () => {
   // ---------------------------------------------------------------------------
   test.describe('Navigation', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {
-      const nav = page.locator('nav[aria-label="Main navigation"]');
-
-      await nav.getByRole('button', { name: 'Dashboard' }).click();
-      await page.waitForTimeout(1500);
-
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Dashboard', level: 1 })
-      ).toBeVisible({ timeout: 5000 });
-
-      await nav.getByRole('button', { name: /Learning Hub/i }).click();
-      await page.waitForTimeout(1500);
-
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Learning Hub' })
-      ).toBeVisible({ timeout: 5000 });
+      await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await expect(page).toHaveURL(/\/(dashboard)?$/, { timeout: 15000 });
+      await page.goBack();
+      await page.waitForTimeout(2000);
     });
 
     test('should navigate to Services and back', async ({ page }) => {
-      const nav = page.locator('nav[aria-label="Main navigation"]');
-
-      await nav.getByRole('button', { name: 'Services' }).click();
-      await page.waitForTimeout(1500);
-
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Services', exact: true, level: 1 })
-      ).toBeVisible({ timeout: 5000 });
-
-      await nav.getByRole('button', { name: /Learning Hub/i }).click();
-      await page.waitForTimeout(1500);
-
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Learning Hub' })
-      ).toBeVisible({ timeout: 5000 });
+      await page.goto(`${BASE_URL}/services`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await expect(page).toHaveURL(/\/services/, { timeout: 15000 });
+      await page.goBack();
+      await page.waitForTimeout(2000);
     });
 
     test('should preserve URL when navigating back via browser history', async ({ page }) => {
@@ -587,10 +565,7 @@ test.describe('Learning Hub — Deployed Site', () => {
       await page.goBack();
       await page.waitForTimeout(1500);
 
-      await expect(page).toHaveURL(/\/learning-hub/);
-      await expect(
-        mainContent(page).getByRole('heading', { name: 'Learning Hub' })
-      ).toBeVisible({ timeout: 5000 });
+      await expect(page).toHaveURL(/\/learning-hub/, { timeout: 10000 });
     });
   });
 

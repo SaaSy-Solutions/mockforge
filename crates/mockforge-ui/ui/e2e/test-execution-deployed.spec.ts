@@ -138,7 +138,7 @@ test.describe('Test Execution Dashboard — Deployed Site', () => {
 
     test('should display a percentage value for Success Rate', async ({ page }) => {
       const main = mainContent(page);
-      const card = main.getByText('Success Rate').locator('..');
+      const card = main.getByText('Success Rate').first().locator('..');
       const text = await card.textContent();
       // Should contain a percentage (e.g., "91.0%")
       expect(text).toMatch(/\d+(\.\d+)?%/);
