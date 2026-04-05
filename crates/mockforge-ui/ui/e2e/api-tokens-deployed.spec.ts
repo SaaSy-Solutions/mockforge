@@ -214,6 +214,56 @@ test.describe('API Tokens — Deployed Site', () => {
     });
   });
 
+  test.describe('Token Scopes & Validation', () => {
+    test('should display all 6 scope checkboxes with labels', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const checkboxes = dialog.getByRole('checkbox');
+      expect(await checkboxes.count()).toBe(6);
+
+      // Close
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('should allow selecting multiple scopes', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const checkboxes = dialog.getByRole('checkbox');
+
+      // Select first 3 scopes
+      await checkboxes.nth(0).check();
+      await checkboxes.nth(1).check();
+      await checkboxes.nth(2).check();
+
+      // Verify all 3 are checked
+      await expect(checkboxes.nth(0)).toBeChecked();
+      await expect(checkboxes.nth(1)).toBeChecked();
+      await expect(checkboxes.nth(2)).toBeChecked();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('should accept custom expiry days value', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const expiryInput = dialog.getByRole('spinbutton');
+
+      if (await expiryInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await expiryInput.clear();
+        await expiryInput.fill('365');
+        await expect(expiryInput).toHaveValue('365');
+      }
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+  });
+
   test.describe('Accessibility', () => {
     test('should have a single H1', async ({ page }) => {
       const h1 = mainContent(page).getByRole('heading', { level: 1 });

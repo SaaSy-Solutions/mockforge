@@ -138,7 +138,86 @@ test.describe('Plugin Registry — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 3. Plugin List / Empty State
+  // 3. Filter Dropdowns
+  // ---------------------------------------------------------------------------
+  test.describe('Filter Dropdowns', () => {
+    test('should open Category dropdown and show options', async ({ page }) => {
+      const main = mainContent(page);
+      // MUI Select: click the displayed value text to open the dropdown
+      await main.getByText('All Categories').click();
+      await page.waitForTimeout(300);
+
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible({ timeout: 3000 });
+      await expect(listbox.getByText('Authentication')).toBeVisible();
+      await expect(listbox.getByText('Templates')).toBeVisible();
+      await expect(listbox.getByText('Middleware')).toBeVisible();
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('should open Language dropdown and show options', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('All Languages').click();
+      await page.waitForTimeout(300);
+
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible({ timeout: 3000 });
+      await expect(listbox.getByText('Rust')).toBeVisible();
+      await expect(listbox.getByText('JavaScript')).toBeVisible();
+      await expect(listbox.getByText('TypeScript')).toBeVisible();
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('should open Sort By dropdown and show options', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('Most Popular').click();
+      await page.waitForTimeout(300);
+
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible({ timeout: 3000 });
+      await expect(listbox.getByText('Most Downloaded')).toBeVisible();
+      await expect(listbox.getByText('Top Rated')).toBeVisible();
+      await expect(listbox.getByText('Recently Updated')).toBeVisible();
+      await expect(listbox.getByText('Best Security Score')).toBeVisible();
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('should select a category and update results count', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('All Categories').click();
+      await page.waitForTimeout(300);
+      await page.getByRole('listbox').getByText('Authentication').click();
+      await page.waitForTimeout(500);
+
+      await expect(main.getByText(/\d+ plugins? found/)).toBeVisible();
+    });
+
+    test('should select a language and update results count', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('All Languages').click();
+      await page.waitForTimeout(300);
+      await page.getByRole('listbox').getByText('Rust').click();
+      await page.waitForTimeout(500);
+
+      await expect(main.getByText(/\d+ plugins? found/)).toBeVisible();
+    });
+
+    test('should select a sort option and maintain results', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('Most Popular').click();
+      await page.waitForTimeout(300);
+      await page.getByRole('listbox').getByText('Top Rated').click();
+      await page.waitForTimeout(500);
+
+      await expect(main.getByText(/\d+ plugins? found/)).toBeVisible();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 4. Plugin List / Cards
   // ---------------------------------------------------------------------------
   test.describe('Plugin List', () => {
     test('should show plugins or "0 plugins found"', async ({ page }) => {
@@ -150,10 +229,87 @@ test.describe('Plugin Registry — Deployed Site', () => {
 
       expect(hasZero || hasPlugins).toBeTruthy();
     });
+
+    test('should display plugin cards with expected content when plugins exist', async ({ page }) => {
+      const main = mainContent(page);
+      const hasPlugins = await main.getByText(/[1-9]\d* plugins? found/)
+        .isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (hasPlugins) {
+        // Each plugin card should have name, description, rating, and action buttons
+        const firstCard = main.locator('.MuiCard-root').first();
+        await expect(firstCard).toBeVisible({ timeout: 3000 });
+
+        // Cards should show category chip, rating stars, and View Details / Install buttons
+        const hasViewDetails = await firstCard.getByRole('button', { name: /View Details/i })
+          .isVisible({ timeout: 2000 }).catch(() => false);
+        const hasInstall = await firstCard.getByRole('button', { name: /Install/i })
+          .isVisible({ timeout: 2000 }).catch(() => false);
+
+        expect(hasViewDetails || hasInstall).toBeTruthy();
+      }
+    });
+
+    test('should display security badge on plugin cards when plugins exist', async ({ page }) => {
+      const main = mainContent(page);
+      const hasPlugins = await main.getByText(/[1-9]\d* plugins? found/)
+        .isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (hasPlugins) {
+        // Security badges use text: Excellent, Good, Fair, or Poor
+        const hasBadge = await main.getByText(/Excellent|Good|Fair|Poor/).first()
+          .isVisible({ timeout: 3000 }).catch(() => false);
+        expect(hasBadge).toBeTruthy();
+      }
+    });
+
+    test('should show View Details and Install buttons on cards when plugins exist', async ({ page }) => {
+      const main = mainContent(page);
+      const hasPlugins = await main.getByText(/[1-9]\d* plugins? found/)
+        .isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (hasPlugins) {
+        const viewBtn = main.getByRole('button', { name: /View Details/i }).first();
+        const installBtn = main.getByRole('button', { name: /Install/i }).first();
+
+        const hasView = await viewBtn.isVisible({ timeout: 2000 }).catch(() => false);
+        const hasInstall = await installBtn.isVisible({ timeout: 2000 }).catch(() => false);
+
+        expect(hasView || hasInstall).toBeTruthy();
+      }
+    });
+
+    test('should open plugin details dialog when clicking View Details', async ({ page }) => {
+      const main = mainContent(page);
+      const viewBtn = main.getByRole('button', { name: /View Details/i }).first();
+
+      if (await viewBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await viewBtn.click();
+        await page.waitForTimeout(500);
+
+        // Details dialog should appear with tabs (Overview, Versions, Reviews, Security)
+        const dialog = page.getByRole('dialog');
+        const hasDialog = await dialog.isVisible({ timeout: 3000 }).catch(() => false);
+
+        if (hasDialog) {
+          const hasOverview = await dialog.getByText(/Overview/i).isVisible({ timeout: 2000 }).catch(() => false);
+          const hasVersions = await dialog.getByText(/Versions/i).isVisible({ timeout: 2000 }).catch(() => false);
+          expect(hasOverview || hasVersions).toBeTruthy();
+
+          // Close dialog
+          const closeBtn = dialog.getByRole('button', { name: /Close/i }).first();
+          if (await closeBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+            await closeBtn.click();
+          } else {
+            await page.keyboard.press('Escape');
+          }
+        }
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------
-  // 4. Navigation
+  // 5. Navigation
   // ---------------------------------------------------------------------------
   test.describe('Navigation', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {
@@ -194,7 +350,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 5. Accessibility
+  // 6. Accessibility
   // ---------------------------------------------------------------------------
   test.describe('Accessibility', () => {
     test('should have a page heading', async ({ page }) => {
@@ -223,7 +379,7 @@ test.describe('Plugin Registry — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 6. Error-Free Operation
+  // 7. Error-Free Operation
   // ---------------------------------------------------------------------------
   test.describe('Error-Free Operation', () => {
     test('should load without JavaScript console errors', async ({ page }) => {

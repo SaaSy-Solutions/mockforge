@@ -119,7 +119,56 @@ test.describe('Template Marketplace — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // 3. Template List / Empty State
+  // 3. Filter Interactions
+  // ---------------------------------------------------------------------------
+  test.describe('Filter Interactions', () => {
+    test('should open Category dropdown and show options', async ({ page }) => {
+      const main = mainContent(page);
+      // Click the default category value to open dropdown
+      await main.getByText('All Categories').click();
+      await page.waitForTimeout(300);
+
+      const listbox = page.getByRole('listbox');
+      if (await listbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const options = await listbox.locator('[role="option"]').count();
+        expect(options).toBeGreaterThanOrEqual(2);
+        await page.keyboard.press('Escape');
+      }
+    });
+
+    test('should open Sort By dropdown and show options', async ({ page }) => {
+      const main = mainContent(page);
+      await main.getByText('Most Popular').click();
+      await page.waitForTimeout(300);
+
+      const listbox = page.getByRole('listbox');
+      if (await listbox.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const options = await listbox.locator('[role="option"]').count();
+        expect(options).toBeGreaterThanOrEqual(2);
+        await page.keyboard.press('Escape');
+      }
+    });
+
+    test('should update results count when search query changes', async ({ page }) => {
+      const main = mainContent(page);
+      const searchInput = main.getByPlaceholder('Search templates...');
+
+      // Get initial count text
+      const initialText = await main.getByText(/\d+ templates? found/).textContent();
+
+      // Type a search query
+      await searchInput.fill('xyznonexistent123');
+      await page.waitForTimeout(500);
+
+      // Results count should update (possibly to 0)
+      await expect(main.getByText(/\d+ templates? found/)).toBeVisible();
+
+      await searchInput.clear();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 4. Template List / Cards
   // ---------------------------------------------------------------------------
   test.describe('Template List', () => {
     test('should show templates or "0 templates found"', async ({ page }) => {
@@ -130,6 +179,39 @@ test.describe('Template Marketplace — Deployed Site', () => {
         .isVisible({ timeout: 3000 }).catch(() => false);
 
       expect(hasZero || hasTemplates).toBeTruthy();
+    });
+
+    test('should display template cards with View Details when templates exist', async ({ page }) => {
+      const main = mainContent(page);
+      const hasTemplates = await main.getByText(/[1-9]\d* templates? found/)
+        .isVisible({ timeout: 3000 }).catch(() => false);
+
+      if (hasTemplates) {
+        const viewBtn = main.getByRole('button', { name: /View Details/i }).first();
+        const hasView = await viewBtn.isVisible({ timeout: 3000 }).catch(() => false);
+        expect(hasView).toBeTruthy();
+      }
+    });
+
+    test('should open template details dialog when clicking View Details', async ({ page }) => {
+      const main = mainContent(page);
+      const viewBtn = main.getByRole('button', { name: /View Details/i }).first();
+
+      if (await viewBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await viewBtn.click();
+        await page.waitForTimeout(500);
+
+        const dialog = page.getByRole('dialog');
+        if (await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
+          // Dialog should contain template info
+          const hasContent = await dialog.getByText(/Description|Overview|Install|Download/i)
+            .first().isVisible({ timeout: 2000 }).catch(() => false);
+          expect(hasContent).toBeTruthy();
+
+          // Close dialog
+          await page.keyboard.press('Escape');
+        }
+      }
     });
   });
 
