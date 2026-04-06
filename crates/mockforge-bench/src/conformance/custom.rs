@@ -169,35 +169,20 @@ impl CustomConformanceConfig {
             for field in &check.expected_body_fields {
                 let field_check_name =
                     format!("{}:body:{}:{}", escaped_name, field.name, field.field_type);
+                // Generate JS expression to access the field value, supporting
+                // nested paths like "results.name" and "items[].id"
+                let accessor = generate_field_accessor(&field.name);
                 let type_check = match field.field_type.as_str() {
-                    "string" => format!(
-                        "typeof JSON.parse(r.body)['{}'] === 'string'",
-                        field.name
-                    ),
-                    "integer" => format!(
-                        "Number.isInteger(JSON.parse(r.body)['{}'])",
-                        field.name
-                    ),
-                    "number" => format!(
-                        "typeof JSON.parse(r.body)['{}'] === 'number'",
-                        field.name
-                    ),
-                    "boolean" => format!(
-                        "typeof JSON.parse(r.body)['{}'] === 'boolean'",
-                        field.name
-                    ),
-                    "array" => format!(
-                        "Array.isArray(JSON.parse(r.body)['{}'])",
-                        field.name
-                    ),
+                    "string" => format!("typeof ({}) === 'string'", accessor),
+                    "integer" => format!("Number.isInteger({})", accessor),
+                    "number" => format!("typeof ({}) === 'number'", accessor),
+                    "boolean" => format!("typeof ({}) === 'boolean'", accessor),
+                    "array" => format!("Array.isArray({})", accessor),
                     "object" => format!(
-                        "typeof JSON.parse(r.body)['{}'] === 'object' && !Array.isArray(JSON.parse(r.body)['{}'])",
-                        field.name, field.name
+                        "typeof ({}) === 'object' && !Array.isArray({})",
+                        accessor, accessor
                     ),
-                    _ => format!(
-                        "JSON.parse(r.body)['{}'] !== undefined",
-                        field.name
-                    ),
+                    _ => format!("({}) !== undefined", accessor),
                 };
                 script.push_str(&format!(
                     "      {{ let ok = check(res, {{ '{}': (r) => {{ try {{ return {}; }} catch(e) {{ return false; }} }} }}); if (!ok) __captureFailure('{}', res, 'body field {} is {}'); }}\n",
@@ -211,6 +196,29 @@ impl CustomConformanceConfig {
         script.push_str("  });\n\n");
         script
     }
+}
+
+/// Generate a JavaScript expression to access a field in a parsed JSON body.
+///
+/// Supports three path formats:
+/// - Simple key: `"name"` → `JSON.parse(r.body)['name']`
+/// - Dot-notation: `"config.enabled"` → `JSON.parse(r.body)['config']['enabled']`
+/// - Array bracket: `"items[].id"` → `JSON.parse(r.body)['items'][0]['id']`
+fn generate_field_accessor(field_name: &str) -> String {
+    // Split on dots, handling [] array notation
+    let parts: Vec<&str> = field_name.split('.').collect();
+    let mut expr = String::from("JSON.parse(r.body)");
+
+    for part in &parts {
+        if let Some(arr_name) = part.strip_suffix("[]") {
+            // Array field — access the array then index first element
+            expr.push_str(&format!("['{}'][0]", arr_name));
+        } else {
+            expr.push_str(&format!("['{}']", part));
+        }
+    }
+
+    expr
 }
 
 #[cfg(test)]
@@ -400,5 +408,59 @@ custom_checks:
         let script = config.generate_k6_group("BASE_URL", &[]);
         assert!(script.contains("http.del("));
         assert!(script.contains("r.status === 204"));
+    }
+
+    #[test]
+    fn test_field_accessor_simple() {
+        assert_eq!(generate_field_accessor("name"), "JSON.parse(r.body)['name']");
+    }
+
+    #[test]
+    fn test_field_accessor_nested_dot() {
+        assert_eq!(
+            generate_field_accessor("config.enabled"),
+            "JSON.parse(r.body)['config']['enabled']"
+        );
+    }
+
+    #[test]
+    fn test_field_accessor_array_bracket() {
+        assert_eq!(generate_field_accessor("items[].id"), "JSON.parse(r.body)['items'][0]['id']");
+    }
+
+    #[test]
+    fn test_field_accessor_deep_nested() {
+        assert_eq!(generate_field_accessor("a.b.c"), "JSON.parse(r.body)['a']['b']['c']");
+    }
+
+    #[test]
+    fn test_generate_k6_nested_body_fields() {
+        let config = CustomConformanceConfig {
+            custom_checks: vec![CustomCheck {
+                name: "custom:nested".to_string(),
+                path: "/api/data".to_string(),
+                method: "GET".to_string(),
+                expected_status: 200,
+                body: None,
+                expected_headers: std::collections::HashMap::new(),
+                expected_body_fields: vec![
+                    ExpectedBodyField {
+                        name: "count".to_string(),
+                        field_type: "integer".to_string(),
+                    },
+                    ExpectedBodyField {
+                        name: "results[].name".to_string(),
+                        field_type: "string".to_string(),
+                    },
+                ],
+                headers: std::collections::HashMap::new(),
+            }],
+        };
+
+        let script = config.generate_k6_group("BASE_URL", &[]);
+        // Simple field should use direct bracket access
+        assert!(script.contains("JSON.parse(r.body)['count']"));
+        // Nested array field should use [0] for array traversal
+        assert!(script.contains("JSON.parse(r.body)['results'][0]['name']"));
     }
 }
