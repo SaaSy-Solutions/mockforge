@@ -2051,9 +2051,16 @@ enum Commands {
         #[arg(long)]
         output: Option<PathBuf>,
 
-        /// Base URL to strip from entry URLs (auto-detected if omitted)
+        /// Base URL to strip from entry URLs (auto-detected if omitted).
+        /// Example: --base-url https://192.168.2.86/api
         #[arg(long)]
         base_url: Option<String>,
+
+        /// Base path to strip from generated paths (e.g., /api).
+        /// Use this when your HAR URLs include a path prefix that you also
+        /// pass via --base-path to the bench command, to avoid path doubling.
+        #[arg(long)]
+        strip_base_path: Option<String>,
 
         /// Skip static asset entries (.js, .css, .png, etc.)
         #[arg(long, default_value = "true")]
@@ -2775,6 +2782,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             har,
             output,
             base_url,
+            strip_base_path,
             skip_static,
             include_headers,
             max_entries,
@@ -2783,8 +2791,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 generate_custom_yaml_from_har, HarToCustomOptions,
             };
 
+            // If --strip-base-path is given, auto-detect the host from the HAR
+            // and append the base path to form the full base URL for stripping.
+            let effective_base_url = if let Some(ref bu) = base_url {
+                Some(bu.clone())
+            } else if let Some(ref sbp) = strip_base_path {
+                // Read the HAR to detect the host, then append the base path
+                let raw = std::fs::read_to_string(&har)?;
+                let archive: serde_json::Value = serde_json::from_str(&raw)?;
+                if let Some(url_str) =
+                    archive.pointer("/log/entries/0/request/url").and_then(|v| v.as_str())
+                {
+                    if let Ok(parsed) = url::Url::parse(url_str) {
+                        let mut host_base = format!(
+                            "{}://{}",
+                            parsed.scheme(),
+                            parsed.host_str().unwrap_or("localhost")
+                        );
+                        if let Some(port) = parsed.port() {
+                            host_base.push_str(&format!(":{}", port));
+                        }
+                        let bp = sbp.trim_end_matches('/');
+                        let bp = if bp.starts_with('/') {
+                            bp.to_string()
+                        } else {
+                            format!("/{}", bp)
+                        };
+                        Some(format!("{}{}", host_base, bp))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             let options = HarToCustomOptions {
-                base_url,
+                base_url: effective_base_url,
                 skip_static,
                 include_headers: if include_headers.is_empty() {
                     vec!["content-type".to_string()]
