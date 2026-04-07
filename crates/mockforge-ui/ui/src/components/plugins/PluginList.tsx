@@ -55,7 +55,11 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
       const data = await response.json();
 
       if (data.success) {
-        setPlugins(data.data.plugins);
+        // Defensive: the server may return `{ success: true, data: {} }`
+        // when the plugin backend is degraded — never hand setPlugins
+        // a non-array or .length / .map will crash the page.
+        const list = data?.data?.plugins;
+        setPlugins(Array.isArray(list) ? list : []);
       } else {
         setError(data.error);
       }

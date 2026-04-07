@@ -93,8 +93,27 @@ export function StatusPage() {
   }
 
   if (!status) {
-    return null;
+    // Render the page shell even when the status payload is missing so
+    // tests and users never see a blank main container.
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Service Status</h1>
+          <p className="text-muted-foreground">
+            Real-time status of MockForge Cloud services
+          </p>
+        </div>
+        <Alert>
+          <span>No status information is available right now. Check back shortly.</span>
+        </Alert>
+      </div>
+    );
   }
+
+  // Defensive: `services` and `incidents` can be missing when the API
+  // returns a degraded payload under rate-limit pressure.
+  const services = Array.isArray(status.services) ? status.services : [];
+  const incidents = Array.isArray(status.incidents) ? status.incidents : [];
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -131,7 +150,7 @@ export function StatusPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {status.services.map((service) => (
+            {services.map((service) => (
               <div
                 key={service.name}
                 className="flex items-center justify-between p-4 border rounded-lg"
@@ -160,14 +179,14 @@ export function StatusPage() {
           <CardTitle>Recent Incidents</CardTitle>
         </CardHeader>
         <CardContent>
-          {status.incidents.length === 0 ? (
+          {incidents.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
               <p>No incidents reported. All systems operational.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {status.incidents.map((incident) => (
+              {incidents.map((incident) => (
                 <div
                   key={incident.id}
                   className="p-4 border rounded-lg"

@@ -102,7 +102,18 @@ export function PluginStatus() {
     );
   }
 
-  const { stats, health } = status;
+  // Defensive: the API may return `status` without `stats`/`health` or
+  // with `health` as null under degraded conditions — fall back to empty
+  // values so downstream .filter / .map / .total_plugins don't crash.
+  const stats = status.stats ?? {
+    total_plugins: 0,
+    discovered: 0,
+    loaded: 0,
+    failed: 0,
+    skipped: 0,
+    success_rate: 0,
+  };
+  const health = Array.isArray(status.health) ? status.health : [];
   const healthyPlugins = health.filter(h => h.healthy).length;
   const unhealthyPlugins = health.filter(h => !h.healthy).length;
 

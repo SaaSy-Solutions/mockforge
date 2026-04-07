@@ -107,7 +107,8 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
     );
   };
 
-  const getTypeBadges = (types: string[]) => {
+  const getTypeBadges = (types: string[] | undefined | null) => {
+    if (!Array.isArray(types)) return null;
     return types.map(type => (
       <Badge key={type} variant="outline" className="text-xs">
         {type}
