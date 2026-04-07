@@ -209,7 +209,17 @@ export const HostedMocksPage: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || 'Failed to create deployment');
+        // `errorData.error` may be a string, an object (e.g. validation
+        // details), or missing entirely. Normalize to a human-readable
+        // string so the toast doesn't render "[object Object]".
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `Failed to create deployment (HTTP ${response.status})`;
+        throw new Error(message);
       }
 
       // Success

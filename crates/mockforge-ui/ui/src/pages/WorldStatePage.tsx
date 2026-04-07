@@ -34,7 +34,9 @@ export const WorldStatePage: React.FC = () => {
 
   // Build layer state
   const layers: StateLayer[] = useMemo(() => {
-    if (!layersData) return [];
+    // The API can return a degraded payload (e.g. `{}` or `{ layers: null }`)
+    // when rate-limited or misconfigured, so guard the array access.
+    if (!layersData || !Array.isArray(layersData.layers)) return [];
     return layersData.layers.map((layer) => ({
       id: layer.id,
       name: layer.name,
@@ -56,19 +58,21 @@ export const WorldStatePage: React.FC = () => {
   // WebSocket stream (optional, for real-time updates)
   const { snapshot: streamSnapshot, connected: streamConnected } = useWorldStateStream(useRealtime);
 
-  // Use stream data if available, otherwise use REST data
+  // Use stream data if available, otherwise use REST data. Both sources can
+  // arrive with missing `nodes`/`edges` fields under degraded conditions, so
+  // fall back to an empty array in every branch.
   const displayNodes = useMemo(() => {
     if (streamSnapshot && useRealtime) {
-      return streamSnapshot.nodes;
+      return Array.isArray(streamSnapshot.nodes) ? streamSnapshot.nodes : [];
     }
-    return graphData?.nodes || [];
+    return Array.isArray(graphData?.nodes) ? graphData!.nodes : [];
   }, [streamSnapshot, graphData, useRealtime]);
 
   const displayEdges = useMemo(() => {
     if (streamSnapshot && useRealtime) {
-      return streamSnapshot.edges;
+      return Array.isArray(streamSnapshot.edges) ? streamSnapshot.edges : [];
     }
-    return graphData?.edges || [];
+    return Array.isArray(graphData?.edges) ? graphData!.edges : [];
   }, [streamSnapshot, graphData, useRealtime]);
 
   // Filter nodes and edges by enabled layers

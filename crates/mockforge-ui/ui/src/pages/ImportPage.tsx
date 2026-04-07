@@ -163,6 +163,9 @@ interface RoutePreviewProps {
 }
 
 function RoutePreview({ routes, onToggleRoute, selectedRoutes }: RoutePreviewProps) {
+  // Defensive: upstream API/parsers may hand us a non-array under
+  // degraded conditions — don't crash the whole page.
+  if (!Array.isArray(routes) || routes.length === 0) return null;
   if (routes.length === 0) {
     return (
       <div className="text-center py-8">
@@ -298,7 +301,14 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
     );
   }
 
-  if (!history || history.imports.length === 0) {
+  // The history endpoint can return a degraded payload (e.g. `{}` or
+  // `{ imports: null }`) under rate limiting, so normalize defensively
+  // before rendering — otherwise `.length` / `.map` crash the page and
+  // trip the global ErrorBoundary.
+  const imports = Array.isArray(history?.imports) ? history!.imports : [];
+  const total = typeof history?.total === 'number' ? history!.total : imports.length;
+
+  if (!history || imports.length === 0) {
     return (
       <EmptyState
         icon={<History className="h-8 w-8" />}
@@ -311,7 +321,7 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium">Import History ({history.total})</h3>
+        <h3 className="text-lg font-medium">Import History ({total})</h3>
         <Button
           variant="outline"
           size="sm"
@@ -324,7 +334,7 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
       </div>
 
       <div className="space-y-3 max-h-96 overflow-y-auto">
-        {history.imports.map((entry) => (
+        {imports.map((entry) => (
           <Card key={entry.id} className="p-4">
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-3 flex-1">
