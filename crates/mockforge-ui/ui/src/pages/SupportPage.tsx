@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { Send, Mail, MessageSquare, HelpCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 interface SupportRequest {
   subject: string;
@@ -46,7 +47,7 @@ export function SupportPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to submit support request' }));
-        throw new Error(errorData.error || 'Failed to submit support request');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to submit support request'));
       }
 
       setSuccess(true);

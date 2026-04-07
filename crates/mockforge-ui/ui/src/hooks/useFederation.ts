@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 const API_BASE = '/api/v1/federation';
 
@@ -67,7 +68,7 @@ export const useFederations = (
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to fetch federations');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch federations'));
       }
       return response.json();
     },
@@ -86,7 +87,7 @@ export const useFederation = (id: string): UseQueryResult<Federation, Error> => 
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to fetch federation');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch federation'));
       }
       return response.json();
     },
@@ -107,7 +108,7 @@ export const useCreateFederation = () => {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to create federation');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to create federation'));
       }
       return response.json();
     },
@@ -130,7 +131,7 @@ export const useUpdateFederation = () => {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to update federation');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to update federation'));
       }
       return response.json();
     },
@@ -153,7 +154,7 @@ export const useDeleteFederation = () => {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to delete federation');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to delete federation'));
       }
     },
     onSuccess: () => {
@@ -173,7 +174,7 @@ export const useRouteRequest = () => {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Failed to route request');
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to route request'));
       }
       return response.json();
     },

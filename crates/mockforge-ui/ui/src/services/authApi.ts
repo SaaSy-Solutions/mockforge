@@ -3,6 +3,7 @@
 // Supports both local admin mode (/__mockforge/) and cloud registry mode (/api/v1/)
 
 import type { User } from '../types';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 export interface LoginResponse {
   token: string;
@@ -43,7 +44,7 @@ class AuthApiService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || errorData.details?.message || `HTTP error! status: ${response.status}`);
+      throw new Error(apiErrorMessage(response, errorData, `HTTP error! status: ${response.status}`));
     }
 
     if (this.cloud) {

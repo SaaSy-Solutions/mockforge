@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/Card';
 import { cn } from '../../utils/cn';
 import { logger } from '@/utils/logger';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 interface WorkspaceScenarioCreatorProps {
   onScenarioCreated?: (scenario: WorkspaceScenarioResult) => void;
@@ -63,7 +64,7 @@ export function WorkspaceScenarioCreator({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
       }
 
       const responseData = await response.json();

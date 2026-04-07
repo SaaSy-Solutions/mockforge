@@ -4,6 +4,7 @@
 import { authenticatedFetch } from '../../utils/apiClient';
 import { safeValidateApiResponse } from '../../schemas/api';
 import { logger } from '@/utils/logger';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 export { authenticatedFetch };
 
@@ -124,7 +125,7 @@ export async function fetchJsonWithErrorMessage(url: string, options?: RequestIn
       throw new Error('Access denied');
     }
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    throw new Error(apiErrorMessage(response, errorData, `HTTP error! status: ${response.status}`));
   }
   const json = await response.json();
   return json.data || json;

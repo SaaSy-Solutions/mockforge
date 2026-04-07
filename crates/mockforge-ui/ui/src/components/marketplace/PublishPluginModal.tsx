@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { apiErrorMessage } from '@/utils/errorHandling';
 import {
   Dialog,
   DialogTitle,
@@ -176,7 +177,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to publish: ${response.statusText}`);
+        throw new Error(apiErrorMessage(response, errorData, `Failed to publish: ${response.statusText}`));
       }
 
       const result = await response.json();

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 const API_BASE = '/api/v1/pipelines';
 
@@ -80,8 +81,8 @@ export const usePipelines = (
     queryFn: async () => {
       const response = await fetch(`${API_BASE}?${params.toString()}`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch pipelines');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipelines'));
       }
       const data = await response.json();
       return data;
@@ -97,8 +98,8 @@ export const usePipeline = (id: string): UseQueryResult<Pipeline, Error> => {
     queryFn: async () => {
       const response = await fetch(`${API_BASE}/${id}`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch pipeline');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline'));
       }
       const data = await response.json();
       return data;
@@ -118,8 +119,8 @@ export const useCreatePipeline = () => {
         body: JSON.stringify(request),
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create pipeline');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to create pipeline'));
       }
       return response.json();
     },
@@ -141,8 +142,8 @@ export const useUpdatePipeline = () => {
         body: JSON.stringify(data),
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update pipeline');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to update pipeline'));
       }
       return response.json();
     },
@@ -163,8 +164,8 @@ export const useDeletePipeline = () => {
         method: 'DELETE',
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete pipeline');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to delete pipeline'));
       }
     },
     onSuccess: () => {
@@ -185,8 +186,8 @@ export const useTriggerPipeline = () => {
         body: JSON.stringify(event || {}),
       });
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to trigger pipeline');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to trigger pipeline'));
       }
       return response.json();
     },
@@ -212,8 +213,8 @@ export const usePipelineExecutions = (
     queryFn: async () => {
       const response = await fetch(`/api/v1/pipelines/executions?${params.toString()}`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch pipeline executions');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline executions'));
       }
       const data = await response.json();
       return data;
@@ -229,8 +230,8 @@ export const usePipelineExecution = (id: string): UseQueryResult<PipelineExecuti
     queryFn: async () => {
       const response = await fetch(`/api/v1/pipelines/executions/${id}`);
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch pipeline execution');
+        const errorData = await response.json().catch(() => null);
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline execution'));
       }
       const data = await response.json();
       return data;

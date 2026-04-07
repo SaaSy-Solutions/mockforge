@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Loader2, CheckCircle2, XCircle, Download, Play } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 interface VoiceInputProps {
   onCommandProcessed?: (result: VoiceCommandResult) => void;
@@ -153,7 +154,7 @@ export function VoiceInput({ onCommandProcessed, className }: VoiceInputProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
       }
 
       const responseData = await response.json();

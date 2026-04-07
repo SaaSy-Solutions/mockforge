@@ -8,6 +8,7 @@ import { Loader2, CheckCircle2, XCircle, Copy, Download, Code2 } from 'lucide-re
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
 import { logger } from '@/utils/logger';
+import { apiErrorMessage } from '@/utils/errorHandling';
 
 interface NLHookEditorProps {
   onHookGenerated?: (hook: HookResult) => void;
@@ -46,7 +47,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
       }
 
       const responseData = await response.json();

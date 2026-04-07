@@ -35,6 +35,32 @@ export function getErrorMessage(error: unknown): string {
 }
 
 /**
+ * Build an Error from a fetch Response + optional parsed JSON body. Prefers
+ * any `message` / `error` string on the body, falls back to a stringified
+ * object (so it never renders as "[object Object]"), and finally to the HTTP
+ * status. Use this everywhere you do
+ *   `throw new Error(errorData.error || 'Failed to …')`
+ * to get consistent, readable error messages regardless of the server's
+ * error envelope.
+ */
+export function apiErrorMessage(
+  response: { status: number; statusText?: string },
+  body: unknown,
+  fallback: string
+): string {
+  if (body && typeof body === 'object') {
+    const raw =
+      (body as { error?: unknown }).error ??
+      (body as { message?: unknown }).message;
+    if (typeof raw === 'string' && raw.trim().length > 0) return raw;
+    if (raw) return JSON.stringify(raw);
+  }
+  if (typeof body === 'string' && body.trim().length > 0) return body;
+  const suffix = response.statusText ? ` ${response.statusText}` : '';
+  return `${fallback} (HTTP ${response.status}${suffix})`;
+}
+
+/**
  * Extract detailed error information for logging and debugging
  */
 export function getErrorDetails(error: unknown): ErrorDetails {
