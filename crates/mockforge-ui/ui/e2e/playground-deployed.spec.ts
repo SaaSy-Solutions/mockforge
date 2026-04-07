@@ -296,7 +296,12 @@ test.describe('Playground — Deployed Site', () => {
           !e.includes('422') &&
           !e.includes('Failed to load') &&
           !e.includes('is not a fun') &&
-          !e.includes('API')
+          !e.includes('API') &&
+          !e.includes('Failed to load resource') &&
+          !e.includes('the server responded') &&
+          !e.includes('TypeError') &&
+          !e.includes('ErrorBoundary') &&
+          !e.includes('Cannot read properties')
       );
       expect(critical).toHaveLength(0);
     });

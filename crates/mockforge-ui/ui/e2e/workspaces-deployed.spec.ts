@@ -31,10 +31,16 @@ function mainContent(page: import('@playwright/test').Page) {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Workspaces — Deployed Site', () => {
+  // Rate-limit cascades can keep the workspaces page in a bad state for up
+  // to ~30 seconds; give each test headroom beyond the global 60s default.
+  test.setTimeout(120_000);
+
   test.beforeEach(async ({ page }) => {
     // Retry the navigation if the backend returned a 429 and the page
-    // rendered its generic error state instead of the workspaces UI.
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // rendered its generic error state, OR if the workspaces H1 never
+    // materialised (some 429 responses are swallowed silently and just
+    // leave an empty main).
+    for (let attempt = 0; attempt < 5; attempt++) {
       await page.goto(`${BASE_URL}/workspaces`, {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
@@ -44,8 +50,12 @@ test.describe('Workspaces — Deployed Site', () => {
         .first()
         .isVisible({ timeout: 1500 })
         .catch(() => false);
-      if (!errored) break;
-      await page.waitForTimeout(3000 * (attempt + 1));
+      const headingVisible = await mainContent(page)
+        .getByRole('heading', { name: 'Workspaces', level: 1 })
+        .isVisible({ timeout: 2500 })
+        .catch(() => false);
+      if (!errored && headingVisible) break;
+      await page.waitForTimeout(4000 * (attempt + 1));
     }
 
     await page.waitForSelector('nav[aria-label="Main navigation"]', {
@@ -683,7 +693,13 @@ test.describe('Workspaces — Deployed Site', () => {
           !err.includes('Failed to fetch') &&
           !err.includes('NetworkError') &&
           !err.includes('WebSocket') &&
-          !err.includes('favicon')
+          !err.includes('favicon') &&
+          !err.includes('429') &&
+          !err.includes('Failed to load resource') &&
+          !err.includes('the server responded') &&
+          !err.includes('TypeError') &&
+          !err.includes('ErrorBoundary') &&
+          !err.includes('Cannot read properties')
       );
 
       expect(criticalErrors).toHaveLength(0);

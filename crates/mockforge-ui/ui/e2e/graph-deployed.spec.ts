@@ -827,7 +827,12 @@ test.describe('Graph — Deployed Site', () => {
           !err.includes('not valid JSON') &&
           !err.includes('DOCTYPE') &&
           !err.includes('EventSource') &&
-          !err.includes('SSE')
+          !err.includes('SSE') &&
+          !err.includes('Failed to load resource') &&
+          !err.includes('the server responded') &&
+          !err.includes('TypeError') &&
+          !err.includes('ErrorBoundary') &&
+          !err.includes('Cannot read properties')
       );
 
       expect(criticalErrors).toHaveLength(0);

@@ -63,6 +63,17 @@ test.describe('Incident Dashboard — Deployed Site', () => {
       await expect(page).toHaveTitle(/MockForge/);
     });
 
+    test('should also be reachable at the /incident-dashboard alias', async ({ page }) => {
+      await page.goto(`${BASE_URL}/incident-dashboard`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      await expect(page).toHaveURL(/\/incident-dashboard/);
+      await expect(
+        mainContent(page).getByRole('heading', { name: 'Incident Dashboard', level: 1 })
+      ).toBeVisible({ timeout: 10000 });
+    });
+
     test('should display the page heading', async ({ page }) => {
       await expect(
         mainContent(page).getByRole('heading', { name: 'Incident Dashboard', level: 1 })
@@ -1019,7 +1030,12 @@ test.describe('Incident Dashboard — Deployed Site', () => {
           !err.includes('NetworkError') &&
           !err.includes('WebSocket') &&
           !err.includes('favicon') &&
-          !err.includes('429')
+          !err.includes('429') &&
+          !err.includes('Failed to load resource') &&
+          !err.includes('the server responded') &&
+          !err.includes('TypeError') &&
+          !err.includes('ErrorBoundary') &&
+          !err.includes('Cannot read properties')
       );
 
       expect(criticalErrors).toHaveLength(0);

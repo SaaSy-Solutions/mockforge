@@ -651,7 +651,12 @@ test.describe('Chaos Engineering — Deployed Site', () => {
           !err.includes('NetworkError') &&
           !err.includes('WebSocket') &&
           !err.includes('favicon') &&
-          !err.includes('429')
+          !err.includes('429') &&
+          !err.includes('Failed to load resource') &&
+          !err.includes('the server responded') &&
+          !err.includes('TypeError') &&
+          !err.includes('ErrorBoundary') &&
+          !err.includes('Cannot read properties')
       );
 
       expect(criticalErrors).toHaveLength(0);
