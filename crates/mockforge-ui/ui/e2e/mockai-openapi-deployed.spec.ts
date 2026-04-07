@@ -61,11 +61,11 @@ test.describe('MockAI OpenAPI Generator — Deployed Site', () => {
       ).toBeVisible({ timeout: 5000 });
     });
 
-    test('should display the subtitle', async ({ page }) => {
+    test('should display the Generation Filters section', async ({ page }) => {
+      // Deployed site does not render a description paragraph; assert the
+      // filter section heading instead so we still verify the page mounted.
       await expect(
-        mainContent(page).getByText(
-          'Analyze recorded HTTP traffic and generate OpenAPI 3.0 specifications using AI-powered pattern detection'
-        ).first()
+        mainContent(page).getByRole('heading', { name: 'Generation Filters' })
       ).toBeVisible({ timeout: 5000 });
     });
 

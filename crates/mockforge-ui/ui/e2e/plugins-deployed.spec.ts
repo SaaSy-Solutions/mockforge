@@ -600,7 +600,7 @@ test.describe('Plugins — Deployed Site', () => {
     test('should have landmarks and skip links', async ({ page }) => {
       const hasMain = await page.getByRole('main').isVisible({ timeout: 3000 }).catch(() => false);
       const hasNav = await page.getByRole('navigation', { name: 'Main navigation' }).isVisible({ timeout: 3000 }).catch(() => false);
-      const hasSkip = await page.getByRole('link', { name: 'Skip to navigation' }).isAttached().catch(() => false);
+      const hasSkip = (await page.getByRole('link', { name: 'Skip to navigation' }).count().catch(() => 0)) > 0;
       expect(hasMain || hasNav || hasSkip).toBeTruthy();
     });
 

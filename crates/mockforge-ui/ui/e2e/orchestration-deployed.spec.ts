@@ -28,7 +28,7 @@ test.describe('Request Chains — Deployed Site', () => {
   });
 
   test('should display Request Chains heading', async ({ page }) => {
-    await expect(mainContent(page).getByText('Request Chains')).toBeVisible({ timeout: 5000 });
+    await expect(mainContent(page).getByRole('heading', { name: 'Request Chains' })).toBeVisible({ timeout: 5000 });
   });
 
   test('should display subtitle', async ({ page }) => {

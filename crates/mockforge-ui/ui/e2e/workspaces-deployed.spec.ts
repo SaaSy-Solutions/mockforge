@@ -25,12 +25,28 @@ function mainContent(page: import('@playwright/test').Page) {
   return page.getByRole('main');
 }
 
+// This file is the heaviest deployed suite and repeatedly hits the
+// registry's per-user rate limit (~100 req/min) when run in parallel, so
+// force serial execution.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Workspaces — Deployed Site', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(`${BASE_URL}/workspaces`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
+    // Retry the navigation if the backend returned a 429 and the page
+    // rendered its generic error state instead of the workspaces UI.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.goto(`${BASE_URL}/workspaces`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
+      const errored = await page
+        .getByText(/HTTP error! status: 429/)
+        .first()
+        .isVisible({ timeout: 1500 })
+        .catch(() => false);
+      if (!errored) break;
+      await page.waitForTimeout(3000 * (attempt + 1));
+    }
 
     await page.waitForSelector('nav[aria-label="Main navigation"]', {
       state: 'visible',

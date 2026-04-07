@@ -228,8 +228,11 @@ test.describe('Config — Deployed Site', () => {
       await main.getByRole('button', { name: /Latency/ }).click();
       await page.waitForTimeout(500);
 
-      await expect(main.getByText('Base Latency')).toBeVisible({ timeout: 5000 });
-      await expect(main.getByText('Jitter')).toBeVisible();
+      // Use exact-text match — "Jitter" appears in both the label and the
+      // description ("Random delay variation (± jitter)") which would otherwise
+      // trigger a strict-mode violation.
+      await expect(main.getByText('Base Latency (ms)', { exact: true })).toBeVisible({ timeout: 5000 });
+      await expect(main.getByText('Jitter (ms)', { exact: true })).toBeVisible();
     });
 
     test('should display Proxy tab with upstream configuration', async ({ page }) => {

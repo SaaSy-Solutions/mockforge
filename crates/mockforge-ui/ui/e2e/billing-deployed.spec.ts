@@ -103,11 +103,9 @@ test.describe('Billing — Deployed Site', () => {
 
     test('should display plan limits (Projects, Collaborators, Environments)', async ({ page }) => {
       const main = mainContent(page);
-      // Each limit should show a number value
-      const projectsEl = main.locator('div').filter({ hasText: /^Projects$/ }).locator('..');
-      await expect(projectsEl).toBeVisible();
-      const collabEl = main.locator('div').filter({ hasText: /^Collaborators$/ }).locator('..');
-      await expect(collabEl).toBeVisible();
+      await expect(main.getByText('Projects', { exact: true })).toBeVisible();
+      await expect(main.getByText('Collaborators', { exact: true })).toBeVisible();
+      await expect(main.getByText('Environments', { exact: true })).toBeVisible();
     });
 
     test('should display Hosted Mocks availability', async ({ page }) => {

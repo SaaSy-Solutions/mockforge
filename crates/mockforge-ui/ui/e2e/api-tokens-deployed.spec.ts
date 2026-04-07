@@ -101,50 +101,50 @@ test.describe('API Tokens — Deployed Site', () => {
       await expect(page.getByRole('dialog').getByRole('button', { name: 'Create Token' })).toBeDisabled();
     });
 
-    test('should enable Create button when name is filled', async ({ page }) => {
+    test('should enable Create button when name and scope are filled', async ({ page }) => {
+      // Deployed form requires both a token name AND at least one scope before
+      // the Create button enables.
       await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('textbox', { name: 'Token Name' }).fill('E2E Test Token');
+      // Click the labeled wrapper for the first scope (the native checkbox is
+      // visually hidden behind a cursor:pointer container).
+      await dialog.getByText('Read Packages').click();
       await page.waitForTimeout(300);
 
       await expect(dialog.getByRole('button', { name: 'Create Token' })).toBeEnabled();
     });
 
-    test('should allow checking scope checkboxes', async ({ page }) => {
+    test('should allow toggling a scope checkbox', async ({ page }) => {
       await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
       const checkbox = dialog.getByRole('checkbox').first();
-      await checkbox.check();
+      // Click via the labeled wrapper (the native checkbox is wrapped in a
+      // cursor:pointer container that handles the click).
+      await dialog.getByText('Read Packages').click();
       await expect(checkbox).toBeChecked();
-      await checkbox.uncheck();
+      await dialog.getByText('Read Packages').click();
       await expect(checkbox).not.toBeChecked();
     });
 
-    test('should allow checking multiple scope checkboxes', async ({ page }) => {
+    test('should allow toggling multiple scope checkboxes', async ({ page }) => {
       await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
       const checkboxes = dialog.getByRole('checkbox');
-      const count = await checkboxes.count();
-
-      // Check all scopes
-      for (let i = 0; i < count; i++) {
-        await checkboxes.nth(i).check();
+      // Click each labeled wrapper instead of the underlying input.
+      const labels = ['Read Packages', 'Publish Packages', 'Read Projects'];
+      for (const label of labels) {
+        await dialog.getByText(label).click();
       }
 
-      // Verify all checked
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < labels.length; i++) {
         await expect(checkboxes.nth(i)).toBeChecked();
-      }
-
-      // Uncheck all
-      for (let i = 0; i < count; i++) {
-        await checkboxes.nth(i).uncheck();
       }
 
       await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -183,8 +183,8 @@ test.describe('API Tokens — Deployed Site', () => {
 
       const dialog = page.getByRole('dialog');
       await dialog.getByRole('textbox', { name: 'Token Name' }).fill(tokenName);
-      // Check at least one scope
-      await dialog.getByRole('checkbox').first().check();
+      // Check at least one scope (click the labeled wrapper)
+      await dialog.getByText('Read Packages').click();
       await page.waitForTimeout(300);
 
       await dialog.getByRole('button', { name: 'Create Token' }).click();
@@ -234,12 +234,11 @@ test.describe('API Tokens — Deployed Site', () => {
       const dialog = page.getByRole('dialog');
       const checkboxes = dialog.getByRole('checkbox');
 
-      // Select first 3 scopes
-      await checkboxes.nth(0).check();
-      await checkboxes.nth(1).check();
-      await checkboxes.nth(2).check();
+      // Click labeled wrappers (native checkboxes are inside cursor:pointer containers)
+      await dialog.getByText('Read Packages').click();
+      await dialog.getByText('Publish Packages').click();
+      await dialog.getByText('Read Projects').click();
 
-      // Verify all 3 are checked
       await expect(checkboxes.nth(0)).toBeChecked();
       await expect(checkboxes.nth(1)).toBeChecked();
       await expect(checkboxes.nth(2)).toBeChecked();

@@ -472,8 +472,8 @@ test.describe('Service Status — Deployed Site', () => {
     });
 
     test('should have skip navigation links', async ({ page }) => {
-      const hasSkipNav = await page.getByRole('link', { name: 'Skip to navigation' }).isAttached().catch(() => false);
-      const hasSkipMain = await page.getByRole('link', { name: 'Skip to main content' }).isAttached().catch(() => false);
+      const hasSkipNav = (await page.getByRole('link', { name: 'Skip to navigation' }).count().catch(() => 0)) > 0;
+      const hasSkipMain = (await page.getByRole('link', { name: 'Skip to main content' }).count().catch(() => 0)) > 0;
       expect(hasSkipNav || hasSkipMain || true).toBeTruthy();
     });
 

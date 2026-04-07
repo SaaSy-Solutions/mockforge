@@ -36,11 +36,13 @@ test.describe('BYOK Keys — Deployed Site', () => {
     test('should display AI Provider options', async ({ page }) => {
       const main = mainContent(page);
       await expect(main.getByText('AI Provider')).toBeVisible();
-      await expect(main.getByText('OpenAI')).toBeVisible();
-      await expect(main.getByText('Anthropic')).toBeVisible();
-      await expect(main.getByText('Together AI')).toBeVisible();
-      await expect(main.getByText('Fireworks AI')).toBeVisible();
-      await expect(main.getByText('Custom')).toBeVisible();
+      // Each provider appears as both a title and a description ("Use OpenAI API…"),
+      // so use exact: true to disambiguate.
+      await expect(main.getByText('OpenAI', { exact: true })).toBeVisible();
+      await expect(main.getByText('Anthropic', { exact: true })).toBeVisible();
+      await expect(main.getByText('Together AI', { exact: true })).toBeVisible();
+      await expect(main.getByText('Fireworks AI', { exact: true })).toBeVisible();
+      await expect(main.getByText('Custom', { exact: true })).toBeVisible();
     });
 
     test('should display API Key input', async ({ page }) => {
@@ -82,13 +84,13 @@ test.describe('BYOK Keys — Deployed Site', () => {
     test('should allow clicking provider options', async ({ page }) => {
       const main = mainContent(page);
 
-      await main.getByText('Anthropic').click();
+      await main.getByText('Anthropic', { exact: true }).click();
       await page.waitForTimeout(300);
       const apiKeyInput = main.getByRole('textbox', { name: 'API Key' });
       await expect(apiKeyInput).toBeVisible();
 
       // Switch back to OpenAI
-      await main.getByText('OpenAI').click();
+      await main.getByText('OpenAI', { exact: true }).click();
       await page.waitForTimeout(300);
     });
 
@@ -96,20 +98,20 @@ test.describe('BYOK Keys — Deployed Site', () => {
       const main = mainContent(page);
 
       // Start with OpenAI — docs link should point to OpenAI
-      await main.getByText('OpenAI').click();
+      await main.getByText('OpenAI', { exact: true }).click();
       await page.waitForTimeout(300);
       const openaiLink = main.getByRole('link', { name: /View API documentation/i });
       const openaiHref = await openaiLink.getAttribute('href');
       expect(openaiHref).toContain('openai');
 
       // Switch to Anthropic — docs link should change
-      await main.getByText('Anthropic').click();
+      await main.getByText('Anthropic', { exact: true }).click();
       await page.waitForTimeout(300);
       const anthropicHref = await openaiLink.getAttribute('href');
       expect(anthropicHref).toContain('anthropic');
 
       // Switch back
-      await main.getByText('OpenAI').click();
+      await main.getByText('OpenAI', { exact: true }).click();
     });
 
     test('should toggle Enable BYOK button', async ({ page }) => {

@@ -234,7 +234,7 @@ test.describe('Import API Collections — Deployed Site', () => {
       const main = mainContent(page);
 
       // Postman tab - file input should exist (hidden)
-      const hasPostman = await main.locator('#file-upload-postman').isAttached().catch(() => false);
+      const hasPostman = (await main.locator('#file-upload-postman').count().catch(() => 0)) > 0;
 
       // Switch to Insomnia and check
       const insomniaBtn = main.getByRole('button', { name: /Insomnia/i });
@@ -243,7 +243,7 @@ test.describe('Import API Collections — Deployed Site', () => {
         await insomniaBtn.click();
         await page.waitForTimeout(500);
       }
-      const hasInsomnia = await main.locator('#file-upload-insomnia').isAttached().catch(() => false);
+      const hasInsomnia = (await main.locator('#file-upload-insomnia').count().catch(() => 0)) > 0;
 
       // Switch to cURL and check
       const curlBtn = main.getByRole('button', { name: /cURL/i });
@@ -252,7 +252,7 @@ test.describe('Import API Collections — Deployed Site', () => {
         await curlBtn.click();
         await page.waitForTimeout(500);
       }
-      const hasCurl = await main.locator('#file-upload-curl').isAttached().catch(() => false);
+      const hasCurl = (await main.locator('#file-upload-curl').count().catch(() => 0)) > 0;
       expect(hasPostman || hasInsomnia || hasCurl || true).toBeTruthy();
     });
 
@@ -706,8 +706,8 @@ test.describe('Import API Collections — Deployed Site', () => {
     });
 
     test('should have skip navigation links', async ({ page }) => {
-      const hasSkipNav = await page.getByRole('link', { name: 'Skip to navigation' }).isAttached().catch(() => false);
-      const hasSkipMain = await page.getByRole('link', { name: 'Skip to main content' }).isAttached().catch(() => false);
+      const hasSkipNav = (await page.getByRole('link', { name: 'Skip to navigation' }).count().catch(() => 0)) > 0;
+      const hasSkipMain = (await page.getByRole('link', { name: 'Skip to main content' }).count().catch(() => 0)) > 0;
       expect(hasSkipNav || hasSkipMain || true).toBeTruthy();
     });
 

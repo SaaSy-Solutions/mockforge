@@ -888,8 +888,8 @@ test.describe('Request Verification — Deployed Site', () => {
     });
 
     test('should have skip navigation links', async ({ page }) => {
-      const hasSkipNav = await page.getByRole('link', { name: 'Skip to navigation' }).isAttached().catch(() => false);
-      const hasSkipMain = await page.getByRole('link', { name: 'Skip to main content' }).isAttached().catch(() => false);
+      const hasSkipNav = (await page.getByRole('link', { name: 'Skip to navigation' }).count().catch(() => 0)) > 0;
+      const hasSkipMain = (await page.getByRole('link', { name: 'Skip to main content' }).count().catch(() => 0)) > 0;
       // At least some skip links or page content should exist
       const hasContent = (await page.textContent('body').catch(() => '') ?? '').length > 0;
       expect(hasSkipNav || hasSkipMain || hasContent).toBeTruthy();
@@ -897,10 +897,10 @@ test.describe('Request Verification — Deployed Site', () => {
 
     test('should have labels for all form inputs', async ({ page }) => {
       const main = mainContent(page);
-      const hasMode = await main.locator('label[for="mode"]').isAttached().catch(() => false);
-      const hasMethod = await main.locator('label[for="method"]').isAttached().catch(() => false);
-      const hasPath = await main.locator('label[for="path"]').isAttached().catch(() => false);
-      const hasBody = await main.locator('label[for="body-pattern"]').isAttached().catch(() => false);
+      const hasMode = ((await main.locator('label[for="mode"]').count().catch(() => 0)) > 0);
+      const hasMethod = ((await main.locator('label[for="method"]').count().catch(() => 0)) > 0);
+      const hasPath = ((await main.locator('label[for="path"]').count().catch(() => 0)) > 0);
+      const hasBody = ((await main.locator('label[for="body-pattern"]').count().catch(() => 0)) > 0);
       // At least some labels should be present if the form rendered
       const hasContent = (await main.textContent() ?? '').length > 0;
       expect(hasMode || hasMethod || hasPath || hasBody || hasContent).toBeTruthy();

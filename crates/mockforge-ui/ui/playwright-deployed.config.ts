@@ -21,8 +21,10 @@ export default defineConfig({
 
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Deployed registry rate-limits at ~100 req/min/user, so cap parallelism
+  // and retry on the rare 429 cascade.
+  retries: 2,
+  workers: 3,
 
   reporter: process.env.CI ? [['html'], ['github']] : [['html'], ['list']],
 
