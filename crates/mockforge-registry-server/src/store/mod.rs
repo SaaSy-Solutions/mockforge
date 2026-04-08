@@ -33,6 +33,7 @@ use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
+use crate::models::template::{Template, TemplateCategory};
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
@@ -686,4 +687,47 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<OrgTemplate>;
 
     async fn delete_org_template(&self, id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Marketplace templates
+    // ---------------------------------------------------------------------
+
+    #[allow(clippy::too_many_arguments)]
+    async fn create_template(
+        &self,
+        org_id: Option<Uuid>,
+        name: &str,
+        slug: &str,
+        description: &str,
+        author_id: Uuid,
+        version: &str,
+        category: TemplateCategory,
+        content_json: serde_json::Value,
+    ) -> StoreResult<Template>;
+
+    async fn find_template_by_name_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> StoreResult<Option<Template>>;
+
+    async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>>;
+
+    async fn search_templates(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Template>>;
+
+    async fn count_search_templates(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> StoreResult<i64>;
 }

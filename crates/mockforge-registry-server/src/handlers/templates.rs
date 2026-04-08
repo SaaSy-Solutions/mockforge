@@ -13,10 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
-    models::{
-        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Template, TemplateCategory,
-        TemplateVersion, UsageCounter, User,
-    },
+    models::{AuditEventType, FeatureType, TemplateCategory, TemplateVersion, UsageCounter, User},
     AppState,
 };
 
@@ -50,28 +47,28 @@ pub async fn search_templates(
     let offset = (page * per_page) as i64;
 
     // Search templates
-    let templates = Template::search(
-        pool,
-        query.query.as_deref(),
-        query.category.as_deref(),
-        &query.tags,
-        org_id,
-        limit,
-        offset,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let templates = state
+        .store
+        .search_templates(
+            query.query.as_deref(),
+            query.category.as_deref(),
+            &query.tags,
+            org_id,
+            limit,
+            offset,
+        )
+        .await?;
 
     // Get total count for pagination (before converting entries)
-    let total = Template::count_search(
-        pool,
-        query.query.as_deref(),
-        query.category.as_deref(),
-        &query.tags,
-        org_id,
-    )
-    .await
-    .map_err(ApiError::Database)? as usize;
+    let total = state
+        .store
+        .count_search_templates(
+            query.query.as_deref(),
+            query.category.as_deref(),
+            &query.tags,
+            org_id,
+        )
+        .await? as usize;
 
     // Convert to response format
     let mut entries = Vec::new();
@@ -80,10 +77,8 @@ pub async fn search_templates(
             .await
             .map_err(ApiError::Database)?;
 
-        let author = User::find_by_id(pool, template.author_id)
-            .await
-            .map_err(ApiError::Database)?
-            .unwrap_or_else(|| User {
+        let author =
+            state.store.find_user_by_id(template.author_id).await?.unwrap_or_else(|| User {
                 id: template.author_id,
                 username: "unknown".to_string(),
                 email: "unknown@example.com".to_string(),
@@ -160,31 +155,28 @@ pub async fn get_template(
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<TemplateRegistryEntry>> {
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "template");
-    let pool = state.db.pool();
 
-    let template = Template::find_by_name_version(pool, &name, &version)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_template_by_name_version(&name, &version)
+        .await?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
-    let author = User::find_by_id(pool, template.author_id)
-        .await
-        .map_err(ApiError::Database)?
-        .unwrap_or_else(|| User {
-            id: template.author_id,
-            username: "unknown".to_string(),
-            email: "unknown@example.com".to_string(),
-            password_hash: String::new(),
-            api_token: None,
-            is_verified: false,
-            is_admin: false,
-            two_factor_enabled: false,
-            two_factor_secret: None,
-            two_factor_backup_codes: None,
-            two_factor_verified_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        });
+    let author = state.store.find_user_by_id(template.author_id).await?.unwrap_or_else(|| User {
+        id: template.author_id,
+        username: "unknown".to_string(),
+        email: "unknown@example.com".to_string(),
+        password_hash: String::new(),
+        api_token: None,
+        is_verified: false,
+        is_admin: false,
+        two_factor_enabled: false,
+        two_factor_secret: None,
+        two_factor_backup_codes: None,
+        two_factor_verified_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    });
 
     let stats = template.stats_json.clone();
     let compatibility = template.compatibility_json.clone();
@@ -253,8 +245,7 @@ pub async fn publish_template(
     let max_templates = limits.get("max_templates_published").and_then(|v| v.as_i64()).unwrap_or(3);
 
     if max_templates >= 0 {
-        let existing =
-            Template::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
+        let existing = state.store.list_templates_by_org(org_ctx.org_id).await?;
 
         if existing.len() as i64 >= max_templates {
             return Err(ApiError::InvalidRequest(format!(
@@ -319,26 +310,26 @@ pub async fn publish_template(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update template
-    let template = if let Some(existing) =
-        Template::find_by_name_version(pool, &request.name, &request.version)
-            .await
-            .map_err(ApiError::Database)?
+    let template = if let Some(existing) = state
+        .store
+        .find_template_by_name_version(&request.name, &request.version)
+        .await?
     {
         existing
     } else {
-        Template::create(
-            pool,
-            Some(org_ctx.org_id),
-            &request.name,
-            &request.slug,
-            &request.description,
-            author_id,
-            &request.version,
-            request.category,
-            request.content_json.clone(),
-        )
-        .await
-        .map_err(ApiError::Database)?
+        state
+            .store
+            .create_template(
+                Some(org_ctx.org_id),
+                &request.name,
+                &request.slug,
+                &request.description,
+                author_id,
+                &request.version,
+                request.category,
+                request.content_json.clone(),
+            )
+            .await?
     };
 
     // Create version entry
@@ -360,17 +351,18 @@ pub async fn publish_template(
         .map_err(ApiError::Database)?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(author_id),
-        FeatureType::TemplatePublish,
-        Some(serde_json::json!({
-            "template_name": request.name,
-            "version": request.version,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(author_id),
+            FeatureType::TemplatePublish,
+            Some(serde_json::json!({
+                "template_name": request.name,
+                "version": request.version,
+            })),
+        )
+        .await;
 
     // Record audit event
     let ip_address = headers
@@ -380,20 +372,21 @@ pub async fn publish_template(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(author_id),
-        AuditEventType::TemplatePublished,
-        format!("Template {} version {} published", request.name, request.version),
-        Some(serde_json::json!({
-            "template_name": request.name,
-            "version": request.version,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(author_id),
+            AuditEventType::TemplatePublished,
+            format!("Template {} version {} published", request.name, request.version),
+            Some(serde_json::json!({
+                "template_name": request.name,
+                "version": request.version,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Record metrics
     metrics.record_publish_success();

@@ -27,6 +27,7 @@ use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{
     record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
 };
+use crate::models::template::{Template, TemplateCategory};
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
@@ -966,5 +967,71 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_org_template(&self, id: Uuid) -> StoreResult<()> {
         OrgTemplate::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn create_template(
+        &self,
+        org_id: Option<Uuid>,
+        name: &str,
+        slug: &str,
+        description: &str,
+        author_id: Uuid,
+        version: &str,
+        category: TemplateCategory,
+        content_json: serde_json::Value,
+    ) -> StoreResult<Template> {
+        Template::create(
+            &self.pool,
+            org_id,
+            name,
+            slug,
+            description,
+            author_id,
+            version,
+            category,
+            content_json,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_template_by_name_version(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> StoreResult<Option<Template>> {
+        Template::find_by_name_version(&self.pool, name, version)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>> {
+        Template::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn search_templates(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Template>> {
+        Template::search(&self.pool, query, category, tags, org_id, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_search_templates(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> StoreResult<i64> {
+        Template::count_search(&self.pool, query, category, tags, org_id)
+            .await
+            .map_err(Into::into)
     }
 }
