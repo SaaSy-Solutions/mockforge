@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{record_audit_event, AuditEventType, OrgMember, OrgRole, Organization, Plan, User},
+    models::{record_audit_event, AuditEventType, OrgRole, Plan, User},
     AppState,
 };
 
@@ -23,8 +23,6 @@ pub async fn create_organization(
     AuthUser(user_id): AuthUser,
     Json(request): Json<CreateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
-    let pool = state.db.pool();
-
     // Validate input
     if request.name.is_empty() {
         return Err(ApiError::InvalidRequest("Organization name is required".to_string()));
@@ -43,11 +41,7 @@ pub async fn create_organization(
     }
 
     // Check if slug is already taken
-    if Organization::find_by_slug(pool, &request.slug)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.store.find_organization_by_slug(&request.slug).await?.is_some() {
         return Err(ApiError::InvalidRequest("Organization slug is already taken".to_string()));
     }
 
@@ -60,9 +54,10 @@ pub async fn create_organization(
         _ => Plan::Free,
     };
 
-    let org = Organization::create(pool, &request.name, &request.slug, user_id, plan_enum)
-        .await
-        .map_err(ApiError::Database)?;
+    let org = state
+        .store
+        .create_organization(&request.name, &request.slug, user_id, plan_enum)
+        .await?;
 
     Ok(Json(OrganizationResponse {
         id: org.id,
@@ -79,10 +74,8 @@ pub async fn list_organizations(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<Vec<OrganizationResponse>>> {
-    let pool = state.db.pool();
-
     // Get all organizations where user is owner or member
-    let orgs = Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
+    let orgs = state.store.list_organizations_by_user(user_id).await?;
 
     // Convert to response format
     let responses: Vec<OrganizationResponse> = orgs
@@ -106,17 +99,16 @@ pub async fn get_organization(
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrganizationResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access (owner or member)
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -143,13 +135,14 @@ pub async fn get_organization_members(
     let pool = state.db.pool();
 
     // Verify user has access to this organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -163,7 +156,7 @@ pub async fn get_organization_members(
     let org_id_for_members = org.id;
 
     // Get all members (including owner)
-    let members = OrgMember::find_by_org(pool, org_id).await.map_err(ApiError::Database)?;
+    let members = state.store.list_org_members(org_id).await?;
 
     // Get user details for each member
     let mut member_responses = Vec::new();
@@ -219,15 +212,16 @@ pub async fn add_organization_member(
     let pool = state.db.pool();
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -264,11 +258,7 @@ pub async fn add_organization_member(
         ));
     }
 
-    if OrgMember::find(pool, org_id, target_user.id)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.store.find_org_member(org_id, target_user.id).await?.is_some() {
         return Err(ApiError::InvalidRequest(
             "User is already a member of this organization".to_string(),
         ));
@@ -286,9 +276,7 @@ pub async fn add_organization_member(
     };
 
     // Add member
-    let member = OrgMember::create(pool, org_id, target_user.id, role)
-        .await
-        .map_err(ApiError::Database)?;
+    let member = state.store.create_org_member(org_id, target_user.id, role).await?;
 
     // Record audit event
     let ip_address = headers
@@ -334,15 +322,16 @@ pub async fn remove_organization_member(
     let pool = state.db.pool();
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -361,9 +350,10 @@ pub async fn remove_organization_member(
     }
 
     // Check if member exists
-    let _member = OrgMember::find(pool, org_id, member_user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let _member = state
+        .store
+        .find_org_member(org_id, member_user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     // Get user details for audit log
@@ -373,9 +363,7 @@ pub async fn remove_organization_member(
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Remove member
-    OrgMember::delete(pool, org_id, member_user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.delete_org_member(org_id, member_user_id).await?;
 
     // Record audit event
     let ip_address = headers
@@ -413,15 +401,16 @@ pub async fn update_organization_member_role(
     let pool = state.db.pool();
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has permission (owner or admin)
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -442,9 +431,10 @@ pub async fn update_organization_member_role(
     }
 
     // Check if member exists
-    let member = OrgMember::find(pool, org_id, member_user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let member = state
+        .store
+        .find_org_member(org_id, member_user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     // Parse new role
@@ -459,9 +449,7 @@ pub async fn update_organization_member_role(
     };
 
     // Update role
-    OrgMember::update_role(pool, org_id, member_user_id, new_role)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.update_org_member_role(org_id, member_user_id, new_role).await?;
 
     // Get user details
     let target_user = User::find_by_id(pool, member_user_id)
@@ -496,9 +484,10 @@ pub async fn update_organization_member_role(
     .await;
 
     // Get updated member
-    let updated_member = OrgMember::find(pool, org_id, member_user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let updated_member = state
+        .store
+        .find_org_member(org_id, member_user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     Ok(Json(MemberResponse {
@@ -523,9 +512,10 @@ pub async fn update_organization(
     let pool = state.db.pool();
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner
@@ -538,12 +528,7 @@ pub async fn update_organization(
         if name.is_empty() {
             return Err(ApiError::InvalidRequest("Organization name cannot be empty".to_string()));
         }
-        sqlx::query("UPDATE organizations SET name = $1, updated_at = NOW() WHERE id = $2")
-            .bind(name)
-            .bind(org_id)
-            .execute(pool)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.update_organization_name(org_id, name).await?;
     }
 
     // Update slug if provided
@@ -560,7 +545,7 @@ pub async fn update_organization(
         }
 
         // Check if slug is already taken (by another org)
-        if let Ok(Some(existing_org)) = Organization::find_by_slug(pool, slug).await {
+        if let Ok(Some(existing_org)) = state.store.find_organization_by_slug(slug).await {
             if existing_org.id != org_id {
                 return Err(ApiError::InvalidRequest(
                     "Organization slug is already taken".to_string(),
@@ -568,12 +553,7 @@ pub async fn update_organization(
             }
         }
 
-        sqlx::query("UPDATE organizations SET slug = $1, updated_at = NOW() WHERE id = $2")
-            .bind(slug)
-            .bind(org_id)
-            .execute(pool)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.update_organization_slug(org_id, slug).await?;
     }
 
     // Update plan if provided
@@ -589,9 +569,7 @@ pub async fn update_organization(
             }
         };
 
-        Organization::update_plan(pool, org_id, new_plan)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.update_organization_plan(org_id, new_plan).await?;
 
         // Record audit event for plan change
         let ip_address = headers
@@ -616,9 +594,10 @@ pub async fn update_organization(
     }
 
     // Get updated organization
-    let updated_org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let updated_org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     Ok(Json(OrganizationResponse {
@@ -641,9 +620,10 @@ pub async fn delete_organization(
     let pool = state.db.pool();
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner
@@ -653,15 +633,7 @@ pub async fn delete_organization(
 
     // Check if organization has active subscriptions (prevent deletion if billing is active)
     // This is a safety check - in production, you might want to handle subscription cancellation first
-    let has_active_subscription: (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE org_id = $1 AND status IN ('active', 'trialing'))"
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    if has_active_subscription.0 {
+    if state.store.organization_has_active_subscription(org_id).await? {
         return Err(ApiError::InvalidRequest(
             "Cannot delete organization with active subscription. Please cancel subscription first.".to_string()
         ));
@@ -688,11 +660,7 @@ pub async fn delete_organization(
     .await;
 
     // Delete organization (cascade will handle related data)
-    sqlx::query("DELETE FROM organizations WHERE id = $1")
-        .bind(org_id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.delete_organization(org_id).await?;
 
     Ok(Json(
         serde_json::json!({"success": true, "message": "Organization deleted successfully"}),

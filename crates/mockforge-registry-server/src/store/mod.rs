@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 
 #[cfg(feature = "postgres")]
@@ -116,11 +117,7 @@ pub trait RegistryStore: Send + Sync + 'static {
     // ---------------------------------------------------------------------
 
     /// Fetch a single org-level setting by key, returning `None` when absent.
-    async fn get_org_setting(
-        &self,
-        org_id: Uuid,
-        key: &str,
-    ) -> StoreResult<Option<OrgSetting>>;
+    async fn get_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<Option<OrgSetting>>;
 
     /// Upsert an org-level setting, returning the persisted record.
     async fn set_org_setting(
@@ -132,4 +129,70 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     /// Delete an org-level setting by key. Idempotent.
     async fn delete_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Organizations
+    // ---------------------------------------------------------------------
+
+    /// Create a new organization and auto-create the owner membership.
+    async fn create_organization(
+        &self,
+        name: &str,
+        slug: &str,
+        owner_id: Uuid,
+        plan: Plan,
+    ) -> StoreResult<Organization>;
+
+    /// Look up an organization by id.
+    async fn find_organization_by_id(&self, org_id: Uuid) -> StoreResult<Option<Organization>>;
+
+    /// Look up an organization by slug.
+    async fn find_organization_by_slug(&self, slug: &str) -> StoreResult<Option<Organization>>;
+
+    /// List all organizations a user belongs to (as owner or member).
+    async fn list_organizations_by_user(&self, user_id: Uuid) -> StoreResult<Vec<Organization>>;
+
+    /// Update an organization's display name.
+    async fn update_organization_name(&self, org_id: Uuid, name: &str) -> StoreResult<()>;
+
+    /// Update an organization's slug.
+    async fn update_organization_slug(&self, org_id: Uuid, slug: &str) -> StoreResult<()>;
+
+    /// Update an organization's plan (and refresh limits).
+    async fn update_organization_plan(&self, org_id: Uuid, plan: Plan) -> StoreResult<()>;
+
+    /// Check whether an organization has an active or trialing subscription.
+    async fn organization_has_active_subscription(&self, org_id: Uuid) -> StoreResult<bool>;
+
+    /// Permanently delete an organization (cascades to related rows).
+    async fn delete_organization(&self, org_id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Organization members
+    // ---------------------------------------------------------------------
+
+    /// Add a user to an organization with the given role.
+    async fn create_org_member(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+        role: OrgRole,
+    ) -> StoreResult<OrgMember>;
+
+    /// Look up a specific (org, user) membership.
+    async fn find_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<Option<OrgMember>>;
+
+    /// List every member of an organization, oldest first.
+    async fn list_org_members(&self, org_id: Uuid) -> StoreResult<Vec<OrgMember>>;
+
+    /// Update a member's role.
+    async fn update_org_member_role(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+        role: OrgRole,
+    ) -> StoreResult<()>;
+
+    /// Remove a member from an organization.
+    async fn delete_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<()>;
 }
