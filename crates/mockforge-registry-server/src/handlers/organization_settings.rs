@@ -13,10 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{
-        record_audit_event, AuditEventType, BYOKConfig, OrgAiSettings, OrgMember, OrgRole,
-        OrgSetting, Organization, Subscription,
-    },
+    models::{AuditEventType, BYOKConfig, OrgAiSettings, OrgRole, Subscription},
     AppState,
 };
 
@@ -26,17 +23,16 @@ pub async fn get_organization_settings(
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrganizationSettingsResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -45,7 +41,7 @@ pub async fn get_organization_settings(
     }
 
     // Get BYOK settings (if any exist)
-    let byok_setting = OrgSetting::get(pool, org_id, "byok").await.map_err(ApiError::Database)?;
+    let byok_setting = state.store.get_org_setting(org_id, "byok").await?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -78,18 +74,17 @@ pub async fn update_organization_settings(
     Path(org_id): Path<Uuid>,
     Json(request): Json<UpdateOrganizationSettingsRequest>,
 ) -> ApiResult<Json<OrganizationSettingsResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner or admin
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -117,18 +112,17 @@ pub async fn update_organization_settings(
             ApiError::Internal(anyhow::anyhow!("Failed to serialize BYOK config: {}", e))
         })?;
 
-        OrgSetting::set(pool, org_id, "byok", config_value)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.set_org_setting(org_id, "byok", config_value).await?;
     }
 
     // Get updated organization and settings
-    let updated_org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let updated_org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let byok_setting = OrgSetting::get(pool, org_id, "byok").await.map_err(ApiError::Database)?;
+    let byok_setting = state.store.get_org_setting(org_id, "byok").await?;
 
     let (byok_enabled, byok_provider) = if let Some(setting) = &byok_setting {
         let config: Result<BYOKConfig, _> = serde_json::from_value(setting.setting_value.clone());
@@ -142,20 +136,21 @@ pub async fn update_organization_settings(
     };
 
     // Record audit event
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::ByokConfigUpdated,
-        "Organization BYOK settings updated".to_string(),
-        Some(serde_json::json!({
-            "byok_enabled": byok_enabled,
-            "byok_provider": byok_provider,
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::ByokConfigUpdated,
+            "Organization BYOK settings updated".to_string(),
+            Some(serde_json::json!({
+                "byok_enabled": byok_enabled,
+                "byok_provider": byok_provider,
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(OrganizationSettingsResponse {
         org_id: updated_org.id,
@@ -177,16 +172,16 @@ pub async fn get_organization_usage(
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrganizationUsageResponse>> {
     let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -259,11 +254,11 @@ pub async fn get_organization_billing(
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrganizationBillingResponse>> {
     let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner (billing info is sensitive)
@@ -341,17 +336,16 @@ pub async fn get_organization_ai_settings(
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrgAiSettings>> {
-    let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user has access
     if org.owner_id != user_id {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         if member.is_none() {
             return Err(ApiError::InvalidRequest(
                 "You don't have access to this organization".to_string(),
@@ -360,8 +354,7 @@ pub async fn get_organization_ai_settings(
     }
 
     // Get AI settings
-    let ai_setting =
-        OrgSetting::get(pool, org_id, "ai_settings").await.map_err(ApiError::Database)?;
+    let ai_setting = state.store.get_org_setting(org_id, "ai_settings").await?;
 
     let ai_settings = if let Some(setting) = &ai_setting {
         serde_json::from_value(setting.setting_value.clone())
@@ -380,18 +373,17 @@ pub async fn update_organization_ai_settings(
     Path(org_id): Path<Uuid>,
     Json(request): Json<OrgAiSettings>,
 ) -> ApiResult<Json<OrgAiSettings>> {
-    let pool = state.db.pool();
-
     // Get organization
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is owner or admin
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -409,22 +401,21 @@ pub async fn update_organization_ai_settings(
         ApiError::Internal(anyhow::anyhow!("Failed to serialize AI settings: {}", e))
     })?;
 
-    OrgSetting::set(pool, org_id, "ai_settings", config_value)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.set_org_setting(org_id, "ai_settings", config_value).await?;
 
     // Record audit event
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        "Organization AI settings updated".to_string(),
-        None,
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            "Organization AI settings updated".to_string(),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(request))
 }
