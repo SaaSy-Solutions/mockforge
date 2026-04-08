@@ -11,10 +11,7 @@ use crate::{
     },
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{
-        organization::{Organization, Plan},
-        User,
-    },
+    models::organization::Plan,
     AppState,
 };
 
@@ -55,8 +52,6 @@ pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
 ) -> ApiResult<Json<AuthResponseV2>> {
-    let pool = state.db.pool();
-
     // Validate input
     if request.username.len() < 3 {
         return Err(ApiError::InvalidRequest("Username must be at least 3 characters".to_string()));
@@ -67,19 +62,11 @@ pub async fn register(
     }
 
     // Check if user already exists
-    if User::find_by_email(pool, &request.email)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.store.find_user_by_email(&request.email).await?.is_some() {
         return Err(ApiError::InvalidRequest("Email already registered".to_string()));
     }
 
-    if User::find_by_username(pool, &request.username)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.store.find_user_by_username(&request.username).await?.is_some() {
         return Err(ApiError::InvalidRequest("Username already taken".to_string()));
     }
 
@@ -87,20 +74,17 @@ pub async fn register(
     let password_hash = hash_password(&request.password).map_err(ApiError::Internal)?;
 
     // Create user
-    let user = User::create(pool, &request.username, &request.email, &password_hash)
-        .await
-        .map_err(ApiError::Database)?;
+    let user = state
+        .store
+        .create_user(&request.username, &request.email, &password_hash)
+        .await?;
 
     // Auto-create a personal organization for the user
     let org_slug = format!("{}-personal", request.username.to_lowercase().replace(' ', "-"));
-    if let Err(e) = Organization::create(
-        pool,
-        &format!("{}'s Org", request.username),
-        &org_slug,
-        user.id,
-        Plan::Free,
-    )
-    .await
+    if let Err(e) = state
+        .store
+        .create_organization(&format!("{}'s Org", request.username), &org_slug, user.id, Plan::Free)
+        .await
     {
         tracing::warn!("Failed to create personal org for user {}: {}", user.id, e);
     }
@@ -133,12 +117,11 @@ pub async fn login(
     State(state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> ApiResult<Json<AuthResponseV2>> {
-    let pool = state.db.pool();
-
     // Find user
-    let user = User::find_by_email(pool, &request.email)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_email(&request.email)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Invalid email or password".to_string()))?;
 
     // Verify password
@@ -176,9 +159,7 @@ pub async fn login(
                         ApiError::Internal(anyhow::anyhow!("Backup code verification error: {}", e))
                     })? {
                         // Remove used backup code
-                        User::remove_backup_code(pool, user.id, index)
-                            .await
-                            .map_err(ApiError::Database)?;
+                        state.store.remove_user_backup_code(user.id, index).await?;
                         backup_valid = true;
                         break;
                     }
@@ -191,7 +172,7 @@ pub async fn login(
         }
 
         // Update 2FA verified timestamp
-        User::update_2fa_verified(pool, user.id).await.map_err(ApiError::Database)?;
+        state.store.update_user_2fa_verified(user.id).await?;
     }
 
     // Generate token pair (access + refresh)
@@ -254,16 +235,15 @@ pub async fn refresh_token(
         return Err(ApiError::InvalidRequest("Refresh token has been revoked".to_string()));
     }
 
-    let pool = state.db.pool();
-
     // Parse user ID from claims
     let user_id = uuid::Uuid::parse_str(&claims.sub)
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
     // Find user to ensure they still exist and are active
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Revoke old refresh token JTI (token rotation for security)
@@ -300,7 +280,6 @@ pub async fn refresh_token(
 
 // Password reset handlers (moved here to avoid axum version conflicts)
 use crate::email::EmailService;
-use crate::models::VerificationToken;
 
 #[derive(Debug, Deserialize)]
 pub struct PasswordResetRequest {
@@ -318,14 +297,11 @@ pub async fn request_password_reset(
     State(state): State<AppState>,
     Json(request): Json<PasswordResetRequest>,
 ) -> ApiResult<Json<PasswordResetRequestResponse>> {
-    let pool = state.db.pool();
-
     // Find user by email
-    let user = match User::find_by_email(pool, &request.email).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
+    let user = match state.store.find_user_by_email(&request.email).await? {
+        Some(user) => user,
+        None => {
             // Don't reveal if email exists or not (security best practice)
-            // Return success even if user doesn't exist
             return Ok(Json(PasswordResetRequestResponse {
                 success: true,
                 message:
@@ -333,21 +309,12 @@ pub async fn request_password_reset(
                         .to_string(),
             }));
         }
-        Err(e) => return Err(ApiError::Database(e)),
     };
 
-    // Create password reset token (reusing VerificationToken model)
-    // Token expires in 1 hour
-    let reset_token = VerificationToken::create(pool, user.id).await.map_err(ApiError::Database)?;
-
-    // Update token expiration to 1 hour (instead of default 24 hours)
-    sqlx::query(
-        "UPDATE verification_tokens SET expires_at = NOW() + INTERVAL '1 hour' WHERE id = $1",
-    )
-    .bind(reset_token.id)
-    .execute(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    // Create password reset token (reusing VerificationToken model).
+    // Token expires in 1 hour instead of the default 24.
+    let reset_token = state.store.create_verification_token(user.id).await?;
+    state.store.set_verification_token_expiry_hours(reset_token.id, 1).await?;
 
     // Send password reset email (non-blocking)
     let email_service = match EmailService::from_env() {
@@ -400,17 +367,16 @@ pub async fn confirm_password_reset(
     State(state): State<AppState>,
     Json(request): Json<PasswordResetConfirmRequest>,
 ) -> ApiResult<Json<PasswordResetConfirmResponse>> {
-    let pool = state.db.pool();
-
     // Validate password
     if request.new_password.len() < 8 {
         return Err(ApiError::InvalidRequest("Password must be at least 8 characters".to_string()));
     }
 
     // Find token
-    let reset_token = VerificationToken::find_by_token(pool, &request.token)
-        .await
-        .map_err(ApiError::Database)?
+    let reset_token = state
+        .store
+        .find_verification_token_by_token(&request.token)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Invalid or expired reset token".to_string()))?;
 
     // Check if token is valid (not expired and not used)
@@ -421,21 +387,17 @@ pub async fn confirm_password_reset(
     }
 
     // Get user
-    let user = User::find_by_id(pool, reset_token.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(reset_token.user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Hash new password
     let password_hash = hash_password(&request.new_password).map_err(ApiError::Internal)?;
 
     // Update user password
-    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&password_hash)
-        .bind(user.id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.update_user_password_hash(user.id, &password_hash).await?;
 
     // Revoke all existing refresh tokens for security (password changed)
     let revoked_count =
@@ -451,9 +413,7 @@ pub async fn confirm_password_reset(
     );
 
     // Mark token as used
-    VerificationToken::mark_as_used(pool, reset_token.id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.mark_verification_token_used(reset_token.id).await?;
 
     tracing::info!("Password reset completed: user_id={}, email={}", user.id, user.email);
 
@@ -478,11 +438,10 @@ pub async fn verify_token(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<VerifyTokenResponse>> {
-    let pool = state.db.pool();
-
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     Ok(Json(VerifyTokenResponse {
@@ -510,11 +469,10 @@ pub async fn me(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<MeResponse>> {
-    let pool = state.db.pool();
-
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     Ok(Json(MeResponse {
