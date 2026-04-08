@@ -24,6 +24,7 @@ use crate::models::feature_usage::FeatureType;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 use crate::models::suspicious_activity::SuspiciousActivityType;
+use crate::models::user::User;
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -259,6 +260,50 @@ pub trait RegistryStore: Send + Sync + 'static {
     // ---------------------------------------------------------------------
 
     /// Record a suspicious-activity event. Failures are logged and swallowed.
+    // ---------------------------------------------------------------------
+    // Users
+    // ---------------------------------------------------------------------
+
+    /// Create a new user with an already-hashed password.
+    async fn create_user(
+        &self,
+        username: &str,
+        email: &str,
+        password_hash: &str,
+    ) -> StoreResult<User>;
+
+    /// Look up a user by id.
+    async fn find_user_by_id(&self, user_id: Uuid) -> StoreResult<Option<User>>;
+
+    /// Look up a user by email.
+    async fn find_user_by_email(&self, email: &str) -> StoreResult<Option<User>>;
+
+    /// Look up a user by username.
+    async fn find_user_by_username(&self, username: &str) -> StoreResult<Option<User>>;
+
+    /// Batch lookup by id to avoid N+1 queries.
+    async fn find_users_by_ids(&self, ids: &[Uuid]) -> StoreResult<Vec<User>>;
+
+    /// Set the persistent API token on a user record.
+    async fn set_user_api_token(&self, user_id: Uuid, token: &str) -> StoreResult<()>;
+
+    /// Enable TOTP 2FA for a user with the given secret and hashed backup codes.
+    async fn enable_user_2fa(
+        &self,
+        user_id: Uuid,
+        secret: &str,
+        backup_codes: &[String],
+    ) -> StoreResult<()>;
+
+    /// Disable 2FA and clear stored secret + backup codes.
+    async fn disable_user_2fa(&self, user_id: Uuid) -> StoreResult<()>;
+
+    /// Refresh the 2FA verified timestamp (e.g. after a successful TOTP challenge).
+    async fn update_user_2fa_verified(&self, user_id: Uuid) -> StoreResult<()>;
+
+    /// Remove a consumed backup code by index.
+    async fn remove_user_backup_code(&self, user_id: Uuid, code_index: usize) -> StoreResult<()>;
+
     #[allow(clippy::too_many_arguments)]
     async fn record_suspicious_activity(
         &self,

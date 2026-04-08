@@ -16,6 +16,7 @@ use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 use crate::models::suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};
+use crate::models::user::User;
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -322,5 +323,61 @@ impl RegistryStore for PgRegistryStore {
             user_agent,
         )
         .await;
+    }
+
+    async fn create_user(
+        &self,
+        username: &str,
+        email: &str,
+        password_hash: &str,
+    ) -> StoreResult<User> {
+        User::create(&self.pool, username, email, password_hash)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_user_by_id(&self, user_id: Uuid) -> StoreResult<Option<User>> {
+        User::find_by_id(&self.pool, user_id).await.map_err(Into::into)
+    }
+
+    async fn find_user_by_email(&self, email: &str) -> StoreResult<Option<User>> {
+        User::find_by_email(&self.pool, email).await.map_err(Into::into)
+    }
+
+    async fn find_user_by_username(&self, username: &str) -> StoreResult<Option<User>> {
+        User::find_by_username(&self.pool, username).await.map_err(Into::into)
+    }
+
+    async fn find_users_by_ids(&self, ids: &[Uuid]) -> StoreResult<Vec<User>> {
+        User::find_by_ids(&self.pool, ids).await.map_err(Into::into)
+    }
+
+    async fn set_user_api_token(&self, user_id: Uuid, token: &str) -> StoreResult<()> {
+        User::set_api_token(&self.pool, user_id, token).await.map_err(Into::into)
+    }
+
+    async fn enable_user_2fa(
+        &self,
+        user_id: Uuid,
+        secret: &str,
+        backup_codes: &[String],
+    ) -> StoreResult<()> {
+        User::enable_2fa(&self.pool, user_id, secret, backup_codes)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn disable_user_2fa(&self, user_id: Uuid) -> StoreResult<()> {
+        User::disable_2fa(&self.pool, user_id).await.map_err(Into::into)
+    }
+
+    async fn update_user_2fa_verified(&self, user_id: Uuid) -> StoreResult<()> {
+        User::update_2fa_verified(&self.pool, user_id).await.map_err(Into::into)
+    }
+
+    async fn remove_user_backup_code(&self, user_id: Uuid, code_index: usize) -> StoreResult<()> {
+        User::remove_backup_code(&self.pool, user_id, code_index)
+            .await
+            .map_err(Into::into)
     }
 }

@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{AuditEventType, OrgRole, Plan, User},
+    models::{AuditEventType, OrgRole, Plan},
     AppState,
 };
 
@@ -132,8 +132,6 @@ pub async fn get_organization_members(
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<MemberResponse>>> {
-    let pool = state.db.pool();
-
     // Verify user has access to this organization
     let org = state
         .store
@@ -162,9 +160,10 @@ pub async fn get_organization_members(
     let mut member_responses = Vec::new();
 
     // Add owner as a member (if not already in members list)
-    let owner_user = User::find_by_id(pool, org_owner_id)
-        .await
-        .map_err(ApiError::Database)?
+    let owner_user = state
+        .store
+        .find_user_by_id(org_owner_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Owner user not found".to_string()))?;
 
     let owner_in_members = members.iter().any(|m| m.user_id == org_owner_id);
@@ -182,9 +181,10 @@ pub async fn get_organization_members(
 
     // Add other members
     for member in members {
-        let user = User::find_by_id(pool, member.user_id)
-            .await
-            .map_err(ApiError::Database)?
+        let user = state
+            .store
+            .find_user_by_id(member.user_id)
+            .await?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
         member_responses.push(MemberResponse {
@@ -209,8 +209,6 @@ pub async fn add_organization_member(
     headers: HeaderMap,
     Json(request): Json<AddMemberRequest>,
 ) -> ApiResult<Json<MemberResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
     let org = state
         .store
@@ -236,14 +234,16 @@ pub async fn add_organization_member(
 
     // Find user to add by email or user_id
     let target_user = if let Some(email) = &request.email {
-        User::find_by_email(pool, email)
-            .await
-            .map_err(ApiError::Database)?
+        state
+            .store
+            .find_user_by_email(email)
+            .await?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?
     } else if let Some(user_id_param) = request.user_id {
-        User::find_by_id(pool, user_id_param)
-            .await
-            .map_err(ApiError::Database)?
+        state
+            .store
+            .find_user_by_id(user_id_param)
+            .await?
             .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?
     } else {
         return Err(ApiError::InvalidRequest(
@@ -320,8 +320,6 @@ pub async fn remove_organization_member(
     Path((org_id, member_user_id)): Path<(Uuid, Uuid)>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Get organization
     let org = state
         .store
@@ -358,9 +356,10 @@ pub async fn remove_organization_member(
         .ok_or_else(|| ApiError::InvalidRequest("Member not found".to_string()))?;
 
     // Get user details for audit log
-    let target_user = User::find_by_id(pool, member_user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let target_user = state
+        .store
+        .find_user_by_id(member_user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Remove member
@@ -400,8 +399,6 @@ pub async fn update_organization_member_role(
     headers: HeaderMap,
     Json(request): Json<UpdateMemberRoleRequest>,
 ) -> ApiResult<Json<MemberResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
     let org = state
         .store
@@ -454,9 +451,10 @@ pub async fn update_organization_member_role(
     state.store.update_org_member_role(org_id, member_user_id, new_role).await?;
 
     // Get user details
-    let target_user = User::find_by_id(pool, member_user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let target_user = state
+        .store
+        .find_user_by_id(member_user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Record audit event
