@@ -312,6 +312,48 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// Remove a consumed backup code by index.
     async fn remove_user_backup_code(&self, user_id: Uuid, code_index: usize) -> StoreResult<()>;
 
+    /// Look up a user by their GitHub account id.
+    async fn find_user_by_github_id(&self, github_id: &str) -> StoreResult<Option<User>>;
+
+    /// Look up a user by their Google account id.
+    async fn find_user_by_google_id(&self, google_id: &str) -> StoreResult<Option<User>>;
+
+    /// Link an existing user to a GitHub account (sets github_id, auth_provider, avatar_url).
+    async fn link_user_github_account(
+        &self,
+        user_id: Uuid,
+        github_id: &str,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<()>;
+
+    /// Link an existing user to a Google account (sets google_id, auth_provider, avatar_url).
+    async fn link_user_google_account(
+        &self,
+        user_id: Uuid,
+        google_id: &str,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<()>;
+
+    /// Create a new verified user from an OAuth provider (random password hash).
+    #[allow(clippy::too_many_arguments)]
+    async fn create_oauth_user(
+        &self,
+        username: &str,
+        email: &str,
+        password_hash: &str,
+        auth_provider: &str,
+        github_id: Option<&str>,
+        google_id: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<User>;
+
+    /// Fetch or create a user's personal/default organization.
+    async fn get_or_create_personal_org(
+        &self,
+        user_id: Uuid,
+        username: &str,
+    ) -> StoreResult<Organization>;
+
     /// Replace a user's password hash (no-op on verification).
     async fn update_user_password_hash(
         &self,

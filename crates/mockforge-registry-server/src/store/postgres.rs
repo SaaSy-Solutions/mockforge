@@ -391,6 +391,97 @@ impl RegistryStore for PgRegistryStore {
             .map_err(Into::into)
     }
 
+    async fn find_user_by_github_id(&self, github_id: &str) -> StoreResult<Option<User>> {
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE github_id = $1")
+            .bind(github_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_user_by_google_id(&self, google_id: &str) -> StoreResult<Option<User>> {
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE google_id = $1")
+            .bind(google_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn link_user_github_account(
+        &self,
+        user_id: Uuid,
+        github_id: &str,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE users SET github_id = $1, auth_provider = 'github', avatar_url = $2 WHERE id = $3",
+        )
+        .bind(github_id)
+        .bind(avatar_url)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    async fn link_user_google_account(
+        &self,
+        user_id: Uuid,
+        google_id: &str,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE users SET google_id = $1, auth_provider = 'google', avatar_url = $2 WHERE id = $3",
+        )
+        .bind(google_id)
+        .bind(avatar_url)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    async fn create_oauth_user(
+        &self,
+        username: &str,
+        email: &str,
+        password_hash: &str,
+        auth_provider: &str,
+        github_id: Option<&str>,
+        google_id: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> StoreResult<User> {
+        sqlx::query_as::<_, User>(
+            r#"
+            INSERT INTO users (username, email, password_hash, auth_provider, github_id, google_id, avatar_url, is_verified)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
+            RETURNING *
+            "#,
+        )
+        .bind(username)
+        .bind(email)
+        .bind(password_hash)
+        .bind(auth_provider)
+        .bind(github_id)
+        .bind(google_id)
+        .bind(avatar_url)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn get_or_create_personal_org(
+        &self,
+        user_id: Uuid,
+        username: &str,
+    ) -> StoreResult<Organization> {
+        Organization::get_or_create_personal_org(&self.pool, user_id, username)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn update_user_password_hash(
         &self,
         user_id: Uuid,
