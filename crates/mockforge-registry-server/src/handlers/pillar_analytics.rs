@@ -96,10 +96,10 @@ pub async fn get_org_pillar_metrics(
     }
 
     // Verify user has permission (owner or admin)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_owner = org_ctx.org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(state.db.pool(), org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false

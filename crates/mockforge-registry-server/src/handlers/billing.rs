@@ -13,8 +13,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{
-        record_audit_event, AuditEventType, Organization, Plan, Subscription, SubscriptionStatus,
-        UsageCounter, User,
+        AuditEventType, Organization, Plan, Subscription, SubscriptionStatus, UsageCounter, User,
     },
     AppState,
 };
@@ -195,7 +194,6 @@ pub async fn create_checkout(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Stripe error: {}", e)))?;
 
     // Record audit log
-    let pool = state.db.pool();
     let ip_address = headers
         .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
@@ -203,20 +201,21 @@ pub async fn create_checkout(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::BillingCheckout,
-        format!("Checkout session created for {} plan", request.plan),
-        Some(serde_json::json!({
-            "plan": request.plan,
-            "session_id": session.id.to_string(),
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::BillingCheckout,
+            format!("Checkout session created for {} plan", request.plan),
+            Some(serde_json::json!({
+                "plan": request.plan,
+                "session_id": session.id.to_string(),
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(CreateCheckoutResponse {
         checkout_url: session
@@ -465,7 +464,7 @@ async fn handle_subscription_event(
             AuditEventType::BillingDowngrade
         };
 
-        record_audit_event(
+        crate::models::record_audit_event(
             pool,
             org_id,
             None, // Webhook event, no user context
@@ -548,7 +547,7 @@ async fn handle_subscription_deleted(
     tracing::info!("Subscription canceled: org_id={}", subscription_record.org_id);
 
     // Record audit log (webhook event, so no user_id or IP)
-    record_audit_event(
+    crate::models::record_audit_event(
         pool,
         subscription_record.org_id,
         None, // Webhook event, no user context
@@ -647,7 +646,7 @@ async fn handle_payment_failed(
     tracing::info!("Payment failed: org_id={}", subscription.org_id);
 
     // Record audit log (webhook event, so no user_id or IP)
-    record_audit_event(
+    crate::models::record_audit_event(
         pool,
         subscription.org_id,
         None,                            // Webhook event, no user context
