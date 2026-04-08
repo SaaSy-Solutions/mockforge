@@ -27,7 +27,9 @@ use crate::models::feature_usage::FeatureType;
 use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
+use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::settings::OrgSetting;
+use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
 use crate::models::user::User;
@@ -608,4 +610,47 @@ pub trait RegistryStore: Send + Sync + 'static {
     async fn get_or_create_current_usage_counter(&self, org_id: Uuid) -> StoreResult<UsageCounter>;
 
     async fn list_usage_counters_by_org(&self, org_id: Uuid) -> StoreResult<Vec<UsageCounter>>;
+
+    // ---------------------------------------------------------------------
+    // SSO configuration
+    // ---------------------------------------------------------------------
+
+    async fn find_sso_config_by_org(&self, org_id: Uuid) -> StoreResult<Option<SSOConfiguration>>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn upsert_sso_config(
+        &self,
+        org_id: Uuid,
+        provider: SSOProvider,
+        saml_entity_id: Option<&str>,
+        saml_sso_url: Option<&str>,
+        saml_slo_url: Option<&str>,
+        saml_x509_cert: Option<&str>,
+        saml_name_id_format: Option<&str>,
+        attribute_mapping: Option<serde_json::Value>,
+        require_signed_assertions: bool,
+        require_signed_responses: bool,
+        allow_unsolicited_responses: bool,
+    ) -> StoreResult<SSOConfiguration>;
+
+    async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
+    async fn disable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
+    async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // SAML replay prevention
+    // ---------------------------------------------------------------------
+
+    async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn record_saml_assertion_used(
+        &self,
+        assertion_id: &str,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        name_id: Option<&str>,
+        issued_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> StoreResult<SAMLAssertionId>;
 }

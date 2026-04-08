@@ -22,10 +22,7 @@ use x509_parser::prelude::*;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{
-        record_audit_event, AuditEventType, Organization, Plan, SAMLAssertionId, SSOConfiguration,
-        SSOSession, User,
-    },
+    models::{AuditEventType, Organization, Plan, SSOConfiguration, SSOSession, User},
     AppState,
 };
 
@@ -68,17 +65,15 @@ pub async fn create_sso_config(
     headers: HeaderMap,
     Json(request): Json<CreateSSOConfigRequest>,
 ) -> ApiResult<Json<SSOConfigResponse>> {
-    let pool = state.db.pool();
-
     // Resolve organization context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
 
     // Check if user is org admin (check if user is owner or admin member)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_admin = org_ctx.org.owner_id == user_id || {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             let role = member.role();
             matches!(role, OrgRole::Admin | OrgRole::Owner)
         } else {
@@ -91,9 +86,10 @@ pub async fn create_sso_config(
     }
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_ctx.org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -122,22 +118,22 @@ pub async fn create_sso_config(
     }
 
     // Create or update SSO configuration
-    let config = SSOConfiguration::upsert(
-        pool,
-        org_ctx.org_id,
-        provider,
-        request.saml_entity_id.as_deref(),
-        request.saml_sso_url.as_deref(),
-        request.saml_slo_url.as_deref(),
-        request.saml_x509_cert.as_deref(),
-        request.saml_name_id_format.as_deref(),
-        request.attribute_mapping,
-        request.require_signed_assertions.unwrap_or(true),
-        request.require_signed_responses.unwrap_or(true),
-        request.allow_unsolicited_responses.unwrap_or(false),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let config = state
+        .store
+        .upsert_sso_config(
+            org_ctx.org_id,
+            provider,
+            request.saml_entity_id.as_deref(),
+            request.saml_sso_url.as_deref(),
+            request.saml_slo_url.as_deref(),
+            request.saml_x509_cert.as_deref(),
+            request.saml_name_id_format.as_deref(),
+            request.attribute_mapping,
+            request.require_signed_assertions.unwrap_or(true),
+            request.require_signed_responses.unwrap_or(true),
+            request.allow_unsolicited_responses.unwrap_or(false),
+        )
+        .await?;
 
     // Record audit log
     let ip_address = headers
@@ -147,20 +143,21 @@ pub async fn create_sso_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        "SSO configuration created/updated".to_string(),
-        Some(serde_json::json!({
-            "provider": provider.to_string(),
-            "enabled": config.enabled,
-        })),
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            "SSO configuration created/updated".to_string(),
+            Some(serde_json::json!({
+                "provider": provider.to_string(),
+                "enabled": config.enabled,
+            })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(SSOConfigResponse {
         id: config.id.to_string(),
@@ -186,17 +183,15 @@ pub async fn get_sso_config(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Option<SSOConfigResponse>>> {
-    let pool = state.db.pool();
-
     // Resolve organization context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
 
     // Check if user is org admin (check if user is owner or admin member)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_admin = org_ctx.org.owner_id == user_id || {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             let role = member.role();
             matches!(role, OrgRole::Admin | OrgRole::Owner)
         } else {
@@ -209,9 +204,7 @@ pub async fn get_sso_config(
     }
 
     // Get SSO configuration
-    let config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let config = state.store.find_sso_config_by_org(org_ctx.org_id).await?;
 
     if let Some(config) = config {
         Ok(Json(Some(SSOConfigResponse {
@@ -241,17 +234,15 @@ pub async fn enable_sso(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve organization context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
 
     // Check if user is org admin (check if user is owner or admin member)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_admin = org_ctx.org.owner_id == user_id || {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             let role = member.role();
             matches!(role, OrgRole::Admin | OrgRole::Owner)
         } else {
@@ -264,9 +255,10 @@ pub async fn enable_sso(
     }
 
     // Get organization
-    let org = Organization::find_by_id(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_ctx.org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -275,17 +267,12 @@ pub async fn enable_sso(
     }
 
     // Check if SSO is configured
-    let _config = SSOConfiguration::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("SSO not configured. Please configure SSO first.".to_string())
-        })?;
+    let _config = state.store.find_sso_config_by_org(org_ctx.org_id).await?.ok_or_else(|| {
+        ApiError::InvalidRequest("SSO not configured. Please configure SSO first.".to_string())
+    })?;
 
     // Enable SSO
-    SSOConfiguration::enable(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.enable_sso_config(org_ctx.org_id).await?;
 
     // Record audit log
     let ip_address = headers
@@ -295,17 +282,18 @@ pub async fn enable_sso(
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        "SSO enabled".to_string(),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            "SSO enabled".to_string(),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -319,17 +307,15 @@ pub async fn disable_sso(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve organization context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
 
     // Check if user is org admin (check if user is owner or admin member)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_admin = org_ctx.org.owner_id == user_id || {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             let role = member.role();
             matches!(role, OrgRole::Admin | OrgRole::Owner)
         } else {
@@ -342,9 +328,7 @@ pub async fn disable_sso(
     }
 
     // Disable SSO
-    SSOConfiguration::disable(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.disable_sso_config(org_ctx.org_id).await?;
 
     // Record audit log
     let ip_address = headers
@@ -354,17 +338,18 @@ pub async fn disable_sso(
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        "SSO disabled".to_string(),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            "SSO disabled".to_string(),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -378,17 +363,15 @@ pub async fn delete_sso_config(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve organization context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
 
     // Check if user is org admin (check if user is owner or admin member)
-    use crate::models::{OrgMember, OrgRole};
+    use crate::models::OrgRole;
     let is_admin = org_ctx.org.owner_id == user_id || {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             let role = member.role();
             matches!(role, OrgRole::Admin | OrgRole::Owner)
         } else {
@@ -401,9 +384,7 @@ pub async fn delete_sso_config(
     }
 
     // Delete SSO configuration
-    SSOConfiguration::delete(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.delete_sso_config(org_ctx.org_id).await?;
 
     // Record audit log
     let ip_address = headers
@@ -413,17 +394,18 @@ pub async fn delete_sso_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        "SSO configuration deleted".to_string(),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            "SSO configuration deleted".to_string(),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -438,21 +420,17 @@ pub async fn get_saml_metadata(
     State(state): State<AppState>,
     Path(org_slug): Path<String>,
 ) -> ApiResult<axum::response::Response> {
-    let pool = state.db.pool();
-
     // Find organization by slug
-    let org = Organization::find_by_slug(pool, &org_slug)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_slug(&org_slug)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
-    let config = SSOConfiguration::find_by_org(pool, org.id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("SSO not configured for this organization".to_string())
-        })?;
+    let config = state.store.find_sso_config_by_org(org.id).await?.ok_or_else(|| {
+        ApiError::InvalidRequest("SSO not configured for this organization".to_string())
+    })?;
 
     // Generate SAML metadata XML
     let app_base_url =
@@ -497,12 +475,11 @@ pub async fn initiate_saml_login(
     State(state): State<AppState>,
     Path(org_slug): Path<String>,
 ) -> Result<Response, ApiError> {
-    let pool = state.db.pool();
-
     // Find organization by slug
-    let org = Organization::find_by_slug(pool, &org_slug)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_slug(&org_slug)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Check if organization is on Team plan
@@ -511,12 +488,9 @@ pub async fn initiate_saml_login(
     }
 
     // Get SSO configuration
-    let config = SSOConfiguration::find_by_org(pool, org.id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("SSO not configured for this organization".to_string())
-        })?;
+    let config = state.store.find_sso_config_by_org(org.id).await?.ok_or_else(|| {
+        ApiError::InvalidRequest("SSO not configured for this organization".to_string())
+    })?;
 
     if !config.enabled {
         return Err(ApiError::InvalidRequest(
@@ -568,15 +542,17 @@ pub async fn saml_acs(
     let pool = state.db.pool();
 
     // Find organization by slug
-    let org = Organization::find_by_slug(pool, &org_slug)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_slug(&org_slug)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
-    let config = SSOConfiguration::find_by_org(pool, org.id)
-        .await
-        .map_err(ApiError::Database)?
+    let config = state
+        .store
+        .find_sso_config_by_org(org.id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("SSO not configured".to_string()))?;
 
     if !config.enabled {
@@ -609,13 +585,13 @@ pub async fn saml_acs(
     // Check for replay attacks (assertion ID tracking)
     if let Some(assertion_id) = &user_info.assertion_id {
         let is_replay =
-            SAMLAssertionId::is_used(pool, assertion_id, org.id).await.map_err(|e| {
+            state.store.is_saml_assertion_used(assertion_id, org.id).await.map_err(|e| {
                 tracing::error!(
                     "Database error checking assertion ID for org_id={}: {:?}",
                     org.id,
                     e
                 );
-                ApiError::Database(e)
+                e
             })?;
 
         if is_replay {
@@ -632,7 +608,7 @@ pub async fn saml_acs(
     }
 
     // Find or create user
-    let user = find_or_create_user_from_saml(pool, &user_info, &org).await?;
+    let user = find_or_create_user_from_saml(&state, &user_info, &org).await?;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
@@ -641,20 +617,21 @@ pub async fn saml_acs(
             .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(1));
         let issued_at = user_info.issued_at.unwrap_or_else(chrono::Utc::now);
 
-        SAMLAssertionId::record_used(
-            pool,
-            assertion_id,
-            org.id,
-            Some(user.id),
-            user_info.name_id.as_deref(),
-            issued_at,
-            expires_at,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to record assertion ID for org_id={}: {:?}", org.id, e);
-            ApiError::Database(e)
-        })?;
+        state
+            .store
+            .record_saml_assertion_used(
+                assertion_id,
+                org.id,
+                Some(user.id),
+                user_info.name_id.as_deref(),
+                issued_at,
+                expires_at,
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to record assertion ID for org_id={}: {:?}", org.id, e);
+                e
+            })?;
 
         tracing::debug!(
             "Recorded assertion ID {} for org_id={}, user_id={}",
@@ -712,15 +689,17 @@ pub async fn saml_slo(
     let pool = state.db.pool();
 
     // Find organization by slug
-    let org = Organization::find_by_slug(pool, &org_slug)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_slug(&org_slug)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get SSO configuration
-    let config = SSOConfiguration::find_by_org(pool, org.id)
-        .await
-        .map_err(ApiError::Database)?
+    let config = state
+        .store
+        .find_sso_config_by_org(org.id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("SSO not configured".to_string()))?;
 
     // Handle logout request or response
@@ -1193,32 +1172,23 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
 
 /// Find or create user from SAML attributes
 async fn find_or_create_user_from_saml(
-    pool: &sqlx::PgPool,
+    state: &AppState,
     user_info: &SAMLUserInfo,
     org: &Organization,
 ) -> Result<User, ApiError> {
     // Try to find user by email
     let user = if let Some(email) = &user_info.email {
-        User::find_by_email(pool, email).await.map_err(ApiError::Database)?
+        state.store.find_user_by_email(email).await?
     } else {
         None
     };
 
     let user = if let Some(user) = user {
         // User exists - ensure they're a member of the organization
-        use crate::models::organization::OrgMember;
         use crate::models::organization::OrgRole;
 
-        // Check if user is already a member
-        if OrgMember::find(pool, org.id, user.id)
-            .await
-            .map_err(ApiError::Database)?
-            .is_none()
-        {
-            // Add user to organization as member
-            OrgMember::create(pool, org.id, user.id, OrgRole::Member)
-                .await
-                .map_err(ApiError::Database)?;
+        if state.store.find_org_member(org.id, user.id).await?.is_none() {
+            state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
 
         user
@@ -1238,24 +1208,14 @@ async fn find_or_create_user_from_saml(
             .map_err(ApiError::Internal)?;
 
         // Create user
-        let user = User::create(pool, &username, email, &password_hash)
-            .await
-            .map_err(ApiError::Database)?;
+        let user = state.store.create_user(&username, email, &password_hash).await?;
 
         // Mark user as verified (SSO users are pre-verified)
-        sqlx::query("UPDATE users SET is_verified = TRUE WHERE id = $1")
-            .bind(user.id)
-            .execute(pool)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.mark_user_verified(user.id).await?;
 
         // Add user to organization as member
-        use crate::models::organization::OrgMember;
         use crate::models::organization::OrgRole;
-
-        OrgMember::create(pool, org.id, user.id, OrgRole::Member)
-            .await
-            .map_err(ApiError::Database)?;
+        state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
 
         user
     };

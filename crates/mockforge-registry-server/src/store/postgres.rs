@@ -19,7 +19,9 @@ use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
+use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::settings::OrgSetting;
+use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{
     record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
@@ -836,5 +838,81 @@ impl RegistryStore for PgRegistryStore {
 
     async fn list_usage_counters_by_org(&self, org_id: Uuid) -> StoreResult<Vec<UsageCounter>> {
         UsageCounter::get_all_for_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn find_sso_config_by_org(&self, org_id: Uuid) -> StoreResult<Option<SSOConfiguration>> {
+        SSOConfiguration::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn upsert_sso_config(
+        &self,
+        org_id: Uuid,
+        provider: SSOProvider,
+        saml_entity_id: Option<&str>,
+        saml_sso_url: Option<&str>,
+        saml_slo_url: Option<&str>,
+        saml_x509_cert: Option<&str>,
+        saml_name_id_format: Option<&str>,
+        attribute_mapping: Option<serde_json::Value>,
+        require_signed_assertions: bool,
+        require_signed_responses: bool,
+        allow_unsolicited_responses: bool,
+    ) -> StoreResult<SSOConfiguration> {
+        SSOConfiguration::upsert(
+            &self.pool,
+            org_id,
+            provider,
+            saml_entity_id,
+            saml_sso_url,
+            saml_slo_url,
+            saml_x509_cert,
+            saml_name_id_format,
+            attribute_mapping,
+            require_signed_assertions,
+            require_signed_responses,
+            allow_unsolicited_responses,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
+        SSOConfiguration::enable(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn disable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
+        SSOConfiguration::disable(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
+        SSOConfiguration::delete(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool> {
+        SAMLAssertionId::is_used(&self.pool, assertion_id, org_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn record_saml_assertion_used(
+        &self,
+        assertion_id: &str,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        name_id: Option<&str>,
+        issued_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> StoreResult<SAMLAssertionId> {
+        SAMLAssertionId::record_used(
+            &self.pool,
+            assertion_id,
+            org_id,
+            user_id,
+            name_id,
+            issued_at,
+            expires_at,
+        )
+        .await
+        .map_err(Into::into)
     }
 }
