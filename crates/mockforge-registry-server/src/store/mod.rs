@@ -50,6 +50,15 @@ pub enum StoreError {
 #[async_trait]
 pub trait RegistryStore: Send + Sync + 'static {
     // ---------------------------------------------------------------------
+    // Health
+    // ---------------------------------------------------------------------
+
+    /// Ping the backing database. Returns `Ok(())` if the store is reachable.
+    /// Implementations should issue the cheapest possible liveness check
+    /// (`SELECT 1` for SQL backends).
+    async fn health_check(&self) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
     // API tokens
     // ---------------------------------------------------------------------
 

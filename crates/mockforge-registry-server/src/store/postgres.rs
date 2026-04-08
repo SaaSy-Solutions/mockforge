@@ -34,6 +34,14 @@ impl PgRegistryStore {
 
 #[async_trait]
 impl RegistryStore for PgRegistryStore {
+    async fn health_check(&self) -> StoreResult<()> {
+        sqlx::query("SELECT 1")
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
     async fn create_api_token(
         &self,
         org_id: Uuid,
