@@ -9,7 +9,10 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::{RegistryStore, StoreResult};
+use super::{
+    AdminAnalyticsSnapshot, ConversionFunnelSnapshot, OrgSettingRow, ProjectRow, RegistryStore,
+    StoreResult, SubscriptionRow, UserSettingRow,
+};
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
@@ -1437,5 +1440,524 @@ impl RegistryStore for PgRegistryStore {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|(id,)| id))
+    }
+
+    // --- Admin analytics snapshots ---
+
+    async fn get_admin_analytics_snapshot(&self) -> StoreResult<AdminAnalyticsSnapshot> {
+        let pool = &self.pool;
+
+        let (total_users,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM users").fetch_one(pool).await?;
+        let (verified_users,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_verified = TRUE")
+                .fetch_one(pool)
+                .await?;
+        let auth_providers = sqlx::query_as::<_, (Option<String>, i64)>(
+            "SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider",
+        )
+        .fetch_all(pool)
+        .await?;
+        let (new_users_7d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (new_users_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (total_orgs,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM organizations").fetch_one(pool).await?;
+        let plan_distribution = sqlx::query_as::<_, (String, i64)>(
+            "SELECT plan, COUNT(*) FROM organizations GROUP BY plan",
+        )
+        .fetch_all(pool)
+        .await?;
+        let (active_subs,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM subscriptions WHERE status IN ('active', 'trialing')",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (trial_orgs,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(DISTINCT org_id) FROM subscriptions WHERE status = 'trialing'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (total_requests,): (Option<i64>,) = sqlx::query_as(
+            "SELECT SUM(requests) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (total_storage,): (Option<i64>,) = sqlx::query_as(
+            "SELECT SUM(storage_bytes) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (total_ai_tokens,): (Option<i64>,) = sqlx::query_as(
+            "SELECT SUM(ai_tokens_used) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let top_orgs = sqlx::query_as::<_, (Uuid, String, String, i64, i64)>(
+            r#"
+            SELECT o.id, o.name, o.plan,
+                   COALESCE(SUM(uc.requests), 0) as requests,
+                   COALESCE(SUM(uc.storage_bytes), 0) as storage_bytes
+            FROM organizations o
+            LEFT JOIN usage_counters uc ON o.id = uc.org_id
+            WHERE uc.period_start >= DATE_TRUNC('month', NOW())
+            GROUP BY o.id, o.name, o.plan
+            ORDER BY requests DESC
+            LIMIT 10
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let (hosted_mocks_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE deleted_at IS NULL")
+                .fetch_one(pool)
+                .await?;
+        let (hosted_mocks_orgs,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(DISTINCT org_id) FROM hosted_mocks WHERE deleted_at IS NULL",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (hosted_mocks_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM hosted_mocks WHERE created_at > NOW() - INTERVAL '30 days' AND deleted_at IS NULL",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (plugins_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM plugins").fetch_one(pool).await?;
+        let (plugins_orgs,): (i64,) =
+            sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM plugins WHERE org_id IS NOT NULL")
+                .fetch_one(pool)
+                .await?;
+        let (plugins_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM plugins WHERE created_at > NOW() - INTERVAL '30 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (templates_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM templates").fetch_one(pool).await?;
+        let (templates_orgs,): (i64,) =
+            sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM templates WHERE org_id IS NOT NULL")
+                .fetch_one(pool)
+                .await?;
+        let (templates_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM templates WHERE created_at > NOW() - INTERVAL '30 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (scenarios_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM scenarios").fetch_one(pool).await?;
+        let (scenarios_orgs,): (i64,) =
+            sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM scenarios WHERE org_id IS NOT NULL")
+                .fetch_one(pool)
+                .await?;
+        let (scenarios_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM scenarios WHERE created_at > NOW() - INTERVAL '30 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (api_tokens_count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM api_tokens").fetch_one(pool).await?;
+        let (api_tokens_orgs,): (i64,) =
+            sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM api_tokens")
+                .fetch_one(pool)
+                .await?;
+        let (api_tokens_30d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM api_tokens WHERE created_at > NOW() - INTERVAL '30 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let user_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
+            r#"
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM users
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let org_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
+            r#"
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM organizations
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(created_at)
+            ORDER BY date ASC
+            "#,
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let (logins_24h,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM login_attempts WHERE success = TRUE AND created_at > NOW() - INTERVAL '24 hours'",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (logins_7d,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM login_attempts WHERE success = TRUE AND created_at > NOW() - INTERVAL '7 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let (api_requests_24h,): (i64,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(requests), 0) FROM usage_counters WHERE updated_at > NOW() - INTERVAL '24 hours'",
+        )
+        .fetch_one(pool)
+        .await?;
+        let (api_requests_7d,): (i64,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(requests), 0) FROM usage_counters WHERE updated_at > NOW() - INTERVAL '7 days'",
+        )
+        .fetch_one(pool)
+        .await?;
+
+        Ok(AdminAnalyticsSnapshot {
+            total_users,
+            verified_users,
+            auth_providers,
+            new_users_7d,
+            new_users_30d,
+            total_orgs,
+            plan_distribution,
+            active_subs,
+            trial_orgs,
+            total_requests,
+            total_storage,
+            total_ai_tokens,
+            top_orgs,
+            hosted_mocks_count,
+            hosted_mocks_orgs,
+            hosted_mocks_30d,
+            plugins_count,
+            plugins_orgs,
+            plugins_30d,
+            templates_count,
+            templates_orgs,
+            templates_30d,
+            scenarios_count,
+            scenarios_orgs,
+            scenarios_30d,
+            api_tokens_count,
+            api_tokens_orgs,
+            api_tokens_30d,
+            user_growth_30d,
+            org_growth_30d,
+            logins_24h,
+            logins_7d,
+            api_requests_24h,
+            api_requests_7d,
+        })
+    }
+
+    async fn get_conversion_funnel_snapshot(
+        &self,
+        interval: &str,
+    ) -> StoreResult<ConversionFunnelSnapshot> {
+        let pool = &self.pool;
+
+        let (signups,): (i64,) = sqlx::query_as(&format!(
+            "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '{}'",
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (verified,): (i64,) = sqlx::query_as(&format!(
+            "SELECT COUNT(*) FROM users WHERE is_verified = TRUE AND created_at > NOW() - INTERVAL '{}'",
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (logged_in,): (i64,) = sqlx::query_as(&format!(
+            r#"
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            INNER JOIN login_attempts la ON u.email = la.email
+            WHERE la.success = TRUE
+            AND u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (org_created,): (i64,) = sqlx::query_as(&format!(
+            r#"
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            INNER JOIN organization_members om ON u.id = om.user_id
+            INNER JOIN organizations o ON om.org_id = o.id
+            WHERE om.role = 'admin'
+            AND u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (feature_users,): (i64,) = sqlx::query_as(&format!(
+            r#"
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            INNER JOIN feature_usage fu ON u.id = fu.user_id
+            WHERE u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (checkout_initiated,): (i64,) = sqlx::query_as(&format!(
+            r#"
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            INNER JOIN feature_usage fu ON u.id = fu.user_id
+            WHERE fu.feature = 'billing_checkout'
+            AND u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let (paid_subscribers,): (i64,) = sqlx::query_as(&format!(
+            r#"
+            SELECT COUNT(DISTINCT u.id)
+            FROM users u
+            INNER JOIN organization_members om ON u.id = om.user_id
+            INNER JOIN organizations o ON om.org_id = o.id
+            INNER JOIN subscriptions s ON o.id = s.org_id
+            WHERE s.status IN ('active', 'trialing')
+            AND s.plan IN ('pro', 'team')
+            AND u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        let time_to_convert_days: Option<f64> = sqlx::query_scalar::<_, Option<f64>>(&format!(
+            r#"
+            SELECT AVG(EXTRACT(EPOCH FROM (s.created_at - u.created_at)) / 86400.0) as avg_days
+            FROM users u
+            INNER JOIN organization_members om ON u.id = om.user_id
+            INNER JOIN organizations o ON om.org_id = o.id
+            INNER JOIN subscriptions s ON o.id = s.org_id
+            WHERE s.status IN ('active', 'trialing')
+            AND s.plan IN ('pro', 'team')
+            AND u.created_at > NOW() - INTERVAL '{}'
+            "#,
+            interval
+        ))
+        .fetch_one(pool)
+        .await?;
+
+        Ok(ConversionFunnelSnapshot {
+            signups,
+            verified,
+            logged_in,
+            org_created,
+            feature_users,
+            checkout_initiated,
+            paid_subscribers,
+            time_to_convert_days,
+        })
+    }
+
+    // --- GDPR ---
+
+    async fn list_user_settings_raw(&self, user_id: Uuid) -> StoreResult<Vec<UserSettingRow>> {
+        let rows = sqlx::query_as::<_, (String, serde_json::Value, DateTime<Utc>, DateTime<Utc>)>(
+            "SELECT setting_key, setting_value, created_at, updated_at FROM user_settings WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(key, value, created_at, updated_at)| UserSettingRow {
+                key,
+                value,
+                created_at,
+                updated_at,
+            })
+            .collect())
+    }
+
+    async fn list_user_api_tokens(&self, user_id: Uuid) -> StoreResult<Vec<ApiToken>> {
+        sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_org_membership_role(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<Option<String>> {
+        let row = sqlx::query_as::<_, (String,)>(
+            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind(org_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(r,)| r))
+    }
+
+    async fn list_org_settings_raw(&self, org_id: Uuid) -> StoreResult<Vec<OrgSettingRow>> {
+        let rows = sqlx::query_as::<_, (String, serde_json::Value, DateTime<Utc>, DateTime<Utc>)>(
+            "SELECT setting_key, setting_value, created_at, updated_at FROM org_settings WHERE org_id = $1",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(key, value, created_at, updated_at)| OrgSettingRow {
+                key,
+                value,
+                created_at,
+                updated_at,
+            })
+            .collect())
+    }
+
+    async fn list_org_projects_raw(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>> {
+        let rows = sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>, DateTime<Utc>)>(
+            "SELECT id, name, visibility, created_at, updated_at FROM projects WHERE org_id = $1",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, name, visibility, created_at, updated_at)| ProjectRow {
+                id,
+                name,
+                visibility,
+                created_at,
+                updated_at,
+            })
+            .collect())
+    }
+
+    async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>> {
+        let rows = sqlx::query_as::<
+            _,
+            (Uuid, String, String, DateTime<Utc>, DateTime<Utc>),
+        >(
+            "SELECT id, plan, status, current_period_end, created_at FROM subscriptions WHERE org_id = $1",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, plan, status, current_period_end, created_at)| SubscriptionRow {
+                id,
+                plan,
+                status,
+                current_period_end,
+                created_at,
+            })
+            .collect())
+    }
+
+    async fn list_org_hosted_mocks_raw(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
+        sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {
+        let mut tx = self.pool.begin().await?;
+
+        let owned_orgs =
+            sqlx::query_as::<_, (Uuid,)>("SELECT id FROM organizations WHERE owner_id = $1")
+                .bind(user_id)
+                .fetch_all(&mut *tx)
+                .await?;
+        let owned_count = owned_orgs.len();
+
+        for (org_id,) in &owned_orgs {
+            let (member_count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM org_members WHERE org_id = $1 AND user_id != $2",
+            )
+            .bind(org_id)
+            .bind(user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+            if member_count > 0 {
+                let new_owner = sqlx::query_as::<_, (Uuid, Uuid)>(
+                    "SELECT id, user_id FROM org_members WHERE org_id = $1 AND user_id != $2 ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'member' THEN 2 END LIMIT 1",
+                )
+                .bind(org_id)
+                .bind(user_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+
+                if let Some((member_id, new_owner_user_id)) = new_owner {
+                    sqlx::query("UPDATE organizations SET owner_id = $1 WHERE id = $2")
+                        .bind(new_owner_user_id)
+                        .bind(org_id)
+                        .execute(&mut *tx)
+                        .await?;
+
+                    sqlx::query("UPDATE org_members SET role = 'owner' WHERE id = $1")
+                        .bind(member_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+            } else {
+                sqlx::query("DELETE FROM organizations WHERE id = $1")
+                    .bind(org_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        sqlx::query("DELETE FROM org_members WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM user_settings WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM api_tokens WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(owned_count)
     }
 }

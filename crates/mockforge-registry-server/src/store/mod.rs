@@ -956,4 +956,134 @@ pub trait RegistryStore: Send + Sync + 'static {
         scenario_id: Uuid,
         reviewer_id: Uuid,
     ) -> StoreResult<Option<Uuid>>;
+
+    // --- Admin analytics snapshots ---
+
+    /// Fetch a single aggregated snapshot covering every metric surfaced by
+    /// the admin analytics dashboard. Encapsulates ~40 raw SQL queries so
+    /// handlers stay thin and SQLite implementations can specialize.
+    async fn get_admin_analytics_snapshot(&self) -> StoreResult<AdminAnalyticsSnapshot>;
+
+    /// Fetch conversion funnel counts for the given textual Postgres interval
+    /// (e.g. "7 days", "30 days"). SQLite implementations may parse this.
+    async fn get_conversion_funnel_snapshot(
+        &self,
+        interval: &str,
+    ) -> StoreResult<ConversionFunnelSnapshot>;
+
+    // --- GDPR data export and deletion ---
+
+    async fn list_user_settings_raw(&self, user_id: Uuid) -> StoreResult<Vec<UserSettingRow>>;
+
+    async fn list_user_api_tokens(&self, user_id: Uuid) -> StoreResult<Vec<ApiToken>>;
+
+    async fn get_org_membership_role(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<Option<String>>;
+
+    async fn list_org_settings_raw(&self, org_id: Uuid) -> StoreResult<Vec<OrgSettingRow>>;
+
+    async fn list_org_projects_raw(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>>;
+
+    async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>>;
+
+    async fn list_org_hosted_mocks_raw(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>>;
+
+    /// Transactionally erase a user's personal data (GDPR right to erasure),
+    /// transferring solo-owned orgs with other members to the next admin and
+    /// cascade-deleting orgs with no remaining members. Returns the number of
+    /// owned organizations affected (for audit logging).
+    async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize>;
+}
+
+/// Aggregated admin analytics data, corresponding to a single dashboard load.
+#[derive(Debug, Clone)]
+pub struct AdminAnalyticsSnapshot {
+    pub total_users: i64,
+    pub verified_users: i64,
+    pub auth_providers: Vec<(Option<String>, i64)>,
+    pub new_users_7d: i64,
+    pub new_users_30d: i64,
+    pub total_orgs: i64,
+    pub plan_distribution: Vec<(String, i64)>,
+    pub active_subs: i64,
+    pub trial_orgs: i64,
+    pub total_requests: Option<i64>,
+    pub total_storage: Option<i64>,
+    pub total_ai_tokens: Option<i64>,
+    pub top_orgs: Vec<(Uuid, String, String, i64, i64)>,
+    pub hosted_mocks_count: i64,
+    pub hosted_mocks_orgs: i64,
+    pub hosted_mocks_30d: i64,
+    pub plugins_count: i64,
+    pub plugins_orgs: i64,
+    pub plugins_30d: i64,
+    pub templates_count: i64,
+    pub templates_orgs: i64,
+    pub templates_30d: i64,
+    pub scenarios_count: i64,
+    pub scenarios_orgs: i64,
+    pub scenarios_30d: i64,
+    pub api_tokens_count: i64,
+    pub api_tokens_orgs: i64,
+    pub api_tokens_30d: i64,
+    pub user_growth_30d: Vec<(chrono::NaiveDate, i64)>,
+    pub org_growth_30d: Vec<(chrono::NaiveDate, i64)>,
+    pub logins_24h: i64,
+    pub logins_7d: i64,
+    pub api_requests_24h: i64,
+    pub api_requests_7d: i64,
+}
+
+/// Aggregated conversion funnel counts for admin dashboards.
+#[derive(Debug, Clone)]
+pub struct ConversionFunnelSnapshot {
+    pub signups: i64,
+    pub verified: i64,
+    pub logged_in: i64,
+    pub org_created: i64,
+    pub feature_users: i64,
+    pub checkout_initiated: i64,
+    pub paid_subscribers: i64,
+    pub time_to_convert_days: Option<f64>,
+}
+
+/// Raw user_settings row used by GDPR export.
+#[derive(Debug, Clone)]
+pub struct UserSettingRow {
+    pub key: String,
+    pub value: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Raw org_settings row used by GDPR export.
+#[derive(Debug, Clone)]
+pub struct OrgSettingRow {
+    pub key: String,
+    pub value: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Raw projects row used by GDPR export.
+#[derive(Debug, Clone)]
+pub struct ProjectRow {
+    pub id: Uuid,
+    pub name: String,
+    pub visibility: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Raw subscriptions row used by GDPR export.
+#[derive(Debug, Clone)]
+pub struct SubscriptionRow {
+    pub id: Uuid,
+    pub plan: String,
+    pub status: String,
+    pub current_period_end: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }

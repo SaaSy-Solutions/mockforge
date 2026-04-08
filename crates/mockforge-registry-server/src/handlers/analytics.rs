@@ -7,7 +7,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
@@ -123,8 +122,6 @@ pub async fn get_analytics(
     AuthUser(user_id): AuthUser,
     Query(_query): Query<AnalyticsQuery>,
 ) -> ApiResult<Json<AnalyticsResponse>> {
-    let pool = state.db.pool();
-
     // Check if user is admin
     let user = state
         .store
@@ -136,67 +133,11 @@ pub async fn get_analytics(
         return Err(ApiError::PermissionDenied);
     }
 
-    // User Analytics
-    let total_users: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let verified_users: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM users WHERE is_verified = TRUE")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let unverified_users = total_users.0 - verified_users.0;
-
-    let auth_providers = sqlx::query_as::<_, (Option<String>, i64)>(
-        "SELECT auth_provider, COUNT(*) FROM users GROUP BY auth_provider",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let new_users_7d: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days'")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let new_users_30d: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '30 days'")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    // Subscription Analytics
-    let total_orgs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM organizations")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let plan_distribution = sqlx::query_as::<_, (String, i64)>(
-        "SELECT plan, COUNT(*) FROM organizations GROUP BY plan",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let active_subs: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM subscriptions WHERE status IN ('active', 'trialing')")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let trial_orgs: (i64,) = sqlx::query_as(
-        "SELECT COUNT(DISTINCT org_id) FROM subscriptions WHERE status = 'trialing'",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    let snap = state.store.get_admin_analytics_snapshot().await?;
 
     // Revenue estimate (Pro: $29, Team: $99)
-    let revenue_estimate = plan_distribution
+    let revenue_estimate = snap
+        .plan_distribution
         .iter()
         .map(|(plan, count)| match plan.as_str() {
             "pro" => *count as f64 * 29.0,
@@ -205,238 +146,44 @@ pub async fn get_analytics(
         })
         .sum::<f64>();
 
-    // Usage Analytics
-    let total_requests: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(requests) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let total_storage: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(storage_bytes) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
-        "SELECT SUM(ai_tokens_used) FROM usage_counters WHERE period_start >= DATE_TRUNC('month', NOW())"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Top orgs by usage
-    let top_orgs = sqlx::query_as::<_, (Uuid, String, String, i64, i64)>(
-        r#"
-        SELECT
-            o.id,
-            o.name,
-            o.plan,
-            COALESCE(SUM(uc.requests), 0) as requests,
-            COALESCE(SUM(uc.storage_bytes), 0) as storage_bytes
-        FROM organizations o
-        LEFT JOIN usage_counters uc ON o.id = uc.org_id
-        WHERE uc.period_start >= DATE_TRUNC('month', NOW())
-        GROUP BY o.id, o.name, o.plan
-        ORDER BY requests DESC
-        LIMIT 10
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Feature Analytics
-    let hosted_mocks_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE deleted_at IS NULL")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let hosted_mocks_orgs: (i64,) =
-        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM hosted_mocks WHERE deleted_at IS NULL")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let hosted_mocks_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM hosted_mocks WHERE created_at > NOW() - INTERVAL '30 days' AND deleted_at IS NULL"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let plugins_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM plugins")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let plugins_orgs: (i64,) =
-        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM plugins WHERE org_id IS NOT NULL")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let plugins_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM plugins WHERE created_at > NOW() - INTERVAL '30 days'",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let templates_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM templates")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let templates_orgs: (i64,) =
-        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM templates WHERE org_id IS NOT NULL")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let templates_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM templates WHERE created_at > NOW() - INTERVAL '30 days'",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let scenarios_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM scenarios")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let scenarios_orgs: (i64,) =
-        sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM scenarios WHERE org_id IS NOT NULL")
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let scenarios_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM scenarios WHERE created_at > NOW() - INTERVAL '30 days'",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let api_tokens_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_tokens")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let api_tokens_orgs: (i64,) = sqlx::query_as("SELECT COUNT(DISTINCT org_id) FROM api_tokens")
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
-
-    let api_tokens_30d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM api_tokens WHERE created_at > NOW() - INTERVAL '30 days'",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Growth Analytics (last 30 days daily)
-    let user_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
-        r#"
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM users
-        WHERE created_at > NOW() - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let org_growth_30d = sqlx::query_as::<_, (chrono::NaiveDate, i64)>(
-        r#"
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM organizations
-        WHERE created_at > NOW() - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
-        ORDER BY date ASC
-        "#,
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Activity Analytics
-    let logins_24h: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM login_attempts WHERE success = TRUE AND created_at > NOW() - INTERVAL '24 hours'"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let logins_7d: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM login_attempts WHERE success = TRUE AND created_at > NOW() - INTERVAL '7 days'"
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // API requests (approximate from usage counters)
-    let api_requests_24h: (i64,) = sqlx::query_as(
-        r#"
-        SELECT COALESCE(SUM(requests), 0) FROM usage_counters
-        WHERE updated_at > NOW() - INTERVAL '24 hours'
-        "#,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let api_requests_7d: (i64,) = sqlx::query_as(
-        r#"
-        SELECT COALESCE(SUM(requests), 0) FROM usage_counters
-        WHERE updated_at > NOW() - INTERVAL '7 days'
-        "#,
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
     Ok(Json(AnalyticsResponse {
         users: UserAnalytics {
-            total: total_users.0,
-            verified: verified_users.0,
-            unverified: unverified_users,
-            by_auth_provider: auth_providers
+            total: snap.total_users,
+            verified: snap.verified_users,
+            unverified: snap.total_users - snap.verified_users,
+            by_auth_provider: snap
+                .auth_providers
                 .into_iter()
                 .map(|(provider, count)| AuthProviderCount {
                     provider: provider.unwrap_or_else(|| "email".to_string()),
                     count,
                 })
                 .collect(),
-            new_users_last_7d: new_users_7d.0,
-            new_users_last_30d: new_users_30d.0,
+            new_users_last_7d: snap.new_users_7d,
+            new_users_last_30d: snap.new_users_30d,
         },
         subscriptions: SubscriptionAnalytics {
-            total_orgs: total_orgs.0,
-            by_plan: plan_distribution
+            total_orgs: snap.total_orgs,
+            by_plan: snap
+                .plan_distribution
                 .into_iter()
                 .map(|(plan, count)| PlanCount { plan, count })
                 .collect(),
-            active_subscriptions: active_subs.0,
-            trial_orgs: trial_orgs.0,
+            active_subscriptions: snap.active_subs,
+            trial_orgs: snap.trial_orgs,
             revenue_estimate,
         },
         usage: UsageAnalytics {
-            total_requests: total_requests.0.unwrap_or(0),
-            total_storage_gb: (total_storage.0.unwrap_or(0) as f64) / 1_000_000_000.0,
-            total_ai_tokens: total_ai_tokens.0.unwrap_or(0),
-            avg_requests_per_org: if total_orgs.0 > 0 {
-                (total_requests.0.unwrap_or(0) as f64) / (total_orgs.0 as f64)
+            total_requests: snap.total_requests.unwrap_or(0),
+            total_storage_gb: (snap.total_storage.unwrap_or(0) as f64) / 1_000_000_000.0,
+            total_ai_tokens: snap.total_ai_tokens.unwrap_or(0),
+            avg_requests_per_org: if snap.total_orgs > 0 {
+                (snap.total_requests.unwrap_or(0) as f64) / (snap.total_orgs as f64)
             } else {
                 0.0
             },
-            top_orgs_by_usage: top_orgs
+            top_orgs_by_usage: snap
+                .top_orgs
                 .into_iter()
                 .map(|(id, name, plan, requests, storage_bytes)| OrgUsage {
                     org_id: id.to_string(),
@@ -449,35 +196,35 @@ pub async fn get_analytics(
         },
         features: FeatureAnalytics {
             hosted_mocks: FeatureUsage {
-                total: hosted_mocks_count.0,
-                active_orgs: hosted_mocks_orgs.0,
-                last_30d: hosted_mocks_30d.0,
+                total: snap.hosted_mocks_count,
+                active_orgs: snap.hosted_mocks_orgs,
+                last_30d: snap.hosted_mocks_30d,
             },
             plugins_published: FeatureUsage {
-                total: plugins_count.0,
-                active_orgs: plugins_orgs.0,
-                last_30d: plugins_30d.0,
+                total: snap.plugins_count,
+                active_orgs: snap.plugins_orgs,
+                last_30d: snap.plugins_30d,
             },
             templates_published: FeatureUsage {
-                total: templates_count.0,
-                active_orgs: templates_orgs.0,
-                last_30d: templates_30d.0,
+                total: snap.templates_count,
+                active_orgs: snap.templates_orgs,
+                last_30d: snap.templates_30d,
             },
             scenarios_published: FeatureUsage {
-                total: scenarios_count.0,
-                active_orgs: scenarios_orgs.0,
-                last_30d: scenarios_30d.0,
+                total: snap.scenarios_count,
+                active_orgs: snap.scenarios_orgs,
+                last_30d: snap.scenarios_30d,
             },
             api_tokens_created: FeatureUsage {
-                total: api_tokens_count.0,
-                active_orgs: api_tokens_orgs.0,
-                last_30d: api_tokens_30d.0,
+                total: snap.api_tokens_count,
+                active_orgs: snap.api_tokens_orgs,
+                last_30d: snap.api_tokens_30d,
             },
         },
         growth: GrowthAnalytics {
             user_growth_7d: {
                 let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).date_naive();
-                user_growth_30d
+                snap.user_growth_30d
                     .iter()
                     .filter(|(date, _)| *date >= cutoff)
                     .map(|(date, count)| DailyCount {
@@ -486,16 +233,17 @@ pub async fn get_analytics(
                     })
                     .collect()
             },
-            user_growth_30d: user_growth_30d
-                .into_iter()
+            user_growth_30d: snap
+                .user_growth_30d
+                .iter()
                 .map(|(date, count)| DailyCount {
                     date: date.to_string(),
-                    count,
+                    count: *count,
                 })
                 .collect(),
             org_growth_7d: {
                 let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).date_naive();
-                org_growth_30d
+                snap.org_growth_30d
                     .iter()
                     .filter(|(date, _)| *date >= cutoff)
                     .map(|(date, count)| DailyCount {
@@ -504,19 +252,20 @@ pub async fn get_analytics(
                     })
                     .collect()
             },
-            org_growth_30d: org_growth_30d
-                .into_iter()
+            org_growth_30d: snap
+                .org_growth_30d
+                .iter()
                 .map(|(date, count)| DailyCount {
                     date: date.to_string(),
-                    count,
+                    count: *count,
                 })
                 .collect(),
         },
         activity: ActivityAnalytics {
-            logins_last_24h: logins_24h.0,
-            logins_last_7d: logins_7d.0,
-            api_requests_last_24h: api_requests_24h.0,
-            api_requests_last_7d: api_requests_7d.0,
+            logins_last_24h: snap.logins_24h,
+            logins_last_7d: snap.logins_7d,
+            api_requests_last_24h: snap.api_requests_24h,
+            api_requests_last_7d: snap.api_requests_7d,
         },
     }))
 }
@@ -545,8 +294,6 @@ pub async fn get_conversion_funnel(
     AuthUser(user_id): AuthUser,
     Query(query): Query<AnalyticsQuery>,
 ) -> ApiResult<Json<ConversionFunnelResponse>> {
-    let pool = state.db.pool();
-
     // Check if user is admin
     let user = state
         .store
@@ -568,207 +315,86 @@ pub async fn get_conversion_funnel(
         _ => "30 days",
     };
 
-    // Stage 1: Signups (users created)
-    let signups: (i64,) = sqlx::query_as(&format!(
-        "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '{}'",
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    let snap = state.store.get_conversion_funnel_snapshot(interval).await?;
 
-    // Stage 2: Email Verified
-    let verified: (i64,) = sqlx::query_as(&format!(
-        "SELECT COUNT(*) FROM users WHERE is_verified = TRUE AND created_at > NOW() - INTERVAL '{}'",
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Stage 3: First Login (users who have logged in at least once)
-    // Note: login_attempts uses email, not user_id, so we join via email
-    let logged_in: (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN login_attempts la ON u.email = la.email
-        WHERE la.success = TRUE
-        AND u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Stage 4: Organization Created (users who created an org)
-    let org_created: (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN organization_members om ON u.id = om.user_id
-        INNER JOIN organizations o ON om.org_id = o.id
-        WHERE om.role = 'admin'
-        AND u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Stage 5: First Feature Use (users who used any feature)
-    let feature_users: (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN feature_usage fu ON u.id = fu.user_id
-        WHERE u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Stage 6: Checkout Initiated (users who started checkout)
-    let checkout_initiated: (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN feature_usage fu ON u.id = fu.user_id
-        WHERE fu.feature = 'billing_checkout'
-        AND u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Stage 7: Paid Subscription (users with active paid subscriptions)
-    let paid_subscribers: (i64,) = sqlx::query_as(&format!(
-        r#"
-        SELECT COUNT(DISTINCT u.id)
-        FROM users u
-        INNER JOIN organization_members om ON u.id = om.user_id
-        INNER JOIN organizations o ON om.org_id = o.id
-        INNER JOIN subscriptions s ON o.id = s.org_id
-        WHERE s.status IN ('active', 'trialing')
-        AND s.plan IN ('pro', 'team')
-        AND u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Calculate average time to convert (signup to paid subscription)
-    let time_to_convert: Option<f64> = sqlx::query_scalar::<_, Option<f64>>(&format!(
-        r#"
-        SELECT AVG(EXTRACT(EPOCH FROM (s.created_at - u.created_at)) / 86400.0) as avg_days
-        FROM users u
-        INNER JOIN organization_members om ON u.id = om.user_id
-        INNER JOIN organizations o ON om.org_id = o.id
-        INNER JOIN subscriptions s ON o.id = s.org_id
-        WHERE s.status IN ('active', 'trialing')
-        AND s.plan IN ('pro', 'team')
-        AND u.created_at > NOW() - INTERVAL '{}'
-        "#,
-        interval
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Build funnel stages
     let mut stages = Vec::new();
-    let signup_count = signups.0 as f64;
+    let signup_count = snap.signups as f64;
 
-    // Stage 1: Signups (baseline - 100%)
     stages.push(FunnelStage {
         stage: "Signup".to_string(),
-        count: signups.0,
+        count: snap.signups,
         conversion_rate: 100.0,
         drop_off: 0.0,
     });
 
-    // Stage 2: Email Verified
     let verified_rate = if signup_count > 0.0 {
-        (verified.0 as f64 / signup_count) * 100.0
+        (snap.verified as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "Email Verified".to_string(),
-        count: verified.0,
+        count: snap.verified,
         conversion_rate: verified_rate,
         drop_off: 100.0 - verified_rate,
     });
 
-    // Stage 3: First Login
     let login_rate = if signup_count > 0.0 {
-        (logged_in.0 as f64 / signup_count) * 100.0
+        (snap.logged_in as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "First Login".to_string(),
-        count: logged_in.0,
+        count: snap.logged_in,
         conversion_rate: login_rate,
         drop_off: verified_rate - login_rate,
     });
 
-    // Stage 4: Organization Created
     let org_rate = if signup_count > 0.0 {
-        (org_created.0 as f64 / signup_count) * 100.0
+        (snap.org_created as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "Organization Created".to_string(),
-        count: org_created.0,
+        count: snap.org_created,
         conversion_rate: org_rate,
         drop_off: login_rate - org_rate,
     });
 
-    // Stage 5: First Feature Use
     let feature_rate = if signup_count > 0.0 {
-        (feature_users.0 as f64 / signup_count) * 100.0
+        (snap.feature_users as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "First Feature Use".to_string(),
-        count: feature_users.0,
+        count: snap.feature_users,
         conversion_rate: feature_rate,
         drop_off: org_rate - feature_rate,
     });
 
-    // Stage 6: Checkout Initiated
     let checkout_rate = if signup_count > 0.0 {
-        (checkout_initiated.0 as f64 / signup_count) * 100.0
+        (snap.checkout_initiated as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "Checkout Initiated".to_string(),
-        count: checkout_initiated.0,
+        count: snap.checkout_initiated,
         conversion_rate: checkout_rate,
         drop_off: feature_rate - checkout_rate,
     });
 
-    // Stage 7: Paid Subscription
     let paid_rate = if signup_count > 0.0 {
-        (paid_subscribers.0 as f64 / signup_count) * 100.0
+        (snap.paid_subscribers as f64 / signup_count) * 100.0
     } else {
         0.0
     };
     stages.push(FunnelStage {
         stage: "Paid Subscription".to_string(),
-        count: paid_subscribers.0,
+        count: snap.paid_subscribers,
         conversion_rate: paid_rate,
         drop_off: checkout_rate - paid_rate,
     });
@@ -777,6 +403,6 @@ pub async fn get_conversion_funnel(
         period: period.to_string(),
         stages,
         overall_conversion_rate: paid_rate,
-        time_to_convert,
+        time_to_convert: snap.time_to_convert_days,
     }))
 }
