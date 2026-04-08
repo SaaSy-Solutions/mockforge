@@ -24,6 +24,7 @@ use mockforge_registry_server::middleware::rate_limit::RateLimiterState;
 use mockforge_registry_server::middleware::request_id::request_id_middleware;
 use mockforge_registry_server::redis::RedisPool;
 use mockforge_registry_server::storage::PluginStorage;
+use mockforge_registry_server::store::PgRegistryStore;
 use mockforge_registry_server::{deployment, pillar_tracking_init, routes, workers, AppState};
 
 use axum::response::IntoResponse;
@@ -151,6 +152,11 @@ async fn main() -> Result<()> {
         .await;
     tracing::info!("Circuit breakers initialized for external services");
 
+    // Create the unified registry store (Phase 1 extraction). For the SaaS
+    // binary this is always a Postgres-backed adapter over the existing pool.
+    let store: Arc<dyn mockforge_registry_server::store::RegistryStore> =
+        Arc::new(PgRegistryStore::new(db.pool().clone()));
+
     // Create app state
     let state = AppState {
         db: db.clone(),
@@ -160,6 +166,7 @@ async fn main() -> Result<()> {
         analytics_db,
         redis,
         circuit_breakers,
+        store,
     };
 
     // Start background workers

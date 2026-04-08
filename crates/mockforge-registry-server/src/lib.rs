@@ -31,6 +31,7 @@ pub mod pillar_tracking_init;
 pub mod redis;
 pub mod routes;
 pub mod storage;
+pub mod store;
 pub mod two_factor;
 pub mod validation;
 pub mod workers;
@@ -42,6 +43,7 @@ use crate::config::Config;
 use crate::database::Database;
 use crate::redis::RedisPool;
 use crate::storage::PluginStorage;
+use crate::store::RegistryStore;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -52,4 +54,8 @@ pub struct AppState {
     pub analytics_db: Option<mockforge_analytics::AnalyticsDatabase>,
     pub redis: Option<RedisPool>,
     pub circuit_breakers: CircuitBreakerRegistry,
+    /// Backend-agnostic domain store. Handlers should migrate to this over
+    /// time, in parallel with `db`, so that both Postgres (SaaS) and SQLite
+    /// (OSS admin) backends can satisfy the same handler code.
+    pub store: Arc<dyn RegistryStore>,
 }
