@@ -17,6 +17,7 @@ use crate::models::cloud_service::CloudService;
 use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::federation::Federation;
+use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 use crate::models::suspicious_activity::{
@@ -637,5 +638,84 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {
         CloudFixture::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn create_hosted_mock(
+        &self,
+        org_id: Uuid,
+        project_id: Option<Uuid>,
+        name: &str,
+        slug: &str,
+        description: Option<&str>,
+        config_json: serde_json::Value,
+        openapi_spec_url: Option<&str>,
+        region: Option<&str>,
+    ) -> StoreResult<HostedMock> {
+        HostedMock::create(
+            &self.pool,
+            org_id,
+            project_id,
+            name,
+            slug,
+            description,
+            config_json,
+            openapi_spec_url,
+            region,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_hosted_mock_by_id(&self, id: Uuid) -> StoreResult<Option<HostedMock>> {
+        HostedMock::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn find_hosted_mock_by_slug(
+        &self,
+        org_id: Uuid,
+        slug: &str,
+    ) -> StoreResult<Option<HostedMock>> {
+        HostedMock::find_by_slug(&self.pool, org_id, slug).await.map_err(Into::into)
+    }
+
+    async fn list_hosted_mocks_by_org(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
+        HostedMock::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_hosted_mock_status(
+        &self,
+        id: Uuid,
+        status: DeploymentStatus,
+        error_message: Option<&str>,
+    ) -> StoreResult<()> {
+        HostedMock::update_status(&self.pool, id, status, error_message)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_hosted_mock_urls(
+        &self,
+        id: Uuid,
+        deployment_url: Option<&str>,
+        internal_url: Option<&str>,
+    ) -> StoreResult<()> {
+        HostedMock::update_urls(&self.pool, id, deployment_url, internal_url)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_hosted_mock_health(
+        &self,
+        id: Uuid,
+        health_status: HealthStatus,
+        health_check_url: Option<&str>,
+    ) -> StoreResult<()> {
+        HostedMock::update_health(&self.pool, id, health_status, health_check_url)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_hosted_mock(&self, id: Uuid) -> StoreResult<()> {
+        HostedMock::delete(&self.pool, id).await.map_err(Into::into)
     }
 }

@@ -17,9 +17,8 @@ use crate::{
         permission_check::PermissionChecker, permissions::Permission, resolve_org_context, AuthUser,
     },
     models::{
-        feature_usage::{FeatureType, FeatureUsage},
-        record_audit_event, AuditEventType, DeploymentLog, DeploymentMetrics, DeploymentStatus,
-        HostedMock, Organization, User,
+        feature_usage::FeatureType, AuditEventType, DeploymentLog, DeploymentMetrics,
+        DeploymentStatus, HostedMock,
     },
     AppState,
 };
@@ -51,9 +50,7 @@ pub async fn create_deployment(
 
     if max_hosted_mocks >= 0 {
         // Count existing active deployments
-        let existing = HostedMock::find_by_org(pool, org_ctx.org_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let existing = state.store.list_hosted_mocks_by_org(org_ctx.org_id).await?;
 
         let active_count = existing
             .iter()
@@ -100,11 +97,7 @@ pub async fn create_deployment(
     }
 
     // Check if slug is already taken
-    if HostedMock::find_by_slug(pool, org_ctx.org_id, slug)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    if state.store.find_hosted_mock_by_slug(org_ctx.org_id, slug).await?.is_some() {
         return Err(ApiError::InvalidRequest(format!(
             "A deployment with slug '{}' already exists",
             slug
@@ -112,19 +105,19 @@ pub async fn create_deployment(
     }
 
     // Create deployment record
-    let deployment = HostedMock::create(
-        pool,
-        org_ctx.org_id,
-        request.project_id,
-        &request.name,
-        slug,
-        request.description.as_deref(),
-        request.config_json,
-        request.openapi_spec_url.as_deref(),
-        request.region.as_deref(),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let deployment = state
+        .store
+        .create_hosted_mock(
+            org_ctx.org_id,
+            request.project_id,
+            &request.name,
+            slug,
+            request.description.as_deref(),
+            request.config_json,
+            request.openapi_spec_url.as_deref(),
+            request.region.as_deref(),
+        )
+        .await?;
 
     // Log deployment creation
     DeploymentLog::create(
@@ -142,23 +135,25 @@ pub async fn create_deployment(
 
     // Mark as pending - the deployment orchestrator will pick it up and deploy it
     // The orchestrator polls for pending/deploying deployments every 10 seconds
-    HostedMock::update_status(pool, deployment.id, DeploymentStatus::Pending, None)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .update_hosted_mock_status(deployment.id, DeploymentStatus::Pending, None)
+        .await?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::HostedMockDeploy,
-        Some(serde_json::json!({
-            "deployment_id": deployment.id,
-            "name": request.name,
-            "slug": slug,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::HostedMockDeploy,
+            Some(serde_json::json!({
+                "deployment_id": deployment.id,
+                "name": request.name,
+                "slug": slug,
+            })),
+        )
+        .await;
 
     // Record audit log
     let ip_address = headers
@@ -168,30 +163,28 @@ pub async fn create_deployment(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::DeploymentCreated,
-        format!("Hosted mock deployment '{}' created", request.name),
-        Some(serde_json::json!({
-            "deployment_id": deployment.id,
-            "name": request.name,
-            "slug": slug,
-            "project_id": request.project_id,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::DeploymentCreated,
+            format!("Hosted mock deployment '{}' created", request.name),
+            Some(serde_json::json!({
+                "deployment_id": deployment.id,
+                "name": request.name,
+                "slug": slug,
+                "project_id": request.project_id,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Return deployment info
-    let deployment = HostedMock::find_by_id(pool, deployment.id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::Internal(anyhow::anyhow!("Failed to retrieve created deployment"))
-        })?;
+    let deployment = state.store.find_hosted_mock_by_id(deployment.id).await?.ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("Failed to retrieve created deployment"))
+    })?;
 
     Ok(Json(DeploymentResponse::from(deployment)))
 }
@@ -202,17 +195,13 @@ pub async fn list_deployments(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<DeploymentResponse>>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all deployments
-    let deployments = HostedMock::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deployments = state.store.list_hosted_mocks_by_org(org_ctx.org_id).await?;
 
     let responses: Vec<DeploymentResponse> =
         deployments.into_iter().map(DeploymentResponse::from).collect();
@@ -227,17 +216,16 @@ pub async fn get_deployment(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<DeploymentResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -258,8 +246,6 @@ pub async fn update_deployment_status(
     Path(deployment_id): Path<Uuid>,
     Json(request): Json<UpdateStatusRequest>,
 ) -> ApiResult<Json<DeploymentResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -272,9 +258,10 @@ pub async fn update_deployment_status(
         .await?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -288,33 +275,31 @@ pub async fn update_deployment_status(
     let status = DeploymentStatus::from_str(&request.status)
         .ok_or_else(|| ApiError::InvalidRequest("Invalid status".to_string()))?;
 
-    HostedMock::update_status(pool, deployment_id, status, request.error_message.as_deref())
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .update_hosted_mock_status(deployment_id, status, request.error_message.as_deref())
+        .await?;
 
     // Update URLs if provided
     if request.deployment_url.is_some() || request.internal_url.is_some() {
-        HostedMock::update_urls(
-            pool,
-            deployment_id,
-            request.deployment_url.as_deref(),
-            request.internal_url.as_deref(),
-        )
-        .await
-        .map_err(ApiError::Database)?;
+        state
+            .store
+            .update_hosted_mock_urls(
+                deployment_id,
+                request.deployment_url.as_deref(),
+                request.internal_url.as_deref(),
+            )
+            .await?;
     }
 
     // Get updated deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
-        })?;
+    let deployment = state.store.find_hosted_mock_by_id(deployment_id).await?.ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
+    })?;
 
     // Send deployment status notification email (non-blocking)
-    if let Ok(Some(org)) = Organization::find_by_id(pool, deployment.org_id).await {
-        if let Ok(Some(owner)) = User::find_by_id(pool, org.owner_id).await {
+    if let Ok(Some(org)) = state.store.find_organization_by_id(deployment.org_id).await {
+        if let Ok(Some(owner)) = state.store.find_user_by_id(org.owner_id).await {
             let status_str = format!("{:?}", deployment.status()).to_lowercase();
             let email_msg = crate::email::EmailService::generate_deployment_status_email(
                 &owner.username,
@@ -364,9 +349,10 @@ pub async fn delete_deployment(
         .await?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -384,26 +370,28 @@ pub async fn delete_deployment(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::DeploymentDeleted,
-        format!("Hosted mock deployment '{}' deleted", deployment.name),
-        Some(serde_json::json!({
-            "deployment_id": deployment.id,
-            "name": deployment.name,
-            "slug": deployment.slug,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::DeploymentDeleted,
+            format!("Hosted mock deployment '{}' deleted", deployment.name),
+            Some(serde_json::json!({
+                "deployment_id": deployment.id,
+                "name": deployment.name,
+                "slug": deployment.slug,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Update status to deleting before cleanup
-    HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .update_hosted_mock_status(deployment_id, DeploymentStatus::Deleting, None)
+        .await?;
 
     // Trigger actual deletion (stop service, cleanup resources, etc.)
     // Try to delete from Fly.io if configured
@@ -505,7 +493,7 @@ pub async fn delete_deployment(
     }
 
     // Soft delete from database
-    HostedMock::delete(pool, deployment_id).await.map_err(ApiError::Database)?;
+    state.store.delete_hosted_mock(deployment_id).await?;
 
     DeploymentLog::create(pool, deployment_id, "info", "Deployment deleted successfully", None)
         .await
@@ -548,11 +536,13 @@ pub async fn redeploy_deployment(
     checker
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
+    // pool kept for DeploymentLog + the spawned redeploy orchestration task below
 
     // Get existing deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify ownership
@@ -600,9 +590,10 @@ pub async fn redeploy_deployment(
     }
 
     // Update status to deploying
-    HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deploying, None)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .update_hosted_mock_status(deployment_id, DeploymentStatus::Deploying, None)
+        .await?;
 
     DeploymentLog::create(pool, deployment_id, "info", "Redeployment initiated", None)
         .await
