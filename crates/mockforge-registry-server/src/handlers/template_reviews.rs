@@ -6,12 +6,11 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{Template, TemplateReview, User},
+    models::User,
     AppState,
 };
 
@@ -21,30 +20,23 @@ pub async fn get_template_reviews(
     Path((name, version)): Path<(String, String)>,
     Query(params): Query<ReviewQueryParams>,
 ) -> ApiResult<Json<TemplateReviewsResponse>> {
-    let pool = state.db.pool();
-
-    let template = Template::find_by_name_version(pool, &name, &version)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_template_by_name_version(&name, &version)
+        .await?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     let limit = params.per_page.unwrap_or(20) as i64;
     let offset = (params.page.unwrap_or(0) * limit as usize) as i64;
 
-    let reviews = TemplateReview::get_by_template(pool, template.id, limit, offset)
-        .await
-        .map_err(ApiError::Database)?;
+    let reviews = state.store.get_template_reviews(template.id, limit, offset).await?;
 
-    let total = TemplateReview::count_by_template(pool, template.id)
-        .await
-        .map_err(ApiError::Database)?;
+    let total = state.store.count_template_reviews(template.id).await?;
 
     let mut review_responses = Vec::new();
     for review in reviews {
-        let reviewer = User::find_by_id(pool, review.reviewer_id)
-            .await
-            .map_err(ApiError::Database)?
-            .unwrap_or_else(|| User {
+        let reviewer =
+            state.store.find_user_by_id(review.reviewer_id).await?.unwrap_or_else(|| User {
                 id: review.reviewer_id,
                 username: "unknown".to_string(),
                 email: "unknown@example.com".to_string(),
@@ -89,8 +81,6 @@ pub async fn submit_template_review(
     Path((name, version)): Path<(String, String)>,
     Json(request): Json<SubmitTemplateReviewRequest>,
 ) -> ApiResult<Json<SubmitReviewResponse>> {
-    let pool = state.db.pool();
-
     // Validate rating
     if request.rating < 1 || request.rating > 5 {
         return Err(ApiError::InvalidRequest("Rating must be between 1 and 5".to_string()));
@@ -101,43 +91,38 @@ pub async fn submit_template_review(
         return Err(ApiError::InvalidRequest("Comment must be at least 10 characters".to_string()));
     }
 
-    let template = Template::find_by_name_version(pool, &name, &version)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_template_by_name_version(&name, &version)
+        .await?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
     // Check if user already reviewed
-    let existing = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM template_reviews WHERE template_id = $1 AND reviewer_id = $2",
-    )
-    .bind(template.id)
-    .bind(reviewer_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    if existing.is_some() {
+    if state
+        .store
+        .find_existing_template_review(template.id, reviewer_id)
+        .await?
+        .is_some()
+    {
         return Err(ApiError::InvalidRequest(
             "You have already reviewed this template".to_string(),
         ));
     }
 
     // Create review
-    let review = TemplateReview::create(
-        pool,
-        template.id,
-        reviewer_id,
-        request.rating as i32,
-        request.title.as_deref(),
-        &request.comment,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let review = state
+        .store
+        .create_template_review(
+            template.id,
+            reviewer_id,
+            request.rating as i32,
+            request.title.as_deref(),
+            &request.comment,
+        )
+        .await?;
 
     // Update template stats
-    TemplateReview::update_template_stats(pool, template.id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.update_template_review_stats(template.id).await?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,

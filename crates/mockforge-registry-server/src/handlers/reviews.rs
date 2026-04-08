@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{Plugin, Review},
     AppState,
 };
 
@@ -72,33 +71,28 @@ pub async fn get_reviews(
     Path(name): Path<String>,
     Query(query): Query<ReviewQuery>,
 ) -> ApiResult<Json<ReviewsResponse>> {
-    let pool = state.db.pool();
-
     // Get plugin
-    let plugin = Plugin::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     // Get reviews with pagination
     let offset = query.page * query.per_page;
-    let reviews = Review::get_by_plugin(pool, plugin.id, query.per_page, offset)
-        .await
-        .map_err(ApiError::Database)?;
+    let reviews = state.store.get_plugin_reviews(plugin.id, query.per_page, offset).await?;
 
     // Get total count
-    let total = Review::count_by_plugin(pool, plugin.id).await.map_err(ApiError::Database)?;
+    let total = state.store.count_plugin_reviews(plugin.id).await?;
 
     // Get users for reviews
     let mut reviews_with_users = Vec::new();
     for review in reviews {
-        let user = sqlx::query_as::<_, (String, String)>(
-            "SELECT id::text, username FROM users WHERE id = $1",
-        )
-        .bind(review.user_id)
-        .fetch_one(pool)
-        .await
-        .map_err(ApiError::Database)?;
+        let user = state
+            .store
+            .get_user_public_info(review.user_id)
+            .await?
+            .unwrap_or_else(|| (review.user_id.to_string(), "unknown".to_string()));
 
         reviews_with_users.push(ReviewWithUser {
             id: review.id.to_string(),
@@ -120,33 +114,8 @@ pub async fn get_reviews(
     }
 
     // Calculate stats
-    let stats_query = sqlx::query_as::<_, (f64, i64)>(
-        r#"
-        SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
-        FROM reviews
-        WHERE plugin_id = $1
-        "#,
-    )
-    .bind(plugin.id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let (average_rating, total_reviews) = stats_query;
-
-    // Get rating distribution
-    let distribution_rows = sqlx::query_as::<_, (i16, i64)>(
-        "SELECT rating, COUNT(*) FROM reviews WHERE plugin_id = $1 GROUP BY rating",
-    )
-    .bind(plugin.id)
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let mut rating_distribution = std::collections::HashMap::new();
-    for (rating, count) in distribution_rows {
-        rating_distribution.insert(rating, count);
-    }
+    let (average_rating, total_reviews) = state.store.get_plugin_review_stats(plugin.id).await?;
+    let rating_distribution = state.store.get_plugin_review_distribution(plugin.id).await?;
 
     let stats = ReviewStats {
         average_rating,
@@ -184,8 +153,6 @@ pub async fn submit_review(
     Extension(user_id): Extension<String>, // From auth middleware
     Json(request): Json<SubmitReviewRequest>,
 ) -> ApiResult<Json<SubmitReviewResponse>> {
-    let pool = state.db.pool();
-
     // Validate rating
     if request.rating < 1 || request.rating > 5 {
         return Err(ApiError::InvalidRequest("Rating must be between 1 and 5".to_string()));
@@ -212,9 +179,10 @@ pub async fn submit_review(
     }
 
     // Get plugin
-    let plugin = Plugin::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
     // Parse user_id
@@ -222,54 +190,28 @@ pub async fn submit_review(
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
     // Check if user already reviewed this plugin
-    let existing = sqlx::query_as::<_, (Uuid,)>(
-        "SELECT id FROM reviews WHERE plugin_id = $1 AND user_id = $2",
-    )
-    .bind(plugin.id)
-    .bind(user_uuid)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    if existing.is_some() {
+    if state.store.find_existing_plugin_review(plugin.id, user_uuid).await?.is_some() {
         return Err(ApiError::InvalidRequest(
             "You have already reviewed this plugin. Please edit your existing review.".to_string(),
         ));
     }
 
     // Create review
-    let review = Review::create(
-        pool,
-        plugin.id,
-        user_uuid,
-        &request.version,
-        request.rating,
-        request.title.as_deref(),
-        &request.comment,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let review = state
+        .store
+        .create_plugin_review(
+            plugin.id,
+            user_uuid,
+            &request.version,
+            request.rating,
+            request.title.as_deref(),
+            &request.comment,
+        )
+        .await?;
 
     // Update plugin rating stats
-    let stats = sqlx::query_as::<_, (f64, i64)>(
-        r#"
-        SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
-        FROM reviews
-        WHERE plugin_id = $1
-        "#,
-    )
-    .bind(plugin.id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    sqlx::query("UPDATE plugins SET rating_avg = $1, rating_count = $2 WHERE id = $3")
-        .bind(stats.0)
-        .bind(stats.1 as i32)
-        .bind(plugin.id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    let (avg, count) = state.store.get_plugin_review_stats(plugin.id).await?;
+    state.store.update_plugin_rating_stats(plugin.id, avg, count as i32).await?;
 
     Ok(Json(SubmitReviewResponse {
         success: true,
@@ -289,34 +231,21 @@ pub async fn vote_review(
     Extension(_user_id): Extension<String>,
     Json(request): Json<VoteRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Parse review_id
     let review_uuid = Uuid::parse_str(&review_id)
         .map_err(|_| ApiError::InvalidRequest("Invalid review ID".to_string()))?;
 
     // Get plugin
-    let plugin = Plugin::find_by_name(pool, &plugin_name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&plugin_name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(plugin_name.clone()))?;
 
-    // Update vote count
-    let field = if request.helpful {
-        "helpful_count"
-    } else {
-        "unhelpful_count"
-    };
-
-    let query_str =
-        format!("UPDATE reviews SET {} = {} + 1 WHERE id = $1 AND plugin_id = $2", field, field);
-
-    sqlx::query(&query_str)
-        .bind(review_uuid)
-        .bind(plugin.id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .increment_plugin_review_vote(plugin.id, review_uuid, request.helpful)
+        .await?;
 
     Ok(Json(serde_json::json!({
         "success": true,

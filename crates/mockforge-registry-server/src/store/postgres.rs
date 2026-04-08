@@ -21,8 +21,10 @@ use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::plugin::{Plugin, PluginVersion};
+use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
+use crate::models::scenario_review::ScenarioReview;
 use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
@@ -30,6 +32,7 @@ use crate::models::suspicious_activity::{
     record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
 };
 use crate::models::template::{Template, TemplateCategory};
+use crate::models::template_review::TemplateReview;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
@@ -1215,5 +1218,224 @@ impl RegistryStore for PgRegistryStore {
         PluginVersion::add_dependency(&self.pool, version_id, plugin_name, version_req)
             .await
             .map_err(Into::into)
+    }
+
+    // --- Plugin reviews ---
+
+    async fn get_plugin_reviews(
+        &self,
+        plugin_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Review>> {
+        Review::get_by_plugin(&self.pool, plugin_id, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_plugin_reviews(&self, plugin_id: Uuid) -> StoreResult<i64> {
+        Review::count_by_plugin(&self.pool, plugin_id).await.map_err(Into::into)
+    }
+
+    async fn create_plugin_review(
+        &self,
+        plugin_id: Uuid,
+        user_id: Uuid,
+        version: &str,
+        rating: i16,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<Review> {
+        Review::create(&self.pool, plugin_id, user_id, version, rating, title, comment)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_plugin_review_stats(&self, plugin_id: Uuid) -> StoreResult<(f64, i64)> {
+        let row = sqlx::query_as::<_, (f64, i64)>(
+            "SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*) FROM reviews WHERE plugin_id = $1",
+        )
+        .bind(plugin_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    async fn get_plugin_review_distribution(
+        &self,
+        plugin_id: Uuid,
+    ) -> StoreResult<std::collections::HashMap<i16, i64>> {
+        let rows = sqlx::query_as::<_, (i16, i64)>(
+            "SELECT rating, COUNT(*) FROM reviews WHERE plugin_id = $1 GROUP BY rating",
+        )
+        .bind(plugin_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().collect())
+    }
+
+    async fn find_existing_plugin_review(
+        &self,
+        plugin_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<Option<Uuid>> {
+        let row = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM reviews WHERE plugin_id = $1 AND user_id = $2",
+        )
+        .bind(plugin_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(id,)| id))
+    }
+
+    async fn update_plugin_rating_stats(
+        &self,
+        plugin_id: Uuid,
+        avg: f64,
+        count: i32,
+    ) -> StoreResult<()> {
+        sqlx::query("UPDATE plugins SET rating_avg = $1, rating_count = $2 WHERE id = $3")
+            .bind(avg)
+            .bind(count)
+            .bind(plugin_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn increment_plugin_review_vote(
+        &self,
+        plugin_id: Uuid,
+        review_id: Uuid,
+        helpful: bool,
+    ) -> StoreResult<()> {
+        let field = if helpful {
+            "helpful_count"
+        } else {
+            "unhelpful_count"
+        };
+        let q = format!(
+            "UPDATE reviews SET {} = {} + 1 WHERE id = $1 AND plugin_id = $2",
+            field, field
+        );
+        sqlx::query(&q).bind(review_id).bind(plugin_id).execute(&self.pool).await?;
+        Ok(())
+    }
+
+    async fn get_user_public_info(&self, user_id: Uuid) -> StoreResult<Option<(String, String)>> {
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT id::text, username FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    // --- Template reviews ---
+
+    async fn get_template_reviews(
+        &self,
+        template_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<TemplateReview>> {
+        TemplateReview::get_by_template(&self.pool, template_id, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_template_reviews(&self, template_id: Uuid) -> StoreResult<i64> {
+        TemplateReview::count_by_template(&self.pool, template_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_template_review(
+        &self,
+        template_id: Uuid,
+        reviewer_id: Uuid,
+        rating: i32,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<TemplateReview> {
+        TemplateReview::create(&self.pool, template_id, reviewer_id, rating, title, comment)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_template_review_stats(&self, template_id: Uuid) -> StoreResult<()> {
+        TemplateReview::update_template_stats(&self.pool, template_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_existing_template_review(
+        &self,
+        template_id: Uuid,
+        reviewer_id: Uuid,
+    ) -> StoreResult<Option<Uuid>> {
+        let row = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM template_reviews WHERE template_id = $1 AND reviewer_id = $2",
+        )
+        .bind(template_id)
+        .bind(reviewer_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(id,)| id))
+    }
+
+    // --- Scenario reviews ---
+
+    async fn get_scenario_reviews(
+        &self,
+        scenario_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<ScenarioReview>> {
+        ScenarioReview::get_by_scenario(&self.pool, scenario_id, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_scenario_reviews(&self, scenario_id: Uuid) -> StoreResult<i64> {
+        ScenarioReview::count_by_scenario(&self.pool, scenario_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_scenario_review(
+        &self,
+        scenario_id: Uuid,
+        reviewer_id: Uuid,
+        rating: i32,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<ScenarioReview> {
+        ScenarioReview::create(&self.pool, scenario_id, reviewer_id, rating, title, comment)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_scenario_review_stats(&self, scenario_id: Uuid) -> StoreResult<()> {
+        ScenarioReview::update_scenario_stats(&self.pool, scenario_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_existing_scenario_review(
+        &self,
+        scenario_id: Uuid,
+        reviewer_id: Uuid,
+    ) -> StoreResult<Option<Uuid>> {
+        let row = sqlx::query_as::<_, (Uuid,)>(
+            "SELECT id FROM scenario_reviews WHERE scenario_id = $1 AND reviewer_id = $2",
+        )
+        .bind(scenario_id)
+        .bind(reviewer_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(id,)| id))
     }
 }

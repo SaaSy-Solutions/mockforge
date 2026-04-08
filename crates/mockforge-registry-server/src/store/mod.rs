@@ -29,13 +29,16 @@ use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::plugin::{Plugin, PluginVersion};
+use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
+use crate::models::scenario_review::ScenarioReview;
 use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
 use crate::models::template::{Template, TemplateCategory};
+use crate::models::template_review::TemplateReview;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
@@ -844,4 +847,113 @@ pub trait RegistryStore: Send + Sync + 'static {
         plugin_name: &str,
         version_req: &str,
     ) -> StoreResult<()>;
+
+    // --- Plugin reviews ---
+
+    async fn get_plugin_reviews(
+        &self,
+        plugin_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Review>>;
+
+    async fn count_plugin_reviews(&self, plugin_id: Uuid) -> StoreResult<i64>;
+
+    async fn create_plugin_review(
+        &self,
+        plugin_id: Uuid,
+        user_id: Uuid,
+        version: &str,
+        rating: i16,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<Review>;
+
+    /// Returns (average_rating, total_reviews) for a plugin.
+    async fn get_plugin_review_stats(&self, plugin_id: Uuid) -> StoreResult<(f64, i64)>;
+
+    /// Returns map of rating -> count for a plugin.
+    async fn get_plugin_review_distribution(
+        &self,
+        plugin_id: Uuid,
+    ) -> StoreResult<std::collections::HashMap<i16, i64>>;
+
+    async fn find_existing_plugin_review(
+        &self,
+        plugin_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<Option<Uuid>>;
+
+    async fn update_plugin_rating_stats(
+        &self,
+        plugin_id: Uuid,
+        avg: f64,
+        count: i32,
+    ) -> StoreResult<()>;
+
+    async fn increment_plugin_review_vote(
+        &self,
+        plugin_id: Uuid,
+        review_id: Uuid,
+        helpful: bool,
+    ) -> StoreResult<()>;
+
+    /// Lookup (id, username) for a user.
+    async fn get_user_public_info(&self, user_id: Uuid) -> StoreResult<Option<(String, String)>>;
+
+    // --- Template reviews ---
+
+    async fn get_template_reviews(
+        &self,
+        template_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<TemplateReview>>;
+
+    async fn count_template_reviews(&self, template_id: Uuid) -> StoreResult<i64>;
+
+    async fn create_template_review(
+        &self,
+        template_id: Uuid,
+        reviewer_id: Uuid,
+        rating: i32,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<TemplateReview>;
+
+    async fn update_template_review_stats(&self, template_id: Uuid) -> StoreResult<()>;
+
+    async fn find_existing_template_review(
+        &self,
+        template_id: Uuid,
+        reviewer_id: Uuid,
+    ) -> StoreResult<Option<Uuid>>;
+
+    // --- Scenario reviews ---
+
+    async fn get_scenario_reviews(
+        &self,
+        scenario_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<ScenarioReview>>;
+
+    async fn count_scenario_reviews(&self, scenario_id: Uuid) -> StoreResult<i64>;
+
+    async fn create_scenario_review(
+        &self,
+        scenario_id: Uuid,
+        reviewer_id: Uuid,
+        rating: i32,
+        title: Option<&str>,
+        comment: &str,
+    ) -> StoreResult<ScenarioReview>;
+
+    async fn update_scenario_review_stats(&self, scenario_id: Uuid) -> StoreResult<()>;
+
+    async fn find_existing_scenario_review(
+        &self,
+        scenario_id: Uuid,
+        reviewer_id: Uuid,
+    ) -> StoreResult<Option<Uuid>>;
 }
