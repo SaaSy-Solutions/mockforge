@@ -44,6 +44,7 @@ export function TimeTravelPage() {
   const [advanceDuration, setAdvanceDuration] = useState('1h');
   const [timeScale, setTimeScale] = useState('1.0');
   const [initialTime, setInitialTime] = useState('');
+  const [initialTimeError, setInitialTimeError] = useState<string | null>(null);
 
   const formatTime = (timeStr?: string) => {
     if (!timeStr) return 'Real Time';
@@ -63,6 +64,14 @@ export function TimeTravelPage() {
   };
 
   const handleEnable = () => {
+    if (initialTime) {
+      const d = new Date(initialTime);
+      if (isNaN(d.getTime())) {
+        setInitialTimeError('Invalid ISO-8601 date (e.g., 2025-01-01T00:00:00Z)');
+        return;
+      }
+    }
+    setInitialTimeError(null);
     enableMutation.mutate({
       time: initialTime || undefined,
       scale: timeScale ? parseFloat(timeScale) : undefined,
@@ -185,6 +194,9 @@ export function TimeTravelPage() {
                     onChange={(e) => setInitialTime(e.target.value)}
                     className="w-full"
                   />
+                  {initialTimeError && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{initialTimeError}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Search, Play, RefreshCw, AlertCircle } from 'lucide-react';
 import { verificationApi } from '../services/api';
 import type { VerificationRequest, VerificationCount, VerificationResult } from '../types';
@@ -37,9 +37,61 @@ export function VerificationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setResult(null);
+  }, [mode]);
+
+  const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+
+  const validatePattern = (p: VerificationRequest, label = 'Pattern'): string | null => {
+    if (p.method && p.method.trim() !== '') {
+      if (!ALLOWED_METHODS.includes(p.method.trim().toUpperCase())) {
+        return `${label}: method must be one of ${ALLOWED_METHODS.join(', ')}`;
+      }
+    }
+    if (!p.path || p.path.trim() === '') {
+      return `${label}: path must be non-empty`;
+    }
+    const jsonFields: Array<[string, unknown]> = [
+      ['query_params', p.query_params],
+      ['headers', p.headers],
+    ];
+    if (p.body_pattern && p.body_pattern.trim() !== '') {
+      jsonFields.push(['body_pattern', p.body_pattern]);
+    }
+    for (const [name, value] of jsonFields) {
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string' && value.trim() !== '') {
+        try {
+          JSON.parse(value);
+        } catch {
+          return `${label}: ${name} is not valid JSON`;
+        }
+      }
+    }
+    return null;
+  };
+
   const handleVerify = async () => {
-    setIsLoading(true);
     setError(null);
+
+    if (mode === 'sequence') {
+      for (let i = 0; i < sequencePatterns.length; i++) {
+        const err = validatePattern(sequencePatterns[i], `Pattern ${i + 1}`);
+        if (err) {
+          setError(err);
+          return;
+        }
+      }
+    } else {
+      const err = validatePattern(pattern);
+      if (err) {
+        setError(err);
+        return;
+      }
+    }
+
+    setIsLoading(true);
     setResult(null);
 
     try {
@@ -72,8 +124,13 @@ export function VerificationPage() {
   };
 
   const handleCount = async () => {
-    setIsLoading(true);
     setError(null);
+    const err = validatePattern(pattern);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setIsLoading(true);
 
     try {
       const response = await verificationApi.count(pattern);

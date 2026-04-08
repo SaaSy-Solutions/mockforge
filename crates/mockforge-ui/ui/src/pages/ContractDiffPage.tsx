@@ -315,11 +315,28 @@ export function ContractDiffPage() {
   const [selectedProtocol, setSelectedProtocol] = useState<'http' | ProtocolType>('http');
   const [showProtocolEditor, setShowProtocolEditor] = useState(false);
 
+  // Pagination state
+  const PAGE_SIZE = 100;
+  const [page, setPage] = useState(0);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setPage(0);
+  }, [filterSource, filterMethod]);
+
   // Fetch captured requests
   const { data: capturesData, isLoading: capturesLoading, refetch: refetchCaptures } = useQuery({
-    queryKey: ['contract-diff-captures', filterSource, filterMethod],
+    queryKey: ['contract-diff-captures', filterSource, filterMethod, page],
     queryFn: async () => {
-      const params: any = {};
+      const params: {
+        source?: string;
+        method?: string;
+        limit: number;
+        offset: number;
+      } = {
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+      };
       if (filterSource !== 'all') params.source = filterSource;
       if (filterMethod !== 'all') params.method = filterMethod;
       return contractDiffApi.getCapturedRequests(params);
@@ -582,6 +599,39 @@ export function ContractDiffPage() {
                   </div>
                 ))
               )}
+            </div>
+
+            {/* Pagination controls */}
+            <div className="flex items-center justify-between text-xs text-gray-600">
+              <span>
+                {(() => {
+                  const pageCount = captures.length;
+                  if (pageCount === 0) {
+                    return page === 0 ? 'No results' : `Page ${page + 1} (empty)`;
+                  }
+                  const start = page * PAGE_SIZE + 1;
+                  const end = page * PAGE_SIZE + pageCount;
+                  return `Showing ${start}–${end}`;
+                })()}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0 || capturesLoading}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={captures.length < PAGE_SIZE || capturesLoading}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
 
             <Button onClick={() => refetchCaptures()} variant="outline" className="w-full">

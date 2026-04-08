@@ -29,6 +29,7 @@ import { RealityIndicator } from '../components/reality/RealityIndicator';
 import { RealityPresetManager } from '../components/reality/RealityPresetManager';
 import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 import { authenticatedFetch } from '../utils/apiClient';
+import { serverApi } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
 
 function extractPort(address?: string): string {
@@ -383,10 +384,8 @@ export function ConfigPage() {
           break;
 
         case 'general': {
-          // Save port configuration to localStorage for persistence
-          savePortConfig(formData.general);
-
-          // Show confirmation dialog
+          // Show confirmation dialog — ports are only persisted to localStorage
+          // after the restart is verified to have taken effect.
           setShowRestartDialog(true);
           break;
         }
@@ -428,7 +427,39 @@ export function ConfigPage() {
 
       await restartServers.mutateAsync('Port configuration updated');
 
-      // The restart status monitoring will handle success feedback
+      // Poll server-info up to 5 times, 500ms apart, to confirm the expected
+      // ports are actually listening before persisting anything.
+      const expected = formData.general;
+      let verified = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          const info = await serverApi.getServerInfo();
+          const httpPort = extractPort(info.http_server);
+          const wsPort = extractPort(info.ws_server);
+          const grpcPort = extractPort(info.grpc_server);
+          const httpOk = !info.http_server || httpPort === String(expected.http_port);
+          const wsOk = !info.ws_server || wsPort === String(expected.ws_port);
+          const grpcOk = !info.grpc_server || grpcPort === String(expected.grpc_port);
+          if (httpOk && wsOk && grpcOk) {
+            verified = true;
+            break;
+          }
+        } catch (pollErr) {
+          logger.error('server-info poll failed', pollErr);
+        }
+      }
+
+      setFormData(prev => ({ ...prev, restartInProgress: false }));
+      if (verified) {
+        savePortConfig(expected);
+        setHasPendingPortConfig(true);
+        toast.success('Server restarted successfully! Port configuration applied.');
+      } else {
+        localStorage.removeItem('mockforge_pending_port_config');
+        setHasPendingPortConfig(false);
+        toast.error('Server restarted but ports could not be verified — please reload manually');
+      }
     } catch (error) {
       setFormData(prev => ({ ...prev, restartInProgress: false }));
       toast.error('Failed to restart server. Please restart manually.');
