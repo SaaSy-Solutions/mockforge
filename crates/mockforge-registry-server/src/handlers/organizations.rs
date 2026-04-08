@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{record_audit_event, AuditEventType, OrgRole, Plan, User},
+    models::{AuditEventType, OrgRole, Plan, User},
     AppState,
 };
 
@@ -286,20 +286,21 @@ pub async fn add_organization_member(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::MemberAdded,
-        format!(
-            "Added member {} ({}) with role {}",
-            target_user.username, target_user.email, role
-        ),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::MemberAdded,
+            format!(
+                "Added member {} ({}) with role {}",
+                target_user.username, target_user.email, role
+            ),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(MemberResponse {
         id: member.id,
@@ -373,17 +374,18 @@ pub async fn remove_organization_member(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::MemberRemoved,
-        format!("Removed member {} ({})", target_user.username, target_user.email),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::MemberRemoved,
+            format!("Removed member {} ({})", target_user.username, target_user.email),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(
         serde_json::json!({"success": true, "message": "Member removed successfully"}),
@@ -465,23 +467,24 @@ pub async fn update_organization_member_role(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::MemberRoleChanged,
-        format!(
-            "Changed role of {} ({}) from {} to {}",
-            target_user.username,
-            target_user.email,
-            member.role(),
-            new_role
-        ),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::MemberRoleChanged,
+            format!(
+                "Changed role of {} ({}) from {} to {}",
+                target_user.username,
+                target_user.email,
+                member.role(),
+                new_role
+            ),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     // Get updated member
     let updated_member = state
@@ -509,8 +512,6 @@ pub async fn update_organization(
     headers: HeaderMap,
     Json(request): Json<UpdateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
-    let pool = state.db.pool();
-
     // Get organization
     let org = state
         .store
@@ -580,17 +581,18 @@ pub async fn update_organization(
         let user_agent =
             headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-        record_audit_event(
-            pool,
-            org_id,
-            Some(user_id),
-            AuditEventType::OrgPlanChanged,
-            format!("Changed plan from {} to {}", org.plan(), new_plan),
-            None,
-            ip_address.as_deref(),
-            user_agent.as_deref(),
-        )
-        .await;
+        state
+            .store
+            .record_audit_event(
+                org_id,
+                Some(user_id),
+                AuditEventType::OrgPlanChanged,
+                format!("Changed plan from {} to {}", org.plan(), new_plan),
+                None,
+                ip_address.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
     }
 
     // Get updated organization
@@ -617,8 +619,6 @@ pub async fn delete_organization(
     Path(org_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Get organization
     let org = state
         .store
@@ -647,17 +647,18 @@ pub async fn delete_organization(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
-    record_audit_event(
-        pool,
-        org_id,
-        Some(user_id),
-        AuditEventType::OrgDeleted,
-        format!("Deleted organization: {}", org.name),
-        None,
-        ip_address.as_deref(),
-        user_agent.as_deref(),
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::OrgDeleted,
+            format!("Deleted organization: {}", org.name),
+            None,
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     // Delete organization (cascade will handle related data)
     state.store.delete_organization(org_id).await?;

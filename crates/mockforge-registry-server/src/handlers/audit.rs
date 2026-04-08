@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{AuditEventType, AuditLog, OrgMember, OrgRole, Organization},
+    models::{AuditEventType, OrgRole},
     AppState,
 };
 
@@ -51,18 +51,17 @@ pub async fn get_audit_logs(
     Path(org_id): Path<Uuid>,
     Query(query): Query<AuditLogQuery>,
 ) -> ApiResult<Json<AuditLogListResponse>> {
-    let pool = state.db.pool();
-
     // Verify organization exists
-    let org = Organization::find_by_id(pool, org_id)
-        .await
-        .map_err(ApiError::Database)?
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify user is admin or owner of the organization
     let is_owner = org.owner_id == user_id;
     let is_admin = if !is_owner {
-        let member = OrgMember::find(pool, org_id, user_id).await.map_err(ApiError::Database)?;
+        let member = state.store.find_org_member(org_id, user_id).await?;
         member.map(|m| m.role() == OrgRole::Admin).unwrap_or(false)
     } else {
         true
@@ -111,30 +110,13 @@ pub async fn get_audit_logs(
     };
 
     // Get audit logs
-    let logs = AuditLog::get_by_org(
-        pool,
-        org_id,
-        query.limit.or(Some(100)),
-        query.offset.or(Some(0)),
-        event_type,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let logs = state
+        .store
+        .list_audit_logs(org_id, query.limit.or(Some(100)), query.offset.or(Some(0)), event_type)
+        .await?;
 
     // Get total count
-    let total: (i64,) = if event_type.is_some() {
-        sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2")
-            .bind(org_id)
-            .bind(event_type)
-            .fetch_one(pool)
-            .await
-    } else {
-        sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_one(pool)
-            .await
-    }
-    .map_err(ApiError::Database)?;
+    let total = state.store.count_audit_logs(org_id, event_type).await?;
 
     // Convert to response format
     let log_responses: Vec<AuditLogResponse> = logs
@@ -154,7 +136,7 @@ pub async fn get_audit_logs(
 
     Ok(Json(AuditLogListResponse {
         logs: log_responses,
-        total: total.0,
+        total,
         limit: query.limit.unwrap_or(100),
         offset: query.offset.unwrap_or(0),
     }))

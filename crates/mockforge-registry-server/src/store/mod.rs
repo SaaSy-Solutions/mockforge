@@ -19,8 +19,11 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::audit_log::{AuditEventType, AuditLog};
+use crate::models::feature_usage::FeatureType;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
+use crate::models::suspicious_activity::SuspiciousActivityType;
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -195,4 +198,77 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     /// Remove a member from an organization.
     async fn delete_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Audit logs
+    // ---------------------------------------------------------------------
+
+    /// Best-effort audit event recording. Failures are logged and swallowed
+    /// so they never block the caller's primary operation.
+    #[allow(clippy::too_many_arguments)]
+    async fn record_audit_event(
+        &self,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        event_type: AuditEventType,
+        description: String,
+        metadata: Option<serde_json::Value>,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+    );
+
+    /// List audit logs for an organization with optional filters.
+    async fn list_audit_logs(
+        &self,
+        org_id: Uuid,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        event_type: Option<AuditEventType>,
+    ) -> StoreResult<Vec<AuditLog>>;
+
+    /// Count audit logs matching the filter (for pagination).
+    async fn count_audit_logs(
+        &self,
+        org_id: Uuid,
+        event_type: Option<AuditEventType>,
+    ) -> StoreResult<i64>;
+
+    // ---------------------------------------------------------------------
+    // Feature usage
+    // ---------------------------------------------------------------------
+
+    /// Record a feature-usage event. Failures are logged and swallowed.
+    async fn record_feature_usage(
+        &self,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        feature: FeatureType,
+        metadata: Option<serde_json::Value>,
+    );
+
+    /// Count how many times an org used a feature over the last `days` days.
+    async fn count_feature_usage_by_org(
+        &self,
+        org_id: Uuid,
+        feature: FeatureType,
+        days: i64,
+    ) -> StoreResult<i64>;
+
+    // ---------------------------------------------------------------------
+    // Suspicious activity
+    // ---------------------------------------------------------------------
+
+    /// Record a suspicious-activity event. Failures are logged and swallowed.
+    #[allow(clippy::too_many_arguments)]
+    async fn record_suspicious_activity(
+        &self,
+        org_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        activity_type: SuspiciousActivityType,
+        severity: &str,
+        description: String,
+        metadata: Option<serde_json::Value>,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+    );
 }

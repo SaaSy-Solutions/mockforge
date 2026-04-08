@@ -11,8 +11,11 @@ use uuid::Uuid;
 
 use super::{RegistryStore, StoreResult};
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
+use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
+use crate::models::suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -216,5 +219,108 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<()> {
         OrgMember::delete(&self.pool, org_id, user_id).await.map_err(Into::into)
+    }
+
+    async fn record_audit_event(
+        &self,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        event_type: AuditEventType,
+        description: String,
+        metadata: Option<serde_json::Value>,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+    ) {
+        record_audit_event(
+            &self.pool,
+            org_id,
+            user_id,
+            event_type,
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        )
+        .await;
+    }
+
+    async fn list_audit_logs(
+        &self,
+        org_id: Uuid,
+        limit: Option<i64>,
+        offset: Option<i64>,
+        event_type: Option<AuditEventType>,
+    ) -> StoreResult<Vec<AuditLog>> {
+        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_type)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_audit_logs(
+        &self,
+        org_id: Uuid,
+        event_type: Option<AuditEventType>,
+    ) -> StoreResult<i64> {
+        let count: (i64,) = if let Some(evt) = event_type {
+            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2")
+                .bind(org_id)
+                .bind(evt)
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1")
+                .bind(org_id)
+                .fetch_one(&self.pool)
+                .await?
+        };
+        Ok(count.0)
+    }
+
+    async fn record_feature_usage(
+        &self,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        feature: FeatureType,
+        metadata: Option<serde_json::Value>,
+    ) {
+        if let Err(e) = FeatureUsage::record(&self.pool, org_id, user_id, feature, metadata).await {
+            tracing::warn!("Failed to record feature usage: {}", e);
+        }
+    }
+
+    async fn count_feature_usage_by_org(
+        &self,
+        org_id: Uuid,
+        feature: FeatureType,
+        days: i64,
+    ) -> StoreResult<i64> {
+        FeatureUsage::count_by_org(&self.pool, org_id, feature, days)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn record_suspicious_activity(
+        &self,
+        org_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        activity_type: SuspiciousActivityType,
+        severity: &str,
+        description: String,
+        metadata: Option<serde_json::Value>,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+    ) {
+        record_suspicious_activity(
+            &self.pool,
+            org_id,
+            user_id,
+            activity_type,
+            severity,
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+        )
+        .await;
     }
 }
