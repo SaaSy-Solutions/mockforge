@@ -14,7 +14,7 @@ use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{record_audit_event, ApiToken, AuditEventType, Organization, User},
+    models::{ApiToken, AuditEventType, Organization, User},
     AppState,
 };
 
@@ -42,17 +42,16 @@ pub async fn rotate_token(
     Path(token_id): Path<Uuid>,
     Json(request): Json<RotateTokenRequest>,
 ) -> ApiResult<Json<RotateTokenResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify token belongs to org
-    let old_token = ApiToken::find_by_id(pool, token_id)
-        .await
-        .map_err(ApiError::Database)?
+    let old_token = state
+        .store
+        .find_api_token_by_id(token_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Token not found".to_string()))?;
 
     if old_token.org_id != org_ctx.org_id {
@@ -63,10 +62,10 @@ pub async fn rotate_token(
 
     // Rotate token
     let delete_old = request.delete_old.unwrap_or(false);
-    let (new_full_token, new_token, _deleted_token) =
-        ApiToken::rotate(pool, token_id, request.new_name.as_deref(), delete_old)
-            .await
-            .map_err(ApiError::Database)?;
+    let (new_full_token, new_token, _deleted_token) = state
+        .store
+        .rotate_api_token(token_id, request.new_name.as_deref(), delete_old)
+        .await?;
 
     // Record audit log
     let ip_address = headers
@@ -76,31 +75,32 @@ pub async fn rotate_token(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ApiTokenRotated,
-        format!(
-            "API token '{}' rotated{}",
-            old_token.name,
-            if delete_old {
-                " (old token deleted)"
-            } else {
-                ""
-            }
-        ),
-        Some(serde_json::json!({
-            "old_token_id": token_id,
-            "new_token_id": new_token.id,
-            "old_token_name": old_token.name,
-            "new_token_name": new_token.name,
-            "delete_old": delete_old,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ApiTokenRotated,
+            format!(
+                "API token '{}' rotated{}",
+                old_token.name,
+                if delete_old {
+                    " (old token deleted)"
+                } else {
+                    ""
+                }
+            ),
+            Some(serde_json::json!({
+                "old_token_id": token_id,
+                "new_token_id": new_token.id,
+                "old_token_name": old_token.name,
+                "new_token_name": new_token.name,
+                "delete_old": delete_old,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(RotateTokenResponse {
         success: true,
@@ -145,8 +145,6 @@ pub async fn get_tokens_needing_rotation(
     headers: HeaderMap,
     Query(query): Query<TokenRotationStatusQuery>,
 ) -> ApiResult<Json<TokenRotationStatusResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -155,8 +153,7 @@ pub async fn get_tokens_needing_rotation(
     let threshold_days = query.threshold_days.unwrap_or(90);
 
     // Get all tokens for org
-    let all_tokens =
-        ApiToken::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
+    let all_tokens = state.store.list_api_tokens_by_org(org_ctx.org_id).await?;
 
     // Filter tokens needing rotation
     let tokens_needing_rotation: Vec<TokenRotationStatus> = all_tokens

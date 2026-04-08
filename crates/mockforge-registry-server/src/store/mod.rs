@@ -25,6 +25,7 @@ use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 use crate::models::suspicious_activity::SuspiciousActivityType;
 use crate::models::user::User;
+use crate::models::verification_token::VerificationToken;
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -303,6 +304,40 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     /// Remove a consumed backup code by index.
     async fn remove_user_backup_code(&self, user_id: Uuid, code_index: usize) -> StoreResult<()>;
+
+    /// Replace a user's password hash (no-op on verification).
+    async fn update_user_password_hash(
+        &self,
+        user_id: Uuid,
+        password_hash: &str,
+    ) -> StoreResult<()>;
+
+    /// Mark a user's email as verified.
+    async fn mark_user_verified(&self, user_id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Verification / password-reset tokens
+    // ---------------------------------------------------------------------
+
+    /// Create a new verification token for a user (24h default expiry).
+    async fn create_verification_token(&self, user_id: Uuid) -> StoreResult<VerificationToken>;
+
+    /// Shorten a verification token's expiry to `hours` from now.
+    /// Used by password-reset to override the default 24h window.
+    async fn set_verification_token_expiry_hours(
+        &self,
+        token_id: Uuid,
+        hours: i64,
+    ) -> StoreResult<()>;
+
+    /// Look up a verification token by its plaintext token string.
+    async fn find_verification_token_by_token(
+        &self,
+        token: &str,
+    ) -> StoreResult<Option<VerificationToken>>;
+
+    /// Mark a verification token as consumed.
+    async fn mark_verification_token_used(&self, token_id: Uuid) -> StoreResult<()>;
 
     #[allow(clippy::too_many_arguments)]
     async fn record_suspicious_activity(

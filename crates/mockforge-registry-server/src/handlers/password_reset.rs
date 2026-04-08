@@ -8,7 +8,7 @@ use crate::{
     auth::hash_password,
     email::EmailService,
     error::{ApiError, ApiResult},
-    models::{record_audit_event, AuditEventType, User, VerificationToken},
+    models::AuditEventType,
     AppState,
 };
 
@@ -29,14 +29,11 @@ pub async fn request_password_reset(
     State(state): State<AppState>,
     Json(request): Json<PasswordResetRequest>,
 ) -> ApiResult<Json<PasswordResetRequestResponse>> {
-    let pool = state.db.pool();
-
     // Find user by email
-    let user = match User::find_by_email(pool, &request.email).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
+    let user = match state.store.find_user_by_email(&request.email).await? {
+        Some(user) => user,
+        None => {
             // Don't reveal if email exists or not (security best practice)
-            // Return success even if user doesn't exist
             return Ok(Json(PasswordResetRequestResponse {
                 success: true,
                 message:
@@ -44,21 +41,12 @@ pub async fn request_password_reset(
                         .to_string(),
             }));
         }
-        Err(e) => return Err(ApiError::Database(e)),
     };
 
     // Create password reset token (reusing VerificationToken model)
-    // Token expires in 1 hour
-    let reset_token = VerificationToken::create(pool, user.id).await.map_err(ApiError::Database)?;
-
-    // Update token expiration to 1 hour (instead of default 24 hours)
-    sqlx::query(
-        "UPDATE verification_tokens SET expires_at = NOW() + INTERVAL '1 hour' WHERE id = $1",
-    )
-    .bind(reset_token.id)
-    .execute(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    // Token expires in 1 hour instead of the default 24
+    let reset_token = state.store.create_verification_token(user.id).await?;
+    state.store.set_verification_token_expiry_hours(reset_token.id, 1).await?;
 
     // Send password reset email (non-blocking)
     let email_service = match EmailService::from_env() {
@@ -112,17 +100,16 @@ pub async fn confirm_password_reset(
     State(state): State<AppState>,
     Json(request): Json<PasswordResetConfirmRequest>,
 ) -> ApiResult<Json<PasswordResetConfirmResponse>> {
-    let pool = state.db.pool();
-
     // Validate password
     if request.new_password.len() < 8 {
         return Err(ApiError::InvalidRequest("Password must be at least 8 characters".to_string()));
     }
 
     // Find token
-    let reset_token = VerificationToken::find_by_token(pool, &request.token)
-        .await
-        .map_err(ApiError::Database)?
+    let reset_token = state
+        .store
+        .find_verification_token_by_token(&request.token)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Invalid or expired reset token".to_string()))?;
 
     // Check if token is valid (not expired and not used)
@@ -133,41 +120,36 @@ pub async fn confirm_password_reset(
     }
 
     // Get user
-    let user = User::find_by_id(pool, reset_token.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(reset_token.user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Hash new password
     let password_hash = hash_password(&request.new_password).map_err(ApiError::Internal)?;
 
     // Update user password
-    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&password_hash)
-        .bind(user.id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.update_user_password_hash(user.id, &password_hash).await?;
 
     // Mark token as used
-    VerificationToken::mark_as_used(pool, reset_token.id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.mark_verification_token_used(reset_token.id).await?;
 
     tracing::info!("Password reset completed: user_id={}, email={}", user.id, user.email);
 
     // Record audit event for password change
-    record_audit_event(
-        pool,
-        Uuid::nil(), // System-level operation (no org context)
-        Some(user.id),
-        AuditEventType::PasswordChanged,
-        format!("Password reset completed for user {}", user.email),
-        None,
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(), // System-level operation (no org context)
+            Some(user.id),
+            AuditEventType::PasswordChanged,
+            format!("Password reset completed for user {}", user.email),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(PasswordResetConfirmResponse {
         success: true,

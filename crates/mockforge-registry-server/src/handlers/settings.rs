@@ -8,7 +8,7 @@ use crate::{
     cache::{org_setting_cache_key, ttl, Cache},
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{record_audit_event, AuditEventType, BYOKConfig},
+    models::{AuditEventType, BYOKConfig},
     AppState,
 };
 
@@ -124,8 +124,6 @@ pub async fn update_byok_config(
     headers: HeaderMap,
     Json(config): Json<BYOKConfig>,
 ) -> ApiResult<Json<BYOKConfig>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -170,21 +168,22 @@ pub async fn update_byok_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ByokConfigUpdated,
-        format!("BYOK configuration updated for provider: {}", config.provider),
-        Some(serde_json::json!({
-            "provider": config.provider,
-            "enabled": config.enabled,
-            "has_base_url": config.base_url.is_some(),
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ByokConfigUpdated,
+            format!("BYOK configuration updated for provider: {}", config.provider),
+            Some(serde_json::json!({
+                "provider": config.provider,
+                "enabled": config.enabled,
+                "has_base_url": config.base_url.is_some(),
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(config))
 }
@@ -195,8 +194,6 @@ pub async fn delete_byok_config(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -210,17 +207,18 @@ pub async fn delete_byok_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ByokConfigDeleted,
-        "BYOK configuration deleted".to_string(),
-        None,
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ByokConfigDeleted,
+            "BYOK configuration deleted".to_string(),
+            None,
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Delete setting
     state.store.delete_org_setting(org_ctx.org_id, "byok").await?;

@@ -12,7 +12,6 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::User,
     AppState,
 };
 
@@ -127,9 +126,10 @@ pub async fn get_analytics(
     let pool = state.db.pool();
 
     // Check if user is admin
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     if !user.is_admin {
@@ -548,9 +548,10 @@ pub async fn get_conversion_funnel(
     let pool = state.db.pool();
 
     // Check if user is admin
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     if !user.is_admin {

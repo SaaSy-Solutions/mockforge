@@ -17,6 +17,7 @@ use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
 use crate::models::suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};
 use crate::models::user::User;
+use crate::models::verification_token::VerificationToken;
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -379,5 +380,59 @@ impl RegistryStore for PgRegistryStore {
         User::remove_backup_code(&self.pool, user_id, code_index)
             .await
             .map_err(Into::into)
+    }
+
+    async fn update_user_password_hash(
+        &self,
+        user_id: Uuid,
+        password_hash: &str,
+    ) -> StoreResult<()> {
+        sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+            .bind(password_hash)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
+    async fn mark_user_verified(&self, user_id: Uuid) -> StoreResult<()> {
+        sqlx::query("UPDATE users SET is_verified = TRUE, updated_at = NOW() WHERE id = $1")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
+    async fn create_verification_token(&self, user_id: Uuid) -> StoreResult<VerificationToken> {
+        VerificationToken::create(&self.pool, user_id).await.map_err(Into::into)
+    }
+
+    async fn set_verification_token_expiry_hours(
+        &self,
+        token_id: Uuid,
+        hours: i64,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE verification_tokens SET expires_at = NOW() + make_interval(hours => $1) WHERE id = $2",
+        )
+        .bind(hours)
+        .bind(token_id)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    async fn find_verification_token_by_token(
+        &self,
+        token: &str,
+    ) -> StoreResult<Option<VerificationToken>> {
+        VerificationToken::find_by_token(&self.pool, token).await.map_err(Into::into)
+    }
+
+    async fn mark_verification_token_used(&self, token_id: Uuid) -> StoreResult<()> {
+        VerificationToken::mark_as_used(&self.pool, token_id).await.map_err(Into::into)
     }
 }

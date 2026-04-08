@@ -11,8 +11,8 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{
-        record_audit_event, ApiToken, AuditEventType, HostedMock, OrgMember, OrgSetting,
-        Organization, Project, Subscription, UsageCounter, User, UserSetting,
+        ApiToken, AuditEventType, HostedMock, OrgMember, OrgSetting, Organization, Project,
+        Subscription, UsageCounter, UserSetting,
     },
     AppState,
 };
@@ -130,9 +130,10 @@ pub async fn export_data(
     let pool = state.db.pool();
 
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get user settings
@@ -151,7 +152,7 @@ pub async fn export_data(
         .map_err(ApiError::Database)?;
 
     // Get organizations (owned and memberships)
-    let orgs = Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
+    let orgs = state.store.list_organizations_by_user(user_id).await?;
 
     let mut org_data = Vec::new();
 
@@ -328,9 +329,10 @@ pub async fn delete_data(
     let mut tx = pool.begin().await.map_err(ApiError::Database)?;
 
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Get organizations owned by user
@@ -429,21 +431,22 @@ pub async fn delete_data(
     tx.commit().await.map_err(ApiError::Database)?;
 
     // Record audit event after commit (user is deleted, but this is compliance-required)
-    record_audit_event(
-        state.db.pool(),
-        Uuid::nil(),
-        Some(user_id),
-        AuditEventType::OrgDeleted, // Reusing closest event type for data erasure
-        format!("GDPR data erasure completed for user {}", user.email),
-        Some(serde_json::json!({
-            "action": "gdpr_data_erasure",
-            "reason": request.reason,
-            "orgs_affected": owned_orgs.len(),
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_id),
+            AuditEventType::OrgDeleted, // Reusing closest event type for data erasure
+            format!("GDPR data erasure completed for user {}", user.email),
+            Some(serde_json::json!({
+                "action": "gdpr_data_erasure",
+                "reason": request.reason,
+                "orgs_affected": owned_orgs.len(),
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(DeleteResponse {
         success: true,

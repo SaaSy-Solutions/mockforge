@@ -7,7 +7,6 @@ use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
     middleware::OptionalAuthUser,
-    models::Organization,
     AppState,
 };
 
@@ -34,8 +33,6 @@ pub async fn submit_contact(
     OptionalAuthUser(user_id): OptionalAuthUser,
     Json(request): Json<ContactRequest>,
 ) -> ApiResult<Json<ContactResponse>> {
-    let pool = state.db.pool();
-
     // Validate input
     if request.subject.trim().is_empty() {
         return Err(ApiError::InvalidRequest("Subject is required".to_string()));
@@ -47,11 +44,9 @@ pub async fn submit_contact(
 
     // Get user info if authenticated
     let (user_email, username, org_name, plan) = if let Some(user_id) = user_id {
-        use crate::models::User;
-        if let Some(user) = User::find_by_id(pool, user_id).await.map_err(ApiError::Database)? {
+        if let Some(user) = state.store.find_user_by_id(user_id).await? {
             // Try to get org context for plan info
-            let orgs =
-                Organization::find_by_user(pool, user_id).await.map_err(ApiError::Database)?;
+            let orgs = state.store.list_organizations_by_user(user_id).await?;
             let org = orgs.first();
 
             (

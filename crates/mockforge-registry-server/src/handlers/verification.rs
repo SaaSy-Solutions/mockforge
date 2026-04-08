@@ -10,7 +10,6 @@ use crate::{
     email::EmailService,
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{User, VerificationToken},
     AppState,
 };
 
@@ -30,12 +29,11 @@ pub async fn verify_email(
     State(state): State<AppState>,
     Query(params): Query<VerifyEmailQuery>,
 ) -> ApiResult<Json<VerifyEmailResponse>> {
-    let pool = state.db.pool();
-
     // Find token
-    let verification_token = VerificationToken::find_by_token(pool, &params.token)
-        .await
-        .map_err(ApiError::Database)?
+    let verification_token = state
+        .store
+        .find_verification_token_by_token(&params.token)
+        .await?
         .ok_or_else(|| {
             ApiError::InvalidRequest("Invalid or expired verification token".to_string())
         })?;
@@ -48,22 +46,17 @@ pub async fn verify_email(
     }
 
     // Get user
-    let user = User::find_by_id(pool, verification_token.user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(verification_token.user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Mark user as verified
-    sqlx::query("UPDATE users SET is_verified = TRUE WHERE id = $1")
-        .bind(verification_token.user_id)
-        .execute(pool)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.mark_user_verified(verification_token.user_id).await?;
 
     // Mark token as used
-    VerificationToken::mark_as_used(pool, verification_token.id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.mark_verification_token_used(verification_token.id).await?;
 
     tracing::info!("Email verified: user_id={}, email={}", user.id, user.email);
 
@@ -84,12 +77,11 @@ pub async fn resend_verification(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<ResendVerificationResponse>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if already verified
@@ -101,8 +93,7 @@ pub async fn resend_verification(
     }
 
     // Create new verification token
-    let verification_token =
-        VerificationToken::create(pool, user_id).await.map_err(ApiError::Database)?;
+    let verification_token = state.store.create_verification_token(user_id).await?;
 
     // Send verification email (non-blocking)
     let verification_email = EmailService::generate_verification_email(

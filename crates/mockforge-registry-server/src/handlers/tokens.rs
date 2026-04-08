@@ -11,10 +11,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{
-        record_audit_event, record_suspicious_activity, AuditEventType, FeatureType, FeatureUsage,
-        SuspiciousActivityType, TokenScope,
-    },
+    models::{AuditEventType, FeatureType, SuspiciousActivityType, TokenScope},
     AppState,
 };
 
@@ -43,8 +40,6 @@ pub async fn create_token(
     headers: HeaderMap,
     Json(request): Json<CreateTokenRequest>,
 ) -> ApiResult<Json<CreateTokenResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context (extensions not available in handler, use None)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -79,51 +74,47 @@ pub async fn create_token(
             .map(|s| s.split(',').next().unwrap_or(s).trim());
         let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-        record_suspicious_activity(
-            pool,
-            Some(org_ctx.org_id),
-            Some(user_id),
-            SuspiciousActivityType::RapidApiTokenCreation,
-            "medium",
-            format!(
-                "Rapid API token creation detected: {} tokens created in the last hour",
-                tokens_last_hour + 1
-            ),
-            Some(serde_json::json!({
-                "tokens_created_last_hour": tokens_last_hour + 1,
-                "new_token_name": request.name,
-            })),
-            ip_address,
-            user_agent,
-        )
-        .await;
+        state
+            .store
+            .record_suspicious_activity(
+                Some(org_ctx.org_id),
+                Some(user_id),
+                SuspiciousActivityType::RapidApiTokenCreation,
+                "medium",
+                format!(
+                    "Rapid API token creation detected: {} tokens created in the last hour",
+                    tokens_last_hour + 1
+                ),
+                Some(serde_json::json!({
+                    "tokens_created_last_hour": tokens_last_hour + 1,
+                    "new_token_name": request.name,
+                })),
+                ip_address,
+                user_agent,
+            )
+            .await;
     }
 
     // Create token
     let (full_token, token) = state
         .store
-        .create_api_token(
-            org_ctx.org_id,
-            Some(user_id),
-            &request.name,
-            &scopes,
-            request.expires_at,
-        )
+        .create_api_token(org_ctx.org_id, Some(user_id), &request.name, &scopes, request.expires_at)
         .await?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::ApiTokenCreate,
-        Some(serde_json::json!({
-            "token_id": token.id,
-            "name": request.name,
-            "scopes": request.scopes,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::ApiTokenCreate,
+            Some(serde_json::json!({
+                "token_id": token.id,
+                "name": request.name,
+                "scopes": request.scopes,
+            })),
+        )
+        .await;
 
     // Record audit log
     let ip_address = headers
@@ -133,25 +124,26 @@ pub async fn create_token(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ApiTokenCreated,
-        format!(
-            "API token '{}' created with scopes: {}",
-            request.name,
-            request.scopes.join(", ")
-        ),
-        Some(serde_json::json!({
-            "token_id": token.id,
-            "token_name": request.name,
-            "scopes": request.scopes,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ApiTokenCreated,
+            format!(
+                "API token '{}' created with scopes: {}",
+                request.name,
+                request.scopes.join(", ")
+            ),
+            Some(serde_json::json!({
+                "token_id": token.id,
+                "token_name": request.name,
+                "scopes": request.scopes,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(CreateTokenResponse {
         token: full_token, // Show full token only once!
@@ -220,8 +212,6 @@ pub async fn delete_token(
     headers: HeaderMap,
     Path(token_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context (extensions not available in handler, use None)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -248,21 +238,22 @@ pub async fn delete_token(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ApiTokenDeleted,
-        format!("API token '{}' deleted", token.name),
-        Some(serde_json::json!({
-            "token_id": token.id,
-            "token_name": token.name,
-            "token_prefix": token.token_prefix,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ApiTokenDeleted,
+            format!("API token '{}' deleted", token.name),
+            Some(serde_json::json!({
+                "token_id": token.id,
+                "token_name": token.name,
+                "token_prefix": token.token_prefix,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Delete token
     state.store.delete_api_token(token_id).await?;
