@@ -29,6 +29,7 @@ use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::saml_assertion::SAMLAssertionId;
+use crate::models::scenario::Scenario;
 use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
@@ -724,6 +725,48 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<Vec<Template>>;
 
     async fn count_search_templates(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> StoreResult<i64>;
+
+    // ---------------------------------------------------------------------
+    // Marketplace scenarios
+    // ---------------------------------------------------------------------
+
+    #[allow(clippy::too_many_arguments)]
+    async fn create_scenario(
+        &self,
+        org_id: Option<Uuid>,
+        name: &str,
+        slug: &str,
+        description: &str,
+        author_id: Uuid,
+        current_version: &str,
+        category: &str,
+        license: &str,
+        manifest_json: serde_json::Value,
+    ) -> StoreResult<Scenario>;
+
+    async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>>;
+
+    async fn list_scenarios_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn search_scenarios(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+        sort: &str,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Scenario>>;
+
+    async fn count_search_scenarios(
         &self,
         query: Option<&str>,
         category: Option<&str>,

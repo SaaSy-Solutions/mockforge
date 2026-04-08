@@ -21,6 +21,7 @@ use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::saml_assertion::SAMLAssertionId;
+use crate::models::scenario::Scenario;
 use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
@@ -1031,6 +1032,69 @@ impl RegistryStore for PgRegistryStore {
         org_id: Option<Uuid>,
     ) -> StoreResult<i64> {
         Template::count_search(&self.pool, query, category, tags, org_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn create_scenario(
+        &self,
+        org_id: Option<Uuid>,
+        name: &str,
+        slug: &str,
+        description: &str,
+        author_id: Uuid,
+        current_version: &str,
+        category: &str,
+        license: &str,
+        manifest_json: serde_json::Value,
+    ) -> StoreResult<Scenario> {
+        Scenario::create(
+            &self.pool,
+            org_id,
+            name,
+            slug,
+            description,
+            author_id,
+            current_version,
+            category,
+            license,
+            manifest_json,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>> {
+        Scenario::find_by_name(&self.pool, name).await.map_err(Into::into)
+    }
+
+    async fn list_scenarios_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>> {
+        Scenario::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn search_scenarios(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+        sort: &str,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Scenario>> {
+        Scenario::search(&self.pool, query, category, tags, org_id, sort, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_search_scenarios(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        org_id: Option<Uuid>,
+    ) -> StoreResult<i64> {
+        Scenario::count_search(&self.pool, query, category, tags, org_id)
             .await
             .map_err(Into::into)
     }
