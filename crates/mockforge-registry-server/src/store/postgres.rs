@@ -13,9 +13,12 @@ use super::{RegistryStore, StoreResult};
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
 use crate::models::feature_usage::{FeatureType, FeatureUsage};
+use crate::models::federation::Federation;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
-use crate::models::suspicious_activity::{record_suspicious_activity, SuspiciousActivityType};
+use crate::models::suspicious_activity::{
+    record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
+};
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 
@@ -434,5 +437,74 @@ impl RegistryStore for PgRegistryStore {
 
     async fn mark_verification_token_used(&self, token_id: Uuid) -> StoreResult<()> {
         VerificationToken::mark_as_used(&self.pool, token_id).await.map_err(Into::into)
+    }
+
+    async fn create_federation(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        services: &serde_json::Value,
+    ) -> StoreResult<Federation> {
+        Federation::create(&self.pool, org_id, created_by, name, description, services)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_federation_by_id(&self, id: Uuid) -> StoreResult<Option<Federation>> {
+        Federation::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_federations_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Federation>> {
+        Federation::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_federation(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        services: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<Federation>> {
+        Federation::update(&self.pool, id, name, description, services)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_federation(&self, id: Uuid) -> StoreResult<()> {
+        Federation::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_unresolved_suspicious_activities(
+        &self,
+        org_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        severity: Option<&str>,
+        limit: Option<i64>,
+    ) -> StoreResult<Vec<SuspiciousActivity>> {
+        SuspiciousActivity::get_unresolved(&self.pool, org_id, user_id, severity, limit)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_unresolved_suspicious_activities(&self, org_id: Uuid) -> StoreResult<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE",
+        )
+        .bind(org_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    async fn resolve_suspicious_activity(
+        &self,
+        activity_id: Uuid,
+        resolved_by: Uuid,
+    ) -> StoreResult<()> {
+        SuspiciousActivity::resolve(&self.pool, activity_id, resolved_by)
+            .await
+            .map_err(Into::into)
     }
 }

@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{record_audit_event, AuditEventType, FeatureType, FeatureUsage, Federation},
+    models::{AuditEventType, FeatureType, Federation},
     AppState,
 };
 
@@ -21,15 +21,11 @@ pub async fn list_federations(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<Federation>>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let federations = Federation::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let federations = state.store.list_federations_by_org(org_ctx.org_id).await?;
 
     Ok(Json(federations))
 }
@@ -41,15 +37,14 @@ pub async fn get_federation(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Federation>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let federation = Federation::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let federation = state
+        .store
+        .find_federation_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Federation not found".to_string()))?;
 
     if federation.org_id != org_ctx.org_id {
@@ -76,8 +71,6 @@ pub async fn create_federation(
     headers: HeaderMap,
     Json(request): Json<CreateFederationRequest>,
 ) -> ApiResult<Json<Federation>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -93,29 +86,30 @@ pub async fn create_federation(
         request.services
     };
 
-    let federation = Federation::create(
-        pool,
-        org_ctx.org_id,
-        user_id,
-        request.name.trim(),
-        &request.description,
-        &services,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let federation = state
+        .store
+        .create_federation(
+            org_ctx.org_id,
+            user_id,
+            request.name.trim(),
+            &request.description,
+            &services,
+        )
+        .await?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::FederationCreate,
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-            "name": federation.name,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::FederationCreate,
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+                "name": federation.name,
+            })),
+        )
+        .await;
 
     // Record audit log
     let ip_address = headers
@@ -125,20 +119,21 @@ pub async fn create_federation(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::FederationCreated,
-        format!("Federation '{}' created", federation.name),
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-            "name": federation.name,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::FederationCreated,
+            format!("Federation '{}' created", federation.name),
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+                "name": federation.name,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(federation))
 }
@@ -158,16 +153,15 @@ pub async fn update_federation(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateFederationRequest>,
 ) -> ApiResult<Json<Federation>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify federation exists and belongs to org
-    let existing = Federation::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let existing = state
+        .store
+        .find_federation_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Federation not found".to_string()))?;
 
     if existing.org_id != org_ctx.org_id {
@@ -176,28 +170,29 @@ pub async fn update_federation(
         ));
     }
 
-    let federation = Federation::update(
-        pool,
-        id,
-        request.name.as_deref(),
-        request.description.as_deref(),
-        request.services.as_ref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::InvalidRequest("Federation not found".to_string()))?;
+    let federation = state
+        .store
+        .update_federation(
+            id,
+            request.name.as_deref(),
+            request.description.as_deref(),
+            request.services.as_ref(),
+        )
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Federation not found".to_string()))?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::FederationUpdate,
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::FederationUpdate,
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+            })),
+        )
+        .await;
 
     // Record audit log
     let ip_address = headers
@@ -207,19 +202,20 @@ pub async fn update_federation(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::FederationUpdated,
-        format!("Federation '{}' updated", federation.name),
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::FederationUpdated,
+            format!("Federation '{}' updated", federation.name),
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(federation))
 }
@@ -231,16 +227,15 @@ pub async fn delete_federation(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify federation exists and belongs to org
-    let federation = Federation::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let federation = state
+        .store
+        .find_federation_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Federation not found".to_string()))?;
 
     if federation.org_id != org_ctx.org_id {
@@ -257,34 +252,36 @@ pub async fn delete_federation(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::FederationDeleted,
-        format!("Federation '{}' deleted", federation.name),
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-            "name": federation.name,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::FederationDeleted,
+            format!("Federation '{}' deleted", federation.name),
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+                "name": federation.name,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::FederationDelete,
-        Some(serde_json::json!({
-            "federation_id": federation.id,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::FederationDelete,
+            Some(serde_json::json!({
+                "federation_id": federation.id,
+            })),
+        )
+        .await;
 
-    Federation::delete(pool, id).await.map_err(ApiError::Database)?;
+    state.store.delete_federation(id).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

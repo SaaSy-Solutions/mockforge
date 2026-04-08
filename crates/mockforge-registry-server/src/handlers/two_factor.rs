@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{record_audit_event, AuditEventType, User},
+    models::AuditEventType,
     redis::{two_factor_backup_codes_key, two_factor_setup_key, TWO_FACTOR_SETUP_TTL_SECONDS},
     two_factor::{
         generate_backup_codes, generate_qr_code_data_url, generate_secret, hash_backup_code,
@@ -52,12 +52,11 @@ pub async fn setup_2fa(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<Setup2FAResponse>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -124,12 +123,11 @@ pub async fn verify_2fa_setup(
     AuthUser(user_id): AuthUser,
     Json(request): Json<Verify2FASetupRequest>,
 ) -> ApiResult<Json<Verify2FASetupResponse>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -187,9 +185,7 @@ pub async fn verify_2fa_setup(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to hash backup codes: {}", e)))?;
 
     // Enable 2FA in database
-    User::enable_2fa(pool, user_id, &secret, &hashed_backup_codes)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.enable_user_2fa(user_id, &secret, &hashed_backup_codes).await?;
 
     // Clean up Redis keys
     let _ = redis.delete(&secret_key).await;
@@ -197,17 +193,18 @@ pub async fn verify_2fa_setup(
 
     // Record audit log
     let user_org_id = uuid::Uuid::nil();
-    record_audit_event(
-        pool,
-        user_org_id,
-        Some(user_id),
-        AuditEventType::TwoFactorEnabled,
-        "Two-factor authentication enabled".to_string(),
-        None,
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            user_org_id,
+            Some(user_id),
+            AuditEventType::TwoFactorEnabled,
+            "Two-factor authentication enabled".to_string(),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     tracing::info!("2FA enabled for user {}", user_id);
 
@@ -226,12 +223,11 @@ pub async fn verify_2fa_setup_with_secret(
     AuthUser(user_id): AuthUser,
     Json(request): Json<Verify2FASetupRequestWithSecret>,
 ) -> ApiResult<Json<Verify2FASetupResponse>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Check if 2FA is already enabled
@@ -260,24 +256,26 @@ pub async fn verify_2fa_setup_with_secret(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to hash backup codes: {}", e)))?;
 
     // Enable 2FA
-    User::enable_2fa(pool, user_id, &request.secret, &hashed_backup_codes)
-        .await
-        .map_err(ApiError::Database)?;
+    state
+        .store
+        .enable_user_2fa(user_id, &request.secret, &hashed_backup_codes)
+        .await?;
 
     // Record audit log
     // Use a sentinel UUID for user-level actions (no org)
     let user_org_id = uuid::Uuid::nil();
-    record_audit_event(
-        pool,
-        user_org_id,
-        Some(user_id),
-        AuditEventType::TwoFactorEnabled,
-        "Two-factor authentication enabled".to_string(),
-        None,
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            user_org_id,
+            Some(user_id),
+            AuditEventType::TwoFactorEnabled,
+            "Two-factor authentication enabled".to_string(),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(Verify2FASetupResponse {
         success: true,
@@ -301,12 +299,11 @@ pub async fn disable_2fa(
     AuthUser(user_id): AuthUser,
     Json(request): Json<Disable2FARequest>,
 ) -> ApiResult<Json<Disable2FAResponse>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     // Verify password
@@ -324,22 +321,23 @@ pub async fn disable_2fa(
     }
 
     // Disable 2FA
-    User::disable_2fa(pool, user_id).await.map_err(ApiError::Database)?;
+    state.store.disable_user_2fa(user_id).await?;
 
     // Record audit log
     // Use a sentinel UUID for user-level actions (no org)
     let user_org_id = uuid::Uuid::nil();
-    record_audit_event(
-        pool,
-        user_org_id,
-        Some(user_id),
-        AuditEventType::TwoFactorDisabled,
-        "Two-factor authentication disabled".to_string(),
-        None,
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            user_org_id,
+            Some(user_id),
+            AuditEventType::TwoFactorDisabled,
+            "Two-factor authentication disabled".to_string(),
+            None,
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(Disable2FAResponse {
         success: true,
@@ -352,12 +350,11 @@ pub async fn get_2fa_status(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Get user
-    let user = User::find_by_id(pool, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
     Ok(Json(serde_json::json!({

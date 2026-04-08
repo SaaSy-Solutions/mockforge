@@ -21,9 +21,10 @@ use uuid::Uuid;
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{AuditEventType, AuditLog};
 use crate::models::feature_usage::FeatureType;
+use crate::models::federation::Federation;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
-use crate::models::suspicious_activity::SuspiciousActivityType;
+use crate::models::suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 
@@ -351,4 +352,50 @@ pub trait RegistryStore: Send + Sync + 'static {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     );
+
+    // ---------------------------------------------------------------------
+    // Federations
+    // ---------------------------------------------------------------------
+
+    async fn create_federation(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        services: &serde_json::Value,
+    ) -> StoreResult<Federation>;
+
+    async fn find_federation_by_id(&self, id: Uuid) -> StoreResult<Option<Federation>>;
+
+    async fn list_federations_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Federation>>;
+
+    async fn update_federation(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        services: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<Federation>>;
+
+    async fn delete_federation(&self, id: Uuid) -> StoreResult<()>;
+
+    /// List unresolved suspicious activities with optional filters.
+    async fn list_unresolved_suspicious_activities(
+        &self,
+        org_id: Option<Uuid>,
+        user_id: Option<Uuid>,
+        severity: Option<&str>,
+        limit: Option<i64>,
+    ) -> StoreResult<Vec<SuspiciousActivity>>;
+
+    /// Count unresolved suspicious activities for an org.
+    async fn count_unresolved_suspicious_activities(&self, org_id: Uuid) -> StoreResult<i64>;
+
+    /// Mark a suspicious activity as resolved by the given user.
+    async fn resolve_suspicious_activity(
+        &self,
+        activity_id: Uuid,
+        resolved_by: Uuid,
+    ) -> StoreResult<()>;
 }

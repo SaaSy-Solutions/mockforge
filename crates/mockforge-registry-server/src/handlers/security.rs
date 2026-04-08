@@ -13,7 +13,6 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::SuspiciousActivity,
     AppState,
 };
 
@@ -52,32 +51,24 @@ pub async fn get_suspicious_activities(
     headers: HeaderMap,
     Query(query): Query<SuspiciousActivityQuery>,
 ) -> ApiResult<Json<SuspiciousActivityListResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get activities for this org
-    let activities = SuspiciousActivity::get_unresolved(
-        pool,
-        Some(org_ctx.org_id),
-        None,
-        query.severity.as_deref(),
-        query.limit.or(Some(100)),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let activities = state
+        .store
+        .list_unresolved_suspicious_activities(
+            Some(org_ctx.org_id),
+            None,
+            query.severity.as_deref(),
+            query.limit.or(Some(100)),
+        )
+        .await?;
 
     // Get total count
-    let total: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE",
-    )
-    .bind(org_ctx.org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    let total = state.store.count_unresolved_suspicious_activities(org_ctx.org_id).await?;
 
     let activity_responses: Vec<SuspiciousActivityResponse> = activities
         .into_iter()
@@ -99,7 +90,7 @@ pub async fn get_suspicious_activities(
 
     Ok(Json(SuspiciousActivityListResponse {
         activities: activity_responses,
-        total: total.0,
+        total,
     }))
 }
 
@@ -109,12 +100,8 @@ pub async fn resolve_suspicious_activity(
     AuthUser(user_id): AuthUser,
     Path(activity_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Mark as resolved
-    SuspiciousActivity::resolve(pool, activity_id, user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.resolve_suspicious_activity(activity_id, user_id).await?;
 
     Ok(Json(serde_json::json!({
         "success": true,
