@@ -28,9 +28,11 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
+use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
+use crate::models::waitlist::WaitlistSubscriber;
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -544,4 +546,24 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<()>;
 
     async fn delete_hosted_mock(&self, id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Waitlist
+    // ---------------------------------------------------------------------
+
+    async fn subscribe_waitlist(
+        &self,
+        email: &str,
+        source: &str,
+    ) -> StoreResult<WaitlistSubscriber>;
+
+    async fn unsubscribe_waitlist_by_token(&self, token: Uuid) -> StoreResult<bool>;
+
+    // ---------------------------------------------------------------------
+    // Usage counters
+    // ---------------------------------------------------------------------
+
+    async fn get_or_create_current_usage_counter(&self, org_id: Uuid) -> StoreResult<UsageCounter>;
+
+    async fn list_usage_counters_by_org(&self, org_id: Uuid) -> StoreResult<Vec<UsageCounter>>;
 }

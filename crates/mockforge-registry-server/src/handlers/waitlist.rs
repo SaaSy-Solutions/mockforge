@@ -10,7 +10,6 @@ use validator::Validate;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::waitlist::WaitlistSubscriber,
     AppState,
 };
 
@@ -43,9 +42,7 @@ pub async fn subscribe(
     let email = request.email.trim().to_lowercase();
     let source = request.source.as_deref().unwrap_or("landing_page");
 
-    WaitlistSubscriber::subscribe(state.db.pool(), &email, source)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.subscribe_waitlist(&email, source).await?;
 
     tracing::info!(email = %email, source = %source, "Waitlist subscriber added");
 
@@ -60,9 +57,7 @@ pub async fn unsubscribe(
     State(state): State<AppState>,
     Query(query): Query<UnsubscribeQuery>,
 ) -> ApiResult<Json<SubscribeResponse>> {
-    let removed = WaitlistSubscriber::unsubscribe_by_token(state.db.pool(), query.token)
-        .await
-        .map_err(ApiError::Database)?;
+    let removed = state.store.unsubscribe_waitlist_by_token(query.token).await?;
 
     if removed {
         Ok(Json(SubscribeResponse {

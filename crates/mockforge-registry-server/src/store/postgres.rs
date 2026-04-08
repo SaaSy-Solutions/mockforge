@@ -20,11 +20,13 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::settings::OrgSetting;
+use crate::models::subscription::UsageCounter;
 use crate::models::suspicious_activity::{
     record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
 };
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
+use crate::models::waitlist::WaitlistSubscriber;
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -717,5 +719,31 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_hosted_mock(&self, id: Uuid) -> StoreResult<()> {
         HostedMock::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn subscribe_waitlist(
+        &self,
+        email: &str,
+        source: &str,
+    ) -> StoreResult<WaitlistSubscriber> {
+        WaitlistSubscriber::subscribe(&self.pool, email, source)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn unsubscribe_waitlist_by_token(&self, token: Uuid) -> StoreResult<bool> {
+        WaitlistSubscriber::unsubscribe_by_token(&self.pool, token)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_or_create_current_usage_counter(&self, org_id: Uuid) -> StoreResult<UsageCounter> {
+        UsageCounter::get_or_create_current(&self.pool, org_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn list_usage_counters_by_org(&self, org_id: Uuid) -> StoreResult<Vec<UsageCounter>> {
+        UsageCounter::get_all_for_org(&self.pool, org_id).await.map_err(Into::into)
     }
 }
