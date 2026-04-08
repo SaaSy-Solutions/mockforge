@@ -677,6 +677,7 @@ export function FitnessFunctionsPage() {
   const [testResults, setTestResults] = useState<FitnessTestResult[] | null>(null);
   const [showTestResults, setShowTestResults] = useState(false);
   const [showSummary, setShowSummary] = useState(true);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Fetch fitness functions
   const { data, isLoading, refetch } = useQuery({
@@ -756,8 +757,14 @@ export function FitnessFunctionsPage() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this fitness function?')) {
-      deleteMutation.mutate(id);
+    setPendingDeleteId(id);
+  };
+
+  const confirmDelete = () => {
+    if (pendingDeleteId) {
+      deleteMutation.mutate(pendingDeleteId, {
+        onSettled: () => setPendingDeleteId(null),
+      });
     }
   };
 
@@ -853,6 +860,30 @@ export function FitnessFunctionsPage() {
               setEditingFunction(null);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={pendingDeleteId !== null} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Fitness Function</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this fitness function? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

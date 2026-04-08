@@ -6,7 +6,7 @@
  * the need for polling while keeping polling as a fallback.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWebSocket } from './useWebSocket';
 import { useConnectionStore } from '@/components/layout/ConnectionStatus';
@@ -62,28 +62,79 @@ export function useDashboardStream(options: UseDashboardStreamOptions = {}) {
   const setWsState = useConnectionStore((state) => state.setWsState);
   const connectedRef = useRef(false);
 
+  // We manage reconnection ourselves with exponential backoff (1s → 30s),
+  // resetting the delay whenever a message is successfully received.
   const { lastMessage, connected, connect, disconnect } = useWebSocket(
     '/__mockforge/ws',
     {
       autoConnect: enabled,
       reconnect: {
-        enabled: true,
-        maxAttempts: 10,
-        delay: 3000,
+        enabled: false,
       },
     }
   );
 
-  // Update global connection state
+  const [connectionState, setConnectionState] = useState<
+    'connecting' | 'connected' | 'disconnected' | 'reconnecting'
+  >('disconnected');
+  const backoffRef = useRef(1000);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  // Update global connection state + track local connectionState
   useEffect(() => {
     if (connected) {
       setWsState('connected');
+      setConnectionState('connected');
       connectedRef.current = true;
+      backoffRef.current = 1000; // reset backoff on successful connect
+      clearReconnectTimer();
     } else if (connectedRef.current) {
-      // Only set reconnecting if we were previously connected
       setWsState('reconnecting');
+      setConnectionState('reconnecting');
     }
-  }, [connected, setWsState]);
+  }, [connected, setWsState, clearReconnectTimer]);
+
+  // Exponential-backoff reconnection loop.
+  useEffect(() => {
+    if (!enabled) return;
+    if (connected) return;
+    // Schedule a reconnect attempt with current backoff, then double it (cap 30s).
+    clearReconnectTimer();
+    const delay = backoffRef.current;
+    setConnectionState(connectedRef.current ? 'reconnecting' : 'connecting');
+    reconnectTimerRef.current = setTimeout(() => {
+      try {
+        connect();
+      } catch (err) {
+        logger.warn('Dashboard WS reconnect attempt failed', err);
+      }
+      backoffRef.current = Math.min(backoffRef.current * 2, 30000);
+    }, delay);
+    return () => {
+      clearReconnectTimer();
+    };
+  }, [enabled, connected, connect, clearReconnectTimer]);
+
+  // Reset backoff whenever a message is successfully received.
+  useEffect(() => {
+    if (lastMessage) {
+      backoffRef.current = 1000;
+    }
+  }, [lastMessage]);
+
+  // Ensure timers are cleared on unmount.
+  useEffect(() => {
+    return () => {
+      clearReconnectTimer();
+    };
+  }, [clearReconnectTimer]);
 
   // Process incoming WebSocket messages
   useEffect(() => {
@@ -163,6 +214,8 @@ export function useDashboardStream(options: UseDashboardStreamOptions = {}) {
   return {
     /** Whether the WebSocket is currently connected */
     connected,
+    /** Granular connection state for UI display */
+    connectionState,
     /** Manually reconnect */
     reconnect: connect,
     /** Manually disconnect */
