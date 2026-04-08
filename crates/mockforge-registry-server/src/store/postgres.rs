@@ -20,6 +20,7 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
+use crate::models::plugin::{Plugin, PluginVersion};
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
 use crate::models::settings::OrgSetting;
@@ -1095,6 +1096,123 @@ impl RegistryStore for PgRegistryStore {
         org_id: Option<Uuid>,
     ) -> StoreResult<i64> {
         Scenario::count_search(&self.pool, query, category, tags, org_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn search_plugins(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+        sort_by: &str,
+        limit: i64,
+        offset: i64,
+    ) -> StoreResult<Vec<Plugin>> {
+        Plugin::search(&self.pool, query, category, tags, sort_by, limit, offset)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_search_plugins(
+        &self,
+        query: Option<&str>,
+        category: Option<&str>,
+        tags: &[String],
+    ) -> StoreResult<i64> {
+        Plugin::count_search(&self.pool, query, category, tags)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_plugin_by_name(&self, name: &str) -> StoreResult<Option<Plugin>> {
+        Plugin::find_by_name(&self.pool, name).await.map_err(Into::into)
+    }
+
+    async fn get_plugin_tags(&self, plugin_id: Uuid) -> StoreResult<Vec<String>> {
+        Plugin::get_tags(&self.pool, plugin_id).await.map_err(Into::into)
+    }
+
+    async fn create_plugin(
+        &self,
+        name: &str,
+        description: &str,
+        version: &str,
+        category: &str,
+        license: &str,
+        repository: Option<&str>,
+        homepage: Option<&str>,
+        author_id: Uuid,
+    ) -> StoreResult<Plugin> {
+        Plugin::create(
+            &self.pool,
+            name,
+            description,
+            version,
+            category,
+            license,
+            repository,
+            homepage,
+            author_id,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn list_plugin_versions(&self, plugin_id: Uuid) -> StoreResult<Vec<PluginVersion>> {
+        PluginVersion::get_by_plugin(&self.pool, plugin_id).await.map_err(Into::into)
+    }
+
+    async fn find_plugin_version(
+        &self,
+        plugin_id: Uuid,
+        version: &str,
+    ) -> StoreResult<Option<PluginVersion>> {
+        PluginVersion::find(&self.pool, plugin_id, version).await.map_err(Into::into)
+    }
+
+    async fn create_plugin_version(
+        &self,
+        plugin_id: Uuid,
+        version: &str,
+        download_url: &str,
+        checksum: &str,
+        file_size: i64,
+        min_mockforge_version: Option<&str>,
+    ) -> StoreResult<PluginVersion> {
+        PluginVersion::create(
+            &self.pool,
+            plugin_id,
+            version,
+            download_url,
+            checksum,
+            file_size,
+            min_mockforge_version,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn yank_plugin_version(&self, version_id: Uuid) -> StoreResult<()> {
+        PluginVersion::yank(&self.pool, version_id).await.map_err(Into::into)
+    }
+
+    async fn get_plugin_version_dependencies(
+        &self,
+        version_id: Uuid,
+    ) -> StoreResult<std::collections::HashMap<String, String>> {
+        PluginVersion::get_dependencies(&self.pool, version_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn add_plugin_version_dependency(
+        &self,
+        version_id: Uuid,
+        plugin_name: &str,
+        version_req: &str,
+    ) -> StoreResult<()> {
+        PluginVersion::add_dependency(&self.pool, version_id, plugin_name, version_req)
             .await
             .map_err(Into::into)
     }
