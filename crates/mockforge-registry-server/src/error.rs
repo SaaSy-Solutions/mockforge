@@ -88,6 +88,17 @@ pub enum ApiError {
     Internal(#[from] anyhow::Error),
 }
 
+impl From<crate::store::StoreError> for ApiError {
+    fn from(e: crate::store::StoreError) -> Self {
+        use crate::store::StoreError;
+        match e {
+            StoreError::NotFound => ApiError::InvalidRequest("Not found".to_string()),
+            StoreError::Database(err) => ApiError::Database(err),
+            StoreError::Hash(msg) => ApiError::Storage(format!("hash error: {}", msg)),
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, error_code, error_message, details) = match self {

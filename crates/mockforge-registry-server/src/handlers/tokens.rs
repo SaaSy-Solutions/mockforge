@@ -12,8 +12,8 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{
-        record_audit_event, record_suspicious_activity, ApiToken, AuditEventType, FeatureType,
-        FeatureUsage, SuspiciousActivityType, TokenScope,
+        record_audit_event, record_suspicious_activity, AuditEventType, FeatureType, FeatureUsage,
+        SuspiciousActivityType, TokenScope,
     },
     AppState,
 };
@@ -63,8 +63,7 @@ pub async fn create_token(
     let scopes = scopes?;
 
     // Check for rapid token creation (suspicious activity detection)
-    let recent_tokens =
-        ApiToken::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
+    let recent_tokens = state.store.list_api_tokens_by_org(org_ctx.org_id).await?;
 
     let tokens_last_hour = recent_tokens
         .iter()
@@ -101,16 +100,16 @@ pub async fn create_token(
     }
 
     // Create token
-    let (full_token, token) = ApiToken::create(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        &request.name,
-        &scopes,
-        request.expires_at,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let (full_token, token) = state
+        .store
+        .create_api_token(
+            org_ctx.org_id,
+            Some(user_id),
+            &request.name,
+            &scopes,
+            request.expires_at,
+        )
+        .await?;
 
     // Track feature usage
     let _ = FeatureUsage::record(
@@ -184,15 +183,13 @@ pub async fn list_tokens(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<TokenListItem>>> {
-    let pool = state.db.pool();
-
     // Resolve org context (extensions not available in handler, use None)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all tokens
-    let tokens = ApiToken::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
+    let tokens = state.store.list_api_tokens_by_org(org_ctx.org_id).await?;
 
     let items: Vec<TokenListItem> = tokens
         .into_iter()
@@ -231,9 +228,10 @@ pub async fn delete_token(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Verify token belongs to org
-    let token = ApiToken::find_by_id(pool, token_id)
-        .await
-        .map_err(ApiError::Database)?
+    let token = state
+        .store
+        .find_api_token_by_id(token_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Token not found".to_string()))?;
 
     if token.org_id != org_ctx.org_id {
@@ -267,7 +265,7 @@ pub async fn delete_token(
     .await;
 
     // Delete token
-    ApiToken::delete(pool, token_id).await.map_err(ApiError::Database)?;
+    state.store.delete_api_token(token_id).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }
