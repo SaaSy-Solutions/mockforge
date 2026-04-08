@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use super::{RegistryStore, StoreResult};
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::settings::OrgSetting;
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -100,5 +101,28 @@ impl RegistryStore for PgRegistryStore {
         ApiToken::find_tokens_needing_rotation(&self.pool, org_id, days_old)
             .await
             .map_err(Into::into)
+    }
+
+    async fn get_org_setting(
+        &self,
+        org_id: Uuid,
+        key: &str,
+    ) -> StoreResult<Option<OrgSetting>> {
+        OrgSetting::get(&self.pool, org_id, key).await.map_err(Into::into)
+    }
+
+    async fn set_org_setting(
+        &self,
+        org_id: Uuid,
+        key: &str,
+        value: serde_json::Value,
+    ) -> StoreResult<OrgSetting> {
+        OrgSetting::set(&self.pool, org_id, key, value)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<()> {
+        OrgSetting::delete(&self.pool, org_id, key).await.map_err(Into::into)
     }
 }

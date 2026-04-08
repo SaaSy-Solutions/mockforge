@@ -19,6 +19,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::settings::OrgSetting;
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -109,4 +110,26 @@ pub trait RegistryStore: Send + Sync + 'static {
         org_id: Option<Uuid>,
         days_old: i64,
     ) -> StoreResult<Vec<ApiToken>>;
+
+    // ---------------------------------------------------------------------
+    // Organization settings (JSON key/value per org)
+    // ---------------------------------------------------------------------
+
+    /// Fetch a single org-level setting by key, returning `None` when absent.
+    async fn get_org_setting(
+        &self,
+        org_id: Uuid,
+        key: &str,
+    ) -> StoreResult<Option<OrgSetting>>;
+
+    /// Upsert an org-level setting, returning the persisted record.
+    async fn set_org_setting(
+        &self,
+        org_id: Uuid,
+        key: &str,
+        value: serde_json::Value,
+    ) -> StoreResult<OrgSetting>;
+
+    /// Delete an org-level setting by key. Idempotent.
+    async fn delete_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<()>;
 }
