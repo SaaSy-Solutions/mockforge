@@ -18,6 +18,7 @@ use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
+use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::settings::OrgSetting;
@@ -914,5 +915,56 @@ impl RegistryStore for PgRegistryStore {
         )
         .await
         .map_err(Into::into)
+    }
+
+    async fn create_org_template(
+        &self,
+        org_id: Uuid,
+        name: &str,
+        description: Option<&str>,
+        blueprint_config: Option<serde_json::Value>,
+        security_baseline: Option<serde_json::Value>,
+        created_by: Uuid,
+        is_default: bool,
+    ) -> StoreResult<OrgTemplate> {
+        OrgTemplate::create(
+            &self.pool,
+            org_id,
+            name,
+            description,
+            blueprint_config,
+            security_baseline,
+            created_by,
+            is_default,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_org_template_by_id(&self, id: Uuid) -> StoreResult<Option<OrgTemplate>> {
+        OrgTemplate::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_org_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<OrgTemplate>> {
+        OrgTemplate::list_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_org_template(
+        &self,
+        template: &OrgTemplate,
+        name: Option<&str>,
+        description: Option<&str>,
+        blueprint_config: Option<serde_json::Value>,
+        security_baseline: Option<serde_json::Value>,
+        is_default: Option<bool>,
+    ) -> StoreResult<OrgTemplate> {
+        template
+            .update(&self.pool, name, description, blueprint_config, security_baseline, is_default)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_org_template(&self, id: Uuid) -> StoreResult<()> {
+        OrgTemplate::delete(&self.pool, id).await.map_err(Into::into)
     }
 }

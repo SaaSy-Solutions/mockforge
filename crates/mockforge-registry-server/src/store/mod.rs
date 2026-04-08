@@ -26,6 +26,7 @@ use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::FeatureType;
 use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
+use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::settings::OrgSetting;
@@ -653,4 +654,36 @@ pub trait RegistryStore: Send + Sync + 'static {
         issued_at: DateTime<Utc>,
         expires_at: DateTime<Utc>,
     ) -> StoreResult<SAMLAssertionId>;
+
+    // ---------------------------------------------------------------------
+    // Organization templates
+    // ---------------------------------------------------------------------
+
+    #[allow(clippy::too_many_arguments)]
+    async fn create_org_template(
+        &self,
+        org_id: Uuid,
+        name: &str,
+        description: Option<&str>,
+        blueprint_config: Option<serde_json::Value>,
+        security_baseline: Option<serde_json::Value>,
+        created_by: Uuid,
+        is_default: bool,
+    ) -> StoreResult<OrgTemplate>;
+
+    async fn find_org_template_by_id(&self, id: Uuid) -> StoreResult<Option<OrgTemplate>>;
+
+    async fn list_org_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<OrgTemplate>>;
+
+    async fn update_org_template(
+        &self,
+        template: &OrgTemplate,
+        name: Option<&str>,
+        description: Option<&str>,
+        blueprint_config: Option<serde_json::Value>,
+        security_baseline: Option<serde_json::Value>,
+        is_default: Option<bool>,
+    ) -> StoreResult<OrgTemplate>;
+
+    async fn delete_org_template(&self, id: Uuid) -> StoreResult<()>;
 }
