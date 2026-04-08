@@ -20,6 +20,9 @@ use uuid::Uuid;
 
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{AuditEventType, AuditLog};
+use crate::models::cloud_fixture::CloudFixture;
+use crate::models::cloud_service::CloudService;
+use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::FeatureType;
 use crate::models::federation::Federation;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
@@ -398,4 +401,96 @@ pub trait RegistryStore: Send + Sync + 'static {
         activity_id: Uuid,
         resolved_by: Uuid,
     ) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Cloud workspaces
+    // ---------------------------------------------------------------------
+
+    async fn create_cloud_workspace(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+    ) -> StoreResult<CloudWorkspace>;
+
+    async fn find_cloud_workspace_by_id(&self, id: Uuid) -> StoreResult<Option<CloudWorkspace>>;
+
+    async fn list_cloud_workspaces_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudWorkspace>>;
+
+    async fn update_cloud_workspace(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        is_active: Option<bool>,
+        settings: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudWorkspace>>;
+
+    async fn delete_cloud_workspace(&self, id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Cloud services
+    // ---------------------------------------------------------------------
+
+    async fn create_cloud_service(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        base_url: &str,
+    ) -> StoreResult<CloudService>;
+
+    async fn find_cloud_service_by_id(&self, id: Uuid) -> StoreResult<Option<CloudService>>;
+
+    async fn list_cloud_services_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudService>>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_cloud_service(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        base_url: Option<&str>,
+        enabled: Option<bool>,
+        tags: Option<&serde_json::Value>,
+        routes: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudService>>;
+
+    async fn delete_cloud_service(&self, id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Cloud fixtures
+    // ---------------------------------------------------------------------
+
+    #[allow(clippy::too_many_arguments)]
+    async fn create_cloud_fixture(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        path: &str,
+        method: &str,
+        content: Option<&serde_json::Value>,
+    ) -> StoreResult<CloudFixture>;
+
+    async fn find_cloud_fixture_by_id(&self, id: Uuid) -> StoreResult<Option<CloudFixture>>;
+
+    async fn list_cloud_fixtures_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudFixture>>;
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_cloud_fixture(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        path: Option<&str>,
+        method: Option<&str>,
+        content: Option<&serde_json::Value>,
+        tags: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudFixture>>;
+
+    async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()>;
 }

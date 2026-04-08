@@ -123,8 +123,6 @@ pub async fn get_health(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let _pool = state.db.pool();
-
     let _org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;

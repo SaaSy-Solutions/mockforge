@@ -11,9 +11,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{
-        cloud_service::CloudService, record_audit_event, AuditEventType, FeatureType, FeatureUsage,
-    },
+    models::{cloud_service::CloudService, AuditEventType, FeatureType},
     AppState,
 };
 
@@ -22,14 +20,11 @@ pub async fn list_services(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<CloudService>>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let services = CloudService::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let services = state.store.list_cloud_services_by_org(org_ctx.org_id).await?;
 
     Ok(Json(services))
 }
@@ -40,14 +35,14 @@ pub async fn get_service(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<CloudService>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let service = CloudService::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let service = state
+        .store
+        .find_cloud_service_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;
 
     if service.org_id != org_ctx.org_id {
@@ -74,7 +69,6 @@ pub async fn create_service(
     headers: HeaderMap,
     Json(request): Json<CreateServiceRequest>,
 ) -> ApiResult<Json<CloudService>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -83,25 +77,26 @@ pub async fn create_service(
         return Err(ApiError::InvalidRequest("Service name is required".to_string()));
     }
 
-    let service = CloudService::create(
-        pool,
-        org_ctx.org_id,
-        user_id,
-        request.name.trim(),
-        &request.description,
-        &request.base_url,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let service = state
+        .store
+        .create_cloud_service(
+            org_ctx.org_id,
+            user_id,
+            request.name.trim(),
+            &request.description,
+            &request.base_url,
+        )
+        .await?;
 
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::ServiceCreate,
-        Some(serde_json::json!({ "service_id": service.id, "name": service.name })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::ServiceCreate,
+            Some(serde_json::json!({ "service_id": service.id, "name": service.name })),
+        )
+        .await;
 
     let ip = headers
         .get("X-Forwarded-For")
@@ -110,17 +105,18 @@ pub async fn create_service(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let ua = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ServiceCreated,
-        format!("Service '{}' created", service.name),
-        Some(serde_json::json!({ "service_id": service.id })),
-        ip,
-        ua,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ServiceCreated,
+            format!("Service '{}' created", service.name),
+            Some(serde_json::json!({ "service_id": service.id })),
+            ip,
+            ua,
+        )
+        .await;
 
     Ok(Json(service))
 }
@@ -142,14 +138,14 @@ pub async fn update_service(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateServiceRequest>,
 ) -> ApiResult<Json<CloudService>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let existing = CloudService::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let existing = state
+        .store
+        .find_cloud_service_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;
 
     if existing.org_id != org_ctx.org_id {
@@ -158,19 +154,19 @@ pub async fn update_service(
         ));
     }
 
-    let service = CloudService::update(
-        pool,
-        id,
-        request.name.as_deref(),
-        request.description.as_deref(),
-        request.base_url.as_deref(),
-        request.enabled,
-        request.tags.as_ref(),
-        request.routes.as_ref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;
+    let service = state
+        .store
+        .update_cloud_service(
+            id,
+            request.name.as_deref(),
+            request.description.as_deref(),
+            request.base_url.as_deref(),
+            request.enabled,
+            request.tags.as_ref(),
+            request.routes.as_ref(),
+        )
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;
 
     let ip = headers
         .get("X-Forwarded-For")
@@ -179,17 +175,18 @@ pub async fn update_service(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let ua = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ServiceUpdated,
-        format!("Service '{}' updated", service.name),
-        Some(serde_json::json!({ "service_id": service.id })),
-        ip,
-        ua,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ServiceUpdated,
+            format!("Service '{}' updated", service.name),
+            Some(serde_json::json!({ "service_id": service.id })),
+            ip,
+            ua,
+        )
+        .await;
 
     Ok(Json(service))
 }
@@ -200,14 +197,14 @@ pub async fn delete_service(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let service = CloudService::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let service = state
+        .store
+        .find_cloud_service_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;
 
     if service.org_id != org_ctx.org_id {
@@ -223,19 +220,20 @@ pub async fn delete_service(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let ua = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ServiceDeleted,
-        format!("Service '{}' deleted", service.name),
-        Some(serde_json::json!({ "service_id": service.id, "name": service.name })),
-        ip,
-        ua,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ServiceDeleted,
+            format!("Service '{}' deleted", service.name),
+            Some(serde_json::json!({ "service_id": service.id, "name": service.name })),
+            ip,
+            ua,
+        )
+        .await;
 
-    CloudService::delete(pool, id).await.map_err(ApiError::Database)?;
+    state.store.delete_cloud_service(id).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

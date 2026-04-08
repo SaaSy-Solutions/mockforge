@@ -12,6 +12,9 @@ use uuid::Uuid;
 use super::{RegistryStore, StoreResult};
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
+use crate::models::cloud_fixture::CloudFixture;
+use crate::models::cloud_service::CloudService;
+use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::federation::Federation;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
@@ -506,5 +509,133 @@ impl RegistryStore for PgRegistryStore {
         SuspiciousActivity::resolve(&self.pool, activity_id, resolved_by)
             .await
             .map_err(Into::into)
+    }
+
+    async fn create_cloud_workspace(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+    ) -> StoreResult<CloudWorkspace> {
+        CloudWorkspace::create(&self.pool, org_id, created_by, name, description)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_cloud_workspace_by_id(&self, id: Uuid) -> StoreResult<Option<CloudWorkspace>> {
+        CloudWorkspace::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_cloud_workspaces_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudWorkspace>> {
+        CloudWorkspace::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_cloud_workspace(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        is_active: Option<bool>,
+        settings: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudWorkspace>> {
+        CloudWorkspace::update(&self.pool, id, name, description, is_active, settings)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_cloud_workspace(&self, id: Uuid) -> StoreResult<()> {
+        CloudWorkspace::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn create_cloud_service(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        base_url: &str,
+    ) -> StoreResult<CloudService> {
+        CloudService::create(&self.pool, org_id, created_by, name, description, base_url)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_cloud_service_by_id(&self, id: Uuid) -> StoreResult<Option<CloudService>> {
+        CloudService::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_cloud_services_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudService>> {
+        CloudService::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_cloud_service(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        base_url: Option<&str>,
+        enabled: Option<bool>,
+        tags: Option<&serde_json::Value>,
+        routes: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudService>> {
+        CloudService::update(&self.pool, id, name, description, base_url, enabled, tags, routes)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_cloud_service(&self, id: Uuid) -> StoreResult<()> {
+        CloudService::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn create_cloud_fixture(
+        &self,
+        org_id: Uuid,
+        created_by: Uuid,
+        name: &str,
+        description: &str,
+        path: &str,
+        method: &str,
+        content: Option<&serde_json::Value>,
+    ) -> StoreResult<CloudFixture> {
+        CloudFixture::create(
+            &self.pool,
+            org_id,
+            created_by,
+            name,
+            description,
+            path,
+            method,
+            content,
+        )
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_cloud_fixture_by_id(&self, id: Uuid) -> StoreResult<Option<CloudFixture>> {
+        CloudFixture::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn list_cloud_fixtures_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudFixture>> {
+        CloudFixture::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn update_cloud_fixture(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        path: Option<&str>,
+        method: Option<&str>,
+        content: Option<&serde_json::Value>,
+        tags: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<CloudFixture>> {
+        CloudFixture::update(&self.pool, id, name, description, path, method, content, tags)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {
+        CloudFixture::delete(&self.pool, id).await.map_err(Into::into)
     }
 }

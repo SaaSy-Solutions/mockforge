@@ -11,10 +11,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{
-        cloud_workspace::WorkspaceSummaryResponse, record_audit_event, AuditEventType,
-        CloudWorkspace, FeatureType, FeatureUsage,
-    },
+    models::{cloud_workspace::WorkspaceSummaryResponse, AuditEventType, FeatureType},
     AppState,
 };
 
@@ -24,15 +21,11 @@ pub async fn list_workspaces(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<WorkspaceSummaryResponse>>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let workspaces = CloudWorkspace::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let workspaces = state.store.list_cloud_workspaces_by_org(org_ctx.org_id).await?;
 
     let summaries: Vec<WorkspaceSummaryResponse> =
         workspaces.iter().map(|w| w.to_summary()).collect();
@@ -47,15 +40,14 @@ pub async fn get_workspace(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<WorkspaceSummaryResponse>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let workspace = CloudWorkspace::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let workspace = state
+        .store
+        .find_cloud_workspace_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     if workspace.org_id != org_ctx.org_id {
@@ -81,8 +73,6 @@ pub async fn create_workspace(
     headers: HeaderMap,
     Json(request): Json<CreateWorkspaceRequest>,
 ) -> ApiResult<Json<WorkspaceSummaryResponse>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -91,27 +81,23 @@ pub async fn create_workspace(
         return Err(ApiError::InvalidRequest("Workspace name is required".to_string()));
     }
 
-    let workspace = CloudWorkspace::create(
-        pool,
-        org_ctx.org_id,
-        user_id,
-        request.name.trim(),
-        &request.description,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let workspace = state
+        .store
+        .create_cloud_workspace(org_ctx.org_id, user_id, request.name.trim(), &request.description)
+        .await?;
 
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::WorkspaceCreate,
-        Some(serde_json::json!({
-            "workspace_id": workspace.id,
-            "name": workspace.name,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::WorkspaceCreate,
+            Some(serde_json::json!({
+                "workspace_id": workspace.id,
+                "name": workspace.name,
+            })),
+        )
+        .await;
 
     let ip_address = headers
         .get("X-Forwarded-For")
@@ -120,17 +106,18 @@ pub async fn create_workspace(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::WorkspaceCreated,
-        format!("Workspace '{}' created", workspace.name),
-        Some(serde_json::json!({ "workspace_id": workspace.id, "name": workspace.name })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::WorkspaceCreated,
+            format!("Workspace '{}' created", workspace.name),
+            Some(serde_json::json!({ "workspace_id": workspace.id, "name": workspace.name })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(workspace.to_summary()))
 }
@@ -151,15 +138,14 @@ pub async fn update_workspace(
     Path(id): Path<Uuid>,
     Json(request): Json<UpdateWorkspaceRequest>,
 ) -> ApiResult<Json<WorkspaceSummaryResponse>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let existing = CloudWorkspace::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let existing = state
+        .store
+        .find_cloud_workspace_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     if existing.org_id != org_ctx.org_id {
@@ -168,26 +154,27 @@ pub async fn update_workspace(
         ));
     }
 
-    let workspace = CloudWorkspace::update(
-        pool,
-        id,
-        request.name.as_deref(),
-        request.description.as_deref(),
-        request.is_active,
-        request.settings.as_ref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let workspace = state
+        .store
+        .update_cloud_workspace(
+            id,
+            request.name.as_deref(),
+            request.description.as_deref(),
+            request.is_active,
+            request.settings.as_ref(),
+        )
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::WorkspaceUpdate,
-        Some(serde_json::json!({ "workspace_id": workspace.id })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::WorkspaceUpdate,
+            Some(serde_json::json!({ "workspace_id": workspace.id })),
+        )
+        .await;
 
     let ip_address = headers
         .get("X-Forwarded-For")
@@ -196,17 +183,18 @@ pub async fn update_workspace(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::WorkspaceUpdated,
-        format!("Workspace '{}' updated", workspace.name),
-        Some(serde_json::json!({ "workspace_id": workspace.id })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::WorkspaceUpdated,
+            format!("Workspace '{}' updated", workspace.name),
+            Some(serde_json::json!({ "workspace_id": workspace.id })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(workspace.to_summary()))
 }
@@ -218,15 +206,14 @@ pub async fn delete_workspace(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let workspace = CloudWorkspace::find_by_id(pool, id)
-        .await
-        .map_err(ApiError::Database)?
+    let workspace = state
+        .store
+        .find_cloud_workspace_by_id(id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     if workspace.org_id != org_ctx.org_id {
@@ -242,28 +229,30 @@ pub async fn delete_workspace(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::WorkspaceDeleted,
-        format!("Workspace '{}' deleted", workspace.name),
-        Some(serde_json::json!({ "workspace_id": workspace.id, "name": workspace.name })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::WorkspaceDeleted,
+            format!("Workspace '{}' deleted", workspace.name),
+            Some(serde_json::json!({ "workspace_id": workspace.id, "name": workspace.name })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        FeatureType::WorkspaceDelete,
-        Some(serde_json::json!({ "workspace_id": workspace.id })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(user_id),
+            FeatureType::WorkspaceDelete,
+            Some(serde_json::json!({ "workspace_id": workspace.id })),
+        )
+        .await;
 
-    CloudWorkspace::delete(pool, id).await.map_err(ApiError::Database)?;
+    state.store.delete_cloud_workspace(id).await?;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }
