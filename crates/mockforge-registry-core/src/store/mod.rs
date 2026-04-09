@@ -49,10 +49,10 @@ pub mod postgres;
 #[cfg(feature = "postgres")]
 pub use postgres::PgRegistryStore;
 
-// `StoreError` and `StoreResult` now live in `mockforge-registry-core`. They
-// are re-exported here so existing `use crate::store::{StoreError, StoreResult}`
-// imports continue to work unchanged during the cloud-core extraction.
-pub use mockforge_registry_core::error::{StoreError, StoreResult};
+// `StoreError` and `StoreResult` live in `crate::error`. Re-exported here
+// so existing `use crate::store::{StoreError, StoreResult}` imports in
+// downstream crates continue to work.
+pub use crate::error::{StoreError, StoreResult};
 
 /// Unified storage trait for the registry domain.
 ///

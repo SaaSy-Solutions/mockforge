@@ -16,5 +16,6 @@
 pub mod error;
 pub mod models;
 pub mod permissions;
+pub mod store;
 
 pub use error::{ApiError, ApiResult, StoreError, StoreResult};

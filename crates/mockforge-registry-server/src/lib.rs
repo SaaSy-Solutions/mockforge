@@ -34,7 +34,9 @@ pub mod pillar_tracking_init;
 pub mod redis;
 pub mod routes;
 pub mod storage;
-pub mod store;
+/// Storage trait + backends now live in `mockforge-registry-core`.
+/// Re-exported so existing `crate::store::*` paths keep working.
+pub use mockforge_registry_core::store;
 pub mod two_factor;
 pub mod validation;
 pub mod workers;
