@@ -53,6 +53,7 @@ pub struct FeatureUsage {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl FeatureUsage {
     /// Record a feature usage event
     pub async fn record(

@@ -52,6 +52,7 @@ pub struct OrgMember {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Organization {
     /// Get plan as enum
     pub fn plan(&self) -> Plan {
@@ -238,6 +239,7 @@ impl std::fmt::Display for Plan {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl OrgMember {
     /// Get role as enum
     pub fn role(&self) -> OrgRole {
@@ -486,7 +488,7 @@ impl OrgRole {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 

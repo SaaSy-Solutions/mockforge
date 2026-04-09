@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "postgres")]
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -16,6 +17,7 @@ pub struct WaitlistSubscriber {
     pub unsubscribed_at: Option<DateTime<Utc>>,
 }
 
+#[cfg(feature = "postgres")]
 impl WaitlistSubscriber {
     /// Subscribe an email. If already subscribed, re-activates silently.
     pub async fn subscribe(pool: &PgPool, email: &str, source: &str) -> sqlx::Result<Self> {

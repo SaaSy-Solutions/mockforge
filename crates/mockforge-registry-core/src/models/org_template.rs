@@ -34,6 +34,7 @@ pub struct OrgTemplate {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl OrgTemplate {
     /// Create a new organization template
     #[allow(clippy::too_many_arguments)]

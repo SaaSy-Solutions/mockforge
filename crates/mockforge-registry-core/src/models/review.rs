@@ -21,6 +21,7 @@ pub struct Review {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Review {
     /// Get reviews for a plugin
     pub async fn get_by_plugin(

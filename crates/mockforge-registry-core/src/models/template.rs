@@ -76,6 +76,7 @@ pub struct Template {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Template {
     /// Get category as enum
     pub fn category(&self) -> TemplateCategory {
@@ -299,6 +300,7 @@ pub struct TemplateVersion {
     pub published_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl TemplateVersion {
     /// Create a new version
     pub async fn create(

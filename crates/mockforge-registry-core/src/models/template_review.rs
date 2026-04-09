@@ -19,6 +19,7 @@ pub struct TemplateReview {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl TemplateReview {
     /// Get reviews for a template
     pub async fn get_by_template(

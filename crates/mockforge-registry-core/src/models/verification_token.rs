@@ -17,6 +17,7 @@ pub struct VerificationToken {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl VerificationToken {
     /// Create a new verification token
     pub async fn create(pool: &sqlx::PgPool, user_id: Uuid) -> sqlx::Result<Self> {

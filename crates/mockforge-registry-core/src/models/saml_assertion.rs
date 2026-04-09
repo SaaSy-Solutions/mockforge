@@ -18,6 +18,7 @@ pub struct SAMLAssertionId {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl SAMLAssertionId {
     /// Check if an assertion ID has been used (replay attack prevention)
     pub async fn is_used(

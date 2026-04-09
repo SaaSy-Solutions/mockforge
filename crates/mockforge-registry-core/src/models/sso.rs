@@ -78,6 +78,7 @@ pub struct SSOSession {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl SSOConfiguration {
     /// Get provider as enum
     pub fn provider(&self) -> SSOProvider {
@@ -180,6 +181,7 @@ impl SSOConfiguration {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl SSOSession {
     /// Create a new SSO session
     pub async fn create(

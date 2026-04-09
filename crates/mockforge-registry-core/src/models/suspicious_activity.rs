@@ -41,6 +41,7 @@ pub struct SuspiciousActivity {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl SuspiciousActivity {
     /// Create a new suspicious activity record
     #[allow(clippy::too_many_arguments)]
@@ -140,6 +141,7 @@ impl SuspiciousActivity {
 }
 
 /// Helper function to record suspicious activity
+#[cfg(feature = "postgres")]
 #[allow(clippy::too_many_arguments)]
 pub async fn record_suspicious_activity(
     pool: &sqlx::PgPool,

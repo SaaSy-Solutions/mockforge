@@ -31,6 +31,7 @@ pub struct Scenario {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Scenario {
     /// Create a new scenario
     #[allow(clippy::too_many_arguments)]
@@ -262,6 +263,7 @@ pub struct ScenarioVersion {
     pub published_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl ScenarioVersion {
     /// Create a new version
     #[allow(clippy::too_many_arguments)]
@@ -325,7 +327,7 @@ impl ScenarioVersion {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
     use rust_decimal::prelude::*;

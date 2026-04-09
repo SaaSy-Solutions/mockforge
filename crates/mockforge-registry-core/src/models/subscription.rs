@@ -71,6 +71,7 @@ pub struct Subscription {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Subscription {
     /// Get plan as enum
     pub fn plan(&self) -> Plan {
@@ -208,6 +209,7 @@ pub struct UsageCounter {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl UsageCounter {
     /// Get or create usage counter for current month
     pub async fn get_or_create_current(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Self> {
@@ -328,7 +330,7 @@ impl UsageCounter {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 

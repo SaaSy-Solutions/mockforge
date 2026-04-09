@@ -33,6 +33,7 @@ pub struct WorkspaceSummaryResponse {
     pub folder_count: i64,
 }
 
+#[cfg(feature = "postgres")]
 impl Workspace {
     /// Create a new workspace
     pub async fn create(

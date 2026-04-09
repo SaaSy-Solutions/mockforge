@@ -102,6 +102,7 @@ pub struct HostedMock {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
+#[cfg(feature = "postgres")]
 impl HostedMock {
     /// Get status as enum
     pub fn status(&self) -> DeploymentStatus {
@@ -295,6 +296,7 @@ pub struct DeploymentLog {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl DeploymentLog {
     /// Create a new log entry
     pub async fn create(
@@ -352,6 +354,7 @@ pub struct DeploymentMetrics {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl DeploymentMetrics {
     /// Get or create metrics for current period
     pub async fn get_or_create_current(

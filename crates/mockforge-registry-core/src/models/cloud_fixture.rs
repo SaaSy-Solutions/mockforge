@@ -23,6 +23,7 @@ pub struct CloudFixture {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl CloudFixture {
     pub async fn create(
         pool: &sqlx::PgPool,

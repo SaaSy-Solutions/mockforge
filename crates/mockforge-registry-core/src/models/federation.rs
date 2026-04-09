@@ -17,6 +17,7 @@ pub struct Federation {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Federation {
     /// Create a new federation
     pub async fn create(

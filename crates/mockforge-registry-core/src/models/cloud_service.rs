@@ -21,6 +21,7 @@ pub struct CloudService {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl CloudService {
     pub async fn create(
         pool: &sqlx::PgPool,

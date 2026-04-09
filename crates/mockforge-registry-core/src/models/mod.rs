@@ -32,7 +32,9 @@ pub mod waitlist;
 pub use verification_token::VerificationToken;
 
 pub use api_token::{ApiToken, TokenScope};
-pub use audit_log::{record_audit_event, AuditEventType};
+#[cfg(feature = "postgres")]
+pub use audit_log::record_audit_event;
+pub use audit_log::AuditEventType;
 pub use cloud_workspace::Workspace as CloudWorkspace;
 pub use federation::Federation;
 pub use hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
@@ -51,9 +53,9 @@ pub use user::User;
 // Re-export deployment-related models for convenience
 pub use feature_usage::{FeatureType, FeatureUsage};
 pub use hosted_mock::{DeploymentLog, DeploymentMetrics};
-pub use suspicious_activity::{
-    record_suspicious_activity, SuspiciousActivity, SuspiciousActivityType,
-};
+#[cfg(feature = "postgres")]
+pub use suspicious_activity::record_suspicious_activity;
+pub use suspicious_activity::{SuspiciousActivity, SuspiciousActivityType};
 
 // Re-export types needed by handler modules
 pub use audit_log::AuditLog;

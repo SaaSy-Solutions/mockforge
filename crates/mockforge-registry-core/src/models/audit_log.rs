@@ -80,6 +80,7 @@ pub struct AuditLog {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl AuditLog {
     /// Create a new audit log entry
     #[allow(clippy::too_many_arguments)]
@@ -172,6 +173,7 @@ impl AuditLog {
 }
 
 /// Helper function to record audit events from request context
+#[cfg(feature = "postgres")]
 #[allow(clippy::too_many_arguments)]
 pub async fn record_audit_event(
     pool: &sqlx::PgPool,

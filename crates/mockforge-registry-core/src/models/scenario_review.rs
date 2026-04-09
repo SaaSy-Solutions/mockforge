@@ -19,6 +19,7 @@ pub struct ScenarioReview {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl ScenarioReview {
     /// Get reviews for a scenario
     pub async fn get_by_scenario(

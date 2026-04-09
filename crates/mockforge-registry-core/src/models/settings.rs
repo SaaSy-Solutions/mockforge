@@ -107,6 +107,7 @@ fn default_true() -> bool {
     true
 }
 
+#[cfg(feature = "postgres")]
 impl UserSetting {
     /// Get a user setting by key
     pub async fn get(
@@ -158,6 +159,7 @@ impl UserSetting {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl OrgSetting {
     /// Get an organization setting by key
     pub async fn get(

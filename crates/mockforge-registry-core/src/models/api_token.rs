@@ -60,6 +60,7 @@ pub struct ApiToken {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl ApiToken {
     /// Create a new API token
     /// Returns the full token (only shown once) and the ApiToken record
@@ -177,12 +178,6 @@ impl ApiToken {
         Ok(None)
     }
 
-    /// Check if token has a specific scope
-    pub fn has_scope(&self, scope: &TokenScope) -> bool {
-        let scope_str = scope.to_string();
-        self.scopes.contains(&scope_str)
-    }
-
     /// Delete token
     pub async fn delete(pool: &sqlx::PgPool, token_id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM api_tokens WHERE id = $1")
@@ -267,6 +262,17 @@ impl ApiToken {
 
         query.fetch_all(pool).await
     }
+}
+
+// Pure, backend-agnostic helper methods on ApiToken. These live in a
+// separate impl block (NOT gated on `postgres`) so that sqlite-only builds
+// of the crate still have access to scope checks, rotation heuristics, etc.
+impl ApiToken {
+    /// Check if token has a specific scope
+    pub fn has_scope(&self, scope: &TokenScope) -> bool {
+        let scope_str = scope.to_string();
+        self.scopes.contains(&scope_str)
+    }
 
     /// Check if token needs rotation (older than N days)
     pub fn needs_rotation(&self, days_old: i64) -> bool {
@@ -281,7 +287,7 @@ impl ApiToken {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 

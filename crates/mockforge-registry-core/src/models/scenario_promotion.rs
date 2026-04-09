@@ -92,6 +92,7 @@ pub struct ScenarioPromotion {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl ScenarioPromotion {
     /// Get status as enum
     pub fn status_enum(&self) -> Option<PromotionStatus> {
@@ -301,6 +302,7 @@ pub struct ScenarioEnvironmentVersion {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl ScenarioEnvironmentVersion {
     /// Get or create environment version record
     ///

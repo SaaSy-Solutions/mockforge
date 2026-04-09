@@ -29,6 +29,7 @@ pub struct Project {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl Project {
     /// Get visibility as enum
     pub fn visibility(&self) -> ProjectVisibility {

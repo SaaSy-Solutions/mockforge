@@ -47,6 +47,7 @@ pub struct PluginWithVersions {
     pub tags: Vec<String>,
 }
 
+#[cfg(feature = "postgres")]
 impl Plugin {
     /// Search plugins
     pub async fn search(
@@ -260,6 +261,7 @@ impl Plugin {
     }
 }
 
+#[cfg(feature = "postgres")]
 impl PluginVersion {
     /// Get all versions for a plugin
     pub async fn get_by_plugin(pool: &sqlx::PgPool, plugin_id: Uuid) -> sqlx::Result<Vec<Self>> {

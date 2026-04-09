@@ -66,6 +66,7 @@ pub struct MockEnvironment {
     pub updated_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl MockEnvironment {
     /// Get environment name as enum
     pub fn environment_name(&self) -> Option<MockEnvironmentName> {

@@ -15,6 +15,7 @@ pub struct LoginAttempt {
     pub created_at: DateTime<Utc>,
 }
 
+#[cfg(feature = "postgres")]
 impl LoginAttempt {
     /// Record a login attempt
     pub async fn record(
