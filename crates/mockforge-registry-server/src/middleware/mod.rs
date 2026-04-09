@@ -4,7 +4,9 @@ pub mod api_token_auth;
 pub mod csrf;
 pub mod org_context;
 pub mod permission_check;
-pub mod permissions;
+// `permissions` module now lives in mockforge-registry-core. Re-exported
+// here so existing `crate::middleware::permissions::*` paths keep working.
+pub use mockforge_registry_core::permissions;
 pub mod rate_limit;
 pub mod request_id;
 pub mod scope_check;

@@ -30,7 +30,11 @@ tower = "0.5"
 tokio = { version = "1.48", features = ["sync", "rt", "macros"] }
 
 # Database — shared between Postgres (SaaS) and SQLite (OSS).
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "uuid", "chrono", "migrate", "rust_decimal"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "uuid", "chrono", "migrate", "rust_decimal", "macros", "json"] }
+
+# Misc crypto / encoding helpers used by model types.
+base64 = "0.21"
+rand = "0.8"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

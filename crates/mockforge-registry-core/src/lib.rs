@@ -14,5 +14,7 @@
 #![allow(clippy::module_inception)]
 
 pub mod error;
+pub mod models;
+pub mod permissions;
 
 pub use error::{ApiError, ApiResult, StoreError, StoreResult};

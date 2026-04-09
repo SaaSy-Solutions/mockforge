@@ -395,8 +395,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
 /// Admin: OrgRead, OrgManageMembers + marketplace publish/update permissions + hosted mocks
 /// Member: Read-only permissions for all resources
 impl OrgRole {
-    pub fn get_permissions(&self) -> Vec<crate::middleware::permissions::Permission> {
-        use crate::middleware::permissions::Permission;
+    pub fn get_permissions(&self) -> Vec<crate::permissions::Permission> {
+        use crate::permissions::Permission;
 
         match self {
             OrgRole::Owner => vec![
@@ -787,7 +787,7 @@ mod tests {
 
     #[test]
     fn test_owner_has_all_permissions() {
-        use crate::middleware::permissions::Permission;
+        use crate::permissions::Permission;
 
         let perms = OrgRole::Owner.get_permissions();
         // Owner should have AdminAll
@@ -824,7 +824,7 @@ mod tests {
 
     #[test]
     fn test_admin_cannot_delete() {
-        use crate::middleware::permissions::Permission;
+        use crate::permissions::Permission;
 
         let admin_perms = OrgRole::Admin.get_permissions();
         assert!(!admin_perms.contains(&Permission::OrgDelete));
@@ -837,7 +837,7 @@ mod tests {
 
     #[test]
     fn test_member_is_read_only_plus_review_create() {
-        use crate::middleware::permissions::Permission;
+        use crate::permissions::Permission;
 
         let member_perms = OrgRole::Member.get_permissions();
         let expected = vec![
