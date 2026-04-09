@@ -149,16 +149,18 @@ impl CustomConformanceConfig {
                 escaped_name, check.expected_status, escaped_name, check.expected_status
             ));
 
-            // Header checks with failure detail capture
+            // Header checks with failure detail capture.
+            // k6 canonicalizes response header names (e.g. `X-XSS-Protection` ->
+            // `X-Xss-Protection`), so match header names case-insensitively.
             for (header_name, pattern) in &check.expected_headers {
                 let header_check_name = format!("{}:header:{}", escaped_name, header_name);
                 let escaped_pattern = pattern.replace('\\', "\\\\").replace('\'', "\\'");
+                let header_lower = header_name.to_lowercase();
                 script.push_str(&format!(
-                    "      {{ let ok = check(res, {{ '{}': (r) => new RegExp('{}').test(r.headers['{}'] || r.headers['{}'] || '') }}); if (!ok) __captureFailure('{}', res, 'header {} matches /{}/ '); }}\n",
+                    "      {{ let ok = check(res, {{ '{}': (r) => {{ const _hk = Object.keys(r.headers || {{}}).find(k => k.toLowerCase() === '{}'); return new RegExp('{}').test(_hk ? r.headers[_hk] : ''); }} }}); if (!ok) __captureFailure('{}', res, 'header {} matches /{}/ '); }}\n",
                     header_check_name,
+                    header_lower,
                     escaped_pattern,
-                    header_name,
-                    header_name.to_lowercase(),
                     header_check_name,
                     header_name,
                     escaped_pattern

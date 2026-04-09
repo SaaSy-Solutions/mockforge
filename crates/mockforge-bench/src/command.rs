@@ -2134,7 +2134,8 @@ impl BenchCommand {
     /// tested sequentially to avoid overwhelming them, and per-target headers from
     /// the targets file are merged with the base `--conformance-header` headers.
     async fn execute_multi_target_conformance(&self, targets_file: &Path) -> Result<()> {
-        use crate::conformance::generator::ConformanceConfig;
+        use crate::conformance::generator::{ConformanceConfig, ConformanceGenerator};
+        use crate::conformance::report::ConformanceReport;
         use crate::conformance::spec::ConformanceFeature;
 
         TerminalReporter::print_progress("Multi-target OpenAPI 3.0.0 Conformance Testing Mode");
@@ -2281,24 +2282,80 @@ impl BenchCommand {
                 request_delay_ms: self.conformance_delay_ms,
             };
 
-            let mut executor =
-                crate::conformance::executor::NativeConformanceExecutor::new(config)?;
-
-            executor = if let Some(ref annotated) = annotated_ops {
-                executor.with_spec_driven_checks(annotated)
-            } else {
-                executor.with_reference_checks()
-            };
-            executor = executor.with_custom_checks()?;
-
-            TerminalReporter::print_success(&format!(
-                "Executing {} conformance checks against {}...",
-                executor.check_count(),
-                target.url
-            ));
+            // Per-target output dir (used by both native and k6 paths)
+            let target_dir = self.output.join(format!("target_{}", idx));
+            std::fs::create_dir_all(&target_dir)?;
 
             let target_start = std::time::Instant::now();
-            let report = executor.execute().await?;
+            let report = if self.use_k6 {
+                if !K6Executor::is_k6_installed() {
+                    TerminalReporter::print_error("k6 is not installed");
+                    TerminalReporter::print_warning(
+                        "Install k6 from: https://k6.io/docs/get-started/installation/",
+                    );
+                    return Err(BenchError::K6NotFound);
+                }
+
+                let script = if let Some(ref annotated) = annotated_ops {
+                    let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
+                        config.clone(),
+                        annotated.clone(),
+                    );
+                    let (script, _check_count) = gen.generate()?;
+                    script
+                } else {
+                    let generator = ConformanceGenerator::new(config.clone());
+                    generator.generate()?
+                };
+
+                let script_path = target_dir.join("k6-conformance.js");
+                std::fs::write(&script_path, &script).map_err(|e| {
+                    BenchError::Other(format!("Failed to write conformance script: {}", e))
+                })?;
+                TerminalReporter::print_success(&format!(
+                    "Conformance script generated: {}",
+                    script_path.display()
+                ));
+
+                TerminalReporter::print_progress(&format!(
+                    "Running conformance tests via k6 against {}...",
+                    target.url
+                ));
+                let k6 = K6Executor::new()?;
+                // Unique k6 API port per target to avoid collisions.
+                let api_port = 6565u16.saturating_add(idx as u16);
+                k6.execute_with_port(&script_path, Some(&target_dir), self.verbose, Some(api_port))
+                    .await?;
+
+                let report_path = target_dir.join("conformance-report.json");
+                if report_path.exists() {
+                    ConformanceReport::from_file(&report_path)?
+                } else {
+                    TerminalReporter::print_warning(&format!(
+                        "Conformance report not generated for target {} (k6 handleSummary may not have run)",
+                        target.url
+                    ));
+                    continue;
+                }
+            } else {
+                let mut executor =
+                    crate::conformance::executor::NativeConformanceExecutor::new(config)?;
+
+                executor = if let Some(ref annotated) = annotated_ops {
+                    executor.with_spec_driven_checks(annotated)
+                } else {
+                    executor.with_reference_checks()
+                };
+                executor = executor.with_custom_checks()?;
+
+                TerminalReporter::print_success(&format!(
+                    "Executing {} conformance checks against {}...",
+                    executor.check_count(),
+                    target.url
+                ));
+
+                executor.execute().await?
+            };
             let target_elapsed = target_start.elapsed();
 
             let report_json = report.to_json();
@@ -2322,9 +2379,7 @@ impl BenchCommand {
                 target_elapsed.as_secs_f64()
             ));
 
-            // Save per-target report
-            let target_dir = self.output.join(format!("target_{}", idx));
-            std::fs::create_dir_all(&target_dir)?;
+            // Save per-target report (target_dir created above)
             let target_report_path = target_dir.join("conformance-report.json");
             let report_str = serde_json::to_string_pretty(&report_json)
                 .map_err(|e| BenchError::Other(format!("Failed to serialize report: {}", e)))?;

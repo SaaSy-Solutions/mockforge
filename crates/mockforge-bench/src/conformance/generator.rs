@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use super::custom::CustomConformanceConfig;
 
 /// Configuration for conformance test generation
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ConformanceConfig {
     /// Target base URL
     pub target_url: String,
