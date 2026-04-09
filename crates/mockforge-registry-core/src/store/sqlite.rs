@@ -32,7 +32,9 @@ use crate::models::audit_log::{AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
 use crate::models::cloud_service::CloudService;
 use crate::models::cloud_workspace::Workspace as CloudWorkspace;
-use crate::models::feature_usage::{FeatureType, FeatureUsage};
+use crate::models::feature_usage::FeatureType;
+#[allow(unused_imports)]
+use crate::models::feature_usage::FeatureUsage;
 use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
@@ -1326,5 +1328,88 @@ impl RegistryStore for SqliteRegistryStore {
     #[allow(unused_variables)]
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {
         Ok(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Open an in-memory SQLite database, run migrations, and return the
+    /// resulting store. Shared by every test below.
+    async fn memory_store() -> SqliteRegistryStore {
+        SqliteRegistryStore::connect("sqlite::memory:")
+            .await
+            .expect("connect and migrate in-memory sqlite")
+    }
+
+    #[tokio::test]
+    async fn test_connect_and_migrate_in_memory() {
+        let store = memory_store().await;
+        // Health check should succeed against a fresh in-memory database.
+        store.health_check().await.expect("health_check");
+    }
+
+    #[tokio::test]
+    async fn test_migrations_create_core_tables() {
+        let store = memory_store().await;
+        // Every table we care about for the OSS admin should exist. We do
+        // a cheap `SELECT COUNT(*)` against each — a missing table surfaces
+        // as a sqlx error and fails the test.
+        for table in [
+            "users",
+            "organizations",
+            "org_members",
+            "api_tokens",
+            "user_settings",
+            "org_settings",
+            "audit_logs",
+            "token_revocations",
+            "verification_tokens",
+            "login_attempts",
+        ] {
+            let query = format!("SELECT COUNT(*) FROM {}", table);
+            sqlx::query(&query)
+                .fetch_one(store.pool())
+                .await
+                .unwrap_or_else(|e| panic!("table `{}` missing or broken: {}", table, e));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_empty_store_returns_expected_defaults() {
+        let store = memory_store().await;
+        let fake_user = Uuid::new_v4();
+        let fake_org = Uuid::new_v4();
+
+        // Lookups against an empty store return None, never an error.
+        assert!(store.find_user_by_id(fake_user).await.unwrap().is_none());
+        assert!(store.find_user_by_email("nobody@example.com").await.unwrap().is_none());
+        assert!(store.find_organization_by_id(fake_org).await.unwrap().is_none());
+        assert!(store.find_organization_by_slug("nope").await.unwrap().is_none());
+
+        // List endpoints return empty vectors.
+        assert!(store.list_api_tokens_by_org(fake_org).await.unwrap().is_empty());
+        assert!(store.list_org_members(fake_org).await.unwrap().is_empty());
+        assert!(store.list_organizations_by_user(fake_user).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_admin_analytics_snapshot_is_zeroed() {
+        let store = memory_store().await;
+        let snap = store.get_admin_analytics_snapshot().await.unwrap();
+        assert_eq!(snap.total_users, 0);
+        assert_eq!(snap.total_orgs, 0);
+        assert_eq!(snap.plugins_count, 0);
+        assert!(snap.user_growth_30d.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_conversion_funnel_snapshot_is_zeroed() {
+        let store = memory_store().await;
+        let funnel = store.get_conversion_funnel_snapshot("30 days").await.unwrap();
+        assert_eq!(funnel.signups, 0);
+        assert_eq!(funnel.paid_subscribers, 0);
+        assert!(funnel.time_to_convert_days.is_none());
     }
 }
