@@ -61,7 +61,7 @@ pub async fn start_admin_server(
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let app = create_admin_router(
+    let mut app = create_admin_router(
         http_server_addr,
         ws_server_addr,
         grpc_server_addr,
@@ -78,6 +78,32 @@ pub async fn start_admin_server(
         federation,
         vbr_engine,
     );
+
+    // Optionally bring up the registry-admin (SQLite) sub-router if the
+    // operator points us at a database via MOCKFORGE_REGISTRY_DB_URL.
+    // When unset, the /api/admin/registry/* routes simply don't exist and
+    // the rest of the admin UI behaves exactly as before.
+    #[cfg(feature = "registry-admin")]
+    if let Ok(db_url) = std::env::var("MOCKFORGE_REGISTRY_DB_URL") {
+        match registry_admin::init_sqlite_registry_store(&db_url).await {
+            Ok(store) => {
+                let state = registry_admin::CoreAppState::new(std::sync::Arc::new(store));
+                app = app.merge(registry_admin::router(state));
+                tracing::info!(
+                    "Registry admin (SQLite) enabled at /api/admin/registry/* — db: {}",
+                    db_url
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to initialize registry admin SQLite store at '{}': {} — \
+                     /api/admin/registry/* routes will not be available",
+                    db_url,
+                    e
+                );
+            }
+        }
+    }
 
     tracing::info!("Starting MockForge Admin UI on {}", addr);
 
