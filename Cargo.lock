@@ -8847,6 +8847,7 @@ dependencies = [
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
  "mockforge-recorder",
+ "mockforge-registry-core",
  "mockforge-vbr",
  "mockforge-ws",
  "once_cell",

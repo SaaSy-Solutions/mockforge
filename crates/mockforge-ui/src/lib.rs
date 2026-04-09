@@ -8,6 +8,8 @@ pub mod audit;
 pub mod auth;
 pub mod handlers;
 pub mod rbac;
+#[cfg(feature = "registry-admin")]
+pub mod registry_admin;
 pub mod routes;
 // Templates module removed; static assets in `static/` are the single source of truth
 pub mod models;
