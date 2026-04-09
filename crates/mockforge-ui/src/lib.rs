@@ -87,7 +87,26 @@ pub async fn start_admin_server(
     if let Ok(db_url) = std::env::var("MOCKFORGE_REGISTRY_DB_URL") {
         match registry_admin::init_sqlite_registry_store(&db_url).await {
             Ok(store) => {
-                let state = registry_admin::CoreAppState::new(std::sync::Arc::new(store));
+                // First-run admin bootstrap — if MOCKFORGE_ADMIN_{USERNAME,
+                // EMAIL,PASSWORD} are set and no matching user exists yet,
+                // seed a verified admin account so the operator can log in
+                // without a manual curl dance.
+                if let Err(e) = registry_admin::bootstrap_admin_user_from_env(&store).await {
+                    tracing::error!("Registry admin bootstrap failed: {} — continuing startup", e);
+                }
+
+                let jwt_secret = std::env::var("MOCKFORGE_ADMIN_JWT_SECRET").unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "MOCKFORGE_ADMIN_JWT_SECRET not set — using empty secret. \
+                             Tokens issued by /api/admin/registry/auth/* will be \
+                             trivially forgeable. Set the env var in production."
+                    );
+                    String::new()
+                });
+                let state = registry_admin::CoreAppState::with_jwt_secret(
+                    std::sync::Arc::new(store),
+                    jwt_secret,
+                );
                 app = app.merge(registry_admin::router(state));
                 tracing::info!(
                     "Registry admin (SQLite) enabled at /api/admin/registry/* — db: {}",

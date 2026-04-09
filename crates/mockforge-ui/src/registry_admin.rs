@@ -41,13 +41,27 @@ use mockforge_registry_core::store::{RegistryStore, SqliteRegistryStore};
 #[derive(Clone)]
 pub struct CoreAppState {
     pub store: Arc<dyn RegistryStore>,
+    /// JWT signing secret. If empty, auth endpoints (register/login)
+    /// are still functional but the JWTs they issue will also verify
+    /// against an empty secret — fine for tests, NOT for production.
+    pub jwt_secret: String,
 }
 
 impl CoreAppState {
     /// Wrap an arbitrary [`RegistryStore`] implementation. Useful for
-    /// tests that want to hand in a mock or in-memory store.
+    /// tests that want to hand in a mock or in-memory store. Uses an
+    /// empty JWT secret — call [`CoreAppState::with_jwt_secret`] or
+    /// construct manually for production use.
     pub fn new(store: Arc<dyn RegistryStore>) -> Self {
-        Self { store }
+        Self {
+            store,
+            jwt_secret: String::new(),
+        }
+    }
+
+    /// Like [`CoreAppState::new`] but with a real JWT signing secret.
+    pub fn with_jwt_secret(store: Arc<dyn RegistryStore>, jwt_secret: String) -> Self {
+        Self { store, jwt_secret }
     }
 }
 
@@ -63,6 +77,51 @@ impl CoreAppState {
 ///   * `sqlite:///var/lib/mockforge.db` — absolute path
 pub async fn init_sqlite_registry_store(database_url: &str) -> StoreResult<SqliteRegistryStore> {
     SqliteRegistryStore::connect(database_url).await
+}
+
+/// First-run bootstrap for the OSS admin: if the store has zero users
+/// and the operator has provided `MOCKFORGE_ADMIN_USERNAME`,
+/// `MOCKFORGE_ADMIN_EMAIL`, and `MOCKFORGE_ADMIN_PASSWORD` environment
+/// variables, create a verified admin user so they can log in
+/// immediately. Returns `Ok(true)` if an admin was created, `Ok(false)`
+/// if the bootstrap was skipped (either because users already exist or
+/// because the env vars weren't set).
+///
+/// This lets a fresh `mockforge serve --admin` run auto-provision its
+/// first user without requiring a manual `curl` dance, matching the
+/// UX of other self-hosted admin tools (Grafana, Prometheus Alertmanager,
+/// etc.).
+pub async fn bootstrap_admin_user_from_env<S: RegistryStore + ?Sized>(
+    store: &S,
+) -> StoreResult<bool> {
+    let Ok(username) = std::env::var("MOCKFORGE_ADMIN_USERNAME") else {
+        return Ok(false);
+    };
+    let Ok(email) = std::env::var("MOCKFORGE_ADMIN_EMAIL") else {
+        return Ok(false);
+    };
+    let Ok(password) = std::env::var("MOCKFORGE_ADMIN_PASSWORD") else {
+        return Ok(false);
+    };
+
+    if store.find_user_by_username(&username).await?.is_some()
+        || store.find_user_by_email(&email).await?.is_some()
+    {
+        // Already provisioned — no-op.
+        return Ok(false);
+    }
+
+    let hash = mockforge_registry_core::auth::hash_password(&password)
+        .map_err(|e| mockforge_registry_core::error::StoreError::Hash(e.to_string()))?;
+    let user = store.create_user(&username, &email, &hash).await?;
+    // Mark as verified so they can log in without an email round-trip.
+    store.mark_user_verified(user.id).await?;
+    tracing::info!(
+        "Bootstrapped admin user '{}' (email: {}) from MOCKFORGE_ADMIN_* env vars",
+        username,
+        email
+    );
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +180,16 @@ impl From<mockforge_registry_core::error::StoreError> for ApiError {
 pub fn router(state: CoreAppState) -> Router {
     Router::new()
         .route("/api/admin/registry/health", get(health))
+        // Auth — register/login issue a JWT bound to the user id
+        .route("/api/admin/registry/auth/register", post(register))
+        .route("/api/admin/registry/auth/login", post(login))
+        .route("/api/admin/registry/auth/me", get(auth_me))
+        // User management
         .route("/api/admin/registry/users", post(create_user))
         .route("/api/admin/registry/users/email/{email}", get(find_user_by_email))
         .route("/api/admin/registry/users/username/{username}", get(find_user_by_username))
         .route("/api/admin/registry/users/{id}/verify", post(mark_user_verified))
+        // Org management
         .route("/api/admin/registry/orgs", post(create_org))
         .route("/api/admin/registry/orgs/slug/{slug}", get(find_org_by_slug))
         .route("/api/admin/registry/orgs/{org_id}/tokens", post(create_api_token))
@@ -134,6 +199,143 @@ pub fn router(state: CoreAppState) -> Router {
 async fn health(State(state): State<CoreAppState>) -> Result<Json<serde_json::Value>, ApiError> {
     state.store.health_check().await?;
     Ok(Json(json!({ "status": "ok" })))
+}
+
+// --- Auth ------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+struct RegisterReq {
+    username: String,
+    email: String,
+    /// Plaintext — this endpoint bcrypts it server-side. Contrast with
+    /// POST /users which accepts an already-hashed password so callers
+    /// can integrate with external hashing strategies.
+    password: String,
+}
+
+async fn register(
+    State(state): State<CoreAppState>,
+    Json(req): Json<RegisterReq>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    if req.username.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "username must not be empty".into()));
+    }
+    if !req.email.contains('@') {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "email looks invalid".into()));
+    }
+    if req.password.len() < 8 {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "password must be at least 8 characters".into(),
+        ));
+    }
+
+    // Reject duplicate usernames/emails up front so we return a helpful
+    // 409 instead of a cryptic StoreError::Database UNIQUE violation.
+    if state.store.find_user_by_email(&req.email).await?.is_some() {
+        return Err(ApiError(StatusCode::CONFLICT, "email already registered".into()));
+    }
+    if state.store.find_user_by_username(&req.username).await?.is_some() {
+        return Err(ApiError(StatusCode::CONFLICT, "username already taken".into()));
+    }
+
+    let hash = mockforge_registry_core::auth::hash_password(&req.password)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("hash: {}", e)))?;
+    let user = state.store.create_user(&req.username, &req.email, &hash).await?;
+    let token =
+        mockforge_registry_core::auth::create_access_token(&user.id.to_string(), &state.jwt_secret)
+            .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("jwt: {}", e)))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "is_verified": user.is_verified,
+            },
+            "token": token,
+        })),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct LoginReq {
+    /// Either username or email — the handler tries both, in that order.
+    identifier: String,
+    password: String,
+}
+
+async fn login(
+    State(state): State<CoreAppState>,
+    Json(req): Json<LoginReq>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Resolve the user by username first, then by email, before doing
+    // the expensive bcrypt verify. Missing user returns the same 401 as
+    // a bad password so we don't leak account-existence info.
+    let user = match state.store.find_user_by_username(&req.identifier).await? {
+        Some(u) => u,
+        None => state
+            .store
+            .find_user_by_email(&req.identifier)
+            .await?
+            .ok_or(ApiError(StatusCode::UNAUTHORIZED, "invalid credentials".into()))?,
+    };
+
+    let ok = mockforge_registry_core::auth::verify_password(&req.password, &user.password_hash)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("verify: {}", e)))?;
+    if !ok {
+        return Err(ApiError(StatusCode::UNAUTHORIZED, "invalid credentials".into()));
+    }
+
+    let token =
+        mockforge_registry_core::auth::create_access_token(&user.id.to_string(), &state.jwt_secret)
+            .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("jwt: {}", e)))?;
+
+    Ok(Json(json!({
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_verified": user.is_verified,
+            "is_admin": user.is_admin,
+        },
+        "token": token,
+    })))
+}
+
+/// GET /api/admin/registry/auth/me — verifies the Authorization: Bearer
+/// token against the configured JWT secret and returns the user.
+async fn auth_me(
+    State(state): State<CoreAppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let auth = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or(ApiError(StatusCode::UNAUTHORIZED, "missing Authorization header".into()))?;
+    let token = auth.strip_prefix("Bearer ").ok_or(ApiError(
+        StatusCode::UNAUTHORIZED,
+        "expected 'Authorization: Bearer <token>'".into(),
+    ))?;
+    let claims = mockforge_registry_core::auth::verify_token(token, &state.jwt_secret)
+        .map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("invalid token: {}", e)))?;
+    let user_id = Uuid::parse_str(&claims.sub)
+        .map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("bad subject: {}", e)))?;
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
+        .ok_or(ApiError(StatusCode::NOT_FOUND, "user no longer exists".into()))?;
+    Ok(Json(json!({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_verified": user.is_verified,
+        "is_admin": user.is_admin,
+        "claims_exp": claims.exp,
+    })))
 }
 
 async fn find_user_by_email(
@@ -670,6 +872,246 @@ mod tests {
         assert_eq!(body["name"], "ci-token");
         assert_eq!(body["scopes"].as_array().unwrap().len(), 2);
         assert!(body["token_prefix"].as_str().unwrap().starts_with("mfx_"));
+    }
+
+    /// Build a test router with a non-empty JWT secret so tokens are
+    /// meaningfully signed. The seed fixtures above use the default
+    /// empty-secret CoreAppState::new path.
+    async fn test_router_with_jwt() -> Router {
+        let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
+        let state = CoreAppState::with_jwt_secret(
+            Arc::new(store),
+            "test-secret-please-do-not-use-in-prod".to_string(),
+        );
+        router(state)
+    }
+
+    #[tokio::test]
+    async fn test_register_then_login_roundtrip() {
+        let router = test_router_with_jwt().await;
+
+        // Register
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "newbie",
+                    "email": "newbie@example.com",
+                    "password": "correcthorsebatterystaple"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = body_json(resp).await;
+        assert!(body["token"].as_str().unwrap().len() > 20);
+        let register_token = body["token"].as_str().unwrap().to_string();
+        let user_id = body["user"]["id"].as_str().unwrap().to_string();
+
+        // Login with username
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/login",
+                json!({
+                    "identifier": "newbie",
+                    "password": "correcthorsebatterystaple"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        let login_token = body["token"].as_str().unwrap().to_string();
+        assert_eq!(body["user"]["id"], user_id);
+
+        // Both tokens should work against /auth/me
+        for (label, tok) in [("register", &register_token), ("login", &login_token)] {
+            let resp = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri("/api/admin/registry/auth/me")
+                        .header("authorization", format!("Bearer {}", tok))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "{} token failed /auth/me", label);
+            let body = body_json(resp).await;
+            assert_eq!(body["id"], user_id);
+            assert_eq!(body["username"], "newbie");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_login_with_email_identifier() {
+        let router = test_router_with_jwt().await;
+        router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "bob",
+                    "email": "bob@example.com",
+                    "password": "hunter2hunter2"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        // Login by email instead of username
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/login",
+                json!({
+                    "identifier": "bob@example.com",
+                    "password": "hunter2hunter2"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_login_wrong_password_returns_401() {
+        let router = test_router_with_jwt().await;
+        router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "carol",
+                    "email": "carol@example.com",
+                    "password": "rightpassword"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/login",
+                json!({
+                    "identifier": "carol",
+                    "password": "wrongpassword"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_login_unknown_user_also_401() {
+        let router = test_router_with_jwt().await;
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/login",
+                json!({
+                    "identifier": "nobody",
+                    "password": "whatever"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_register_duplicate_email_is_409() {
+        let router = test_router_with_jwt().await;
+        router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "first",
+                    "email": "dup@example.com",
+                    "password": "password1"
+                }),
+            ))
+            .await
+            .unwrap();
+
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "second",
+                    "email": "dup@example.com",
+                    "password": "password2"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn test_register_rejects_short_password() {
+        let router = test_router_with_jwt().await;
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "x",
+                    "email": "x@example.com",
+                    "password": "short"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_auth_me_rejects_missing_header() {
+        let router = test_router_with_jwt().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/admin/registry/auth/me")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_auth_me_rejects_bogus_token() {
+        let router = test_router_with_jwt().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/admin/registry/auth/me")
+                    .header("authorization", "Bearer not-a-real-jwt")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_bootstrap_admin_user_no_env_vars() {
+        // Without the env vars set, bootstrap is a no-op.
+        let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
+        // Explicitly clear in case the test runner has them set.
+        std::env::remove_var("MOCKFORGE_ADMIN_USERNAME");
+        std::env::remove_var("MOCKFORGE_ADMIN_EMAIL");
+        std::env::remove_var("MOCKFORGE_ADMIN_PASSWORD");
+        let result = bootstrap_admin_user_from_env(&store).await.unwrap();
+        assert!(!result);
     }
 
     #[tokio::test]
