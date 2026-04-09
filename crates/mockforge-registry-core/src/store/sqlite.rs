@@ -143,6 +143,128 @@ fn row_to_api_token(row: &sqlx::sqlite::SqliteRow) -> StoreResult<ApiToken> {
     })
 }
 
+fn row_to_organization(row: &sqlx::sqlite::SqliteRow) -> StoreResult<Organization> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let owner_id_str: String = row.try_get("owner_id")?;
+    let limits_json_str: String = row.try_get("limits_json")?;
+    let created_at_str: String = row.try_get("created_at")?;
+    let updated_at_str: String = row.try_get("updated_at")?;
+
+    let limits_json: serde_json::Value = serde_json::from_str(&limits_json_str)
+        .map_err(|e| StoreError::Hash(format!("bad limits_json: {}", e)))?;
+
+    Ok(Organization {
+        id: parse_uuid(&id_str)?,
+        name: row.try_get("name")?,
+        slug: row.try_get("slug")?,
+        owner_id: parse_uuid(&owner_id_str)?,
+        plan: row.try_get("plan")?,
+        limits_json,
+        stripe_customer_id: row.try_get("stripe_customer_id")?,
+        created_at: parse_dt(&created_at_str)?,
+        updated_at: parse_dt(&updated_at_str)?,
+    })
+}
+
+fn row_to_org_member(row: &sqlx::sqlite::SqliteRow) -> StoreResult<OrgMember> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let org_id_str: String = row.try_get("org_id")?;
+    let user_id_str: String = row.try_get("user_id")?;
+    let created_at_str: String = row.try_get("created_at")?;
+    let updated_at_str: String = row.try_get("updated_at")?;
+
+    Ok(OrgMember {
+        id: parse_uuid(&id_str)?,
+        org_id: parse_uuid(&org_id_str)?,
+        user_id: parse_uuid(&user_id_str)?,
+        role: row.try_get("role")?,
+        created_at: parse_dt(&created_at_str)?,
+        updated_at: parse_dt(&updated_at_str)?,
+    })
+}
+
+fn row_to_org_setting(row: &sqlx::sqlite::SqliteRow) -> StoreResult<OrgSetting> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let org_id_str: String = row.try_get("org_id")?;
+    let setting_value_str: String = row.try_get("setting_value")?;
+    let created_at_str: String = row.try_get("created_at")?;
+    let updated_at_str: String = row.try_get("updated_at")?;
+
+    let setting_value: serde_json::Value = serde_json::from_str(&setting_value_str)
+        .map_err(|e| StoreError::Hash(format!("bad setting_value: {}", e)))?;
+
+    Ok(OrgSetting {
+        id: parse_uuid(&id_str)?,
+        org_id: parse_uuid(&org_id_str)?,
+        setting_key: row.try_get("setting_key")?,
+        setting_value,
+        created_at: parse_dt(&created_at_str)?,
+        updated_at: parse_dt(&updated_at_str)?,
+    })
+}
+
+fn row_to_audit_log(row: &sqlx::sqlite::SqliteRow) -> StoreResult<AuditLog> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let org_id_str: String = row.try_get("org_id")?;
+    let user_id_str: Option<String> = row.try_get("user_id")?;
+    let event_type_str: String = row.try_get("event_type")?;
+    let metadata_str: Option<String> = row.try_get("metadata")?;
+    let created_at_str: String = row.try_get("created_at")?;
+
+    let event_type: AuditEventType =
+        serde_json::from_value(serde_json::Value::String(event_type_str.clone()))
+            .map_err(|e| StoreError::Hash(format!("bad event_type '{}': {}", event_type_str, e)))?;
+    let metadata: Option<serde_json::Value> = metadata_str
+        .as_deref()
+        .map(|s| {
+            serde_json::from_str(s).map_err(|e| StoreError::Hash(format!("bad metadata: {}", e)))
+        })
+        .transpose()?;
+
+    Ok(AuditLog {
+        id: parse_uuid(&id_str)?,
+        org_id: parse_uuid(&org_id_str)?,
+        user_id: user_id_str.as_deref().map(parse_uuid).transpose()?,
+        event_type,
+        description: row.try_get("description")?,
+        metadata,
+        ip_address: row.try_get("ip_address")?,
+        user_agent: row.try_get("user_agent")?,
+        created_at: parse_dt(&created_at_str)?,
+    })
+}
+
+fn row_to_verification_token(row: &sqlx::sqlite::SqliteRow) -> StoreResult<VerificationToken> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let user_id_str: String = row.try_get("user_id")?;
+    let expires_at_str: String = row.try_get("expires_at")?;
+    let used_at_str: Option<String> = row.try_get("used_at")?;
+    let created_at_str: String = row.try_get("created_at")?;
+
+    Ok(VerificationToken {
+        id: parse_uuid(&id_str)?,
+        user_id: parse_uuid(&user_id_str)?,
+        token: row.try_get("token")?,
+        expires_at: parse_dt(&expires_at_str)?,
+        used_at: used_at_str.as_deref().map(parse_dt).transpose()?,
+        created_at: parse_dt(&created_at_str)?,
+    })
+}
+
+fn audit_event_type_to_str(et: &AuditEventType) -> String {
+    // AuditEventType derives Serialize with `rename_all = "snake_case"`, so
+    // serde_json::to_value yields a JSON string like "member_added".
+    serde_json::to_value(et)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 fn row_to_user(row: &sqlx::sqlite::SqliteRow) -> StoreResult<User> {
     use sqlx::Row;
     let id_str: String = row.try_get("id")?;
@@ -315,27 +437,53 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(Vec::new())
     }
 
-    #[allow(unused_variables)]
     async fn get_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<Option<OrgSetting>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM org_settings WHERE org_id = ? AND setting_key = ?")
+            .bind(org_id.to_string())
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_org_setting).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn set_org_setting(
         &self,
         org_id: Uuid,
         key: &str,
         value: serde_json::Value,
     ) -> StoreResult<OrgSetting> {
-        Err(StoreError::NotFound)
+        let value_str = value.to_string();
+        let now = Utc::now().to_rfc3339();
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO org_settings (id, org_id, setting_key, setting_value, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(org_id, setting_key) DO UPDATE SET
+                setting_value = excluded.setting_value,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(org_id.to_string())
+        .bind(key)
+        .bind(&value_str)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        self.get_org_setting(org_id, key).await?.ok_or(StoreError::NotFound)
     }
 
-    #[allow(unused_variables)]
     async fn delete_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<()> {
+        sqlx::query("DELETE FROM org_settings WHERE org_id = ? AND setting_key = ?")
+            .bind(org_id.to_string())
+            .bind(key)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn create_organization(
         &self,
         name: &str,
@@ -343,85 +491,189 @@ impl RegistryStore for SqliteRegistryStore {
         owner_id: Uuid,
         plan: Plan,
     ) -> StoreResult<Organization> {
-        Err(StoreError::NotFound)
+        let id = Uuid::new_v4();
+        let now = Utc::now().to_rfc3339();
+        let plan_str = serde_json::to_value(&plan)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "free".to_string());
+        sqlx::query(
+            r#"
+            INSERT INTO organizations (
+                id, name, slug, owner_id, plan, limits_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, '{}', ?, ?)
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(name)
+        .bind(slug)
+        .bind(owner_id.to_string())
+        .bind(&plan_str)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        self.find_organization_by_id(id).await?.ok_or(StoreError::NotFound)
     }
 
-    #[allow(unused_variables)]
     async fn find_organization_by_id(&self, org_id: Uuid) -> StoreResult<Option<Organization>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM organizations WHERE id = ?")
+            .bind(org_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_organization).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn find_organization_by_slug(&self, slug: &str) -> StoreResult<Option<Organization>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM organizations WHERE slug = ?")
+            .bind(slug)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_organization).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn list_organizations_by_user(&self, user_id: Uuid) -> StoreResult<Vec<Organization>> {
-        Ok(Vec::new())
+        // Orgs where the user is owner OR a member.
+        let rows = sqlx::query(
+            r#"
+            SELECT DISTINCT o.* FROM organizations o
+            LEFT JOIN org_members m ON m.org_id = o.id
+            WHERE o.owner_id = ? OR m.user_id = ?
+            ORDER BY o.created_at ASC
+            "#,
+        )
+        .bind(user_id.to_string())
+        .bind(user_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(row_to_organization).collect()
     }
 
-    #[allow(unused_variables)]
     async fn update_organization_name(&self, org_id: Uuid, name: &str) -> StoreResult<()> {
+        sqlx::query("UPDATE organizations SET name = ?, updated_at = ? WHERE id = ?")
+            .bind(name)
+            .bind(Utc::now().to_rfc3339())
+            .bind(org_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn update_organization_slug(&self, org_id: Uuid, slug: &str) -> StoreResult<()> {
+        sqlx::query("UPDATE organizations SET slug = ?, updated_at = ? WHERE id = ?")
+            .bind(slug)
+            .bind(Utc::now().to_rfc3339())
+            .bind(org_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn update_organization_plan(&self, org_id: Uuid, plan: Plan) -> StoreResult<()> {
+        let plan_str = serde_json::to_value(&plan)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "free".to_string());
+        sqlx::query("UPDATE organizations SET plan = ?, updated_at = ? WHERE id = ?")
+            .bind(&plan_str)
+            .bind(Utc::now().to_rfc3339())
+            .bind(org_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
     #[allow(unused_variables)]
     async fn organization_has_active_subscription(&self, org_id: Uuid) -> StoreResult<bool> {
+        // OSS admin has no Stripe integration.
         Ok(false)
     }
 
-    #[allow(unused_variables)]
     async fn delete_organization(&self, org_id: Uuid) -> StoreResult<()> {
+        sqlx::query("DELETE FROM organizations WHERE id = ?")
+            .bind(org_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn create_org_member(
         &self,
         org_id: Uuid,
         user_id: Uuid,
         role: OrgRole,
     ) -> StoreResult<OrgMember> {
-        Err(StoreError::NotFound)
+        let id = Uuid::new_v4();
+        let now = Utc::now().to_rfc3339();
+        let role_str = serde_json::to_value(&role)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "member".to_string());
+        sqlx::query(
+            "INSERT INTO org_members (id, org_id, user_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(id.to_string())
+        .bind(org_id.to_string())
+        .bind(user_id.to_string())
+        .bind(&role_str)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        self.find_org_member(org_id, user_id).await?.ok_or(StoreError::NotFound)
     }
 
-    #[allow(unused_variables)]
     async fn find_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<Option<OrgMember>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM org_members WHERE org_id = ? AND user_id = ?")
+            .bind(org_id.to_string())
+            .bind(user_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_org_member).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn list_org_members(&self, org_id: Uuid) -> StoreResult<Vec<OrgMember>> {
-        Ok(Vec::new())
+        let rows =
+            sqlx::query("SELECT * FROM org_members WHERE org_id = ? ORDER BY created_at ASC")
+                .bind(org_id.to_string())
+                .fetch_all(&self.pool)
+                .await?;
+        rows.iter().map(row_to_org_member).collect()
     }
 
-    #[allow(unused_variables)]
     async fn update_org_member_role(
         &self,
         org_id: Uuid,
         user_id: Uuid,
         role: OrgRole,
     ) -> StoreResult<()> {
+        let role_str = serde_json::to_value(&role)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "member".to_string());
+        sqlx::query(
+            "UPDATE org_members SET role = ?, updated_at = ? WHERE org_id = ? AND user_id = ?",
+        )
+        .bind(&role_str)
+        .bind(Utc::now().to_rfc3339())
+        .bind(org_id.to_string())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn delete_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<()> {
+        sqlx::query("DELETE FROM org_members WHERE org_id = ? AND user_id = ?")
+            .bind(org_id.to_string())
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn record_audit_event(
         &self,
         org_id: Uuid,
@@ -432,9 +684,36 @@ impl RegistryStore for SqliteRegistryStore {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) {
+        // Best-effort: never fail the caller on an audit insert error.
+        let id = Uuid::new_v4();
+        let now = Utc::now().to_rfc3339();
+        let event_type_str = audit_event_type_to_str(&event_type);
+        let metadata_str = metadata.as_ref().map(|v| v.to_string());
+        let result = sqlx::query(
+            r#"
+            INSERT INTO audit_logs (
+                id, org_id, user_id, event_type, description,
+                metadata, ip_address, user_agent, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(org_id.to_string())
+        .bind(user_id.map(|u| u.to_string()))
+        .bind(&event_type_str)
+        .bind(&description)
+        .bind(metadata_str)
+        .bind(ip_address)
+        .bind(user_agent)
+        .bind(&now)
+        .execute(&self.pool)
+        .await;
+        if let Err(e) = result {
+            tracing::warn!("failed to record audit event: {}", e);
+        }
     }
 
-    #[allow(unused_variables)]
     async fn list_audit_logs(
         &self,
         org_id: Uuid,
@@ -442,16 +721,52 @@ impl RegistryStore for SqliteRegistryStore {
         offset: Option<i64>,
         event_type: Option<AuditEventType>,
     ) -> StoreResult<Vec<AuditLog>> {
-        Ok(Vec::new())
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let rows = if let Some(et) = event_type {
+            let et_str = audit_event_type_to_str(&et);
+            sqlx::query(
+                "SELECT * FROM audit_logs WHERE org_id = ? AND event_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            )
+            .bind(org_id.to_string())
+            .bind(&et_str)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                "SELECT * FROM audit_logs WHERE org_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            )
+            .bind(org_id.to_string())
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        };
+        rows.iter().map(row_to_audit_log).collect()
     }
 
-    #[allow(unused_variables)]
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
         event_type: Option<AuditEventType>,
     ) -> StoreResult<i64> {
-        Ok(0)
+        use sqlx::Row;
+        let row = if let Some(et) = event_type {
+            let et_str = audit_event_type_to_str(&et);
+            sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ? AND event_type = ?")
+                .bind(org_id.to_string())
+                .bind(&et_str)
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ?")
+                .bind(org_id.to_string())
+                .fetch_one(&self.pool)
+                .await?
+        };
+        Ok(row.try_get::<i64, _>("c")?)
     }
 
     #[allow(unused_variables)]
@@ -616,44 +931,87 @@ impl RegistryStore for SqliteRegistryStore {
         Err(StoreError::NotFound)
     }
 
-    #[allow(unused_variables)]
     async fn update_user_password_hash(
         &self,
         user_id: Uuid,
         password_hash: &str,
     ) -> StoreResult<()> {
+        sqlx::query("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+            .bind(password_hash)
+            .bind(Utc::now().to_rfc3339())
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn mark_user_verified(&self, user_id: Uuid) -> StoreResult<()> {
+        sqlx::query("UPDATE users SET is_verified = 1, updated_at = ? WHERE id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn create_verification_token(&self, user_id: Uuid) -> StoreResult<VerificationToken> {
-        Err(StoreError::NotFound)
+        use base64::{engine::general_purpose, Engine as _};
+        use rand::RngCore;
+        let mut buf = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut buf);
+        let token = general_purpose::URL_SAFE_NO_PAD.encode(buf);
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        let expires_at = now + chrono::Duration::hours(24);
+        sqlx::query(
+            "INSERT INTO verification_tokens (id, user_id, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(id.to_string())
+        .bind(user_id.to_string())
+        .bind(&token)
+        .bind(expires_at.to_rfc3339())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        let row = sqlx::query("SELECT * FROM verification_tokens WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_one(&self.pool)
+            .await?;
+        row_to_verification_token(&row)
     }
 
-    #[allow(unused_variables)]
     async fn set_verification_token_expiry_hours(
         &self,
         token_id: Uuid,
         hours: i64,
     ) -> StoreResult<()> {
+        let new_expiry = Utc::now() + chrono::Duration::hours(hours);
+        sqlx::query("UPDATE verification_tokens SET expires_at = ? WHERE id = ?")
+            .bind(new_expiry.to_rfc3339())
+            .bind(token_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn find_verification_token_by_token(
         &self,
         token: &str,
     ) -> StoreResult<Option<VerificationToken>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM verification_tokens WHERE token = ?")
+            .bind(token)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_verification_token).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn mark_verification_token_used(&self, token_id: Uuid) -> StoreResult<()> {
+        sqlx::query("UPDATE verification_tokens SET used_at = ? WHERE id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(token_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1473,13 +1831,18 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(Vec::new())
     }
 
-    #[allow(unused_variables)]
     async fn get_org_membership_role(
         &self,
         org_id: Uuid,
         user_id: Uuid,
     ) -> StoreResult<Option<String>> {
-        Ok(None)
+        use sqlx::Row;
+        let row = sqlx::query("SELECT role FROM org_members WHERE org_id = ? AND user_id = ?")
+            .bind(org_id.to_string())
+            .bind(user_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.as_ref().map(|r| r.try_get::<String, _>("role")).transpose()?)
     }
 
     #[allow(unused_variables)]
@@ -1625,6 +1988,226 @@ mod tests {
     async fn test_health_check_pings_database() {
         let store = memory_store().await;
         store.health_check().await.expect("health_check ping");
+    }
+
+    #[tokio::test]
+    async fn test_create_and_find_organization_roundtrip() {
+        let store = memory_store().await;
+        let owner = store.create_user("bob", "bob@example.com", "hash").await.unwrap();
+
+        let org = store
+            .create_organization("Bob's Org", "bobs-org", owner.id, Plan::Free)
+            .await
+            .unwrap();
+        assert_eq!(org.name, "Bob's Org");
+        assert_eq!(org.slug, "bobs-org");
+        assert_eq!(org.owner_id, owner.id);
+        assert_eq!(org.plan, "free");
+
+        // Find by id + slug
+        let by_id = store.find_organization_by_id(org.id).await.unwrap().expect("by id");
+        assert_eq!(by_id.id, org.id);
+        let by_slug = store.find_organization_by_slug("bobs-org").await.unwrap().expect("by slug");
+        assert_eq!(by_slug.id, org.id);
+
+        // list_organizations_by_user finds the org via owner_id
+        let mine = store.list_organizations_by_user(owner.id).await.unwrap();
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].id, org.id);
+
+        // Update plan
+        store.update_organization_plan(org.id, Plan::Pro).await.unwrap();
+        let reloaded = store.find_organization_by_id(org.id).await.unwrap().unwrap();
+        assert_eq!(reloaded.plan, "pro");
+
+        // Delete
+        store.delete_organization(org.id).await.unwrap();
+        assert!(store.find_organization_by_id(org.id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_org_member_crud() {
+        let store = memory_store().await;
+        let owner = store.create_user("carol", "carol@example.com", "hash").await.unwrap();
+        let org = store
+            .create_organization("Carol Org", "carol-org", owner.id, Plan::Free)
+            .await
+            .unwrap();
+        let member_user = store.create_user("dave", "dave@example.com", "hash").await.unwrap();
+
+        // Create member
+        let member =
+            store.create_org_member(org.id, member_user.id, OrgRole::Member).await.unwrap();
+        assert_eq!(member.org_id, org.id);
+        assert_eq!(member.user_id, member_user.id);
+        assert_eq!(member.role, "member");
+
+        // Find
+        let found = store.find_org_member(org.id, member_user.id).await.unwrap().expect("found");
+        assert_eq!(found.id, member.id);
+
+        // get_org_membership_role
+        let role = store.get_org_membership_role(org.id, member_user.id).await.unwrap();
+        assert_eq!(role, Some("member".to_string()));
+
+        // List
+        let members = store.list_org_members(org.id).await.unwrap();
+        assert_eq!(members.len(), 1);
+
+        // Update role
+        store
+            .update_org_member_role(org.id, member_user.id, OrgRole::Admin)
+            .await
+            .unwrap();
+        let updated = store.find_org_member(org.id, member_user.id).await.unwrap().unwrap();
+        assert_eq!(updated.role, "admin");
+
+        // Delete
+        store.delete_org_member(org.id, member_user.id).await.unwrap();
+        assert!(store.find_org_member(org.id, member_user.id).await.unwrap().is_none());
+        assert!(store.list_org_members(org.id).await.unwrap().is_empty());
+
+        // list_organizations_by_user still finds the org through member path
+        // (removed above, so now empty for member_user but populated for owner)
+        assert!(store.list_organizations_by_user(member_user.id).await.unwrap().is_empty());
+        assert_eq!(store.list_organizations_by_user(owner.id).await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_org_setting_upsert() {
+        let store = memory_store().await;
+        let owner = store.create_user("eve", "eve@example.com", "hash").await.unwrap();
+        let org = store
+            .create_organization("Eve Org", "eve-org", owner.id, Plan::Free)
+            .await
+            .unwrap();
+
+        // Missing key returns None
+        assert!(store.get_org_setting(org.id, "retention_days").await.unwrap().is_none());
+
+        // Set a value
+        let v1 = serde_json::json!({"days": 30});
+        let s1 = store.set_org_setting(org.id, "retention_days", v1.clone()).await.unwrap();
+        assert_eq!(s1.setting_value, v1);
+
+        // Update the same key — should upsert
+        let v2 = serde_json::json!({"days": 60});
+        let s2 = store.set_org_setting(org.id, "retention_days", v2.clone()).await.unwrap();
+        assert_eq!(s2.id, s1.id, "upsert should preserve id");
+        assert_eq!(s2.setting_value, v2);
+
+        // Read it back
+        let got = store.get_org_setting(org.id, "retention_days").await.unwrap().unwrap();
+        assert_eq!(got.setting_value, v2);
+
+        // Delete
+        store.delete_org_setting(org.id, "retention_days").await.unwrap();
+        assert!(store.get_org_setting(org.id, "retention_days").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_audit_event_roundtrip() {
+        let store = memory_store().await;
+        let owner = store.create_user("frank", "frank@example.com", "hash").await.unwrap();
+        let org = store
+            .create_organization("Frank Org", "frank-org", owner.id, Plan::Free)
+            .await
+            .unwrap();
+
+        // Record two events
+        store
+            .record_audit_event(
+                org.id,
+                Some(owner.id),
+                AuditEventType::OrgCreated,
+                "bootstrap".to_string(),
+                Some(serde_json::json!({"source": "test"})),
+                Some("127.0.0.1"),
+                Some("test/1.0"),
+            )
+            .await;
+
+        store
+            .record_audit_event(
+                org.id,
+                Some(owner.id),
+                AuditEventType::ApiTokenCreated,
+                "created ci-token".to_string(),
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        // Count and list
+        assert_eq!(store.count_audit_logs(org.id, None).await.unwrap(), 2);
+        assert_eq!(
+            store.count_audit_logs(org.id, Some(AuditEventType::OrgCreated)).await.unwrap(),
+            1
+        );
+
+        let logs = store.list_audit_logs(org.id, None, None, None).await.unwrap();
+        assert_eq!(logs.len(), 2);
+        // most recent first
+        assert_eq!(logs[0].event_type, AuditEventType::ApiTokenCreated);
+        assert_eq!(logs[1].event_type, AuditEventType::OrgCreated);
+        assert_eq!(logs[1].ip_address.as_deref(), Some("127.0.0.1"));
+        assert_eq!(logs[1].metadata.as_ref().unwrap(), &serde_json::json!({"source": "test"}));
+
+        // Filtered list
+        let org_created = store
+            .list_audit_logs(org.id, None, None, Some(AuditEventType::OrgCreated))
+            .await
+            .unwrap();
+        assert_eq!(org_created.len(), 1);
+        assert_eq!(org_created[0].event_type, AuditEventType::OrgCreated);
+    }
+
+    #[tokio::test]
+    async fn test_user_update_flows() {
+        let store = memory_store().await;
+        let user = store.create_user("gina", "gina@example.com", "hash_v1").await.unwrap();
+        assert!(!user.is_verified);
+
+        // mark_user_verified
+        store.mark_user_verified(user.id).await.unwrap();
+        let reloaded = store.find_user_by_id(user.id).await.unwrap().unwrap();
+        assert!(reloaded.is_verified);
+
+        // update_user_password_hash
+        store.update_user_password_hash(user.id, "hash_v2").await.unwrap();
+        let reloaded2 = store.find_user_by_id(user.id).await.unwrap().unwrap();
+        assert_eq!(reloaded2.password_hash, "hash_v2");
+    }
+
+    #[tokio::test]
+    async fn test_verification_token_lifecycle() {
+        let store = memory_store().await;
+        let user = store.create_user("harry", "harry@example.com", "hash").await.unwrap();
+
+        let vt = store.create_verification_token(user.id).await.unwrap();
+        assert_eq!(vt.user_id, user.id);
+        assert!(vt.used_at.is_none());
+        assert!(!vt.token.is_empty());
+        assert!(vt.expires_at > Utc::now());
+
+        // Find by token
+        let found = store
+            .find_verification_token_by_token(&vt.token)
+            .await
+            .unwrap()
+            .expect("should find");
+        assert_eq!(found.id, vt.id);
+
+        // Mark used
+        store.mark_verification_token_used(vt.id).await.unwrap();
+        let used = store.find_verification_token_by_token(&vt.token).await.unwrap().unwrap();
+        assert!(used.used_at.is_some());
+
+        // Extend expiry
+        store.set_verification_token_expiry_hours(vt.id, 72).await.unwrap();
+        let extended = store.find_verification_token_by_token(&vt.token).await.unwrap().unwrap();
+        assert!(extended.expires_at > vt.expires_at);
     }
 
     /// Insert a minimal `organizations` row so tests can satisfy the FK

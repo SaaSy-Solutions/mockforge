@@ -41,6 +41,7 @@ CREATE TABLE organizations (
     owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     plan TEXT NOT NULL DEFAULT 'free',
     limits_json TEXT NOT NULL DEFAULT '{}',
+    stripe_customer_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -54,6 +55,7 @@ CREATE TABLE org_members (
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role TEXT NOT NULL DEFAULT 'member',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(org_id, user_id)
 );
 
@@ -134,15 +136,14 @@ CREATE INDEX idx_token_revocations_expires_at ON token_revocations(expires_at);
 CREATE TABLE verification_tokens (
     id TEXT PRIMARY KEY NOT NULL,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash TEXT NOT NULL UNIQUE,
-    token_type TEXT NOT NULL,
+    token TEXT NOT NULL UNIQUE,
     expires_at TEXT NOT NULL,
     used_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX idx_verification_tokens_user_id ON verification_tokens(user_id);
-CREATE INDEX idx_verification_tokens_token_hash ON verification_tokens(token_hash);
+CREATE UNIQUE INDEX idx_verification_tokens_token ON verification_tokens(token);
 
 CREATE TABLE login_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
