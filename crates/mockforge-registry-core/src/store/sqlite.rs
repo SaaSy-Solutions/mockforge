@@ -103,23 +103,52 @@ fn parse_uuid(s: &str) -> StoreResult<Uuid> {
     Uuid::parse_str(s).map_err(|e| StoreError::Hash(format!("invalid uuid '{}': {}", s, e)))
 }
 
+fn parse_dt(s: &str) -> StoreResult<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&Utc))
+        .or_else(|_| {
+            // sqlite's datetime('now') returns `YYYY-MM-DD HH:MM:SS` (no T, no tz)
+            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
+        })
+        .map_err(|e| StoreError::Hash(format!("bad datetime '{}': {}", s, e)))
+}
+
+fn row_to_api_token(row: &sqlx::sqlite::SqliteRow) -> StoreResult<ApiToken> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let org_id_str: String = row.try_get("org_id")?;
+    let user_id_str: Option<String> = row.try_get("user_id")?;
+    let scopes_json: String = row.try_get("scopes")?;
+    let last_used_at_str: Option<String> = row.try_get("last_used_at")?;
+    let expires_at_str: Option<String> = row.try_get("expires_at")?;
+    let created_at_str: String = row.try_get("created_at")?;
+    let updated_at_str: String = row.try_get("updated_at")?;
+
+    let scopes: Vec<String> = serde_json::from_str(&scopes_json)
+        .map_err(|e| StoreError::Hash(format!("bad scopes json: {}", e)))?;
+
+    Ok(ApiToken {
+        id: parse_uuid(&id_str)?,
+        org_id: parse_uuid(&org_id_str)?,
+        user_id: user_id_str.as_deref().map(parse_uuid).transpose()?,
+        name: row.try_get("name")?,
+        token_prefix: row.try_get("token_prefix")?,
+        hashed_token: row.try_get("hashed_token")?,
+        scopes,
+        last_used_at: last_used_at_str.as_deref().map(parse_dt).transpose()?,
+        expires_at: expires_at_str.as_deref().map(parse_dt).transpose()?,
+        created_at: parse_dt(&created_at_str)?,
+        updated_at: parse_dt(&updated_at_str)?,
+    })
+}
+
 fn row_to_user(row: &sqlx::sqlite::SqliteRow) -> StoreResult<User> {
     use sqlx::Row;
     let id_str: String = row.try_get("id")?;
     let two_factor_verified_at_str: Option<String> = row.try_get("two_factor_verified_at")?;
     let created_at_str: String = row.try_get("created_at")?;
     let updated_at_str: String = row.try_get("updated_at")?;
-
-    let parse_dt = |s: &str| -> StoreResult<DateTime<Utc>> {
-        DateTime::parse_from_rfc3339(s)
-            .map(|dt| dt.with_timezone(&Utc))
-            .or_else(|_| {
-                // sqlite's datetime('now') returns `YYYY-MM-DD HH:MM:SS` (no T, no tz)
-                chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-                    .map(|ndt| DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc))
-            })
-            .map_err(|e| StoreError::Hash(format!("bad datetime '{}': {}", s, e)))
-    };
 
     Ok(User {
         id: parse_uuid(&id_str)?,
@@ -150,7 +179,6 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn create_api_token(
         &self,
         org_id: Uuid,
@@ -159,37 +187,110 @@ impl RegistryStore for SqliteRegistryStore {
         scopes: &[TokenScope],
         expires_at: Option<DateTime<Utc>>,
     ) -> StoreResult<(String, ApiToken)> {
-        Err(StoreError::Hash(
-            "create_api_token: not yet implemented in SQLite backend".into(),
-        ))
+        // Generate a 32-byte random token, base64-encode, prefix with `mfx_`.
+        use base64::{engine::general_purpose, Engine as _};
+        use rand::RngCore;
+        let mut buf = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut buf);
+        let full_token = format!("mfx_{}", general_purpose::URL_SAFE_NO_PAD.encode(buf));
+        let token_prefix: String = full_token.chars().take(12).collect();
+        let hashed_token = bcrypt::hash(&full_token, bcrypt::DEFAULT_COST)
+            .map_err(|e| StoreError::Hash(format!("bcrypt: {}", e)))?;
+
+        let id = Uuid::new_v4();
+        let now = Utc::now().to_rfc3339();
+        let scopes_json: Vec<String> = scopes.iter().map(|s| s.to_string()).collect();
+        let scopes_json = serde_json::to_string(&scopes_json)
+            .map_err(|e| StoreError::Hash(format!("encode scopes: {}", e)))?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO api_tokens (
+                id, org_id, user_id, name, token_prefix, hashed_token,
+                scopes, expires_at, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(org_id.to_string())
+        .bind(user_id.map(|u| u.to_string()))
+        .bind(name)
+        .bind(&token_prefix)
+        .bind(&hashed_token)
+        .bind(&scopes_json)
+        .bind(expires_at.map(|d| d.to_rfc3339()))
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        let token = self.find_api_token_by_id(id).await?.ok_or(StoreError::NotFound)?;
+        Ok((full_token, token))
     }
 
-    #[allow(unused_variables)]
     async fn find_api_token_by_id(&self, token_id: Uuid) -> StoreResult<Option<ApiToken>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM api_tokens WHERE id = ?")
+            .bind(token_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_api_token).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn list_api_tokens_by_org(&self, org_id: Uuid) -> StoreResult<Vec<ApiToken>> {
-        Ok(Vec::new())
+        let rows =
+            sqlx::query("SELECT * FROM api_tokens WHERE org_id = ? ORDER BY created_at DESC")
+                .bind(org_id.to_string())
+                .fetch_all(&self.pool)
+                .await?;
+        rows.iter().map(row_to_api_token).collect()
     }
 
-    #[allow(unused_variables)]
     async fn find_api_token_by_prefix(
         &self,
         org_id: Uuid,
         prefix: &str,
     ) -> StoreResult<Option<ApiToken>> {
-        Ok(None)
+        let row = sqlx::query("SELECT * FROM api_tokens WHERE org_id = ? AND token_prefix = ?")
+            .bind(org_id.to_string())
+            .bind(prefix)
+            .fetch_optional(&self.pool)
+            .await?;
+        row.as_ref().map(row_to_api_token).transpose()
     }
 
-    #[allow(unused_variables)]
     async fn verify_api_token(&self, token: &str) -> StoreResult<Option<ApiToken>> {
+        // Match the prefix, then bcrypt-verify candidates. Matches the
+        // Postgres impl's behavior (no expires_at filter — caller checks).
+        let token_prefix: String = token.chars().take(12).collect();
+        let rows = sqlx::query(
+            "SELECT * FROM api_tokens WHERE token_prefix = ? AND (expires_at IS NULL OR expires_at > ?)",
+        )
+        .bind(&token_prefix)
+        .bind(Utc::now().to_rfc3339())
+        .fetch_all(&self.pool)
+        .await?;
+
+        for row in &rows {
+            let candidate = row_to_api_token(row)?;
+            if bcrypt::verify(token, &candidate.hashed_token).unwrap_or(false) {
+                // Best-effort last_used_at touch — ignore failure.
+                let _ = sqlx::query("UPDATE api_tokens SET last_used_at = ? WHERE id = ?")
+                    .bind(Utc::now().to_rfc3339())
+                    .bind(candidate.id.to_string())
+                    .execute(&self.pool)
+                    .await;
+                return Ok(Some(candidate));
+            }
+        }
         Ok(None)
     }
 
-    #[allow(unused_variables)]
     async fn delete_api_token(&self, token_id: Uuid) -> StoreResult<()> {
+        sqlx::query("DELETE FROM api_tokens WHERE id = ?")
+            .bind(token_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1524,5 +1625,95 @@ mod tests {
     async fn test_health_check_pings_database() {
         let store = memory_store().await;
         store.health_check().await.expect("health_check ping");
+    }
+
+    /// Insert a minimal `organizations` row so tests can satisfy the FK
+    /// constraint on api_tokens.org_id without dragging in the full
+    /// create_organization / create_user plumbing.
+    async fn seed_org(store: &SqliteRegistryStore, user_id: Uuid) -> Uuid {
+        let id = Uuid::new_v4();
+        // FK on owner_id -> users.id, so seed the user too.
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO users (id, username, email, password_hash, is_verified, is_admin, two_factor_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, 0, ?, ?)",
+        )
+        .bind(user_id.to_string())
+        .bind(format!("u-{}", user_id))
+        .bind(format!("u-{}@example.com", user_id))
+        .bind("hash")
+        .bind(&now)
+        .bind(&now)
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO organizations (id, name, slug, owner_id, plan, limits_json, created_at, updated_at) VALUES (?, ?, ?, ?, 'free', '{}', ?, ?)",
+        )
+        .bind(id.to_string())
+        .bind("Test Org")
+        .bind(format!("test-{}", id))
+        .bind(user_id.to_string())
+        .bind(&now)
+        .bind(&now)
+        .execute(store.pool())
+        .await
+        .unwrap();
+        id
+    }
+
+    #[tokio::test]
+    async fn test_create_and_verify_api_token_roundtrip() {
+        let store = memory_store().await;
+        let user_id_value = Uuid::new_v4();
+        let org_id = seed_org(&store, user_id_value).await;
+        let user_id = Some(user_id_value);
+        let scopes = vec![TokenScope::ReadPackages, TokenScope::PublishPackages];
+
+        let (plaintext, created) = store
+            .create_api_token(org_id, user_id, "ci-token", &scopes, None)
+            .await
+            .expect("create_api_token");
+
+        assert!(plaintext.starts_with("mfx_"));
+        assert_eq!(created.token_prefix, plaintext.chars().take(12).collect::<String>());
+        assert_eq!(created.org_id, org_id);
+        assert_eq!(created.user_id, user_id);
+        assert_eq!(created.scopes.len(), 2);
+        assert!(created.scopes.contains(&"read:packages".to_string()));
+        assert!(created.scopes.contains(&"publish:packages".to_string()));
+        assert!(created.has_scope(&TokenScope::ReadPackages));
+        assert!(!created.has_scope(&TokenScope::AdminOrg));
+
+        // find_api_token_by_id round trip
+        let by_id = store.find_api_token_by_id(created.id).await.unwrap().expect("by id");
+        assert_eq!(by_id.id, created.id);
+        assert_eq!(by_id.hashed_token, created.hashed_token);
+
+        // list_api_tokens_by_org finds it
+        let listed = store.list_api_tokens_by_org(org_id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, created.id);
+
+        // find_api_token_by_prefix
+        let by_prefix = store
+            .find_api_token_by_prefix(org_id, &created.token_prefix)
+            .await
+            .unwrap()
+            .expect("by prefix");
+        assert_eq!(by_prefix.id, created.id);
+
+        // verify_api_token with the plaintext returns Some
+        let verified = store.verify_api_token(&plaintext).await.unwrap().expect("verified");
+        assert_eq!(verified.id, created.id);
+
+        // verify_api_token with a bogus token returns None
+        let bogus = store.verify_api_token("mfx_nope_nope_nope_nope").await.unwrap();
+        assert!(bogus.is_none());
+
+        // delete_api_token removes it
+        store.delete_api_token(created.id).await.unwrap();
+        assert!(store.find_api_token_by_id(created.id).await.unwrap().is_none());
+        assert!(store.list_api_tokens_by_org(org_id).await.unwrap().is_empty());
     }
 }

@@ -62,19 +62,23 @@ CREATE INDEX idx_org_members_user_id ON org_members(user_id);
 
 CREATE TABLE api_tokens (
     id TEXT PRIMARY KEY NOT NULL,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    org_id TEXT REFERENCES organizations(id) ON DELETE CASCADE,
+    org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
+    token_prefix TEXT NOT NULL,
+    hashed_token TEXT NOT NULL UNIQUE,
+    -- JSON-encoded Vec<String> of scope strings
     scopes TEXT NOT NULL DEFAULT '[]',
     last_used_at TEXT,
     expires_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX idx_api_tokens_user_id ON api_tokens(user_id);
 CREATE INDEX idx_api_tokens_org_id ON api_tokens(org_id);
-CREATE INDEX idx_api_tokens_token_hash ON api_tokens(token_hash);
+CREATE INDEX idx_api_tokens_token_prefix ON api_tokens(token_prefix);
+CREATE UNIQUE INDEX idx_api_tokens_hashed_token ON api_tokens(hashed_token);
 
 CREATE TABLE user_settings (
     id TEXT PRIMARY KEY NOT NULL,
