@@ -49,6 +49,12 @@ pub mod postgres;
 #[cfg(feature = "postgres")]
 pub use postgres::PgRegistryStore;
 
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
+
+#[cfg(feature = "sqlite")]
+pub use sqlite::SqliteRegistryStore;
+
 // `StoreError` and `StoreResult` live in `crate::error`. Re-exported here
 // so existing `use crate::store::{StoreError, StoreResult}` imports in
 // downstream crates continue to work.
