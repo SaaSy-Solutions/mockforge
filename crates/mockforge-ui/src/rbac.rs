@@ -292,6 +292,11 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
     // All GET requests to /__mockforge/* are read-only admin data — the admin server
     // is already on a separate port that users explicitly enable with --admin, so
     // requiring auth for read-only access is unnecessary and blocks tools like the TUI.
+    //
+    // /api/admin/registry/* is the SQLite-backed registry admin sub-router
+    // (crates/mockforge-ui/src/registry_admin.rs) which carries its own
+    // JWT-based auth layer — the rbac middleware would reject every request
+    // before it reached the registry_admin handlers. Bypass it wholesale.
     let is_public_route = path == "/"
         || path.starts_with("/assets/")
         || path == "/__mockforge/auth/login"
@@ -302,6 +307,7 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
         || path == "/manifest.json"
         || path == "/sw.js"
         || path == "/api-docs"
+        || path.starts_with("/api/admin/registry/")
         || (method == "GET" && path.starts_with("/__mockforge/"));
 
     if is_public_route {
