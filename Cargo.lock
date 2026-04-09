@@ -8424,6 +8424,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-registry-core"
+version = "0.3.108"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.8",
+ "bcrypt",
+ "chrono",
+ "hex",
+ "jsonwebtoken",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.5.3",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "mockforge-registry-server"
 version = "0.3.108"
 dependencies = [

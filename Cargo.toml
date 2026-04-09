@@ -62,6 +62,7 @@ members = [
 
     # Server applications
     "crates/mockforge-k8s-operator",
+    "crates/mockforge-registry-core",
     "crates/mockforge-registry-server",
 
     # Examples and integration tests
