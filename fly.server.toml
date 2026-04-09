@@ -4,13 +4,25 @@ primary_region = "iad"
 [build]
   dockerfile = "Dockerfile"
 
+# Fly public URL now fronts the admin UI (port 9080) instead of the HTTP
+# mock protocol (port 3000) so the new /api/admin/registry/* routes are
+# reachable at https://mockforge-server.fly.dev. The HTTP mock protocol
+# stays running inside the container on port 3000 but is NOT externally
+# exposed — this instance is a registry-admin test host, not a public
+# mock host. Flip this back if you need HTTP mock access.
 [http_service]
-  internal_port = 3000
+  internal_port = 9080
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
 
+# SQLite storage for the registry admin backend. The volume persists
+# the mockforge-admin.db file across deploys so the bootstrapped admin
+# user and any orgs/tokens/audit rows survive a redeploy.
+[mounts]
+  source = "registry_admin"
+  destination = "/data"
 
 [[vm]]
   size = "shared-cpu-1x"

@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/admin/registry/:path*",
+      "destination": "https://mockforge-server.fly.dev/api/admin/registry/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://api.mockforge.dev/api/:path*"
     },
