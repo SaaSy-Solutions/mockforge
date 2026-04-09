@@ -19,7 +19,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use uuid::Uuid;
 
 use super::{
@@ -69,10 +69,26 @@ impl SqliteRegistryStore {
     /// Open (and create if missing) a SQLite database at the given URL and
     /// run the bundled OSS migrations.
     ///
-    /// The URL must be in sqlx form, e.g. `sqlite://./mockforge.db` or
-    /// `sqlite::memory:` for an in-process database.
+    /// Accepts these URL forms:
+    ///   * `sqlite::memory:`               — in-process only
+    ///   * `sqlite://./mockforge.db`       — relative path (two slashes)
+    ///   * `sqlite:///var/lib/forge.db`    — absolute path (three slashes)
+    ///   * `/absolute/path/mockforge.db`   — bare absolute path
+    ///   * `./relative/mockforge.db`       — bare relative path
+    ///
+    /// Always sets `create_if_missing(true)` so a fresh container with an
+    /// empty volume mount bootstraps its own database file instead of
+    /// erroring with SQLITE_CANTOPEN.
     pub async fn connect(database_url: &str) -> StoreResult<Self> {
-        let pool = SqlitePoolOptions::new().max_connections(5).connect(database_url).await?;
+        // Explicitly build connect options so we can set
+        // create_if_missing — SqlitePoolOptions::connect(url) alone
+        // defaults to create_if_missing(false), which is what we hit on
+        // the first Fly deploy (empty /data volume → SQLITE_CANTOPEN).
+        let opts: SqliteConnectOptions = database_url
+            .parse::<SqliteConnectOptions>()
+            .map_err(|e| StoreError::Hash(format!("parse sqlite url '{}': {}", database_url, e)))?
+            .create_if_missing(true);
+        let pool = SqlitePoolOptions::new().max_connections(5).connect_with(opts).await?;
         let this = Self { pool };
         this.migrate().await?;
         Ok(this)
