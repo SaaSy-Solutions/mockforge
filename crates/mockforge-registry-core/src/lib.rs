@@ -13,11 +13,13 @@
 #![deny(unsafe_code)]
 #![allow(clippy::module_inception)]
 
+pub mod auth;
 pub mod error;
 pub mod models;
 pub mod permissions;
 pub mod scope_check;
 pub mod store;
+pub mod two_factor;
 pub mod validation;
 
 pub use error::{ApiError, ApiResult, StoreError, StoreResult};

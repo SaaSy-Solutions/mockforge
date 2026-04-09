@@ -15,7 +15,8 @@
 //! without behavior changes. Later phases will introduce a `RegistryStore`
 //! trait, a SQLite backend, and feature gates for SaaS-only integrations.
 
-pub mod auth;
+/// JWT/password auth helpers moved to `mockforge-registry-core`.
+pub use mockforge_registry_core::auth;
 pub mod cache;
 pub mod circuit_breaker;
 pub mod config;
@@ -37,7 +38,8 @@ pub mod storage;
 /// Storage trait + backends now live in `mockforge-registry-core`.
 /// Re-exported so existing `crate::store::*` paths keep working.
 pub use mockforge_registry_core::store;
-pub mod two_factor;
+/// TOTP/2FA helpers moved to `mockforge-registry-core`.
+pub use mockforge_registry_core::two_factor;
 /// Validation helpers moved to `mockforge-registry-core`.
 pub use mockforge_registry_core::validation;
 pub mod workers;
