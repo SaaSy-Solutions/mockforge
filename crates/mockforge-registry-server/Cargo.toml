@@ -119,6 +119,7 @@ x509-parser = { version = "0.17", optional = true }
 rustls-pemfile = { version = "2.0", optional = true }
 
 # Internal dependencies
+mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["postgres"] }
 mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }

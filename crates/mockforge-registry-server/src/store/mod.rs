@@ -49,21 +49,10 @@ pub mod postgres;
 #[cfg(feature = "postgres")]
 pub use postgres::PgRegistryStore;
 
-/// Result alias for all [`RegistryStore`] operations.
-pub type StoreResult<T> = Result<T, StoreError>;
-
-/// Backend-agnostic errors surfaced by [`RegistryStore`] implementations.
-#[derive(Debug, thiserror::Error)]
-pub enum StoreError {
-    #[error("record not found")]
-    NotFound,
-
-    #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
-
-    #[error("hashing error: {0}")]
-    Hash(String),
-}
+// `StoreError` and `StoreResult` now live in `mockforge-registry-core`. They
+// are re-exported here so existing `use crate::store::{StoreError, StoreResult}`
+// imports continue to work unchanged during the cloud-core extraction.
+pub use mockforge_registry_core::error::{StoreError, StoreResult};
 
 /// Unified storage trait for the registry domain.
 ///

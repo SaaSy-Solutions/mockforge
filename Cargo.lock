@@ -8473,6 +8473,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-observability",
  "mockforge-plugin-registry",
+ "mockforge-registry-core",
  "oauth2",
  "prometheus",
  "qrcode",
