@@ -38,7 +38,8 @@ pub mod storage;
 /// Re-exported so existing `crate::store::*` paths keep working.
 pub use mockforge_registry_core::store;
 pub mod two_factor;
-pub mod validation;
+/// Validation helpers moved to `mockforge-registry-core`.
+pub use mockforge_registry_core::validation;
 pub mod workers;
 
 use std::sync::Arc;
