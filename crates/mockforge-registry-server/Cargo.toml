@@ -14,6 +14,45 @@ keywords = ["mock", "api", "testing", "registry", "plugin"]
 categories = ["development-tools", "web-programming"]
 publish = false
 
+[features]
+# Default build is the full multi-tenant SaaS server.
+default = ["saas"]
+
+# Bundles every SaaS-only integration. The `mockforge-registry-server` binary
+# requires this feature. OSS consumers (e.g. `mockforge-ui`) can depend on this
+# crate with `default-features = false` and opt into only what they need.
+saas = [
+  "postgres",
+  "storage-s3",
+  "stripe",
+  "email",
+  "oauth",
+  "saml",
+  "cache-redis",
+]
+
+# Storage backends. Exactly one should be enabled per consumer.
+postgres = ["sqlx/postgres"]
+sqlite = ["sqlx/sqlite"]
+
+# Object storage for plugin artifacts (AWS S3).
+storage-s3 = ["dep:aws-sdk-s3", "dep:aws-config"]
+
+# Stripe billing integration.
+stripe = ["dep:async-stripe"]
+
+# SMTP email sending for verification, password reset, invites.
+email = ["dep:lettre"]
+
+# OAuth 2.0 social login (Google, GitHub, etc.).
+oauth = ["dep:oauth2"]
+
+# SAML 2.0 SSO for enterprise customers.
+saml = ["dep:quick-xml", "dep:x509-parser", "dep:rustls-pemfile"]
+
+# Redis cache for sessions, rate limiting, and hot data.
+cache-redis = ["dep:redis"]
+
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["ws", "multipart", "macros"] }
@@ -21,8 +60,8 @@ tokio = { version = "1.48", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 
-# Database
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls", "uuid", "chrono", "migrate", "rust_decimal"] }
+# Database — storage backend enabled via features (`postgres` or `sqlite`).
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "uuid", "chrono", "migrate", "rust_decimal"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -37,9 +76,9 @@ qrcode = "0.14" # QR code generation for 2FA setup
 data-encoding = "2.5" # Base32 encoding for TOTP secrets
 rand = "0.8" # Random number generation for tokens
 
-# Storage
-aws-sdk-s3 = "1.10"
-aws-config = "1.1"
+# Storage (feature: `storage-s3`)
+aws-sdk-s3 = { version = "1.10", optional = true }
+aws-config = { version = "1.1", optional = true }
 
 # Utilities
 anyhow = "1.0"
@@ -67,18 +106,20 @@ validator = { version = "0.20", features = ["derive"] }
 
 # Rate limiting
 governor = "0.6"
-redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
+# Redis (feature: `cache-redis`)
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"], optional = true }
 
-# SAML 2.0 for SSO
+# SAML 2.0 for SSO (feature: `saml`)
 # Using quick-xml for parsing and ring/rustls for signature verification
-quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"] }
+quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"], optional = true }
 regex = "1.10"
 urlencoding = "2.1"
-# X.509 certificate handling
-x509-parser = "0.17"
-rustls-pemfile = "2.0"
+# X.509 certificate handling (feature: `saml`)
+x509-parser = { version = "0.17", optional = true }
+rustls-pemfile = { version = "2.0", optional = true }
 
 # Internal dependencies
+mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["postgres"] }
 mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
@@ -91,14 +132,14 @@ prometheus = { version = "0.14", features = ["process"] }
 # HTTP client for Fly.io API
 reqwest = { version = "0.12", features = ["json"] }
 
-# SMTP email sending
-lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"] }
+# SMTP email sending (feature: `email`)
+lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"], optional = true }
 
-# OAuth 2.0
-oauth2 = { version = "4.4", features = ["reqwest"] }
+# OAuth 2.0 (feature: `oauth`)
+oauth2 = { version = "4.4", features = ["reqwest"], optional = true }
 
-# Stripe payments
-async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"] }
+# Stripe payments (feature: `stripe`)
+async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"], optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

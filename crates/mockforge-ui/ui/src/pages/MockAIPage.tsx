@@ -4,6 +4,7 @@
 //! recent activity, and quick actions.
 
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Brain,
   Code2,
@@ -40,12 +41,12 @@ function FeatureCard({
   badge,
   onClick,
 }: FeatureCardProps) {
+  const navigate = useNavigate();
   const handleClick = () => {
     if (onClick) {
       onClick();
-    } else {
-      // Navigate to the feature page
-      window.location.hash = link;
+    } else if (link && link !== '#') {
+      navigate(link);
     }
   };
 
@@ -70,6 +71,7 @@ function FeatureCard({
 
 export function MockAIPage() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<{
     rulesCount: number;
     openApiGenerated: boolean;
@@ -113,7 +115,7 @@ export function MockAIPage() {
       description:
         'Generate OpenAPI 3.0 specifications from recorded HTTP traffic using AI-powered pattern detection',
       icon: <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
-      link: 'mockai-openapi-generator',
+      link: '/mockai-openapi-generator',
       badge: 'New',
     },
     {
@@ -121,7 +123,7 @@ export function MockAIPage() {
       description:
         'View and explore all generated behavioral rules with detailed explanations and confidence scores',
       icon: <BarChart3 className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
-      link: 'mockai-rules',
+      link: '/mockai-rules',
     },
     {
       title: 'Intelligent Responses API',
@@ -193,9 +195,7 @@ export function MockAIPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Button
             variant="primary"
-            onClick={() => {
-              window.location.hash = 'mockai-openapi-generator';
-            }}
+            onClick={() => navigate('/mockai-openapi-generator')}
             className="w-full"
           >
             <FileText className="h-4 w-4 mr-2" />
@@ -203,9 +203,7 @@ export function MockAIPage() {
           </Button>
           <Button
             variant="primary"
-            onClick={() => {
-              window.location.hash = 'mockai-rules';
-            }}
+            onClick={() => navigate('/mockai-rules')}
             className="w-full"
           >
             <BarChart3 className="h-4 w-4 mr-2" />
@@ -250,30 +248,30 @@ export function MockAIPage() {
             <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700 dark:text-gray-300">
               <li>
                 Record API traffic using the{' '}
-                <a
-                  href="#recorder"
+                <Link
+                  to="/recorder"
                   className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   API Flight Recorder
-                </a>
+                </Link>
               </li>
               <li>
                 Generate OpenAPI specs from recorded traffic using the{' '}
-                <a
-                  href="#mockai-openapi-generator"
+                <Link
+                  to="/mockai-openapi-generator"
                   className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   OpenAPI Generator
-                </a>
+                </Link>
               </li>
               <li>
                 View and understand generated rules in the{' '}
-                <a
-                  href="#mockai-rules"
+                <Link
+                  to="/mockai-rules"
                   className="text-blue-600 dark:text-blue-400 hover:underline"
                 >
                   Rules Dashboard
-                </a>
+                </Link>
               </li>
               <li>
                 Learn from examples to train MockAI on your API patterns

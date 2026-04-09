@@ -2,6 +2,7 @@ import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { FileText, Download, Trash2, Search, Eye, Plus, Edit3, Move } from 'lucide-react';
 import { useFixtures } from '../hooks/useApi';
+import { useQueryClient } from '@tanstack/react-query';
 import type { FixtureInfo } from '../services/api';
 import {
   PageHeader,
@@ -41,6 +42,7 @@ export function FixturesPage() {
   const [newFixturePath, setNewFixturePath] = useState('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [fixtureToDelete, setFixtureToDelete] = useState<FixtureInfo | null>(null);
+  const queryClient = useQueryClient();
 
   const handleCreateFixture = async () => {
     try {
@@ -61,7 +63,7 @@ export function FixturesPage() {
       toast.success('Fixture created successfully');
       setIsCreateDialogOpen(false);
       setNewFixture({ name: '', path: '', method: 'GET', description: '' });
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
     } catch (error) {
       logger.error('Error creating fixture', error);
       toast.error(error instanceof Error ? error.message : 'Failed to create fixture');
@@ -586,7 +588,7 @@ export function FixturesPage() {
                   });
                   toast.success('Fixture renamed successfully');
                   setIsRenameDialogOpen(false);
-                  refetch();
+                  queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
                 } catch (error) {
                   logger.error('Error renaming fixture',error);
                   toast.error('Failed to rename fixture');
@@ -643,7 +645,7 @@ export function FixturesPage() {
                   toast.success('Fixture moved successfully');
                   setIsMoveDialogOpen(false);
                   setNewFixturePath('');
-                  refetch();
+                  queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
                 } catch (error) {
                   logger.error('Error moving fixture',error);
                   toast.error('Failed to move fixture');
@@ -699,7 +701,7 @@ export function FixturesPage() {
                   toast.success('Fixture deleted successfully');
                   setIsDeleteDialogOpen(false);
                   setFixtureToDelete(null);
-                  refetch();
+                  queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
                 } catch (error) {
                   logger.error('Error deleting fixture',error);
                   toast.error('Failed to delete fixture');

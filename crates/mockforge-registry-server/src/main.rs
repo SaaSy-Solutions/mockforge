@@ -1,32 +1,10 @@
-// Some models and internal modules are not yet wired into routes.
-// Suppress dead_code for the binary crate during development.
-#![allow(dead_code)]
-
 //! Pillars: [Cloud]
 //!
-//! MockForge Plugin Registry Server
+//! MockForge Plugin Registry Server — binary entry point.
 //!
-//! Central registry for discovering, publishing, and installing plugins.
-
-mod auth;
-mod cache;
-mod circuit_breaker;
-mod config;
-mod database;
-mod deployment;
-mod email;
-mod error;
-mod handlers;
-mod metrics;
-mod middleware;
-mod models;
-mod pillar_tracking_init;
-mod redis;
-mod routes;
-mod storage;
-mod two_factor;
-mod validation;
-mod workers;
+//! All modules now live in the library crate (`src/lib.rs`) so they can be
+//! reused by the OSS admin server. This file is the thin bootstrap for the
+//! multi-tenant SaaS binary.
 
 use anyhow::Result;
 use axum::extract::DefaultBodyLimit;
@@ -38,29 +16,20 @@ use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::circuit_breaker::{CircuitBreaker, CircuitBreakerRegistry};
-use crate::config::Config;
-use crate::database::Database;
-use crate::middleware::csrf::csrf_middleware;
-use crate::middleware::rate_limit::RateLimiterState;
-use crate::middleware::request_id::request_id_middleware;
-use crate::redis::RedisPool;
-use crate::storage::PluginStorage;
+use mockforge_registry_server::circuit_breaker::{self, CircuitBreaker, CircuitBreakerRegistry};
+use mockforge_registry_server::config::Config;
+use mockforge_registry_server::database::Database;
+use mockforge_registry_server::middleware::csrf::csrf_middleware;
+use mockforge_registry_server::middleware::rate_limit::RateLimiterState;
+use mockforge_registry_server::middleware::request_id::request_id_middleware;
+use mockforge_registry_server::redis::RedisPool;
+use mockforge_registry_server::storage::PluginStorage;
+use mockforge_registry_server::store::PgRegistryStore;
+use mockforge_registry_server::{deployment, pillar_tracking_init, routes, workers, AppState};
 
 use axum::response::IntoResponse;
 use mockforge_observability::get_global_registry;
 use std::sync::Arc;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub db: Database,
-    pub storage: PluginStorage,
-    pub config: Config,
-    pub metrics: Arc<mockforge_observability::prometheus::MetricsRegistry>,
-    pub analytics_db: Option<mockforge_analytics::AnalyticsDatabase>,
-    pub redis: Option<RedisPool>,
-    pub circuit_breakers: CircuitBreakerRegistry,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -183,6 +152,11 @@ async fn main() -> Result<()> {
         .await;
     tracing::info!("Circuit breakers initialized for external services");
 
+    // Create the unified registry store (Phase 1 extraction). For the SaaS
+    // binary this is always a Postgres-backed adapter over the existing pool.
+    let store: Arc<dyn mockforge_registry_server::store::RegistryStore> =
+        Arc::new(PgRegistryStore::new(db.pool().clone()));
+
     // Create app state
     let state = AppState {
         db: db.clone(),
@@ -192,6 +166,7 @@ async fn main() -> Result<()> {
         analytics_db,
         redis,
         circuit_breakers,
+        store,
     };
 
     // Start background workers

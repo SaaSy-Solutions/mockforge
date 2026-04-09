@@ -8424,6 +8424,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-registry-core"
+version = "0.3.108"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.8.8",
+ "base64 0.21.7",
+ "bcrypt",
+ "chrono",
+ "data-encoding",
+ "hex",
+ "jsonwebtoken",
+ "qrcode",
+ "rand 0.8.5",
+ "ring",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "totp-lite",
+ "tower 0.5.3",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "mockforge-registry-server"
 version = "0.3.110"
 dependencies = [
@@ -8448,6 +8480,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-observability",
  "mockforge-plugin-registry",
+ "mockforge-registry-core",
  "oauth2",
  "prometheus",
  "qrcode",
@@ -8814,9 +8847,11 @@ dependencies = [
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
  "mockforge-recorder",
+ "mockforge-registry-core",
  "mockforge-vbr",
  "mockforge-ws",
  "once_cell",
+ "rand 0.8.5",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -8830,6 +8865,7 @@ dependencies = [
  "tower 0.5.3",
  "tower-http 0.6.8",
  "tracing",
+ "urlencoding",
  "uuid",
  "vergen",
 ]

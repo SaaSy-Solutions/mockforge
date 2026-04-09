@@ -11,7 +11,6 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::UsageCounter,
     AppState,
 };
 
@@ -21,17 +20,13 @@ pub async fn get_usage(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<UsageResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get current usage counter
-    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let usage = state.store.get_or_create_current_usage_counter(org_ctx.org_id).await?;
 
     // Get plan limits
     let limits = &org_ctx.org.limits_json;
@@ -75,17 +70,13 @@ pub async fn get_usage_history(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<UsageHistoryResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get all usage counters for this org
-    let counters = UsageCounter::get_all_for_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let counters = state.store.list_usage_counters_by_org(org_ctx.org_id).await?;
 
     // Convert to response format
     let history: Vec<UsagePeriod> = counters

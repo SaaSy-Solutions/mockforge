@@ -57,6 +57,7 @@ mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
 mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 base64 = { workspace = true }
+rand = "0.8"
 jsonwebtoken = "9.3"
 bcrypt = "0.15"
 tokio-util = { version = "0.7", features = ["time"] }
@@ -65,10 +66,19 @@ blake3 = { version = "0.3", optional = true }
 json-patch = "4.0.0"
 jsonptr = "0.7.1"
 
+# Shared registry core (used by the OSS single-tenant admin store).
+# Pulled in without default features with only `sqlite` enabled so we
+# don't drag in the Postgres sqlx backend.
+mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["sqlite"], optional = true }
+
 [features]
-default = []
+default = ["registry-admin"]
 database-auth = ["sqlx", "blake3"]
 password-policy = []
+
+# Enables the SqliteRegistryStore-backed admin APIs (users, orgs,
+# api tokens, audit logging) shared with mockforge-registry-server.
+registry-admin = ["dep:mockforge-registry-core"]
 
 [build-dependencies]
 serde = { workspace = true }
@@ -80,3 +90,4 @@ axum = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
 # Need ServiceExt for oneshot
 tower = { version = "0.5", features = ["util"] }
+urlencoding = { workspace = true }

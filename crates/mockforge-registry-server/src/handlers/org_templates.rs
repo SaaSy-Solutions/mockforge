@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{record_audit_event, AuditEventType, OrgMember, OrgRole, OrgTemplate},
+    models::{AuditEventType, OrgRole, OrgTemplate},
     AppState,
 };
 
@@ -27,8 +27,6 @@ pub async fn list_templates(
     headers: HeaderMap,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<TemplateListResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context and verify access
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -40,9 +38,7 @@ pub async fn list_templates(
     }
 
     // Get templates
-    let templates = OrgTemplate::list_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let templates = state.store.list_org_templates_by_org(org_ctx.org_id).await?;
 
     Ok(Json(TemplateListResponse { templates }))
 }
@@ -56,8 +52,6 @@ pub async fn get_template(
     headers: HeaderMap,
     Path((org_id, template_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<OrgTemplate>> {
-    let pool = state.db.pool();
-
     // Resolve org context and verify access
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -69,9 +63,10 @@ pub async fn get_template(
     }
 
     // Get template
-    let template = OrgTemplate::find_by_id(pool, template_id)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_org_template_by_id(template_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     // Verify template belongs to org
@@ -92,8 +87,6 @@ pub async fn create_template(
     Path(org_id): Path<Uuid>,
     Json(request): Json<CreateTemplateRequest>,
 ) -> ApiResult<Json<OrgTemplate>> {
-    let pool = state.db.pool();
-
     // Resolve org context and verify access
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -107,7 +100,7 @@ pub async fn create_template(
     // Verify user has permission (owner or admin)
     let is_owner = org_ctx.org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -121,35 +114,36 @@ pub async fn create_template(
     }
 
     // Create template
-    let template = OrgTemplate::create(
-        pool,
-        org_ctx.org_id,
-        &request.name,
-        request.description.as_deref(),
-        request.blueprint_config,
-        request.security_baseline,
-        user_id,
-        request.is_default.unwrap_or(false),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let template = state
+        .store
+        .create_org_template(
+            org_ctx.org_id,
+            &request.name,
+            request.description.as_deref(),
+            request.blueprint_config,
+            request.security_baseline,
+            user_id,
+            request.is_default.unwrap_or(false),
+        )
+        .await?;
 
     // Record audit event
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        format!("Organization template '{}' created", request.name),
-        Some(serde_json::json!({
-            "template_id": template.id,
-            "template_name": request.name,
-            "action": "create",
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            format!("Organization template '{}' created", request.name),
+            Some(serde_json::json!({
+                "template_id": template.id,
+                "template_name": request.name,
+                "action": "create",
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(template))
 }
@@ -164,8 +158,6 @@ pub async fn update_template(
     Path((org_id, template_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateTemplateRequest>,
 ) -> ApiResult<Json<OrgTemplate>> {
-    let pool = state.db.pool();
-
     // Resolve org context and verify access
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -179,7 +171,7 @@ pub async fn update_template(
     // Verify user has permission (owner or admin)
     let is_owner = org_ctx.org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -193,9 +185,10 @@ pub async fn update_template(
     }
 
     // Get template
-    let template = OrgTemplate::find_by_id(pool, template_id)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_org_template_by_id(template_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     // Verify template belongs to org
@@ -204,33 +197,34 @@ pub async fn update_template(
     }
 
     // Update template
-    let updated = template
-        .update(
-            pool,
+    let updated = state
+        .store
+        .update_org_template(
+            &template,
             request.name.as_deref(),
             request.description.as_deref(),
             request.blueprint_config,
             request.security_baseline,
             request.is_default,
         )
-        .await
-        .map_err(ApiError::Database)?;
+        .await?;
 
     // Record audit event
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        format!("Organization template '{}' updated", updated.name),
-        Some(serde_json::json!({
-            "template_id": template_id,
-            "action": "update",
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            format!("Organization template '{}' updated", updated.name),
+            Some(serde_json::json!({
+                "template_id": template_id,
+                "action": "update",
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(updated))
 }
@@ -244,8 +238,6 @@ pub async fn delete_template(
     headers: HeaderMap,
     Path((org_id, template_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<DeleteTemplateResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context and verify access
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -259,7 +251,7 @@ pub async fn delete_template(
     // Verify user has permission (owner or admin)
     let is_owner = org_ctx.org.owner_id == user_id;
     let is_admin = if !is_owner {
-        if let Ok(Some(member)) = OrgMember::find(pool, org_ctx.org_id, user_id).await {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
             matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
         } else {
             false
@@ -273,9 +265,10 @@ pub async fn delete_template(
     }
 
     // Get template to verify it belongs to org
-    let template = OrgTemplate::find_by_id(pool, template_id)
-        .await
-        .map_err(ApiError::Database)?
+    let template = state
+        .store
+        .find_org_template_by_id(template_id)
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Template not found".to_string()))?;
 
     if template.org_id != org_ctx.org_id {
@@ -283,23 +276,24 @@ pub async fn delete_template(
     }
 
     // Delete template
-    OrgTemplate::delete(pool, template_id).await.map_err(ApiError::Database)?;
+    state.store.delete_org_template(template_id).await?;
 
     // Record audit event
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::SettingsUpdated,
-        format!("Organization template '{}' deleted", template.name),
-        Some(serde_json::json!({
-            "template_id": template_id,
-            "action": "delete",
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::SettingsUpdated,
+            format!("Organization template '{}' deleted", template.name),
+            Some(serde_json::json!({
+                "template_id": template_id,
+                "action": "delete",
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(DeleteTemplateResponse {
         success: true,

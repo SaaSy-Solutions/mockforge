@@ -52,6 +52,10 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
   }, []);
 
   const handleFile = useCallback((file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large (max 10 MB)');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;

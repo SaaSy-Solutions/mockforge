@@ -139,6 +139,18 @@ export const HostedMocksPage: React.FC = () => {
     loadDeployments();
   }, []);
 
+  // Auto-refresh deployments while any are pending/deploying.
+  useEffect(() => {
+    const hasInFlight = Array.isArray(deployments) && deployments.some(
+      d => d.status === 'pending' || d.status === 'deploying'
+    );
+    if (!hasInFlight) return;
+    const id = setInterval(() => {
+      loadDeployments();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [deployments]);
+
   const loadDeployments = async () => {
     setLoading(true);
     setError(null);

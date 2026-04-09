@@ -1,5 +1,6 @@
 import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { apiService, importApi } from '../services/api';
 import { useUpdateWorkspacesOrder } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
@@ -90,6 +91,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   });
 
   const updateWorkspacesOrder = useUpdateWorkspacesOrder();
+  const queryClient = useQueryClient();
 
   // Load import history when import dialog opens
   useEffect(() => {
@@ -368,39 +370,41 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       return;
     }
 
+    const draggedIndex = workspaces.findIndex(ws => ws.id === draggedWorkspace);
+    const targetIndex = workspaces.findIndex(ws => ws.id === targetWorkspaceId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedWorkspace(null);
+      return;
+    }
+
+    const newWorkspaces = [...workspaces];
+    const [draggedWs] = newWorkspaces.splice(draggedIndex, 1);
+    newWorkspaces.splice(targetIndex, 0, draggedWs);
+    const workspaceIds = newWorkspaces.map(ws => ws.id);
+
+    // Snapshot previous state for rollback
+    const { setWorkspaces } = useWorkspaceStore.getState();
+    const previousWorkspaces = workspaces;
+
+    // Cancel any in-flight workspace queries so they don't overwrite the optimistic update
+    await queryClient.cancelQueries({ queryKey: ['workspaces'] });
+
+    // Optimistic update
+    setWorkspaces(newWorkspaces);
+
     try {
-      // Reorder the workspaces array
-      const draggedIndex = workspaces.findIndex(ws => ws.id === draggedWorkspace);
-      const targetIndex = workspaces.findIndex(ws => ws.id === targetWorkspaceId);
-
-      if (draggedIndex === -1 || targetIndex === -1) {
-        setDraggedWorkspace(null);
-        return;
-      }
-
-      const newWorkspaces = [...workspaces];
-      const [draggedWs] = newWorkspaces.splice(draggedIndex, 1);
-      newWorkspaces.splice(targetIndex, 0, draggedWs);
-
-      // Update the local state immediately for better UX
-      // Note: setWorkspaces is handled by the store
-
-      // Update the order by sending the new order to the API
-      const workspaceIds = newWorkspaces.map(ws => ws.id);
-
-      try {
-        await updateWorkspacesOrder.mutateAsync(workspaceIds);
-        toast.success('Workspace order updated');
-      } catch (error) {
-        toast.error('Failed to update workspace order');
-        throw error;
-      }
-    } catch {
-      toast.error('Failed to update workspace order');
-      // Reload workspaces to revert the optimistic update
-      const { refreshWorkspaces } = useWorkspaceStore.getState();
-      await refreshWorkspaces();
+      await updateWorkspacesOrder.mutateAsync(workspaceIds);
+      toast.success('Workspace order updated');
+    } catch (error) {
+      // Rollback on error
+      setWorkspaces(previousWorkspaces);
+      const errorDetails = getErrorDetails(error);
+      toast.error(`Failed to update workspace order: ${errorDetails.message}`);
+      logError(error, 'Update workspace order');
     } finally {
+      // Always invalidate to re-sync with server truth
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       setDraggedWorkspace(null);
     }
   };
@@ -563,6 +567,10 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             key={workspace.id}
             className={`cursor-pointer transition-all hover:shadow-md ${
               selectedWorkspace?.summary.id === workspace.id ? 'ring-2 ring-primary' : ''
+            } ${
+              draggedWorkspace === workspace.id && updateWorkspacesOrder.isPending
+                ? 'opacity-60 animate-pulse'
+                : ''
             }`}
             draggable
             onDragStart={(e) => handleWorkspaceDragStart(e, workspace.id)}

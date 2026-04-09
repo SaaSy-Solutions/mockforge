@@ -14,10 +14,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
-    models::{
-        record_audit_event, AuditEventType, FeatureType, FeatureUsage, Scenario, ScenarioReview,
-        ScenarioVersion, UsageCounter, User,
-    },
+    models::{AuditEventType, FeatureType, ScenarioReview, ScenarioVersion, UsageCounter, User},
     AppState,
 };
 
@@ -60,29 +57,29 @@ pub async fn search_scenarios(
     };
 
     // Get total count for pagination (before fetching results)
-    let total = Scenario::count_search(
-        pool,
-        query.query.as_deref(),
-        query.category.as_deref(),
-        &query.tags,
-        org_id,
-    )
-    .await
-    .map_err(ApiError::Database)? as usize;
+    let total = state
+        .store
+        .count_search_scenarios(
+            query.query.as_deref(),
+            query.category.as_deref(),
+            &query.tags,
+            org_id,
+        )
+        .await? as usize;
 
     // Search scenarios
-    let scenarios = Scenario::search(
-        pool,
-        query.query.as_deref(),
-        query.category.as_deref(),
-        &query.tags,
-        org_id,
-        sort,
-        limit,
-        offset,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let scenarios = state
+        .store
+        .search_scenarios(
+            query.query.as_deref(),
+            query.category.as_deref(),
+            &query.tags,
+            org_id,
+            sort,
+            limit,
+            offset,
+        )
+        .await?;
 
     // Convert to registry entries
     let mut entries = Vec::new();
@@ -216,33 +213,31 @@ pub async fn get_scenario(
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "scenario");
     let pool = state.db.pool();
 
-    let scenario = Scenario::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let versions = ScenarioVersion::get_by_scenario(pool, scenario.id)
         .await
         .map_err(ApiError::Database)?;
 
-    let author = User::find_by_id(pool, scenario.author_id)
-        .await
-        .map_err(ApiError::Database)?
-        .unwrap_or_else(|| User {
-            id: scenario.author_id,
-            username: "unknown".to_string(),
-            email: "unknown@example.com".to_string(),
-            password_hash: String::new(),
-            api_token: None,
-            is_verified: false,
-            is_admin: false,
-            two_factor_enabled: false,
-            two_factor_secret: None,
-            two_factor_backup_codes: None,
-            two_factor_verified_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        });
+    let author = state.store.find_user_by_id(scenario.author_id).await?.unwrap_or_else(|| User {
+        id: scenario.author_id,
+        username: "unknown".to_string(),
+        email: "unknown@example.com".to_string(),
+        password_hash: String::new(),
+        api_token: None,
+        is_verified: false,
+        is_admin: false,
+        two_factor_enabled: false,
+        two_factor_secret: None,
+        two_factor_backup_codes: None,
+        two_factor_verified_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    });
 
     let version_entries: Vec<ScenarioVersionEntry> = versions
         .into_iter()
@@ -339,9 +334,10 @@ pub async fn get_scenario_version(
 ) -> ApiResult<Json<ScenarioVersionEntry>> {
     let pool = state.db.pool();
 
-    let scenario = Scenario::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
 
     let scenario_version = ScenarioVersion::find(pool, scenario.id, &version)
@@ -380,8 +376,7 @@ pub async fn publish_scenario(
     let max_scenarios = limits.get("max_scenarios_published").and_then(|v| v.as_i64()).unwrap_or(1);
 
     if max_scenarios >= 0 {
-        let existing =
-            Scenario::find_by_org(pool, org_ctx.org_id).await.map_err(ApiError::Database)?;
+        let existing = state.store.list_scenarios_by_org(org_ctx.org_id).await?;
 
         if existing.len() as i64 >= max_scenarios {
             return Err(ApiError::InvalidRequest(format!(
@@ -482,9 +477,7 @@ pub async fn publish_scenario(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update scenario
-    let scenario = if let Some(existing) =
-        Scenario::find_by_name(pool, &name).await.map_err(ApiError::Database)?
-    {
+    let scenario = if let Some(existing) = state.store.find_scenario_by_name(&name).await? {
         // Update existing scenario
         existing
     } else {
@@ -493,20 +486,20 @@ pub async fn publish_scenario(
         let description = manifest.get("description").and_then(|v| v.as_str()).unwrap_or("");
         let license = manifest.get("license").and_then(|v| v.as_str()).unwrap_or("MIT");
 
-        Scenario::create(
-            pool,
-            Some(org_ctx.org_id),
-            &name,
-            &slug,
-            description,
-            author_id,
-            &version,
-            category,
-            license,
-            manifest.clone(),
-        )
-        .await
-        .map_err(ApiError::Database)?
+        state
+            .store
+            .create_scenario(
+                Some(org_ctx.org_id),
+                &name,
+                &slug,
+                description,
+                author_id,
+                &version,
+                category,
+                license,
+                manifest.clone(),
+            )
+            .await?
     };
 
     // Create version entry
@@ -535,17 +528,18 @@ pub async fn publish_scenario(
         .map_err(ApiError::Database)?;
 
     // Track feature usage
-    let _ = FeatureUsage::record(
-        pool,
-        org_ctx.org_id,
-        Some(author_id),
-        FeatureType::ScenarioPublish,
-        Some(serde_json::json!({
-            "scenario_name": name,
-            "version": version,
-        })),
-    )
-    .await;
+    state
+        .store
+        .record_feature_usage(
+            org_ctx.org_id,
+            Some(author_id),
+            FeatureType::ScenarioPublish,
+            Some(serde_json::json!({
+                "scenario_name": name,
+                "version": version,
+            })),
+        )
+        .await;
 
     // Record audit event
     let ip_address = headers
@@ -555,20 +549,21 @@ pub async fn publish_scenario(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(author_id),
-        AuditEventType::ScenarioPublished,
-        format!("Scenario {} version {} published", name, version),
-        Some(serde_json::json!({
-            "scenario_name": name,
-            "version": version,
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(author_id),
+            AuditEventType::ScenarioPublished,
+            format!("Scenario {} version {} published", name, version),
+            Some(serde_json::json!({
+                "scenario_name": name,
+                "version": version,
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Record metrics
     metrics.record_publish_success();

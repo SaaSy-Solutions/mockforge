@@ -76,6 +76,7 @@ export function AIStudioPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const budgetExhausted = (usageStats?.usage_percentage ?? 0) >= 100;
 
   // Contract Diff state
   const [selectedCapture, setSelectedCapture] = useState<string | null>(null);
@@ -425,6 +426,11 @@ export function AIStudioPage() {
 
       {activeTab === 'generate' && (
         <div className="space-y-4">
+          {budgetExhausted && (
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+              <strong>Budget exhausted.</strong> You have reached or exceeded your AI usage budget limit. Generate and Debug actions are disabled until the budget resets or is increased.
+            </div>
+          )}
           <Card className="p-6">
             <div className="space-y-4">
               <div>
@@ -438,12 +444,12 @@ export function AIStudioPage() {
                   type="text"
                   value={inputMessage}
                   onChange={e => setInputMessage(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
+                  onKeyPress={e => e.key === 'Enter' && !budgetExhausted && handleSendMessage()}
                   placeholder="e.g., Create a user API with CRUD operations for managing users"
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                  disabled={isProcessing}
+                  disabled={isProcessing || budgetExhausted}
                 />
-                <Button onClick={handleSendMessage} disabled={isProcessing || !inputMessage.trim()}>
+                <Button onClick={handleSendMessage} disabled={budgetExhausted || isProcessing || !inputMessage.trim()}>
                   {isProcessing ? 'Generating...' : 'Generate'}
                 </Button>
               </div>
@@ -491,6 +497,11 @@ export function AIStudioPage() {
 
       {activeTab === 'debug' && (
         <div className="space-y-4">
+          {budgetExhausted && (
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+              <strong>Budget exhausted.</strong> You have reached or exceeded your AI usage budget limit. Generate and Debug actions are disabled until the budget resets or is increased.
+            </div>
+          )}
           <Card className="p-6">
             <div className="space-y-4">
               <div>
@@ -570,7 +581,7 @@ export function AIStudioPage() {
                       loadUsageStats();
                     }
                   }}
-                  disabled={isProcessing || !inputMessage.trim()}
+                  disabled={budgetExhausted || isProcessing || !inputMessage.trim()}
                 >
                   {isProcessing ? 'Analyzing...' : 'Analyze Failure'}
                 </Button>

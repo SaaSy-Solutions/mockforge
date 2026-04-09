@@ -8,7 +8,7 @@ use crate::{
     cache::{org_setting_cache_key, ttl, Cache},
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{record_audit_event, AuditEventType, BYOKConfig, OrgSetting},
+    models::{AuditEventType, BYOKConfig},
     AppState,
 };
 
@@ -57,8 +57,6 @@ pub async fn get_byok_config(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<BYOKConfig>> {
-    let pool = state.db.pool();
-
     // Resolve org context (BYOK is org-level)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -66,34 +64,38 @@ pub async fn get_byok_config(
 
     // Try cache first
     let cache_key = org_setting_cache_key(&org_ctx.org_id, "byok");
+    let store = state.store.clone();
     let mut config = if let Some(redis) = &state.redis {
         let cache = Cache::new(redis.clone());
         cache
-            .get_or_set(&cache_key, ttl::SETTINGS, || async {
-                let setting = OrgSetting::get(pool, org_ctx.org_id, "byok")
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Database error: {}", e))?;
+            .get_or_set(&cache_key, ttl::SETTINGS, || {
+                let store = store.clone();
+                let org_id = org_ctx.org_id;
+                async move {
+                    let setting = store
+                        .get_org_setting(org_id, "byok")
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Database error: {}", e))?;
 
-                if let Some(setting) = setting {
-                    let config: BYOKConfig = serde_json::from_value(setting.setting_value)
-                        .map_err(|e| anyhow::anyhow!("Invalid BYOK configuration: {}", e))?;
-                    Ok(config)
-                } else {
-                    Ok(BYOKConfig {
-                        provider: "openai".to_string(),
-                        api_key: String::new(),
-                        base_url: None,
-                        enabled: false,
-                    })
+                    if let Some(setting) = setting {
+                        let config: BYOKConfig = serde_json::from_value(setting.setting_value)
+                            .map_err(|e| anyhow::anyhow!("Invalid BYOK configuration: {}", e))?;
+                        Ok(config)
+                    } else {
+                        Ok(BYOKConfig {
+                            provider: "openai".to_string(),
+                            api_key: String::new(),
+                            base_url: None,
+                            enabled: false,
+                        })
+                    }
                 }
             })
             .await
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Cache error: {}", e)))?
     } else {
         // No Redis - fallback to database
-        let setting = OrgSetting::get(pool, org_ctx.org_id, "byok")
-            .await
-            .map_err(ApiError::Database)?;
+        let setting = state.store.get_org_setting(org_ctx.org_id, "byok").await?;
 
         if let Some(setting) = setting {
             let config: BYOKConfig = serde_json::from_value(setting.setting_value)
@@ -122,8 +124,6 @@ pub async fn update_byok_config(
     headers: HeaderMap,
     Json(config): Json<BYOKConfig>,
 ) -> ApiResult<Json<BYOKConfig>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -151,9 +151,7 @@ pub async fn update_byok_config(
         .map_err(|_| ApiError::Internal(anyhow::anyhow!("Failed to serialize config")))?;
 
     // Store setting
-    OrgSetting::set(pool, org_ctx.org_id, "byok", config_value)
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.set_org_setting(org_ctx.org_id, "byok", config_value).await?;
 
     // Invalidate cache
     if let Some(redis) = &state.redis {
@@ -170,21 +168,22 @@ pub async fn update_byok_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ByokConfigUpdated,
-        format!("BYOK configuration updated for provider: {}", config.provider),
-        Some(serde_json::json!({
-            "provider": config.provider,
-            "enabled": config.enabled,
-            "has_base_url": config.base_url.is_some(),
-        })),
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ByokConfigUpdated,
+            format!("BYOK configuration updated for provider: {}", config.provider),
+            Some(serde_json::json!({
+                "provider": config.provider,
+                "enabled": config.enabled,
+                "has_base_url": config.base_url.is_some(),
+            })),
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     Ok(Json(config))
 }
@@ -195,8 +194,6 @@ pub async fn delete_byok_config(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -210,22 +207,21 @@ pub async fn delete_byok_config(
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
 
-    record_audit_event(
-        pool,
-        org_ctx.org_id,
-        Some(user_id),
-        AuditEventType::ByokConfigDeleted,
-        "BYOK configuration deleted".to_string(),
-        None,
-        ip_address,
-        user_agent,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            org_ctx.org_id,
+            Some(user_id),
+            AuditEventType::ByokConfigDeleted,
+            "BYOK configuration deleted".to_string(),
+            None,
+            ip_address,
+            user_agent,
+        )
+        .await;
 
     // Delete setting
-    OrgSetting::delete(pool, org_ctx.org_id, "byok")
-        .await
-        .map_err(ApiError::Database)?;
+    state.store.delete_org_setting(org_ctx.org_id, "byok").await?;
 
     // Invalidate cache
     if let Some(redis) = &state.redis {

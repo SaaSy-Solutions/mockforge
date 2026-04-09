@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{AuthUser, ScopedAuth},
-    models::{record_audit_event, AuditEventType, Plugin, PluginVersion, TokenScope, User},
+    models::{AuditEventType, TokenScope, User},
     AppState,
 };
 
@@ -51,40 +51,31 @@ pub async fn search_plugins(
     let offset = (page * per_page) as i64;
 
     // Search plugins
-    let plugins = match Plugin::search(
-        pool,
-        query.query.as_deref(),
-        category_str,
-        &query.tags,
-        sort_by,
-        limit,
-        offset,
-    )
-    .await
+    let plugins = match state
+        .store
+        .search_plugins(query.query.as_deref(), category_str, &query.tags, sort_by, limit, offset)
+        .await
     {
         Ok(plugins) => plugins,
         Err(e) => {
             metrics.record_search_error("database_error");
-            return Err(ApiError::Database(e));
+            return Err(e.into());
         }
     };
 
     // Convert to registry entries
     let mut entries = Vec::new();
     for plugin in plugins {
-        let tags = Plugin::get_tags(pool, plugin.id).await.map_err(ApiError::Database)?;
+        let tags = state.store.get_plugin_tags(plugin.id).await?;
 
-        let versions = PluginVersion::get_by_plugin(pool, plugin.id)
-            .await
-            .map_err(ApiError::Database)?;
+        let versions = state.store.list_plugin_versions(plugin.id).await?;
 
         let category = map_category_from_string(&plugin.category);
 
         // Load versions with dependencies
         let mut version_entries = Vec::new();
         for v in versions {
-            let dependencies =
-                PluginVersion::get_dependencies(pool, v.id).await.map_err(ApiError::Database)?;
+            let dependencies = state.store.get_plugin_version_dependencies(v.id).await?;
 
             version_entries.push(VersionEntry {
                 version: v.version,
@@ -146,9 +137,10 @@ pub async fn search_plugins(
     }
 
     // Count total matching results for pagination metadata
-    let total = Plugin::count_search(pool, query.query.as_deref(), category_str, &query.tags)
-        .await
-        .map_err(ApiError::Database)? as usize;
+    let total = state
+        .store
+        .count_search_plugins(query.query.as_deref(), category_str, &query.tags)
+        .await? as usize;
 
     let results = SearchResults {
         plugins: entries,
@@ -168,26 +160,23 @@ pub async fn get_plugin(
     Path(name): Path<String>,
 ) -> ApiResult<Json<RegistryEntry>> {
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
-    let pool = state.db.pool();
 
-    let plugin = Plugin::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
-    let tags = Plugin::get_tags(pool, plugin.id).await.map_err(ApiError::Database)?;
+    let tags = state.store.get_plugin_tags(plugin.id).await?;
 
-    let versions = PluginVersion::get_by_plugin(pool, plugin.id)
-        .await
-        .map_err(ApiError::Database)?;
+    let versions = state.store.list_plugin_versions(plugin.id).await?;
 
     let category = map_category_from_string(&plugin.category);
 
     // Load versions with dependencies
     let mut version_entries = Vec::new();
     for v in versions {
-        let dependencies =
-            PluginVersion::get_dependencies(pool, v.id).await.map_err(ApiError::Database)?;
+        let dependencies = state.store.get_plugin_version_dependencies(v.id).await?;
 
         version_entries.push(VersionEntry {
             version: v.version,
@@ -202,24 +191,21 @@ pub async fn get_plugin(
     }
 
     // Fetch author information
-    let author = User::find_by_id(pool, plugin.author_id)
-        .await
-        .map_err(ApiError::Database)?
-        .unwrap_or_else(|| User {
-            id: plugin.author_id,
-            username: "Unknown".to_string(),
-            email: String::new(),
-            password_hash: String::new(),
-            api_token: None,
-            is_verified: false,
-            is_admin: false,
-            two_factor_enabled: false,
-            two_factor_secret: None,
-            two_factor_backup_codes: None,
-            two_factor_verified_at: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        });
+    let author = state.store.find_user_by_id(plugin.author_id).await?.unwrap_or_else(|| User {
+        id: plugin.author_id,
+        username: "Unknown".to_string(),
+        email: String::new(),
+        password_hash: String::new(),
+        api_token: None,
+        is_verified: false,
+        is_admin: false,
+        two_factor_enabled: false,
+        two_factor_secret: None,
+        two_factor_backup_codes: None,
+        two_factor_verified_at: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    });
 
     let entry = RegistryEntry {
         name: plugin.name.clone(),
@@ -254,22 +240,21 @@ pub async fn get_version(
     Path((name, version)): Path<(String, String)>,
 ) -> ApiResult<Json<VersionEntry>> {
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
-    let pool = state.db.pool();
 
-    let plugin = Plugin::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
-    let plugin_version = PluginVersion::find(pool, plugin.id, &version)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin_version = state
+        .store
+        .find_plugin_version(plugin.id, &version)
+        .await?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
     // Load dependencies
-    let dependencies = PluginVersion::get_dependencies(pool, plugin_version.id)
-        .await
-        .map_err(ApiError::Database)?;
+    let dependencies = state.store.get_plugin_version_dependencies(plugin_version.id).await?;
 
     let entry = VersionEntry {
         version: plugin_version.version,
@@ -321,10 +306,9 @@ pub async fn publish_plugin(
     scoped_auth.require_scope(TokenScope::PublishPackages)?;
 
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
-    let pool = state.db.pool();
 
     // Check if plugin exists
-    let existing = Plugin::find_by_name(pool, &request.name).await.map_err(ApiError::Database)?;
+    let existing = state.store.find_plugin_by_name(&request.name).await?;
 
     let plugin = if let Some(mut plugin) = existing {
         // Update existing plugin
@@ -333,19 +317,19 @@ pub async fn publish_plugin(
         plugin
     } else {
         // Create new plugin
-        Plugin::create(
-            pool,
-            &request.name,
-            &request.description,
-            &request.version,
-            &request.category,
-            &request.license,
-            request.repository.as_deref(),
-            request.homepage.as_deref(),
-            author_id,
-        )
-        .await
-        .map_err(ApiError::Database)?
+        state
+            .store
+            .create_plugin(
+                &request.name,
+                &request.description,
+                &request.version,
+                &request.category,
+                &request.license,
+                request.repository.as_deref(),
+                request.homepage.as_deref(),
+                author_id,
+            )
+            .await?
     };
 
     // Validate input fields
@@ -386,43 +370,45 @@ pub async fn publish_plugin(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create version entry
-    let version = PluginVersion::create(
-        pool,
-        plugin.id,
-        &request.version,
-        &download_url,
-        &request.checksum,
-        request.file_size,
-        None,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let version = state
+        .store
+        .create_plugin_version(
+            plugin.id,
+            &request.version,
+            &download_url,
+            &request.checksum,
+            request.file_size,
+            None,
+        )
+        .await?;
 
     // Add dependencies if provided
     if let Some(deps) = request.dependencies {
         for (dep_name, dep_version) in deps {
-            PluginVersion::add_dependency(pool, version.id, &dep_name, &dep_version)
-                .await
-                .map_err(ApiError::Database)?;
+            state
+                .store
+                .add_plugin_version_dependency(version.id, &dep_name, &dep_version)
+                .await?;
         }
     }
 
     // Record audit event
-    record_audit_event(
-        pool,
-        uuid::Uuid::nil(),
-        Some(author_id),
-        AuditEventType::PluginPublished,
-        format!("Plugin {} version {} published", request.name, request.version),
-        Some(serde_json::json!({
-            "plugin_name": request.name,
-            "version": request.version,
-            "category": request.category,
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            uuid::Uuid::nil(),
+            Some(author_id),
+            AuditEventType::PluginPublished,
+            format!("Plugin {} version {} published", request.name, request.version),
+            Some(serde_json::json!({
+                "plugin_name": request.name,
+                "version": request.version,
+                "category": request.category,
+            })),
+            None,
+            None,
+        )
+        .await;
 
     // Record metrics
     metrics.record_publish_success();
@@ -445,19 +431,19 @@ pub async fn yank_version(
     // Check for PublishPackages scope (yanking is a publishing operation)
     scoped_auth.require_scope(TokenScope::PublishPackages)?;
 
-    let pool = state.db.pool();
-
-    let plugin = Plugin::find_by_name(pool, &name)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
-    let plugin_version = PluginVersion::find(pool, plugin.id, &version)
-        .await
-        .map_err(ApiError::Database)?
+    let plugin_version = state
+        .store
+        .find_plugin_version(plugin.id, &version)
+        .await?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
-    PluginVersion::yank(pool, plugin_version.id).await.map_err(ApiError::Database)?;
+    state.store.yank_plugin_version(plugin_version.id).await?;
 
     Ok(Json(serde_json::json!({
         "success": true,

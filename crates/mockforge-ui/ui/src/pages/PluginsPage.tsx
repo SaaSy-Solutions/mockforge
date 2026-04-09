@@ -30,6 +30,7 @@ import { InstallPluginModal } from '../components/plugins/InstallPluginModal';
 import type { PluginType, PluginStatus as PluginStatusType } from '../types';
 import { pluginsApi } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
+import { toast } from 'sonner';
 
 export function PluginsPage() {
   const { t } = useI18n();
@@ -54,10 +55,12 @@ export function PluginsPage() {
       // Trigger a refresh of the plugin list
       setReloadKey(prev => prev + 1);
 
-      // Optionally show success message (you could add a toast/notification system)
       logger.info(result.message);
+      toast.success('Plugins reloaded');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reload plugins');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to reload plugins: ${message}`);
+      toast.error(`Failed to reload plugins: ${message}`);
     } finally {
       setIsReloading(false);
     }

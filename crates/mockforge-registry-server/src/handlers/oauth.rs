@@ -16,7 +16,7 @@ use serde::Deserialize;
 use crate::{
     auth::{create_token_pair, REFRESH_TOKEN_EXPIRY_DAYS},
     error::ApiError,
-    models::{Organization, User},
+    models::User,
     AppState,
 };
 use chrono::{Duration, Utc};
@@ -166,80 +166,48 @@ pub async fn oauth_callback(
     // Fetch user info from provider
     let user_info = fetch_user_info(provider, access_token).await?;
 
-    let pool = state.db.pool();
-
     // Find or create user
     let user = match provider {
         OAuthProvider::GitHub => {
-            // Check if user exists by GitHub ID
-            let existing = sqlx::query_as::<_, User>("SELECT * FROM users WHERE github_id = $1")
-                .bind(&user_info.provider_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(ApiError::Database)?;
-
-            if let Some(user) = existing {
+            if let Some(user) = state.store.find_user_by_github_id(&user_info.provider_id).await? {
+                user
+            } else if let Some(user) = state.store.find_user_by_email(&user_info.email).await? {
+                // Link GitHub account to existing user
+                state
+                    .store
+                    .link_user_github_account(
+                        user.id,
+                        &user_info.provider_id,
+                        user_info.avatar_url.as_deref(),
+                    )
+                    .await?;
                 user
             } else {
-                // Check if email already exists (link accounts)
-                let email_user = User::find_by_email(pool, &user_info.email)
-                    .await
-                    .map_err(ApiError::Database)?;
-
-                if let Some(user) = email_user {
-                    // Link GitHub account to existing user
-                    sqlx::query("UPDATE users SET github_id = $1, auth_provider = 'github', avatar_url = $2 WHERE id = $3")
-                        .bind(&user_info.provider_id)
-                        .bind(user_info.avatar_url.as_deref())
-                        .bind(user.id)
-                        .execute(pool)
-                        .await
-                        .map_err(ApiError::Database)?;
-                    user
-                } else {
-                    // Create new user
-                    create_oauth_user(pool, &user_info, provider).await?
-                }
+                create_oauth_user(&state, &user_info, provider).await?
             }
         }
         OAuthProvider::Google => {
-            // Check if user exists by Google ID
-            let existing = sqlx::query_as::<_, User>("SELECT * FROM users WHERE google_id = $1")
-                .bind(&user_info.provider_id)
-                .fetch_optional(pool)
-                .await
-                .map_err(ApiError::Database)?;
-
-            if let Some(user) = existing {
+            if let Some(user) = state.store.find_user_by_google_id(&user_info.provider_id).await? {
+                user
+            } else if let Some(user) = state.store.find_user_by_email(&user_info.email).await? {
+                // Link Google account to existing user
+                state
+                    .store
+                    .link_user_google_account(
+                        user.id,
+                        &user_info.provider_id,
+                        user_info.avatar_url.as_deref(),
+                    )
+                    .await?;
                 user
             } else {
-                // Check if email already exists (link accounts)
-                let email_user = User::find_by_email(pool, &user_info.email)
-                    .await
-                    .map_err(ApiError::Database)?;
-
-                if let Some(user) = email_user {
-                    // Link Google account to existing user
-                    sqlx::query("UPDATE users SET google_id = $1, auth_provider = 'google', avatar_url = $2 WHERE id = $3")
-                        .bind(&user_info.provider_id)
-                        .bind(user_info.avatar_url.as_deref())
-                        .bind(user.id)
-                        .execute(pool)
-                        .await
-                        .map_err(ApiError::Database)?;
-                    user
-                } else {
-                    // Create new user
-                    create_oauth_user(pool, &user_info, provider).await?
-                }
+                create_oauth_user(&state, &user_info, provider).await?
             }
         }
     };
 
     // Create personal organization if it doesn't exist
-    let _personal_org = Organization::get_or_create_personal_org(pool, user.id, &user.username)
-        .await
-        .map_err(ApiError::Database)?;
+    let _personal_org = state.store.get_or_create_personal_org(user.id, &user.username).await?;
 
     // Send welcome email for new OAuth users (non-blocking)
     // Check if this is a new user by checking if they were just created
@@ -369,7 +337,7 @@ async fn fetch_user_info(
 
 /// Create new user from OAuth info
 async fn create_oauth_user(
-    pool: &sqlx::PgPool,
+    state: &AppState,
     user_info: &OAuthUserInfo,
     provider: OAuthProvider,
 ) -> Result<User, ApiError> {
@@ -381,41 +349,35 @@ async fn create_oauth_user(
     // Ensure username is unique
     let mut username = user_info.username.clone();
     let mut counter = 0;
-    while User::find_by_username(pool, &username)
-        .await
-        .map_err(ApiError::Database)?
-        .is_some()
-    {
+    while state.store.find_user_by_username(&username).await?.is_some() {
         counter += 1;
         username = format!("{}{}", user_info.username, counter);
     }
 
     // Create user
-    let user = sqlx::query_as::<_, User>(
-        r#"
-        INSERT INTO users (username, email, password_hash, auth_provider, github_id, google_id, avatar_url, is_verified)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
-        RETURNING *
-        "#,
-    )
-    .bind(&username)
-    .bind(&user_info.email)
-    .bind(&password_hash)
-    .bind(provider.as_str())
-    .bind(if provider == OAuthProvider::GitHub {
-        Some(&user_info.provider_id)
+    let github_id = if provider == OAuthProvider::GitHub {
+        Some(user_info.provider_id.as_str())
     } else {
         None
-    })
-    .bind(if provider == OAuthProvider::Google {
-        Some(&user_info.provider_id)
+    };
+    let google_id = if provider == OAuthProvider::Google {
+        Some(user_info.provider_id.as_str())
     } else {
         None
-    })
-    .bind(user_info.avatar_url.as_deref())
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    };
+
+    let user = state
+        .store
+        .create_oauth_user(
+            &username,
+            &user_info.email,
+            &password_hash,
+            provider.as_str(),
+            github_id,
+            google_id,
+            user_info.avatar_url.as_deref(),
+        )
+        .await?;
 
     Ok(user)
 }

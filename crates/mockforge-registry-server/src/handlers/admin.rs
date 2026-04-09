@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{record_audit_event, AuditEventType, Plugin},
+    models::{AuditEventType, Plugin},
     AppState,
 };
 
@@ -78,21 +78,22 @@ pub async fn verify_plugin(
     };
 
     // Record audit event for admin verification action
-    record_audit_event(
-        pool,
-        Uuid::nil(),
-        Some(user_uuid),
-        AuditEventType::AdminImpersonation, // Reusing admin action type for verification
-        message.clone(),
-        Some(serde_json::json!({
-            "plugin_name": name,
-            "verified": request.verified,
-            "action": "verify_plugin",
-        })),
-        None,
-        None,
-    )
-    .await;
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_uuid),
+            AuditEventType::AdminImpersonation, // Reusing admin action type for verification
+            message.clone(),
+            Some(serde_json::json!({
+                "plugin_name": name,
+                "verified": request.verified,
+                "action": "verify_plugin",
+            })),
+            None,
+            None,
+        )
+        .await;
 
     Ok(Json(VerifyPluginResponse {
         success: true,

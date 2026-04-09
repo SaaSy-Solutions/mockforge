@@ -35,13 +35,11 @@ pub struct Incident {
 
 /// Get public status page information
 pub async fn get_status(State(state): State<AppState>) -> ApiResult<Json<StatusResponse>> {
-    let pool = state.db.pool();
-
     // Check service health
     let mut services = Vec::new();
 
-    // Check database
-    let db_status = match sqlx::query("SELECT 1").execute(pool).await {
+    // Check database via the backend-agnostic store trait.
+    let db_status = match state.store.health_check().await {
         Ok(_) => ("operational", None),
         Err(_) => ("down", Some("Database connection failed".to_string())),
     };
