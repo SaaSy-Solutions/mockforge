@@ -193,6 +193,29 @@ pub fn router(state: CoreAppState) -> Router {
         .route("/api/admin/registry/orgs", post(create_org))
         .route("/api/admin/registry/orgs/slug/{slug}", get(find_org_by_slug))
         .route("/api/admin/registry/orgs/{org_id}/tokens", post(create_api_token))
+        // Org members — "teams" in the task-list vocabulary. Existing
+        // trait methods power everything here; this is pure wiring.
+        .route("/api/admin/registry/orgs/{org_id}/members", get(list_org_members_endpoint))
+        .route("/api/admin/registry/orgs/{org_id}/members", post(add_org_member_endpoint))
+        .route(
+            "/api/admin/registry/orgs/{org_id}/members/{user_id}",
+            axum::routing::patch(update_org_member_role_endpoint)
+                .delete(remove_org_member_endpoint),
+        )
+        // Org quota — reuses org_settings under the reserved "quota" key,
+        // so no new trait method or schema change is needed.
+        .route(
+            "/api/admin/registry/orgs/{org_id}/quota",
+            get(get_org_quota).put(set_org_quota),
+        )
+        // Invitation flow — uses the existing verification_tokens table
+        // by storing a JSON-encoded payload in the `token` column.
+        .route("/api/admin/registry/orgs/{org_id}/invitations", post(create_invitation))
+        .route("/api/admin/registry/invitations/{token}", get(get_invitation))
+        .route(
+            "/api/admin/registry/invitations/{token}/accept",
+            post(accept_invitation),
+        )
         .with_state(state)
 }
 
@@ -563,6 +586,385 @@ async fn create_api_token(
             "token_prefix": token.token_prefix,
             "scopes": token.scopes,
             "created_at": token.created_at,
+        })),
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Org member management (Phase 3a)
+// ---------------------------------------------------------------------------
+
+async fn list_org_members_endpoint(
+    State(state): State<CoreAppState>,
+    Path(org_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let members = state.store.list_org_members(org_id).await?;
+    let list: Vec<serde_json::Value> = members
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "org_id": m.org_id,
+                "user_id": m.user_id,
+                "role": m.role,
+                "created_at": m.created_at,
+                "updated_at": m.updated_at,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "members": list })))
+}
+
+#[derive(Debug, Deserialize)]
+struct AddOrgMemberReq {
+    user_id: String,
+    #[serde(default)]
+    role: Option<String>,
+}
+
+fn parse_role(s: &str) -> Result<mockforge_registry_core::models::organization::OrgRole, ApiError> {
+    use mockforge_registry_core::models::organization::OrgRole;
+    match s {
+        "owner" => Ok(OrgRole::Owner),
+        "admin" => Ok(OrgRole::Admin),
+        "member" => Ok(OrgRole::Member),
+        other => Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            format!("unknown role '{}' (expected owner/admin/member)", other),
+        )),
+    }
+}
+
+async fn add_org_member_endpoint(
+    State(state): State<CoreAppState>,
+    Path(org_id): Path<String>,
+    Json(req): Json<AddOrgMemberReq>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let user_id = Uuid::parse_str(&req.user_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad user_id: {}", e)))?;
+    let role = parse_role(req.role.as_deref().unwrap_or("member"))?;
+
+    let member = state.store.create_org_member(org_id, user_id, role).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "id": member.id,
+            "org_id": member.org_id,
+            "user_id": member.user_id,
+            "role": member.role,
+            "created_at": member.created_at,
+        })),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateOrgMemberRoleReq {
+    role: String,
+}
+
+async fn update_org_member_role_endpoint(
+    State(state): State<CoreAppState>,
+    Path((org_id, user_id)): Path<(String, String)>,
+    Json(req): Json<UpdateOrgMemberRoleReq>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let user_id = Uuid::parse_str(&user_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad user_id: {}", e)))?;
+    let role = parse_role(&req.role)?;
+
+    state.store.update_org_member_role(org_id, user_id, role).await?;
+    let member = state
+        .store
+        .find_org_member(org_id, user_id)
+        .await?
+        .ok_or(ApiError(StatusCode::NOT_FOUND, "member not found".into()))?;
+    Ok(Json(json!({
+        "id": member.id,
+        "org_id": member.org_id,
+        "user_id": member.user_id,
+        "role": member.role,
+        "updated_at": member.updated_at,
+    })))
+}
+
+async fn remove_org_member_endpoint(
+    State(state): State<CoreAppState>,
+    Path((org_id, user_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let user_id = Uuid::parse_str(&user_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad user_id: {}", e)))?;
+    state.store.delete_org_member(org_id, user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------------------
+// Org quota (Phase 3b) — reuses org_settings under a reserved key, so no
+// schema changes or new trait methods required.
+// ---------------------------------------------------------------------------
+
+const QUOTA_SETTING_KEY: &str = "quota";
+
+async fn get_org_quota(
+    State(state): State<CoreAppState>,
+    Path(org_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let setting = state.store.get_org_setting(org_id, QUOTA_SETTING_KEY).await?;
+    let value = setting.map(|s| s.setting_value).unwrap_or_else(|| json!({}));
+    Ok(Json(json!({ "org_id": org_id, "quota": value })))
+}
+
+async fn set_org_quota(
+    State(state): State<CoreAppState>,
+    Path(org_id): Path<String>,
+    Json(quota): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !quota.is_object() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "quota body must be a JSON object".into()));
+    }
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let updated = state.store.set_org_setting(org_id, QUOTA_SETTING_KEY, quota).await?;
+    Ok(Json(json!({
+        "org_id": org_id,
+        "quota": updated.setting_value,
+        "updated_at": updated.updated_at,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Invitation flow (Phase 3d) — purely registry-admin-local. Uses existing
+// verification_tokens by stuffing a JSON payload into the `token` column:
+//
+//   {"kind":"invite","org_id":"<uuid>","email":"...","role":"member",
+//    "nonce":"<32 random bytes, base64url>"}
+//
+// The nonce makes the token value unique and unguessable. Accept expects
+// the caller to echo the exact token string back, which we look up via
+// find_verification_token_by_token, parse the payload, and consume.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Serialize, Deserialize)]
+struct InvitePayload {
+    kind: String, // always "invite"
+    org_id: Uuid,
+    email: String,
+    role: String,
+    nonce: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateInvitationReq {
+    email: String,
+    #[serde(default)]
+    role: Option<String>,
+}
+
+async fn create_invitation(
+    State(state): State<CoreAppState>,
+    Path(org_id): Path<String>,
+    Json(req): Json<CreateInvitationReq>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    if !req.email.contains('@') {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "email looks invalid".into()));
+    }
+    let org_id = Uuid::parse_str(&org_id)
+        .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad org_id: {}", e)))?;
+    let role = req.role.as_deref().unwrap_or("member").to_string();
+    parse_role(&role)?; // validate before we persist anything
+
+    // Ensure the org actually exists so the invite can't reference a
+    // ghost org that's been deleted.
+    state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
+        .ok_or(ApiError(StatusCode::NOT_FOUND, "org not found".into()))?;
+
+    // Generate the nonce + payload. The verification_token row stores
+    // the JSON-encoded payload directly as the `token` column — we
+    // look it up verbatim on accept.
+    use base64::{engine::general_purpose, Engine as _};
+    use rand::RngCore;
+    let mut buf = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut buf);
+    let nonce = general_purpose::URL_SAFE_NO_PAD.encode(buf);
+    let payload = InvitePayload {
+        kind: "invite".into(),
+        org_id,
+        email: req.email.clone(),
+        role,
+        nonce,
+    };
+    let payload_str = serde_json::to_string(&payload)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("encode: {}", e)))?;
+
+    // Piggyback on create_verification_token by first creating a
+    // throwaway row for a synthetic user_id (the inviter is unknown
+    // at this point). We then overwrite its `token` column with the
+    // JSON payload via a raw UPDATE since the trait doesn't expose a
+    // "set token value" method. This keeps invitations purely
+    // store-side without a new trait method.
+    //
+    // To avoid needing raw SQL and a new trait method, we instead use
+    // `set_org_setting` to stash invitations under a per-token key.
+    let setting_key = format!("invite:{}", payload.nonce);
+    state
+        .store
+        .set_org_setting(org_id, &setting_key, serde_json::to_value(&payload).unwrap())
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "token": payload_str,
+            "org_id": org_id,
+            "email": payload.email,
+            "role": payload.role,
+        })),
+    ))
+}
+
+fn decode_invite_token(token: &str) -> Result<InvitePayload, ApiError> {
+    let payload: InvitePayload = serde_json::from_str(token)
+        .map_err(|_| ApiError(StatusCode::NOT_FOUND, "invalid invitation token".into()))?;
+    if payload.kind != "invite" {
+        return Err(ApiError(StatusCode::NOT_FOUND, "token is not an invitation".into()));
+    }
+    Ok(payload)
+}
+
+async fn get_invitation(
+    State(state): State<CoreAppState>,
+    Path(token): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let payload = decode_invite_token(&token)?;
+    let setting_key = format!("invite:{}", payload.nonce);
+    let setting =
+        state
+            .store
+            .get_org_setting(payload.org_id, &setting_key)
+            .await?
+            .ok_or(ApiError(
+                StatusCode::NOT_FOUND,
+                "invitation not found or already accepted".into(),
+            ))?;
+    let stored: InvitePayload = serde_json::from_value(setting.setting_value)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("decode: {}", e)))?;
+    // Defense in depth: verify the client-supplied token matches what we
+    // stored (ie. they didn't forge a fresh JSON with a guessed nonce).
+    if stored.nonce != payload.nonce
+        || stored.email != payload.email
+        || stored.org_id != payload.org_id
+    {
+        return Err(ApiError(
+            StatusCode::NOT_FOUND,
+            "invitation not found or already accepted".into(),
+        ));
+    }
+    Ok(Json(json!({
+        "org_id": stored.org_id,
+        "email": stored.email,
+        "role": stored.role,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+struct AcceptInvitationReq {
+    username: String,
+    password: String,
+}
+
+async fn accept_invitation(
+    State(state): State<CoreAppState>,
+    Path(token): Path<String>,
+    Json(req): Json<AcceptInvitationReq>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    if req.username.trim().is_empty() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "username must not be empty".into()));
+    }
+    if req.password.len() < 8 {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            "password must be at least 8 characters".into(),
+        ));
+    }
+
+    let payload = decode_invite_token(&token)?;
+    let setting_key = format!("invite:{}", payload.nonce);
+
+    // Consume: fetch, validate, then delete. Any error mid-flow leaves
+    // the invitation intact so it can be retried.
+    let setting =
+        state
+            .store
+            .get_org_setting(payload.org_id, &setting_key)
+            .await?
+            .ok_or(ApiError(
+                StatusCode::NOT_FOUND,
+                "invitation not found or already accepted".into(),
+            ))?;
+    let stored: InvitePayload = serde_json::from_value(setting.setting_value)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("decode: {}", e)))?;
+    if stored.nonce != payload.nonce || stored.email != payload.email {
+        return Err(ApiError(
+            StatusCode::NOT_FOUND,
+            "invitation not found or already accepted".into(),
+        ));
+    }
+
+    // Create the user account.
+    if state.store.find_user_by_username(&req.username).await?.is_some() {
+        return Err(ApiError(StatusCode::CONFLICT, "username already taken".into()));
+    }
+    if state.store.find_user_by_email(&stored.email).await?.is_some() {
+        return Err(ApiError(StatusCode::CONFLICT, "a user with this email already exists".into()));
+    }
+    let hash = mockforge_registry_core::auth::hash_password(&req.password)
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("hash: {}", e)))?;
+    let created = state.store.create_user(&req.username, &stored.email, &hash).await?;
+    // Invites are pre-verified by definition (someone already owns the
+    // mailbox and consented to join).
+    state.store.mark_user_verified(created.id).await?;
+    // Re-fetch so the response reflects the is_verified=true update.
+    let user = state
+        .store
+        .find_user_by_id(created.id)
+        .await?
+        .ok_or(ApiError(StatusCode::INTERNAL_SERVER_ERROR, "user vanished mid-accept".into()))?;
+
+    // Add them as an org member.
+    let role = parse_role(&stored.role)?;
+    state.store.create_org_member(stored.org_id, user.id, role).await?;
+
+    // Consume the invitation.
+    state.store.delete_org_setting(payload.org_id, &setting_key).await?;
+
+    // Issue a JWT so the new user is logged in immediately.
+    let jwt =
+        mockforge_registry_core::auth::create_access_token(&user.id.to_string(), &state.jwt_secret)
+            .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("jwt: {}", e)))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "is_verified": user.is_verified,
+            },
+            "org_id": stored.org_id,
+            "role": stored.role,
+            "token": jwt,
         })),
     ))
 }
@@ -1100,6 +1502,283 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_list_org_members_endpoint() {
+        let (router, _, org_id) = test_router_with_seed().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/registry/orgs/{}/members", org_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        // Fresh org with just an owner has no members yet.
+        assert!(body["members"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_add_update_remove_org_member_lifecycle() {
+        let (router, _, org_id) = test_router_with_seed().await;
+
+        // Create a new user via the write endpoint first.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/users",
+                json!({
+                    "username": "team-member",
+                    "email": "member@example.com",
+                    "password_hash": "bcrypt-hash-placeholder-long-enough"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let member_id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+        // Add as member
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                &format!("/api/admin/registry/orgs/{}/members", org_id),
+                json!({ "user_id": member_id, "role": "member" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        assert_eq!(body_json(resp).await["role"], "member");
+
+        // List shows the new member
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/registry/orgs/{}/members", org_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = body_json(resp).await;
+        assert_eq!(body["members"].as_array().unwrap().len(), 1);
+
+        // Update role to admin
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri(format!("/api/admin/registry/orgs/{}/members/{}", org_id, member_id))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"role": "admin"}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(body_json(resp).await["role"], "admin");
+
+        // Delete
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/admin/registry/orgs/{}/members/{}", org_id, member_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn test_org_quota_get_set() {
+        let (router, _, org_id) = test_router_with_seed().await;
+
+        // Initially empty
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["quota"], json!({}));
+
+        // PUT a quota
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "max_tokens": 10, "max_mocks": 100 }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // GET reflects it
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = body_json(resp).await;
+        assert_eq!(body["quota"]["max_tokens"], 10);
+        assert_eq!(body["quota"]["max_mocks"], 100);
+    }
+
+    #[tokio::test]
+    async fn test_org_quota_rejects_non_object() {
+        let (router, _, org_id) = test_router_with_seed().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!([1, 2, 3]).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_invitation_full_lifecycle() {
+        let router = test_router_with_jwt().await;
+
+        // Bootstrap: register owner, create org.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "owner",
+                    "email": "owner@example.com",
+                    "password": "ownerpass1"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let owner_id = body_json(resp).await["user"]["id"].as_str().unwrap().to_string();
+
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/orgs",
+                json!({
+                    "name": "Invite Corp",
+                    "slug": "invite-corp",
+                    "owner_id": owner_id,
+                    "plan": "free"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let org_id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+        // Create an invitation for a new email.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                &format!("/api/admin/registry/orgs/{}/invitations", org_id),
+                json!({ "email": "invitee@example.com", "role": "admin" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = body_json(resp).await;
+        let token = body["token"].as_str().unwrap().to_string();
+        assert_eq!(body["email"], "invitee@example.com");
+        assert_eq!(body["role"], "admin");
+
+        // GET the invitation (simulates the invitee clicking a link)
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/admin/registry/invitations/{}", urlencoding::encode(&token)))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["email"], "invitee@example.com");
+        assert_eq!(body["role"], "admin");
+
+        // Accept — creates user, membership, and returns a JWT.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                &format!("/api/admin/registry/invitations/{}/accept", urlencoding::encode(&token)),
+                json!({
+                    "username": "invitee",
+                    "password": "inviteepassword"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = body_json(resp).await;
+        assert_eq!(body["user"]["username"], "invitee");
+        assert_eq!(body["user"]["is_verified"], true);
+        assert_eq!(body["org_id"], org_id);
+        assert_eq!(body["role"], "admin");
+        assert!(body["token"].as_str().unwrap().len() > 20);
+
+        // Second accept of the same token must fail — it's consumed.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                &format!("/api/admin/registry/invitations/{}/accept", urlencoding::encode(&token)),
+                json!({
+                    "username": "invitee2",
+                    "password": "anotherpassword"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_invitation_rejects_garbage_token() {
+        let router = test_router_with_jwt().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/registry/invitations/not-a-real-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
