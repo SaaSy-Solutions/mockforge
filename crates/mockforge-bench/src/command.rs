@@ -2268,6 +2268,14 @@ impl BenchCommand {
                 }
             }
 
+            // Per-target output dir (used by both native and k6 paths).
+            // Created before the config so we can point the k6 script's
+            // handleSummary at the per-target directory rather than the shared
+            // parent output dir (otherwise every target would overwrite the
+            // same conformance-report.json).
+            let target_dir = self.output.join(format!("target_{}", idx));
+            std::fs::create_dir_all(&target_dir)?;
+
             let config = ConformanceConfig {
                 target_url: target.url.clone(),
                 api_key: self.conformance_api_key.clone(),
@@ -2276,15 +2284,11 @@ impl BenchCommand {
                 categories: categories.clone(),
                 base_path: self.base_path.clone(),
                 custom_headers: merged_headers,
-                output_dir: Some(self.output.clone()),
+                output_dir: Some(target_dir.clone()),
                 all_operations: self.conformance_all_operations,
                 custom_checks_file: self.conformance_custom.clone(),
                 request_delay_ms: self.conformance_delay_ms,
             };
-
-            // Per-target output dir (used by both native and k6 paths)
-            let target_dir = self.output.join(format!("target_{}", idx));
-            std::fs::create_dir_all(&target_dir)?;
 
             let target_start = std::time::Instant::now();
             let report = if self.use_k6 {
