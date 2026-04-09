@@ -9,7 +9,9 @@ pub mod permission_check;
 pub use mockforge_registry_core::permissions;
 pub mod rate_limit;
 pub mod request_id;
-pub mod scope_check;
+// `scope_check` now lives in mockforge-registry-core. Re-exported so
+// existing `crate::middleware::scope_check::*` paths keep working.
+pub use mockforge_registry_core::scope_check;
 pub mod trusted_proxy;
 
 use axum::{

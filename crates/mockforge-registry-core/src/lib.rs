@@ -16,6 +16,7 @@
 pub mod error;
 pub mod models;
 pub mod permissions;
+pub mod scope_check;
 pub mod store;
 pub mod validation;
 
