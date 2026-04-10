@@ -101,10 +101,12 @@ pub async fn update_organization_settings(
     if let Some(byok_api_key) = &request.byok_api_key {
         // Create or update BYOK config
         let provider = request.byok_provider.as_deref().unwrap_or("openai");
+        let encrypted_key = super::settings::encrypt_api_key(byok_api_key)?;
         let byok_config = BYOKConfig {
             provider: provider.to_string(),
-            api_key: byok_api_key.clone(),
+            api_key: encrypted_key,
             base_url: None,
+            model: None,
             enabled: true,
         };
 

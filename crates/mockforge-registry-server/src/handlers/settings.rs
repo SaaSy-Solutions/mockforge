@@ -2,7 +2,12 @@
 //!
 //! Provides endpoints for managing user and organization settings, including BYOK configuration
 
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{
+    extract::{Query, State},
+    http::HeaderMap,
+    Json,
+};
+use serde::Deserialize;
 
 use crate::{
     cache::{org_setting_cache_key, ttl, Cache},
@@ -32,7 +37,7 @@ fn get_byok_encryption_key() -> Result<mockforge_core::encryption::EncryptionKey
 }
 
 /// Encrypt a BYOK API key before storing
-fn encrypt_api_key(api_key: &str) -> Result<String, ApiError> {
+pub(crate) fn encrypt_api_key(api_key: &str) -> Result<String, ApiError> {
     if api_key.is_empty() {
         return Ok(String::new());
     }
@@ -42,7 +47,7 @@ fn encrypt_api_key(api_key: &str) -> Result<String, ApiError> {
 }
 
 /// Decrypt a stored BYOK API key
-fn decrypt_api_key(encrypted: &str) -> Result<String, ApiError> {
+pub(crate) fn decrypt_api_key(encrypted: &str) -> Result<String, ApiError> {
     if encrypted.is_empty() {
         return Ok(String::new());
     }
@@ -51,11 +56,28 @@ fn decrypt_api_key(encrypted: &str) -> Result<String, ApiError> {
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to decrypt API key: {}", e)))
 }
 
+/// Query parameters for BYOK config retrieval
+#[derive(Debug, Deserialize)]
+pub struct BYOKQueryParams {
+    /// Set to true to reveal the full API key (default: masked)
+    #[serde(default)]
+    pub reveal: bool,
+}
+
+/// Mask an API key, showing only the first 4 and last 4 characters
+fn mask_api_key(key: &str) -> String {
+    if key.len() <= 8 {
+        return "*".repeat(key.len());
+    }
+    format!("{}...{}", &key[..4], &key[key.len() - 4..])
+}
+
 /// Get BYOK configuration for the current organization
 pub async fn get_byok_config(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
+    Query(params): Query<BYOKQueryParams>,
 ) -> ApiResult<Json<BYOKConfig>> {
     // Resolve org context (BYOK is org-level)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
@@ -86,6 +108,7 @@ pub async fn get_byok_config(
                             provider: "openai".to_string(),
                             api_key: String::new(),
                             base_url: None,
+                            model: None,
                             enabled: false,
                         })
                     }
@@ -106,13 +129,19 @@ pub async fn get_byok_config(
                 provider: "openai".to_string(),
                 api_key: String::new(),
                 base_url: None,
+                model: None,
                 enabled: false,
             }
         }
     };
 
     // Decrypt the stored API key before returning
-    config.api_key = decrypt_api_key(&config.api_key)?;
+    let decrypted = decrypt_api_key(&config.api_key)?;
+    config.api_key = if params.reveal {
+        decrypted
+    } else {
+        mask_api_key(&decrypted)
+    };
 
     Ok(Json(config))
 }
@@ -234,4 +263,96 @@ pub async fn delete_byok_config(
         "success": true,
         "message": "BYOK configuration deleted"
     })))
+}
+
+/// Request body for testing a BYOK connection
+#[derive(Debug, Deserialize)]
+pub struct TestBYOKRequest {
+    pub provider: String,
+    pub api_key: String,
+    pub base_url: Option<String>,
+    pub model: Option<String>,
+}
+
+/// Test a BYOK API key by making a lightweight request to the provider
+pub async fn test_byok_connection(
+    AuthUser(_user_id): AuthUser,
+    Json(request): Json<TestBYOKRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create HTTP client: {}", e)))?;
+
+    let (url, auth_header) = match request.provider.as_str() {
+        "openai" => (
+            "https://api.openai.com/v1/models".to_string(),
+            format!("Bearer {}", request.api_key),
+        ),
+        "anthropic" => {
+            ("https://api.anthropic.com/v1/messages".to_string(), request.api_key.clone())
+        }
+        "together" => (
+            "https://api.together.xyz/v1/models".to_string(),
+            format!("Bearer {}", request.api_key),
+        ),
+        "fireworks" => (
+            "https://api.fireworks.ai/inference/v1/models".to_string(),
+            format!("Bearer {}", request.api_key),
+        ),
+        "custom" => {
+            let base = request
+                .base_url
+                .as_deref()
+                .ok_or_else(|| {
+                    ApiError::InvalidRequest("Base URL is required for custom provider".to_string())
+                })?
+                .trim_end_matches('/');
+            (format!("{}/models", base), format!("Bearer {}", request.api_key))
+        }
+        _ => {
+            return Err(ApiError::InvalidRequest(format!(
+                "Unknown provider: {}",
+                request.provider
+            )));
+        }
+    };
+
+    // Anthropic uses a different auth header and needs a POST with minimal body
+    let response = if request.provider == "anthropic" {
+        client
+            .post(&url)
+            .header("x-api-key", &request.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .body(r#"{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}"#)
+            .send()
+            .await
+    } else {
+        client.get(&url).header("Authorization", &auth_header).send().await
+    };
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() {
+                Ok(Json(serde_json::json!({
+                    "success": true,
+                    "message": "Connection successful",
+                    "provider": request.provider,
+                })))
+            } else {
+                let body = resp.text().await.unwrap_or_default();
+                Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Provider returned HTTP {}", status.as_u16()),
+                    "details": body,
+                })))
+            }
+        }
+        Err(e) => Ok(Json(serde_json::json!({
+            "success": false,
+            "message": format!("Connection failed: {}", e),
+        }))),
+    }
 }

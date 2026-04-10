@@ -152,6 +152,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/settings/byok", get(handlers::settings::get_byok_config))
         .route("/api/v1/settings/byok", put(handlers::settings::update_byok_config))
         .route("/api/v1/settings/byok", delete(handlers::settings::delete_byok_config))
+        .route("/api/v1/settings/byok/test", post(handlers::settings::test_byok_connection))
         // Token rotation
         .route("/api/v1/tokens/{token_id}/rotate", post(handlers::token_rotation::rotate_token))
         .route("/api/v1/tokens/rotation-status", get(handlers::token_rotation::get_tokens_needing_rotation))

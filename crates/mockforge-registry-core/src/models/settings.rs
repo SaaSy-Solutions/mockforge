@@ -35,6 +35,8 @@ pub struct BYOKConfig {
     pub provider: String, // 'openai', 'anthropic', 'together', 'fireworks', 'custom'
     pub api_key: String,
     pub base_url: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
     pub enabled: bool,
 }
 
