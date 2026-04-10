@@ -72,9 +72,10 @@ const LearningHubPage = lazy(() => import('../pages/LearningHubPage').then(m => 
 // User Management
 const UserManagementPage = lazy(() => import('../pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 
-// Registry admin (SQLite-backed OSS admin, talks to /api/admin/registry/*)
+// Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
+const RegistryInvitePage = lazy(() => import('../pages/RegistryInvitePage').then(m => ({ default: m.RegistryInvitePage })));
 
 // MockAI
 const MockAIPage = lazy(() => import('../pages/MockAIPage').then(m => ({ default: m.MockAIPage })));
@@ -179,9 +180,10 @@ export const routes: RouteConfig[] = [
   // User Management
   { path: '/user-management', element: <UserManagementPage /> },
 
-  // Registry admin (OSS SQLite-backed admin, /api/admin/registry/*)
+  // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },
   { path: '/registry-admin', element: <RegistryAdminPage /> },
+  { path: '/registry-admin/invite/:token', element: <RegistryInvitePage /> },
 
   // MockAI
   { path: '/mockai', element: <MockAIPage /> },
