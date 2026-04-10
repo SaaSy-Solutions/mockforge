@@ -184,6 +184,8 @@ async fn test_bench_command_parse_headers() {
         conformance_custom: None,
         conformance_delay_ms: 0,
         use_k6: false,
+        conformance_custom_filter: None,
+        export_requests: false,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -258,6 +260,8 @@ async fn test_bench_command_parse_headers_invalid_format() {
         conformance_custom: None,
         conformance_delay_ms: 0,
         use_k6: false,
+        conformance_custom_filter: None,
+        export_requests: false,
     };
 
     let result = cmd.parse_headers();

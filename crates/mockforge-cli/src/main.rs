@@ -2029,6 +2029,27 @@ enum Commands {
         /// Use this flag to fall back to the k6-based execution path.
         #[arg(long)]
         use_k6: bool,
+
+        /// Regex filter for custom conformance checks.
+        ///
+        /// Only custom checks whose name or path matches the regex pattern
+        /// are included. All spec-driven checks still run.
+        ///
+        /// Examples:
+        ///   --conformance-custom-filter "wafcrs|ssl"
+        ///   --conformance-custom-filter "GET"
+        ///   --conformance-custom-filter "/api/users"
+        #[arg(long, value_name = "REGEX")]
+        conformance_custom_filter: Option<String>,
+
+        /// Export all request/response pairs to conformance-requests.json.
+        ///
+        /// Creates a JSON file in the output directory containing every HTTP
+        /// request sent during conformance testing along with the full response
+        /// (status, headers, body). Useful for comparing against your product's
+        /// expected behavior.
+        #[arg(long)]
+        export_requests: bool,
     },
 
     /// Convert a HAR file to conformance custom-checks YAML
@@ -2683,6 +2704,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_custom,
             conformance_delay,
             use_k6,
+            conformance_custom_filter,
+            export_requests,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -2769,6 +2792,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_custom,
                 conformance_delay_ms: conformance_delay,
                 use_k6,
+                conformance_custom_filter,
+                export_requests,
             };
 
             if let Err(e) = bench_cmd.execute().await {

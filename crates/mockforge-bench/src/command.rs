@@ -174,6 +174,13 @@ pub struct BenchCommand {
     pub conformance_delay_ms: u64,
     /// Use k6 for conformance test execution instead of the native Rust executor
     pub use_k6: bool,
+    /// Regex filter for custom conformance checks — only checks whose name or
+    /// path matches the pattern are included. Example: "wafcrs|ssl" to test
+    /// only checks with "wafcrs" or "ssl" in the name/path.
+    pub conformance_custom_filter: Option<String>,
+    /// When true, export all request/response pairs to
+    /// `conformance-requests.json` in the output directory.
+    pub export_requests: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -582,6 +589,8 @@ impl BenchCommand {
                 conformance_custom: None,
                 conformance_delay_ms: 0,
                 use_k6: false,
+                conformance_custom_filter: None,
+                export_requests: false,
             },
             targets,
             max_concurrency,
@@ -1974,6 +1983,8 @@ impl BenchCommand {
             all_operations: self.conformance_all_operations,
             custom_checks_file: self.conformance_custom.clone(),
             request_delay_ms: self.conformance_delay_ms,
+            custom_filter: self.conformance_custom_filter.clone(),
+            export_requests: self.export_requests,
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -2288,6 +2299,8 @@ impl BenchCommand {
                 all_operations: self.conformance_all_operations,
                 custom_checks_file: self.conformance_custom.clone(),
                 request_delay_ms: self.conformance_delay_ms,
+                custom_filter: self.conformance_custom_filter.clone(),
+                export_requests: self.export_requests,
             };
 
             let target_start = std::time::Instant::now();
@@ -2764,6 +2777,8 @@ mod tests {
             conformance_custom: None,
             conformance_delay_ms: 0,
             use_k6: false,
+            conformance_custom_filter: None,
+            export_requests: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2836,6 +2851,8 @@ mod tests {
             conformance_custom: None,
             conformance_delay_ms: 0,
             use_k6: false,
+            conformance_custom_filter: None,
+            export_requests: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2904,6 +2921,8 @@ mod tests {
             conformance_custom: None,
             conformance_delay_ms: 0,
             use_k6: false,
+            conformance_custom_filter: None,
+            export_requests: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

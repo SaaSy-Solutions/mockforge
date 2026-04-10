@@ -36,6 +36,12 @@ pub struct ConformanceConfig {
     /// Delay in milliseconds between consecutive conformance requests.
     /// Useful when testing against rate-limited APIs. Default: 0 (no delay).
     pub request_delay_ms: u64,
+    /// Optional regex to filter custom checks by name or path.
+    /// Only checks whose name or path matches the regex are included.
+    pub custom_filter: Option<String>,
+    /// When true, export all request/response pairs to a JSON file
+    /// in the output directory (`conformance-requests.json`).
+    pub export_requests: bool,
 }
 
 impl ConformanceConfig {
@@ -71,15 +77,34 @@ impl ConformanceConfig {
 
     /// Generate a k6 group block for custom checks, if configured.
     /// Returns `Ok(None)` if no custom checks file is configured.
+    /// Respects `custom_filter` to include only matching checks.
     pub fn generate_custom_group(&self) -> Result<Option<String>> {
         let path = match &self.custom_checks_file {
             Some(p) => p,
             None => return Ok(None),
         };
-        let config = CustomConformanceConfig::from_file(path)?;
+        let mut config = CustomConformanceConfig::from_file(path)?;
         if config.custom_checks.is_empty() {
             return Ok(None);
         }
+
+        // Apply regex filter if provided
+        if let Some(ref pattern) = self.custom_filter {
+            let re = regex::Regex::new(pattern).map_err(|e| {
+                BenchError::Other(format!("Invalid --conformance-custom-filter regex: {}", e))
+            })?;
+            let total = config.custom_checks.len();
+            config.custom_checks.retain(|c| re.is_match(&c.name) || re.is_match(&c.path));
+            tracing::info!(
+                "Custom check filter: {}/{} checks matched pattern",
+                config.custom_checks.len(),
+                total
+            );
+            if config.custom_checks.is_empty() {
+                return Ok(None);
+            }
+        }
+
         Ok(Some(config.generate_k6_group("BASE_URL", &self.custom_headers)))
     }
 
@@ -849,6 +874,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -891,6 +918,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -914,6 +943,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -934,6 +965,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -956,6 +989,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -981,6 +1016,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -999,6 +1036,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -1017,6 +1056,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -1037,6 +1078,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://192.168.2.86");
     }
@@ -1055,6 +1098,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1081,6 +1126,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1111,6 +1158,8 @@ mod tests {
             all_operations: false,
             custom_checks_file: None,
             request_delay_ms: 0,
+            custom_filter: None,
+            export_requests: false,
         };
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));

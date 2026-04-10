@@ -178,6 +178,8 @@ async fn start_run(
             all_operations: req.all_operations.unwrap_or(false),
             custom_checks_file: None,
             request_delay_ms: req.request_delay_ms.unwrap_or(0),
+            custom_filter: None,
+            export_requests: false,
         };
 
         // Build executor

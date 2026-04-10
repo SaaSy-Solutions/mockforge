@@ -108,6 +108,21 @@ struct CheckResult {
     name: String,
     passed: bool,
     failure_detail: Option<FailureDetail>,
+    /// Captured request/response data for --export-requests (always populated
+    /// when export_requests is enabled, regardless of pass/fail).
+    captured: Option<CapturedExchange>,
+}
+
+/// A captured HTTP exchange for the --export-requests feature
+#[derive(Debug, serde::Serialize)]
+struct CapturedExchange {
+    method: String,
+    url: String,
+    request_headers: HashMap<String, String>,
+    request_body: String,
+    response_status: u16,
+    response_headers: HashMap<String, String>,
+    response_body: String,
 }
 
 /// Native conformance executor using reqwest
@@ -514,9 +529,31 @@ impl NativeConformanceExecutor {
             None => return Ok(self),
         };
         let custom_config = CustomConformanceConfig::from_file(&path)?;
+
+        // Compile the custom filter regex (if provided)
+        let filter_re = match &self.config.custom_filter {
+            Some(pattern) => Some(regex::Regex::new(pattern).map_err(|e| {
+                BenchError::Other(format!("Invalid --conformance-custom-filter regex: {}", e))
+            })?),
+            None => None,
+        };
+
+        let mut included = 0usize;
+        let total = custom_config.custom_checks.len();
         for check in &custom_config.custom_checks {
+            if let Some(ref re) = filter_re {
+                if !re.is_match(&check.name) && !re.is_match(&check.path) {
+                    continue;
+                }
+            }
             self.add_custom_check(check);
+            included += 1;
         }
+
+        if filter_re.is_some() {
+            tracing::info!("Custom check filter: {}/{} checks matched pattern", included, total);
+        }
+
         Ok(self)
     }
 
@@ -534,8 +571,44 @@ impl NativeConformanceExecutor {
             if delay > 0 && i > 0 {
                 tokio::time::sleep(Duration::from_millis(delay)).await;
             }
-            let result = self.execute_check(check).await;
-            results.push(result);
+            results.push(self.execute_check(check).await);
+        }
+
+        // Write request log if --export-requests was set
+        if self.config.export_requests {
+            if let Some(ref output_dir) = self.config.output_dir {
+                let request_log: Vec<_> = results
+                    .iter()
+                    .filter_map(|r| {
+                        r.captured.as_ref().map(|c| {
+                            serde_json::json!({
+                                "check": r.name,
+                                "passed": r.passed,
+                                "request": {
+                                    "method": c.method,
+                                    "url": c.url,
+                                    "headers": c.request_headers,
+                                    "body": c.request_body,
+                                },
+                                "response": {
+                                    "status": c.response_status,
+                                    "headers": c.response_headers,
+                                    "body": c.response_body,
+                                },
+                            })
+                        })
+                    })
+                    .collect();
+                let path = output_dir.join("conformance-requests.json");
+                if let Ok(json) = serde_json::to_string_pretty(&request_log) {
+                    let _ = std::fs::write(&path, json);
+                    tracing::info!(
+                        "Exported {} request/response pairs to {}",
+                        request_log.len(),
+                        path.display()
+                    );
+                }
+            }
         }
 
         Ok(Self::aggregate(results))
@@ -620,6 +693,15 @@ impl NativeConformanceExecutor {
             None => {}
         }
 
+        let req_body_str = match &check.body {
+            Some(CheckBody::Json(v)) => v.to_string(),
+            Some(CheckBody::FormUrlencoded(f)) => {
+                f.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")
+            }
+            Some(CheckBody::Raw { content, .. }) => content.clone(),
+            None => String::new(),
+        };
+
         let response = match request.send().await {
             Ok(resp) => resp,
             Err(e) => {
@@ -642,6 +724,7 @@ impl NativeConformanceExecutor {
                         expected: format!("{:?}", check.validation),
                         schema_violations: Vec::new(),
                     }),
+                    captured: None,
                 };
             }
         };
@@ -656,6 +739,25 @@ impl NativeConformanceExecutor {
 
         let (passed, schema_violations) =
             self.validate_response(&check.validation, status, &resp_headers, &resp_body);
+
+        // Always capture the exchange when export_requests is enabled
+        let captured = if self.config.export_requests {
+            Some(CapturedExchange {
+                method: check.method.to_string(),
+                url: url.clone(),
+                request_headers: check.headers.iter().cloned().collect(),
+                request_body: req_body_str,
+                response_status: status,
+                response_headers: resp_headers.clone(),
+                response_body: if resp_body.len() > 2000 {
+                    format!("{}...(truncated)", &resp_body[..2000])
+                } else {
+                    resp_body.clone()
+                },
+            })
+        } else {
+            None
+        };
 
         let failure_detail = if !passed {
             Some(FailureDetail {
@@ -695,6 +797,7 @@ impl NativeConformanceExecutor {
             name: check.name.clone(),
             passed,
             failure_detail,
+            captured,
         }
     }
 
@@ -1506,10 +1609,12 @@ mod tests {
                 name: "check1".to_string(),
                 passed: true,
                 failure_detail: None,
+                captured: None,
             },
             CheckResult {
                 name: "check2".to_string(),
                 passed: false,
+                captured: None,
                 failure_detail: Some(FailureDetail {
                     check: "check2".to_string(),
                     request: FailureRequest {
