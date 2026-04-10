@@ -6,7 +6,7 @@ import { FixturesResponseSchema } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation, authenticatedFetch } from './client';
 
 const isCloud = !!import.meta.env.VITE_API_BASE_URL;
-const FIXTURE_API_BASE = isCloud ? '/api/v1/fixtures' : FIXTURE_API_BASE;
+const FIXTURE_API_BASE = isCloud ? '/api/v1/fixtures' : '/__mockforge/fixtures';
 
 class FixturesApiService {
   constructor() {

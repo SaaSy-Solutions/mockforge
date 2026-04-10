@@ -168,6 +168,7 @@ pub fn create_admin_router(
         .route("/__mockforge/import/postman", post(import_postman))
         .route("/__mockforge/import/insomnia", post(import_insomnia))
         .route("/__mockforge/import/curl", post(import_curl))
+        .route("/__mockforge/import/openapi", post(import_openapi))
         .route("/__mockforge/import/preview", post(preview_import))
         .route("/__mockforge/import/history", get(get_import_history))
         .route("/__mockforge/import/history/clear", post(clear_import_history))
