@@ -18,7 +18,7 @@ import {
   Plus,
   Trash2,
   Copy,
-  CheckCircle2,
+  RefreshCw,
   Eye,
   EyeOff,
   Calendar,
@@ -35,6 +35,8 @@ interface ApiToken {
   expires_at?: string;
   last_used_at?: string;
   created_at: string;
+  age_days?: number;
+  needs_rotation?: boolean;
 }
 
 interface CreateTokenRequest {
@@ -46,6 +48,15 @@ interface CreateTokenRequest {
 interface CreateTokenResponse {
   token: string; // Full token (only shown once)
   token_info: ApiToken;
+}
+
+interface RotateTokenResponse {
+  success: boolean;
+  new_token: string;
+  new_token_id: string;
+  new_token_prefix: string;
+  old_token_deleted: boolean;
+  message: string;
 }
 
 // API base URL
@@ -96,13 +107,30 @@ async function deleteToken(tokenId: string): Promise<void> {
   }
 }
 
+async function rotateToken(tokenId: string, newName?: string, deleteOld?: boolean): Promise<RotateTokenResponse> {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_BASE}/tokens/${tokenId}/rotate`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ new_name: newName || undefined, delete_old: deleteOld }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to rotate token');
+  }
+  return response.json();
+}
+
 const AVAILABLE_SCOPES = [
   { value: 'read:packages', label: 'Read Packages', description: 'Read and search packages' },
   { value: 'publish:packages', label: 'Publish Packages', description: 'Publish new package versions' },
-  { value: 'read:projects', label: 'Read Projects', description: 'Read project information' },
-  { value: 'write:projects', label: 'Write Projects', description: 'Create and update projects' },
   { value: 'deploy:mocks', label: 'Deploy Mocks', description: 'Deploy hosted mock services' },
   { value: 'admin:org', label: 'Admin Organization', description: 'Full organization administration' },
+  { value: 'read:usage', label: 'Read Usage', description: 'Read usage analytics and metrics' },
+  { value: 'manage:billing', label: 'Manage Billing', description: 'Manage billing and subscription' },
 ];
 
 export function ApiTokensPage() {
@@ -114,6 +142,9 @@ export function ApiTokensPage() {
   const [expiresDays, setExpiresDays] = useState<number | undefined>(undefined);
   const [newToken, setNewToken] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [rotateDialogTokenId, setRotateDialogTokenId] = useState<string | null>(null);
+  const [rotateNewName, setRotateNewName] = useState('');
+  const [rotateDeleteOld, setRotateDeleteOld] = useState(false);
 
   // Fetch tokens
   const { data: tokens, isLoading } = useQuery({
@@ -149,6 +180,32 @@ export function ApiTokensPage() {
       showToast('error', 'Error', error.message || 'Failed to delete token');
     },
   });
+
+  // Rotate token mutation
+  const rotateTokenMutation = useMutation({
+    mutationFn: ({ tokenId, newName, deleteOld }: { tokenId: string; newName?: string; deleteOld?: boolean }) =>
+      rotateToken(tokenId, newName, deleteOld),
+    onSuccess: (data) => {
+      setNewToken(data.new_token);
+      setRotateDialogTokenId(null);
+      setRotateNewName('');
+      setRotateDeleteOld(false);
+      queryClient.invalidateQueries({ queryKey: ['api-tokens'] });
+      showToast('success', 'Success', data.message);
+    },
+    onError: (error: Error) => {
+      showToast('error', 'Error', error.message || 'Failed to rotate token');
+    },
+  });
+
+  const handleRotateToken = () => {
+    if (!rotateDialogTokenId) return;
+    rotateTokenMutation.mutate({
+      tokenId: rotateDialogTokenId,
+      newName: rotateNewName.trim() || undefined,
+      deleteOld: rotateDeleteOld,
+    });
+  };
 
   const handleCreateToken = () => {
     if (!newTokenName.trim()) {
@@ -330,6 +387,54 @@ export function ApiTokensPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Rotate Token Dialog */}
+      <Dialog open={!!rotateDialogTokenId} onOpenChange={() => setRotateDialogTokenId(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rotate Token</DialogTitle>
+            <DialogDescription>
+              Create a new token with the same scopes. The old token remains active unless you choose to delete it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rotate-new-name">New Token Name (optional)</Label>
+              <Input
+                id="rotate-new-name"
+                placeholder="Leave empty to keep current name"
+                value={rotateNewName}
+                onChange={(e) => setRotateNewName(e.target.value)}
+              />
+            </div>
+            <div
+              className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-accent cursor-pointer"
+              onClick={() => setRotateDeleteOld(!rotateDeleteOld)}
+            >
+              <input
+                type="checkbox"
+                checked={rotateDeleteOld}
+                onChange={() => setRotateDeleteOld(!rotateDeleteOld)}
+                className="mt-1"
+              />
+              <div className="flex-1">
+                <div className="font-medium">Delete old token</div>
+                <div className="text-sm text-muted-foreground">
+                  Immediately revoke the old token after rotation
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRotateDialogTokenId(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRotateToken} disabled={rotateTokenMutation.isPending}>
+              {rotateTokenMutation.isPending ? 'Rotating...' : 'Rotate Token'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Tokens List */}
       {isLoading ? (
         <div className="text-center py-12">Loading tokens...</div>
@@ -350,15 +455,23 @@ export function ApiTokensPage() {
                           Expires {formatDate(token.expires_at)}
                         </Badge>
                       )}
+                      {token.needs_rotation && (
+                        <Badge variant="destructive">
+                          Needs Rotation — {token.age_days} days old
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-3">
                       <div className="flex items-center">
                         <Key className="w-4 h-4 mr-1" />
                         <span className="font-mono">{token.token_prefix}...</span>
                       </div>
+                      <div className="flex items-center">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        Created: {formatDate(token.created_at)}
+                      </div>
                       {token.last_used_at && (
                         <div className="flex items-center">
-                          <Calendar className="w-4 h-4 mr-1" />
                           Last used: {formatDate(token.last_used_at)}
                         </div>
                       )}
@@ -374,18 +487,28 @@ export function ApiTokensPage() {
                       })}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (confirm('Are you sure you want to delete this token?')) {
-                        deleteTokenMutation.mutate(token.id);
-                      }
-                    }}
-                    disabled={deleteTokenMutation.isPending}
-                  >
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
+                  <div className="flex items-center space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRotateDialogTokenId(token.id)}
+                      title="Rotate token"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to delete this token?')) {
+                          deleteTokenMutation.mutate(token.id);
+                        }
+                      }}
+                      disabled={deleteTokenMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
