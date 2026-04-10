@@ -5,6 +5,7 @@
 //! and integration with deterministic mode settings.
 
 import React, { useState } from 'react';
+import { reportAiTokenUsage } from '@/services/api/usage';
 import {
   Sparkles,
   FileText,
@@ -114,6 +115,10 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
       const result = await response.json();
       setGeneratedSystem(result.system);
       setSelectedArtifact(null);
+
+      if (result.system?.tokens_used) {
+        reportAiTokenUsage(result.system.tokens_used, 'system-generation');
+      }
 
       toast.success(`System generated successfully! Version: ${result.system.version}`);
 

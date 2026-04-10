@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/Skeleton';
 import {
   TrendingUp,
   HardDrive,
@@ -10,7 +12,12 @@ import {
   Activity,
   Calendar,
   AlertCircle,
+  RefreshCw,
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
+import { authenticatedFetch } from '@/utils/apiClient';
 
 // Types
 interface UsageResponse {
@@ -18,13 +25,18 @@ interface UsageResponse {
   period_start: string;
   period_end: string;
   usage: {
-    requests: { used: number; limit: number; unit: string };
-    storage: { used: number; limit: number; unit: string };
-    egress: { used: number; limit: number; unit: string };
-    ai_tokens: { used: number; limit: number; unit: string };
+    requests: UsageMetric;
+    storage: UsageMetric;
+    egress: UsageMetric;
+    ai_tokens: UsageMetric;
   };
-  limits: Record<string, unknown>;
   plan: string;
+}
+
+interface UsageMetric {
+  used: number;
+  limit: number;
+  unit: string;
 }
 
 interface UsageHistoryResponse {
@@ -42,14 +54,10 @@ interface UsageHistoryResponse {
 // API base URL
 const API_BASE = '/api/v1';
 
+const HISTORY_PAGE_SIZE = 6;
+
 async function fetchUsage(): Promise<UsageResponse> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/usage`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const response = await authenticatedFetch(`${API_BASE}/usage`);
   if (!response.ok) {
     throw new Error('Failed to fetch usage');
   }
@@ -57,22 +65,17 @@ async function fetchUsage(): Promise<UsageResponse> {
 }
 
 async function fetchUsageHistory(): Promise<UsageHistoryResponse> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/usage/history`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const response = await authenticatedFetch(`${API_BASE}/usage/history`);
   if (!response.ok) {
     throw new Error('Failed to fetch usage history');
   }
   return response.json();
 }
 
+// Use SI units (base-1000) to match backend which stores limits in SI bytes
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return '0 B';
-  const k = 1024;
+  const k = 1000;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
@@ -95,32 +98,123 @@ const getUsageColor = (percentage: number) => {
   return 'bg-green-500';
 };
 
+const METRIC_LABELS: Record<string, string> = {
+  requests: 'API Requests',
+  storage: 'Storage',
+  egress: 'Data Egress',
+  ai_tokens: 'AI Tokens',
+};
+
+function getHighUsageMetrics(usage: UsageResponse['usage']): string[] {
+  return Object.entries(usage)
+    .filter(([, metric]) => metric.limit > 0 && getUsagePercentage(metric.used, metric.limit) > 75)
+    .map(([key]) => METRIC_LABELS[key] || key);
+}
+
+/** Skeleton placeholder for a usage metric card */
+function UsageCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center space-x-2">
+          <Skeleton width={20} height={20} />
+          <Skeleton width="40%" height={20} />
+        </div>
+        <Skeleton width="60%" height={14} className="mt-1" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <div className="flex justify-between mb-2">
+            <Skeleton width={40} height={14} />
+            <Skeleton width={80} height={14} />
+          </div>
+          <Skeleton width="100%" height={12} className="rounded-full" />
+          <Skeleton width="50%" height={10} className="mt-1" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function UsageDashboardPage() {
-  const { data: usage, isLoading: usageLoading } = useQuery({
+  const [historyPage, setHistoryPage] = useState(0);
+
+  const {
+    data: usage,
+    isLoading: usageLoading,
+    isError: usageError,
+    error: usageErrorDetail,
+    refetch: refetchUsage,
+  } = useQuery({
     queryKey: ['usage'],
     queryFn: fetchUsage,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
-  const { data: history, isLoading: historyLoading } = useQuery({
+  const {
+    data: history,
+    isLoading: historyLoading,
+    isError: historyError,
+    refetch: refetchHistory,
+  } = useQuery({
     queryKey: ['usage-history'],
     queryFn: fetchUsageHistory,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   if (usageLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12">Loading usage data...</div>
+      <div className="container mx-auto p-6 space-y-6">
+        <div>
+          <Skeleton width="50%" height={32} />
+          <Skeleton width="70%" height={16} className="mt-2" />
+        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <Skeleton width="40%" height={16} />
+              <Skeleton width={80} height={24} />
+            </div>
+          </CardContent>
+        </Card>
+        <div className="grid gap-4 md:grid-cols-2">
+          <UsageCardSkeleton />
+          <UsageCardSkeleton />
+          <UsageCardSkeleton />
+        </div>
       </div>
     );
   }
 
-  if (!usage) {
+  if (usageError || !usage) {
     return (
       <div className="container mx-auto p-6">
-        <div className="text-center py-12">Failed to load usage data</div>
+        <div className="text-center py-12 space-y-4">
+          <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+          <h2 className="text-lg font-semibold">Failed to load usage data</h2>
+          <p className="text-sm text-muted-foreground">
+            {usageErrorDetail instanceof Error ? usageErrorDetail.message : 'An unexpected error occurred'}
+          </p>
+          <Button variant="outline" onClick={() => refetchUsage()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
+
+  const highUsageMetrics = getHighUsageMetrics(usage.usage);
+
+  // Pagination for history
+  const totalHistory = history?.history.length ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalHistory / HISTORY_PAGE_SIZE));
+  const pagedHistory = history?.history.slice(
+    historyPage * HISTORY_PAGE_SIZE,
+    (historyPage + 1) * HISTORY_PAGE_SIZE,
+  ) ?? [];
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -157,173 +251,66 @@ export function UsageDashboardPage() {
         <TabsContent value="current" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             {/* Requests */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-2" />
-                  API Requests
-                </CardTitle>
-                <CardDescription>Monthly request usage</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Used</span>
-                    <span className="font-semibold">
-                      {formatNumber(usage.usage.requests.used)} /{' '}
-                      {formatNumber(usage.usage.requests.limit)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className={`h-3 rounded-full transition-all ${getUsageColor(
-                        getUsagePercentage(usage.usage.requests.used, usage.usage.requests.limit)
-                      )}`}
-                      style={{
-                        width: `${getUsagePercentage(
-                          usage.usage.requests.used,
-                          usage.usage.requests.limit
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {(
-                      usage.usage.requests.limit - usage.usage.requests.used
-                    ).toLocaleString()}{' '}
-                    requests remaining
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <UsageCard
+              icon={<TrendingUp className="w-5 h-5 mr-2" />}
+              title="API Requests"
+              description="Monthly request usage"
+              metric={usage.usage.requests}
+              formatValue={formatNumber}
+              remainingLabel="requests"
+            />
 
             {/* Storage */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <HardDrive className="w-5 h-5 mr-2" />
-                  Storage
-                </CardTitle>
-                <CardDescription>Storage usage</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Used</span>
-                    <span className="font-semibold">
-                      {formatBytes(usage.usage.storage.used)} /{' '}
-                      {formatBytes(usage.usage.storage.limit)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className={`h-3 rounded-full transition-all ${getUsageColor(
-                        getUsagePercentage(usage.usage.storage.used, usage.usage.storage.limit)
-                      )}`}
-                      style={{
-                        width: `${getUsagePercentage(
-                          usage.usage.storage.used,
-                          usage.usage.storage.limit
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {formatBytes(usage.usage.storage.limit - usage.usage.storage.used)} remaining
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <UsageCard
+              icon={<HardDrive className="w-5 h-5 mr-2" />}
+              title="Storage"
+              description="Storage usage"
+              metric={usage.usage.storage}
+              formatValue={formatBytes}
+            />
 
             {/* Egress */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Activity className="w-5 h-5 mr-2" />
-                  Data Egress
-                </CardTitle>
-                <CardDescription>Data transfer usage</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Used</span>
-                    <span className="font-semibold">
-                      {formatBytes(usage.usage.egress.used)}
-                    </span>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {usage.usage.egress.limit === -1
-                      ? 'Unlimited'
-                      : `${formatBytes(usage.usage.egress.limit - usage.usage.egress.used)} remaining`}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <UsageCard
+              icon={<Activity className="w-5 h-5 mr-2" />}
+              title="Data Egress"
+              description="Data transfer usage"
+              metric={usage.usage.egress}
+              formatValue={formatBytes}
+            />
 
-            {/* AI Tokens */}
-            {usage.usage.ai_tokens.limit > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Zap className="w-5 h-5 mr-2" />
-                    AI Tokens
-                  </CardTitle>
-                  <CardDescription>AI token usage</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span>Used</span>
-                      <span className="font-semibold">
-                        {formatNumber(usage.usage.ai_tokens.used)} /{' '}
-                        {formatNumber(usage.usage.ai_tokens.limit)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full transition-all ${getUsageColor(
-                          getUsagePercentage(
-                            usage.usage.ai_tokens.used,
-                            usage.usage.ai_tokens.limit
-                          )
-                        )}`}
-                        style={{
-                          width: `${getUsagePercentage(
-                            usage.usage.ai_tokens.used,
-                            usage.usage.ai_tokens.limit
-                          )}%`,
-                        }}
-                      />
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {(
-                        usage.usage.ai_tokens.limit - usage.usage.ai_tokens.used
-                      ).toLocaleString()}{' '}
-                      tokens remaining
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* AI Tokens - show if limit > 0 OR if there's actual usage */}
+            {(usage.usage.ai_tokens.limit > 0 || usage.usage.ai_tokens.used > 0) && (
+              <UsageCard
+                icon={<Zap className="w-5 h-5 mr-2" />}
+                title="AI Tokens"
+                description="AI token usage"
+                metric={usage.usage.ai_tokens}
+                formatValue={formatNumber}
+                remainingLabel="tokens"
+              />
             )}
           </div>
 
           {/* Usage Warnings */}
-          {Object.values(usage.usage).some(
-            (metric) =>
-              metric.limit > 0 &&
-              getUsagePercentage(metric.used, metric.limit) > 75
-          ) && (
+          {highUsageMetrics.length > 0 && (
             <Card className="border-yellow-500">
               <CardContent className="p-4">
                 <div className="flex items-start space-x-3">
                   <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5" />
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold mb-1">Usage Warning</h3>
                     <p className="text-sm text-muted-foreground">
-                      You're approaching your plan limits. Consider upgrading to avoid service
-                      interruptions.
+                      {highUsageMetrics.join(', ')}{' '}
+                      {highUsageMetrics.length === 1 ? 'is' : 'are'} approaching{' '}
+                      {highUsageMetrics.length === 1 ? 'its' : 'their'} plan limit.
                     </p>
+                    <a
+                      href="/billing"
+                      className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      Upgrade plan
+                      <ArrowUpRight className="w-3 h-3 ml-1" />
+                    </a>
                   </div>
                 </div>
               </CardContent>
@@ -334,10 +321,38 @@ export function UsageDashboardPage() {
         {/* History Tab */}
         <TabsContent value="history" className="space-y-4">
           {historyLoading ? (
-            <div className="text-center py-12">Loading history...</div>
-          ) : history && history.history.length > 0 ? (
             <div className="space-y-4">
-              {history.history.map((period, index) => (
+              {[0, 1, 2].map((i) => (
+                <Card key={i}>
+                  <CardHeader>
+                    <Skeleton width="30%" height={20} />
+                    <Skeleton width="50%" height={14} className="mt-1" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[0, 1, 2, 3].map((j) => (
+                        <div key={j}>
+                          <Skeleton width="60%" height={12} />
+                          <Skeleton width="40%" height={20} className="mt-1" />
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : historyError ? (
+            <div className="text-center py-12 space-y-4">
+              <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+              <h2 className="text-lg font-semibold">Failed to load usage history</h2>
+              <Button variant="outline" onClick={() => refetchHistory()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          ) : totalHistory > 0 ? (
+            <div className="space-y-4">
+              {pagedHistory.map((period, index) => (
                 <Card key={index}>
                   <CardHeader>
                     <CardTitle className="text-lg">
@@ -371,7 +386,8 @@ export function UsageDashboardPage() {
                           {formatBytes(period.egress_bytes)}
                         </div>
                       </div>
-                      {usage.usage.ai_tokens.limit > 0 && (
+                      {/* Show AI tokens in history if there's any non-zero usage OR current plan includes them */}
+                      {(period.ai_tokens_used > 0 || usage.usage.ai_tokens.limit > 0) && (
                         <div>
                           <div className="text-sm text-muted-foreground">AI Tokens</div>
                           <div className="text-lg font-semibold">
@@ -383,6 +399,38 @@ export function UsageDashboardPage() {
                   </CardContent>
                 </Card>
               ))}
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {historyPage * HISTORY_PAGE_SIZE + 1}–
+                    {Math.min((historyPage + 1) * HISTORY_PAGE_SIZE, totalHistory)} of{' '}
+                    {totalHistory} periods
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={historyPage === 0}
+                      onClick={() => setHistoryPage((p) => p - 1)}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm">
+                      {historyPage + 1} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={historyPage >= totalPages - 1}
+                      onClick={() => setHistoryPage((p) => p + 1)}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <Card>
@@ -398,5 +446,63 @@ export function UsageDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/** Reusable card for displaying a usage metric with optional progress bar */
+function UsageCard({
+  icon,
+  title,
+  description,
+  metric,
+  formatValue,
+  remainingLabel,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  metric: UsageMetric;
+  formatValue: (n: number) => string;
+  remainingLabel?: string;
+}) {
+  const isUnlimited = metric.limit === -1;
+  const percentage = getUsagePercentage(metric.used, metric.limit);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center">
+          {icon}
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <div className="flex justify-between text-sm mb-2">
+            <span>Used</span>
+            <span className="font-semibold">
+              {formatValue(metric.used)}
+              {!isUnlimited && metric.limit > 0 && ` / ${formatValue(metric.limit)}`}
+            </span>
+          </div>
+          {!isUnlimited && metric.limit > 0 && (
+            <div className="w-full bg-secondary rounded-full h-3">
+              <div
+                className={`h-3 rounded-full transition-all ${getUsageColor(percentage)}`}
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          )}
+          <div className="text-xs text-muted-foreground mt-1">
+            {isUnlimited
+              ? 'Unlimited'
+              : metric.limit > 0
+                ? `${formatValue(metric.limit - metric.used)} ${remainingLabel ?? ''} remaining`.trim()
+                : null}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -139,6 +139,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
+        .route("/api/v1/usage/ai-tokens", post(handlers::usage::report_ai_tokens))
         // Audit logs
         .route("/api/v1/organizations/{org_id}/audit-logs", get(handlers::audit::get_audit_logs))
         // GDPR compliance

@@ -12,6 +12,7 @@
 //! - Intention/state visualization
 
 import React, { useState, useEffect } from 'react';
+import { reportAiTokenUsage } from '@/services/api/usage';
 import {
   Users,
   Play,
@@ -234,6 +235,10 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
           prev.map((a) => (a.agent_id === result.agent.agent_id ? result.agent : a))
         );
         setCurrentState(result.agent.state_awareness);
+      }
+
+      if (result.tokens_used) {
+        reportAiTokenUsage(result.tokens_used, 'behavioral-simulation');
       }
 
       toast.success(`Simulation completed: ${result.intention}`);

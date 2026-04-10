@@ -5,12 +5,13 @@
 
 use axum::{extract::State, http::HeaderMap, Json};
 use chrono::Datelike;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
+    models::UsageCounter,
     AppState,
 };
 
@@ -59,7 +60,6 @@ pub async fn get_usage(
                 unit: "tokens".to_string(),
             },
         },
-        limits: limits.clone(),
         plan: org_ctx.org.plan().to_string(),
     }))
 }
@@ -103,7 +103,6 @@ pub struct UsageResponse {
     pub period_start: chrono::NaiveDate,
     pub period_end: chrono::NaiveDate,
     pub usage: UsageBreakdown,
-    pub limits: serde_json::Value,
     pub plan: String,
 }
 
@@ -136,6 +135,51 @@ pub struct UsagePeriod {
     pub egress_bytes: i64,
     pub storage_bytes: i64,
     pub ai_tokens_used: i64,
+}
+
+/// Request body for reporting AI token consumption
+#[derive(Debug, Deserialize)]
+pub struct ReportAiTokensRequest {
+    /// Number of tokens consumed
+    pub tokens: i64,
+    /// Optional description of the operation (e.g., "api-critique", "system-generation")
+    #[serde(default)]
+    pub operation: Option<String>,
+}
+
+/// Report AI token consumption for the authenticated user's organization
+///
+/// POST /api/v1/usage/ai-tokens
+pub async fn report_ai_tokens(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<ReportAiTokensRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if request.tokens <= 0 {
+        return Err(ApiError::InvalidRequest("tokens must be a positive integer".to_string()));
+    }
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    UsageCounter::increment_ai_tokens(state.db.pool(), org_ctx.org_id, request.tokens)
+        .await
+        .map_err(ApiError::Database)?;
+
+    tracing::info!(
+        org_id = %org_ctx.org_id,
+        tokens = request.tokens,
+        operation = request.operation.as_deref().unwrap_or("unknown"),
+        "AI token usage recorded"
+    );
+
+    Ok(Json(serde_json::json!({
+        "recorded": true,
+        "tokens": request.tokens,
+        "org_id": org_ctx.org_id,
+    })))
 }
 
 /// Calculate the end of a billing period (last day of the month)

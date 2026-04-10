@@ -184,6 +184,14 @@ pub async fn org_rate_limit_middleware(
         .map(|dt| dt.timestamp())
         .unwrap_or_else(|| now.timestamp() + 2592000); // Fallback: 30 days from now
 
+    // Capture request body size before it's consumed
+    let request_body_bytes: i64 = request
+        .headers()
+        .get("content-length")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+
     // Process request
     let mut response = next.run(request).await;
 
@@ -208,30 +216,33 @@ pub async fn org_rate_limit_middleware(
     // Increment usage (only for successful requests, 2xx status)
     let status = response.status();
     if status.is_success() {
-        // Estimate request size from response (approximate)
+        // Total egress = response body size + request body size (both count as data transfer)
         let response_size = estimate_response_size(&response);
+        let total_egress = response_size + request_body_bytes;
 
         // Increment usage asynchronously (don't block response)
         let pool_clone = pool.clone();
         let redis_clone = state.redis.clone();
         let org_id = org_ctx.org_id;
         tokio::spawn(async move {
-            let _ = increment_usage(&pool_clone, redis_clone.as_ref(), org_id, response_size).await;
+            let _ = increment_usage(&pool_clone, redis_clone.as_ref(), org_id, total_egress).await;
         });
     }
 
     Ok(response)
 }
 
-/// Estimate response size (approximate)
+/// Estimate response size from headers.
+///
+/// Uses Content-Length when available, falls back to a conservative 256-byte
+/// estimate (typical small JSON response) rather than the old 1KB default.
 fn estimate_response_size(response: &Response) -> i64 {
-    // This is a rough estimate - in production you might want to track actual bytes
-    // For now, we'll use a default estimate
-    response.headers()
+    response
+        .headers()
         .get("content-length")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(1024) // Default 1KB estimate
+        .unwrap_or(256)
 }
 
 /// Rate limit error

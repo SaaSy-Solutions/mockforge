@@ -6,6 +6,7 @@
 //! and restructuring recommendations.
 
 import React, { useState } from 'react';
+import { reportAiTokenUsage } from '@/services/api/usage';
 import {
   Upload,
   FileText,
@@ -186,6 +187,10 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
       const result = await response.json();
       setCritique(result.critique);
       setArtifactId(result.artifact_id || null);
+
+      if (result.critique?.tokens_used) {
+        reportAiTokenUsage(result.critique.tokens_used, 'api-critique');
+      }
 
       toast.success('API critique completed successfully');
 
