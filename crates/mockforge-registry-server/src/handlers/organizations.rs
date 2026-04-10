@@ -712,3 +712,345 @@ pub struct UpdateOrganizationRequest {
     pub slug: Option<String>,
     pub plan: Option<String>, // "free", "pro", or "team"
 }
+
+// ---------------------------------------------------------------------------
+// Phase B endpoints — added for cloud-mode registry-admin unification
+// ---------------------------------------------------------------------------
+
+/// GET /api/v1/organizations/slug/:slug
+pub async fn get_organization_by_slug(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(slug): Path<String>,
+) -> ApiResult<Json<OrganizationResponse>> {
+    let org = state
+        .store
+        .find_organization_by_slug(&slug)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    Ok(Json(OrganizationResponse {
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        plan: org.plan,
+        owner_id: org.owner_id,
+        created_at: org.created_at,
+    }))
+}
+
+/// GET /api/v1/organizations/:org_id/quota
+pub async fn get_organization_quota(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let setting = state.store.get_org_setting(org_id, "quota").await?;
+    let value = setting.map(|s| s.setting_value).unwrap_or_else(|| serde_json::json!({}));
+    Ok(Json(serde_json::json!({ "org_id": org_id, "quota": value })))
+}
+
+/// PUT /api/v1/organizations/:org_id/quota
+pub async fn set_organization_quota(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+    Json(quota): Json<serde_json::Value>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if !quota.is_object() {
+        return Err(ApiError::InvalidRequest("quota body must be a JSON object".to_string()));
+    }
+    let updated = state.store.set_org_setting(org_id, "quota", quota).await?;
+    Ok(Json(serde_json::json!({
+        "org_id": org_id,
+        "quota": updated.setting_value,
+        "updated_at": updated.updated_at,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Invitation flow — reuses org_settings under invite:{nonce} keys,
+// matching the OSS admin pattern from registry_admin.rs.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize, Deserialize)]
+struct InvitePayload {
+    kind: String,
+    org_id: Uuid,
+    email: String,
+    role: String,
+    nonce: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateInvitationRequest {
+    pub email: String,
+    pub role: Option<String>,
+}
+
+/// POST /api/v1/organizations/:org_id/invitations
+pub async fn create_invitation(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+    Json(req): Json<CreateInvitationRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if !req.email.contains('@') {
+        return Err(ApiError::InvalidRequest("email looks invalid".to_string()));
+    }
+    let role = req.role.as_deref().unwrap_or("member").to_string();
+    // Validate the role
+    match role.as_str() {
+        "owner" | "admin" | "member" => {}
+        _ => {
+            return Err(ApiError::InvalidRequest(format!(
+                "unknown role '{}' (expected owner/admin/member)",
+                role
+            )));
+        }
+    }
+
+    state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    use base64::Engine;
+    use rand::RngCore;
+    let mut buf = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut buf);
+    let nonce = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(buf);
+    let payload = InvitePayload {
+        kind: "invite".into(),
+        org_id,
+        email: req.email.clone(),
+        role: role.clone(),
+        nonce: nonce.clone(),
+    };
+    let payload_str = serde_json::to_string(&payload)
+        .map_err(|e| ApiError::InvalidRequest(format!("encode: {}", e)))?;
+
+    let setting_key = format!("invite:{}", nonce);
+    state
+        .store
+        .set_org_setting(org_id, &setting_key, serde_json::to_value(&payload).unwrap())
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "token": payload_str,
+        "org_id": org_id,
+        "email": req.email,
+        "role": role,
+    })))
+}
+
+/// GET /api/v1/invitations/:token
+pub async fn get_invitation(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let payload: InvitePayload = serde_json::from_str(&token)
+        .map_err(|_| ApiError::InvalidRequest("invalid invitation token".to_string()))?;
+    if payload.kind != "invite" {
+        return Err(ApiError::InvalidRequest("token is not an invitation".to_string()));
+    }
+
+    let setting_key = format!("invite:{}", payload.nonce);
+    let setting =
+        state
+            .store
+            .get_org_setting(payload.org_id, &setting_key)
+            .await?
+            .ok_or_else(|| {
+                ApiError::InvalidRequest("invitation not found or already accepted".to_string())
+            })?;
+    let stored: InvitePayload = serde_json::from_value(setting.setting_value)
+        .map_err(|e| ApiError::InvalidRequest(format!("decode: {}", e)))?;
+    if stored.nonce != payload.nonce || stored.email != payload.email {
+        return Err(ApiError::InvalidRequest(
+            "invitation not found or already accepted".to_string(),
+        ));
+    }
+
+    Ok(Json(serde_json::json!({
+        "org_id": stored.org_id,
+        "email": stored.email,
+        "role": stored.role,
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AcceptInvitationRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// POST /api/v1/invitations/:token/accept
+pub async fn accept_invitation(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+    Json(req): Json<AcceptInvitationRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if req.username.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("username must not be empty".to_string()));
+    }
+    if req.password.len() < 8 {
+        return Err(ApiError::InvalidRequest("password must be at least 8 characters".to_string()));
+    }
+
+    let payload: InvitePayload = serde_json::from_str(&token)
+        .map_err(|_| ApiError::InvalidRequest("invalid invitation token".to_string()))?;
+    let setting_key = format!("invite:{}", payload.nonce);
+
+    let setting =
+        state
+            .store
+            .get_org_setting(payload.org_id, &setting_key)
+            .await?
+            .ok_or_else(|| {
+                ApiError::InvalidRequest("invitation not found or already accepted".to_string())
+            })?;
+    let stored: InvitePayload = serde_json::from_value(setting.setting_value)
+        .map_err(|e| ApiError::InvalidRequest(format!("decode: {}", e)))?;
+    if stored.nonce != payload.nonce || stored.email != payload.email {
+        return Err(ApiError::InvalidRequest(
+            "invitation not found or already accepted".to_string(),
+        ));
+    }
+
+    // Check for duplicate username/email
+    if state.store.find_user_by_username(&req.username).await?.is_some() {
+        return Err(ApiError::InvalidRequest("username already taken".to_string()));
+    }
+    if state.store.find_user_by_email(&stored.email).await?.is_some() {
+        return Err(ApiError::InvalidRequest("a user with this email already exists".to_string()));
+    }
+
+    let hash = crate::auth::hash_password(&req.password).map_err(ApiError::Internal)?;
+    let created = state.store.create_user(&req.username, &stored.email, &hash).await?;
+    state.store.mark_user_verified(created.id).await?;
+    let user = state
+        .store
+        .find_user_by_id(created.id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("user vanished mid-accept".to_string()))?;
+
+    let role = match stored.role.as_str() {
+        "owner" => OrgRole::Owner,
+        "admin" => OrgRole::Admin,
+        _ => OrgRole::Member,
+    };
+    state.store.create_org_member(stored.org_id, user.id, role).await?;
+
+    state.store.delete_org_setting(payload.org_id, &setting_key).await?;
+
+    let jwt = crate::auth::create_access_token(&user.id.to_string(), &state.config.jwt_secret)
+        .map_err(ApiError::Internal)?;
+
+    Ok(Json(serde_json::json!({
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_verified": user.is_verified,
+        },
+        "org_id": stored.org_id,
+        "role": stored.role,
+        "token": jwt,
+    })))
+}
+
+/// GET /api/v1/users/email/:email (admin only)
+pub async fn find_user_by_email_admin(
+    State(state): State<AppState>,
+    AuthUser(caller_id): AuthUser,
+    Path(email): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let caller = state
+        .store
+        .find_user_by_id(caller_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("caller not found".to_string()))?;
+    if !caller.is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let user = state
+        .store
+        .find_user_by_email(&email)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest(format!("user '{}' not found", email)))?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_verified": user.is_verified,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+    })))
+}
+
+/// GET /api/v1/users/username/:username (admin only)
+pub async fn find_user_by_username_admin(
+    State(state): State<AppState>,
+    AuthUser(caller_id): AuthUser,
+    Path(username): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let caller = state
+        .store
+        .find_user_by_id(caller_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("caller not found".to_string()))?;
+    if !caller.is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let user = state
+        .store
+        .find_user_by_username(&username)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest(format!("user '{}' not found", username)))?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_verified": user.is_verified,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+    })))
+}
+
+/// POST /api/v1/users/:id/verify (admin only)
+pub async fn mark_user_verified_admin(
+    State(state): State<AppState>,
+    AuthUser(caller_id): AuthUser,
+    Path(user_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let caller = state
+        .store
+        .find_user_by_id(caller_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("caller not found".to_string()))?;
+    if !caller.is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    state.store.mark_user_verified(user_id).await?;
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("user not found".to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_verified": user.is_verified,
+    })))
+}

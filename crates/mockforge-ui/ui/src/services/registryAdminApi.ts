@@ -138,43 +138,75 @@ async function request<T>(
   return (await resp.json()) as T;
 }
 
+// --- Helpers ---------------------------------------------------------------
+
+/** Build the right path for the current mode. */
+function p(cloudPath: string, ossPath: string): string {
+  return isCloudMode() ? cloudPath : ossPath;
+}
+
 // --- Health ----------------------------------------------------------------
 
 export function registryHealth(): Promise<{ status: string }> {
-  return request('GET', '/api/admin/registry/health');
+  return request('GET', p('/health', '/api/admin/registry/health'));
 }
 
 // --- Auth ------------------------------------------------------------------
 
-export function registryLogin(
+export async function registryLogin(
   identifier: string,
   password: string,
 ): Promise<LoginResponse> {
+  if (isCloudMode()) {
+    // SaaS login uses {email, password} and returns AuthResponseV2
+    const resp = await request<{
+      access_token: string;
+      user_id: string;
+      username: string;
+    }>('POST', '/api/v1/auth/login', { email: identifier, password });
+    // Store the SaaS token so getStoredToken() picks it up.
+    try { localStorage.setItem('auth_token', resp.access_token); } catch { /* */ }
+    return {
+      token: resp.access_token,
+      user: { id: resp.user_id, username: resp.username, email: identifier, is_verified: true, is_admin: false },
+    };
+  }
   return request('POST', '/api/admin/registry/auth/login', { identifier, password });
 }
 
-export function registryRegister(
+export async function registryRegister(
   username: string,
   email: string,
   password: string,
 ): Promise<LoginResponse> {
+  if (isCloudMode()) {
+    const resp = await request<{
+      access_token: string;
+      user_id: string;
+      username: string;
+    }>('POST', '/api/v1/auth/register', { username, email, password });
+    try { localStorage.setItem('auth_token', resp.access_token); } catch { /* */ }
+    return {
+      token: resp.access_token,
+      user: { id: resp.user_id, username: resp.username, email, is_verified: false, is_admin: false },
+    };
+  }
   return request('POST', '/api/admin/registry/auth/register', { username, email, password });
 }
 
 export async function registryMe(): Promise<RegistryUser & { claims_exp?: number }> {
   if (isCloudMode()) {
-    // SaaS /api/v1/auth/me wraps response in {success, data}.
-    const resp = await request<{ success?: boolean; data?: Record<string, unknown> } & Record<string, unknown>>(
+    const d = await request<Record<string, unknown>>(
       'GET',
-      '/__mockforge/auth/me',
+      '/api/v1/auth/me',
     );
-    const d = resp.data ?? resp;
     return {
-      id: String(d.id ?? ''),
-      username: String(d.username ?? d.name ?? ''),
+      id: String(d.user_id ?? d.id ?? ''),
+      username: String(d.username ?? ''),
       email: String(d.email ?? ''),
-      is_verified: Boolean(d.is_verified ?? d.isVerified ?? true),
-      is_admin: Boolean(d.is_admin ?? d.isAdmin ?? d.role === 'admin'),
+      is_verified: Boolean(d.is_verified ?? true),
+      is_admin: Boolean(d.is_admin ?? false),
+      created_at: d.created_at as string | undefined,
     };
   }
   return request('GET', '/api/admin/registry/auth/me');
@@ -183,43 +215,66 @@ export async function registryMe(): Promise<RegistryUser & { claims_exp?: number
 // --- Users -----------------------------------------------------------------
 
 export function findUserByEmail(email: string): Promise<RegistryUser> {
-  return request('GET', `/api/admin/registry/users/email/${encodeURIComponent(email)}`);
+  return request('GET', p(
+    `/api/v1/users/email/${encodeURIComponent(email)}`,
+    `/api/admin/registry/users/email/${encodeURIComponent(email)}`,
+  ));
 }
 
 export function findUserByUsername(username: string): Promise<RegistryUser> {
-  return request(
-    'GET',
+  return request('GET', p(
+    `/api/v1/users/username/${encodeURIComponent(username)}`,
     `/api/admin/registry/users/username/${encodeURIComponent(username)}`,
-  );
+  ));
 }
 
 export function markUserVerified(userId: string): Promise<RegistryUser> {
-  return request('POST', `/api/admin/registry/users/${userId}/verify`);
+  return request('POST', p(
+    `/api/v1/users/${userId}/verify`,
+    `/api/admin/registry/users/${userId}/verify`,
+  ));
 }
 
 // --- Orgs ------------------------------------------------------------------
 
 export function findOrgBySlug(slug: string): Promise<RegistryOrg> {
-  return request('GET', `/api/admin/registry/orgs/slug/${encodeURIComponent(slug)}`);
+  return request('GET', p(
+    `/api/v1/organizations/slug/${encodeURIComponent(slug)}`,
+    `/api/admin/registry/orgs/slug/${encodeURIComponent(slug)}`,
+  ));
 }
 
-export function createOrg(
+export async function createOrg(
   name: string,
   slug: string,
   ownerId: string,
   plan: 'free' | 'pro' | 'team' = 'free',
 ): Promise<RegistryOrg> {
+  if (isCloudMode()) {
+    const resp = await request<Record<string, unknown>>(
+      'POST', '/api/v1/organizations', { name, slug, plan },
+    );
+    return {
+      id: String(resp.id), name: String(resp.name), slug: String(resp.slug),
+      owner_id: String(resp.owner_id), plan: String(resp.plan),
+      created_at: resp.created_at as string | undefined,
+    };
+  }
   return request('POST', '/api/admin/registry/orgs', {
-    name,
-    slug,
-    owner_id: ownerId,
-    plan,
+    name, slug, owner_id: ownerId, plan,
   });
 }
 
 // --- Org members -----------------------------------------------------------
 
-export function listOrgMembers(orgId: string): Promise<{ members: RegistryOrgMember[] }> {
+export async function listOrgMembers(orgId: string): Promise<{ members: RegistryOrgMember[] }> {
+  if (isCloudMode()) {
+    // SaaS returns a flat array, OSS wraps in {members: [...]}
+    const arr = await request<RegistryOrgMember[]>(
+      'GET', `/api/v1/organizations/${orgId}/members`,
+    );
+    return { members: Array.isArray(arr) ? arr : [] };
+  }
   return request('GET', `/api/admin/registry/orgs/${orgId}/members`);
 }
 
@@ -228,10 +283,10 @@ export function addOrgMember(
   userId: string,
   role: 'owner' | 'admin' | 'member' = 'member',
 ): Promise<RegistryOrgMember> {
-  return request('POST', `/api/admin/registry/orgs/${orgId}/members`, {
-    user_id: userId,
-    role,
-  });
+  return request('POST', p(
+    `/api/v1/organizations/${orgId}/members`,
+    `/api/admin/registry/orgs/${orgId}/members`,
+  ), { user_id: userId, role });
 }
 
 export function updateOrgMemberRole(
@@ -239,11 +294,17 @@ export function updateOrgMemberRole(
   userId: string,
   role: 'owner' | 'admin' | 'member',
 ): Promise<RegistryOrgMember> {
-  return request('PATCH', `/api/admin/registry/orgs/${orgId}/members/${userId}`, { role });
+  return request('PATCH', p(
+    `/api/v1/organizations/${orgId}/members/${userId}`,
+    `/api/admin/registry/orgs/${orgId}/members/${userId}`,
+  ), { role });
 }
 
 export function removeOrgMember(orgId: string, userId: string): Promise<void> {
-  return request('DELETE', `/api/admin/registry/orgs/${orgId}/members/${userId}`);
+  return request('DELETE', p(
+    `/api/v1/organizations/${orgId}/members/${userId}`,
+    `/api/admin/registry/orgs/${orgId}/members/${userId}`,
+  ));
 }
 
 // --- Quota -----------------------------------------------------------------
@@ -251,28 +312,49 @@ export function removeOrgMember(orgId: string, userId: string): Promise<void> {
 export function getOrgQuota(
   orgId: string,
 ): Promise<{ org_id: string; quota: Record<string, unknown> }> {
-  return request('GET', `/api/admin/registry/orgs/${orgId}/quota`);
+  return request('GET', p(
+    `/api/v1/organizations/${orgId}/quota`,
+    `/api/admin/registry/orgs/${orgId}/quota`,
+  ));
 }
 
 export function setOrgQuota(
   orgId: string,
   quota: Record<string, unknown>,
 ): Promise<{ org_id: string; quota: Record<string, unknown> }> {
-  return request('PUT', `/api/admin/registry/orgs/${orgId}/quota`, quota);
+  return request('PUT', p(
+    `/api/v1/organizations/${orgId}/quota`,
+    `/api/admin/registry/orgs/${orgId}/quota`,
+  ), quota);
 }
 
 // --- API tokens ------------------------------------------------------------
 
-export function createApiToken(
+export async function createApiToken(
   orgId: string,
   name: string,
   scopes: string[],
   userId?: string,
 ): Promise<CreateApiTokenResponse> {
+  if (isCloudMode()) {
+    // SaaS POST /api/v1/tokens takes {name, scopes, expires_at} and
+    // returns {token, token_id, token_prefix, name, scopes, ...}.
+    const resp = await request<Record<string, unknown>>(
+      'POST', '/api/v1/tokens', { name, scopes },
+    );
+    return {
+      token: String(resp.token),
+      id: String(resp.token_id),
+      org_id: orgId,
+      user_id: userId ?? null,
+      name: String(resp.name),
+      token_prefix: String(resp.token_prefix),
+      scopes: resp.scopes as string[],
+      created_at: String(resp.created_at),
+    };
+  }
   return request('POST', `/api/admin/registry/orgs/${orgId}/tokens`, {
-    name,
-    scopes,
-    user_id: userId,
+    name, scopes, user_id: userId,
   });
 }
 
@@ -290,11 +372,17 @@ export function createInvitation(
   email: string,
   role: 'owner' | 'admin' | 'member' = 'member',
 ): Promise<Invitation> {
-  return request('POST', `/api/admin/registry/orgs/${orgId}/invitations`, { email, role });
+  return request('POST', p(
+    `/api/v1/organizations/${orgId}/invitations`,
+    `/api/admin/registry/orgs/${orgId}/invitations`,
+  ), { email, role });
 }
 
 export function getInvitation(token: string): Promise<Invitation> {
-  return request('GET', `/api/admin/registry/invitations/${encodeURIComponent(token)}`);
+  return request('GET', p(
+    `/api/v1/invitations/${encodeURIComponent(token)}`,
+    `/api/admin/registry/invitations/${encodeURIComponent(token)}`,
+  ));
 }
 
 export function acceptInvitation(
@@ -304,7 +392,10 @@ export function acceptInvitation(
 ): Promise<LoginResponse & { org_id: string; role: string }> {
   return request(
     'POST',
-    `/api/admin/registry/invitations/${encodeURIComponent(token)}/accept`,
+    p(
+      `/api/v1/invitations/${encodeURIComponent(token)}/accept`,
+      `/api/admin/registry/invitations/${encodeURIComponent(token)}/accept`,
+    ),
     { username, password },
   );
 }
