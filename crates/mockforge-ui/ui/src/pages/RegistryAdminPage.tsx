@@ -14,33 +14,42 @@ import {
   createInvitation,
   clearStoredToken,
   getStoredToken,
+  isCloudMode,
   type RegistryUser,
   type RegistryOrg,
 } from '@/services/registryAdminApi';
 
-/// Minimal admin dashboard for the SQLite-backed OSS registry. Has three
-/// tabs (self, lookup, create) that cover the bootstrap + daily-use flows
-/// without duplicating the heavier UserManagementPage that's powered by
-/// the main admin UI's user store.
+/// Admin dashboard for registry management. In **cloud mode** it lives
+/// inside the standard AuthGuard (SaaS login) and reads the SaaS JWT.
+/// In **self-hosted mode** it uses its own JWT from /registry-login.
 export function RegistryAdminPage() {
   const navigate = useNavigate();
   const [me, setMe] = useState<RegistryUser | null>(null);
   const [meError, setMeError] = useState<string | null>(null);
   const [tab, setTab] = useState<'self' | 'lookup' | 'create'>('self');
+  const cloud = isCloudMode();
 
   React.useEffect(() => {
-    if (!getStoredToken()) {
+    // In cloud mode, AuthGuard already verified the user is logged in
+    // via the SaaS flow — no separate token check needed.
+    if (!cloud && !getStoredToken()) {
       navigate('/registry-login');
       return;
     }
     registryMe()
       .then(setMe)
       .catch((e: unknown) => setMeError(e instanceof Error ? e.message : String(e)));
-  }, [navigate]);
+  }, [navigate, cloud]);
 
   function logout() {
-    clearStoredToken();
-    navigate('/registry-login');
+    if (cloud) {
+      // In cloud mode, go back to the main app — AuthGuard will show
+      // the SaaS login if the session expired.
+      navigate('/dashboard');
+    } else {
+      clearStoredToken();
+      navigate('/registry-login');
+    }
   }
 
   return (

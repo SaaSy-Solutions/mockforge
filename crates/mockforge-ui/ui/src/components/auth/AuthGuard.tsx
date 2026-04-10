@@ -10,12 +10,15 @@ interface AuthGuardProps {
 
 /**
  * Paths that carry their own auth flow and must bypass the SaaS
- * AuthGuard entirely. The registry-admin module uses a separate JWT
- * signed against the SqliteRegistryStore — the SaaS auth store knows
- * nothing about it, so forcing SaaS login on these pages would block
- * the user from ever reaching the registry-admin UI.
+ * AuthGuard entirely. In **self-hosted mode** (no VITE_API_BASE_URL),
+ * the registry-admin module uses a separate JWT signed against the
+ * SqliteRegistryStore, so the SaaS auth check would block it. In
+ * **cloud mode**, the registry-admin pages live inside the normal SaaS
+ * auth flow — the user logs in once via the SaaS login, and the
+ * RegistryAdminPage reuses that JWT. So we only bypass in self-hosted.
  */
-const SELF_AUTHED_PREFIXES = ['/registry-login', '/registry-admin'];
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const SELF_AUTHED_PREFIXES = isCloud ? [] : ['/registry-login', '/registry-admin'];
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const location = useLocation();

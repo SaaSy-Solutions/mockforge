@@ -1,11 +1,21 @@
 // Registry admin API client.
 //
-// Talks to the /api/admin/registry/* endpoints exposed by
-// crates/mockforge-ui/src/registry_admin.rs (SQLite-backed OSS admin).
-// Kept intentionally separate from the existing authApi.ts so the two
-// auth flows (local admin UI vs registry admin) don't cross-contaminate.
+// In **cloud mode** (VITE_API_BASE_URL set): calls go to the SaaS
+// backend at /api/v1/* and use the existing SaaS JWT from useAuthStore
+// (stored under `auth_token` in localStorage).
+//
+// In **self-hosted mode** (no VITE_API_BASE_URL): calls go to the
+// embedded SQLite-backed endpoints at /api/admin/registry/* and use a
+// separate JWT stored under `mockforge_registry_admin_token`.
 
 const TOKEN_STORAGE_KEY = 'mockforge_registry_admin_token';
+const SAAS_TOKEN_KEY = 'auth_token'; // matches useAuthStore's persist key
+
+/** True when the frontend is served by Vercel with a cloud API backend. */
+export const isCloudMode = (): boolean => {
+  const apiBase = import.meta.env.VITE_API_BASE_URL;
+  return !!apiBase && apiBase !== '';
+};
 
 export interface RegistryUser {
   id: string;
@@ -52,17 +62,28 @@ export interface CreateApiTokenResponse {
   created_at: string;
 }
 
-/** Load the JWT from localStorage, or null if not logged in. */
+/** Load the JWT from localStorage, or null if not logged in.
+ *  In cloud mode, reads the SaaS token; in self-hosted mode, the
+ *  registry admin's own token. */
 export function getStoredToken(): string | null {
   try {
+    if (isCloudMode()) {
+      // SaaS auth store persists a JSON blob; extract the token field.
+      const raw = localStorage.getItem(SAAS_TOKEN_KEY);
+      if (!raw) return null;
+      // useAuthStore stores just the JWT string directly under auth_token
+      return raw;
+    }
     return localStorage.getItem(TOKEN_STORAGE_KEY);
   } catch {
     return null;
   }
 }
 
-/** Save the JWT to localStorage. */
+/** Save the JWT to localStorage (self-hosted only; cloud mode uses
+ *  the SaaS auth store which manages its own storage). */
 export function setStoredToken(token: string | null): void {
+  if (isCloudMode()) return; // cloud auth is managed by useAuthStore
   try {
     if (token === null) {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -74,8 +95,10 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
-/** Clear the stored JWT (logout). */
+/** Clear the stored JWT (logout). In cloud mode this is a no-op —
+ *  use `useAuthStore().logout()` instead. */
 export function clearStoredToken(): void {
+  if (isCloudMode()) return;
   setStoredToken(null);
 }
 
@@ -138,7 +161,22 @@ export function registryRegister(
   return request('POST', '/api/admin/registry/auth/register', { username, email, password });
 }
 
-export function registryMe(): Promise<RegistryUser & { claims_exp?: number }> {
+export async function registryMe(): Promise<RegistryUser & { claims_exp?: number }> {
+  if (isCloudMode()) {
+    // SaaS /api/v1/auth/me wraps response in {success, data}.
+    const resp = await request<{ success?: boolean; data?: Record<string, unknown> } & Record<string, unknown>>(
+      'GET',
+      '/__mockforge/auth/me',
+    );
+    const d = resp.data ?? resp;
+    return {
+      id: String(d.id ?? ''),
+      username: String(d.username ?? d.name ?? ''),
+      email: String(d.email ?? ''),
+      is_verified: Boolean(d.is_verified ?? d.isVerified ?? true),
+      is_admin: Boolean(d.is_admin ?? d.isAdmin ?? d.role === 'admin'),
+    };
+  }
   return request('GET', '/api/admin/registry/auth/me');
 }
 

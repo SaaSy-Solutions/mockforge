@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,12 @@ import {
   registryLogin,
   setStoredToken,
   registryHealth,
+  isCloudMode,
 } from '@/services/registryAdminApi';
 
 /// Login page for the OSS registry admin (/api/admin/registry/auth/login).
+/// In cloud mode this page is unnecessary — the AuthGuard shows the SaaS
+/// login and then RegistryAdminPage is rendered inside it. So we redirect.
 ///
 /// Kept intentionally separate from the existing LoginPage that talks to
 /// authApi.ts — these are two different auth flows:
@@ -25,6 +28,14 @@ import {
 /// backend response) when the registry admin isn't enabled.
 export function RegistryLoginPage() {
   const navigate = useNavigate();
+  const cloud = isCloudMode();
+
+  // In cloud mode, skip this page — the user logs in via the normal
+  // SaaS LoginForm (rendered by AuthGuard) and then navigates directly
+  // to /registry-admin.
+  if (cloud) {
+    return <Navigate to="/registry-admin" replace />;
+  }
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
