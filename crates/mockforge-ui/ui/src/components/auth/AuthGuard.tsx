@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { LoginForm } from './LoginForm';
 
@@ -7,14 +8,41 @@ interface AuthGuardProps {
   requiredRole?: 'admin' | 'viewer';
 }
 
+/**
+ * Paths that carry their own auth flow and must bypass the SaaS
+ * AuthGuard entirely. The registry-admin module uses a separate JWT
+ * signed against the SqliteRegistryStore — the SaaS auth store knows
+ * nothing about it, so forcing SaaS login on these pages would block
+ * the user from ever reaching the registry-admin UI.
+ */
+const SELF_AUTHED_PREFIXES = ['/registry-login', '/registry-admin'];
+
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
+  const location = useLocation();
   const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
-  // Check authentication on mount
+  // Bypass: let the registry-admin pages handle their own auth.
+  const isSelfAuthed = SELF_AUTHED_PREFIXES.some((p) =>
+    location.pathname.startsWith(p),
+  );
+
+  // Check authentication on mount (always called — React hooks
+  // must not be conditional). The check is skipped for self-authed
+  // paths in the render logic below, not here.
   useEffect(() => {
-    checkAuth().finally(() => setHasCheckedAuth(true));
-  }, [checkAuth]);
+    if (!isSelfAuthed) {
+      checkAuth().finally(() => setHasCheckedAuth(true));
+    } else {
+      setHasCheckedAuth(true);
+    }
+  }, [checkAuth, isSelfAuthed]);
+
+  // Registry-admin pages carry their own JWT auth — render them
+  // directly without waiting for the SaaS auth check.
+  if (isSelfAuthed) {
+    return <>{children}</>;
+  }
 
   // Show loading spinner until initial auth check completes
   if (!hasCheckedAuth || isLoading) {
