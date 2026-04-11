@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import {
-  CreditCard,
   CheckCircle2,
   XCircle,
   Calendar,
@@ -23,6 +22,7 @@ interface Subscription {
   org_id: string;
   plan: 'free' | 'pro' | 'team';
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+  cancel_at_period_end?: boolean;
   current_period_end?: string;
   usage: UsageStats;
   limits: {
@@ -53,6 +53,10 @@ interface CreateCheckoutRequest {
 
 interface CreateCheckoutResponse {
   checkout_url: string;
+}
+
+interface CreatePortalResponse {
+  portal_url: string;
 }
 
 // API base URL - adjust based on your setup
@@ -88,6 +92,24 @@ async function createCheckout(request: CreateCheckoutRequest): Promise<CreateChe
   return response.json();
 }
 
+async function createPortalSession(): Promise<CreatePortalResponse> {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_BASE}/billing/portal`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      return_url: window.location.href,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to create portal session');
+  }
+  return response.json();
+}
+
 export function BillingPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -111,6 +133,21 @@ export function BillingPage() {
     },
   });
 
+  // Create portal session mutation
+  const portalMutation = useMutation({
+    mutationFn: createPortalSession,
+    onSuccess: (data) => {
+      window.location.href = data.portal_url;
+    },
+    onError: (error: Error) => {
+      showToast('error', 'Error', error.message || 'Failed to open billing portal');
+    },
+  });
+
+  const handleManageSubscription = () => {
+    portalMutation.mutate();
+  };
+
   const handleUpgrade = (plan: 'pro' | 'team') => {
     setSelectedPlan(plan);
     checkoutMutation.mutate({
@@ -120,9 +157,22 @@ export function BillingPage() {
     });
   };
 
+  // Handle Stripe checkout redirect query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('success') === 'true') {
+      showToast('success', 'Subscription Updated', 'Your subscription has been updated successfully.');
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+      window.history.replaceState({}, '', '/billing');
+    } else if (params.get('canceled') === 'true') {
+      showToast('info', 'Checkout Canceled', 'Your checkout session was canceled.');
+      window.history.replaceState({}, '', '/billing');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
-    const k = 1024;
+    const k = 1000;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
@@ -177,6 +227,24 @@ export function BillingPage() {
         <p className="text-muted-foreground mt-2">Manage your subscription and view usage</p>
       </div>
 
+      {subscription.cancel_at_period_end && subscription.current_period_end && (
+        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Subscription Canceling</h3>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  Your subscription will be canceled at the end of the current billing period on{' '}
+                  {new Date(subscription.current_period_end).toLocaleDateString()}. You will retain
+                  access to your current plan until then.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -227,7 +295,7 @@ export function BillingPage() {
                     <span>{subscription.limits.hosted_mocks ? 'Yes' : 'No'}</span>
                   </div>
                 </div>
-                {subscription.plan === 'free' && (
+                {subscription.plan === 'free' ? (
                   <Button
                     onClick={() => handleUpgrade('pro')}
                     className="w-full"
@@ -235,6 +303,16 @@ export function BillingPage() {
                   >
                     <ArrowUpCircle className="w-4 h-4 mr-2" />
                     Upgrade to Pro
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={handleManageSubscription}
+                    className="w-full"
+                    disabled={portalMutation.isPending}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    {portalMutation.isPending ? 'Opening...' : 'Manage Subscription'}
                   </Button>
                 )}
               </CardContent>
@@ -327,124 +405,44 @@ export function BillingPage() {
         <TabsContent value="usage" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Detailed Usage</CardTitle>
-              <CardDescription>View detailed usage statistics</CardDescription>
+              <CardTitle className="flex items-center">
+                <TrendingUp className="w-5 h-5 mr-2" />
+                Usage Dashboard
+              </CardTitle>
+              <CardDescription>
+                View detailed usage statistics, history, and per-metric breakdowns
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Requests */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold flex items-center">
-                      <TrendingUp className="w-4 h-4 mr-2" />
-                      API Requests
-                    </h3>
-                    <span className="text-sm text-muted-foreground">
-                      {formatNumber(subscription.usage.requests)} /{' '}
-                      {formatNumber(subscription.usage.requests_limit)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className={`h-3 rounded-full transition-all ${
-                        getUsagePercentage(
-                          subscription.usage.requests,
-                          subscription.usage.requests_limit
-                        ) > 90
-                          ? 'bg-red-500'
-                          : getUsagePercentage(
-                              subscription.usage.requests,
-                              subscription.usage.requests_limit
-                            ) > 75
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                      }`}
-                      style={{
-                        width: `${getUsagePercentage(
-                          subscription.usage.requests,
-                          subscription.usage.requests_limit
-                        )}%`,
-                      }}
-                    />
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border p-3">
+                  <div className="text-sm text-muted-foreground">Requests</div>
+                  <div className="text-lg font-semibold">
+                    {formatNumber(subscription.usage.requests)} / {formatNumber(subscription.usage.requests_limit)}
                   </div>
                 </div>
-
-                {/* Storage */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-semibold flex items-center">
-                      <HardDrive className="w-4 h-4 mr-2" />
-                      Storage
-                    </h3>
-                    <span className="text-sm text-muted-foreground">
-                      {formatBytes(subscription.usage.storage_bytes)} /{' '}
-                      {formatBytes(subscription.usage.storage_limit_bytes)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className={`h-3 rounded-full transition-all ${
-                        getUsagePercentage(
-                          subscription.usage.storage_bytes,
-                          subscription.usage.storage_limit_bytes
-                        ) > 90
-                          ? 'bg-red-500'
-                          : getUsagePercentage(
-                              subscription.usage.storage_bytes,
-                              subscription.usage.storage_limit_bytes
-                            ) > 75
-                          ? 'bg-yellow-500'
-                          : 'bg-green-500'
-                      }`}
-                      style={{
-                        width: `${getUsagePercentage(
-                          subscription.usage.storage_bytes,
-                          subscription.usage.storage_limit_bytes
-                        )}%`,
-                      }}
-                    />
+                <div className="rounded-lg border p-3">
+                  <div className="text-sm text-muted-foreground">Storage</div>
+                  <div className="text-lg font-semibold">
+                    {formatBytes(subscription.usage.storage_bytes)} / {formatBytes(subscription.usage.storage_limit_bytes)}
                   </div>
                 </div>
-
-                {/* AI Tokens */}
                 {subscription.usage.ai_tokens_limit > 0 && (
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold flex items-center">
-                        <Zap className="w-4 h-4 mr-2" />
-                        AI Tokens
-                      </h3>
-                      <span className="text-sm text-muted-foreground">
-                        {formatNumber(subscription.usage.ai_tokens_used)} /{' '}
-                        {formatNumber(subscription.usage.ai_tokens_limit)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-secondary rounded-full h-3">
-                      <div
-                        className={`h-3 rounded-full transition-all ${
-                          getUsagePercentage(
-                            subscription.usage.ai_tokens_used,
-                            subscription.usage.ai_tokens_limit
-                          ) > 90
-                            ? 'bg-red-500'
-                            : getUsagePercentage(
-                                subscription.usage.ai_tokens_used,
-                                subscription.usage.ai_tokens_limit
-                              ) > 75
-                            ? 'bg-yellow-500'
-                            : 'bg-green-500'
-                        }`}
-                        style={{
-                          width: `${getUsagePercentage(
-                            subscription.usage.ai_tokens_used,
-                            subscription.usage.ai_tokens_limit
-                          )}%`,
-                        }}
-                      />
+                  <div className="rounded-lg border p-3">
+                    <div className="text-sm text-muted-foreground">AI Tokens</div>
+                    <div className="text-lg font-semibold">
+                      {formatNumber(subscription.usage.ai_tokens_used)} / {formatNumber(subscription.usage.ai_tokens_limit)}
                     </div>
                   </div>
                 )}
               </div>
+              <a
+                href="/usage"
+                className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                View full usage dashboard
+                <ExternalLink className="w-3 h-3 ml-1" />
+              </a>
             </CardContent>
           </Card>
         </TabsContent>
@@ -485,8 +483,14 @@ export function BillingPage() {
                 {subscription.plan === 'free' ? (
                   <Button disabled className="w-full">Current Plan</Button>
                 ) : (
-                  <Button variant="outline" className="w-full" disabled>
-                    Downgrade
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleManageSubscription}
+                    disabled={portalMutation.isPending}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    {portalMutation.isPending ? 'Opening...' : 'Manage via Stripe'}
                   </Button>
                 )}
               </CardContent>

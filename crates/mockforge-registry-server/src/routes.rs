@@ -119,6 +119,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Billing routes
         .route("/api/v1/billing/subscription", get(handlers::billing::get_subscription))
         .route("/api/v1/billing/checkout", post(handlers::billing::create_checkout))
+        .route("/api/v1/billing/portal", post(handlers::billing::create_portal_session))
         // Email verification (resend requires auth)
         .route("/api/v1/auth/verify-email/resend", post(handlers::verification::resend_verification))
         // Hosted mocks deployment routes

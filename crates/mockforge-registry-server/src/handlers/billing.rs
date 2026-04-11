@@ -3,8 +3,8 @@
 use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use stripe::{
-    CheckoutSession, CheckoutSessionMode, Client, CreateCheckoutSession,
-    CreateCheckoutSessionLineItems, EventObject, EventType,
+    BillingPortalSession, CheckoutSession, CheckoutSessionMode, Client, CreateBillingPortalSession,
+    CreateCheckoutSession, CreateCheckoutSessionLineItems, EventObject, EventType,
 };
 use uuid::Uuid;
 
@@ -51,6 +51,10 @@ pub async fn get_subscription(
             .as_ref()
             .map(|s| s.status().to_string())
             .unwrap_or_else(|| "free".to_string()),
+        cancel_at_period_end: subscription
+            .as_ref()
+            .map(|s| s.cancel_at_period_end)
+            .unwrap_or(false),
         current_period_end: subscription.as_ref().map(|s| s.current_period_end).or_else(|| {
             // For free plan, return None or far future
             Some(chrono::Utc::now() + chrono::Duration::days(365))
@@ -79,6 +83,7 @@ pub struct SubscriptionResponse {
     pub org_id: Uuid,
     pub plan: String,
     pub status: String,
+    pub cancel_at_period_end: bool,
     pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
     pub usage: UsageStats,
     pub limits: serde_json::Value,
@@ -223,6 +228,68 @@ pub async fn create_checkout(
             .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Stripe session missing URL")))?
             .to_string(),
         session_id: session.id.to_string(),
+    }))
+}
+
+/// Create Stripe Customer Portal session
+/// Allows users to manage subscription, payment methods, and view invoices
+#[derive(Debug, Deserialize)]
+pub struct CreatePortalRequest {
+    pub return_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreatePortalResponse {
+    pub portal_url: String,
+}
+
+pub async fn create_portal_session(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<CreatePortalRequest>,
+) -> ApiResult<Json<CreatePortalResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Only org owners can access the billing portal
+    if org_ctx.org.owner_id != user_id {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Require a Stripe customer ID
+    let stripe_customer_id = org_ctx.org.stripe_customer_id.as_ref().ok_or_else(|| {
+        ApiError::InvalidRequest(
+            "No billing account found. Please subscribe to a plan first.".to_string(),
+        )
+    })?;
+
+    // Get Stripe client
+    let stripe_secret = state
+        .config
+        .stripe_secret_key
+        .as_ref()
+        .ok_or_else(|| ApiError::InvalidRequest("Stripe not configured".to_string()))?;
+    let client = Client::new(stripe_secret);
+
+    let return_url = request
+        .return_url
+        .unwrap_or_else(|| format!("{}/billing", state.config.app_base_url));
+
+    let customer_id = stripe_customer_id
+        .parse()
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("Invalid Stripe customer ID")))?;
+
+    let mut params = CreateBillingPortalSession::new(customer_id);
+    params.return_url = Some(&return_url);
+
+    let session = BillingPortalSession::create(&client, params)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Stripe portal error: {}", e)))?;
+
+    Ok(Json(CreatePortalResponse {
+        portal_url: session.url,
     }))
 }
 
