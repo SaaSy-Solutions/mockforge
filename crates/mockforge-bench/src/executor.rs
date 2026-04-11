@@ -8,6 +8,23 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 
+/// Extract `MOCKFORGE_EXCHANGE:` JSON payload from a k6 output line (--export-requests).
+fn extract_exchange_json(line: &str) -> Option<String> {
+    let marker = "MOCKFORGE_EXCHANGE:";
+    let start = line.find(marker)?;
+    let json_start = start + marker.len();
+    let json_str = &line[json_start..];
+    let json_str = json_str.strip_suffix("\" source=console").unwrap_or(json_str).trim();
+    if json_str.is_empty() {
+        return None;
+    }
+    if json_str.starts_with('{') && json_str.contains("\\\"") {
+        Some(json_str.replace("\\\\", "\\").replace("\\\"", "\""))
+    } else {
+        Some(json_str.to_string())
+    }
+}
+
 /// Extract `MOCKFORGE_FAILURE:` JSON payload from a k6 output line.
 ///
 /// k6 may format console.log lines differently depending on output mode:
@@ -160,18 +177,26 @@ impl K6Executor {
         let fd_stdout = Arc::clone(&failure_details);
         let fd_stderr = Arc::clone(&failure_details);
 
+        // Collect request/response exchanges for --export-requests
+        let exchange_details: Arc<tokio::sync::Mutex<Vec<String>>> =
+            Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let ex_stdout = Arc::clone(&exchange_details);
+        let ex_stderr = Arc::clone(&exchange_details);
+
         // Collect all k6 output for saving to a log file
         let log_lines: Arc<tokio::sync::Mutex<Vec<String>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let log_stdout = Arc::clone(&log_lines);
         let log_stderr = Arc::clone(&log_lines);
 
-        // Read stdout lines, capturing MOCKFORGE_FAILURE markers
+        // Read stdout lines, capturing MOCKFORGE_FAILURE and MOCKFORGE_EXCHANGE markers
         let stdout_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stdout_lines.next_line().await {
                 log_stdout.lock().await.push(format!("[stdout] {}", line));
                 if let Some(json_str) = extract_failure_json(&line) {
                     fd_stdout.lock().await.push(json_str);
+                } else if let Some(json_str) = extract_exchange_json(&line) {
+                    ex_stdout.lock().await.push(json_str);
                 } else {
                     spinner.set_message(line.clone());
                     if !line.is_empty() && !line.contains("running") && !line.contains("default") {
@@ -182,13 +207,15 @@ impl K6Executor {
             spinner.finish_and_clear();
         });
 
-        // Read stderr lines, capturing MOCKFORGE_FAILURE markers
+        // Read stderr lines, capturing MOCKFORGE_FAILURE and MOCKFORGE_EXCHANGE markers
         let stderr_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stderr_lines.next_line().await {
                 if !line.is_empty() {
                     log_stderr.lock().await.push(format!("[stderr] {}", line));
                     if let Some(json_str) = extract_failure_json(&line) {
                         fd_stderr.lock().await.push(json_str);
+                    } else if let Some(json_str) = extract_exchange_json(&line) {
+                        ex_stderr.lock().await.push(json_str);
                     } else {
                         eprintln!("{}", line);
                     }
@@ -226,6 +253,22 @@ impl K6Executor {
                     details.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
                 if let Ok(json) = serde_json::to_string_pretty(&parsed) {
                     let _ = std::fs::write(&failure_path, json);
+                }
+            }
+
+            // Write exchange details (--export-requests) if any were captured
+            let exchanges = exchange_details.lock().await;
+            if !exchanges.is_empty() {
+                let exchange_path = dir.join("conformance-requests.json");
+                let parsed: Vec<serde_json::Value> =
+                    exchanges.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
+                if let Ok(json) = serde_json::to_string_pretty(&parsed) {
+                    let _ = std::fs::write(&exchange_path, json);
+                    tracing::info!(
+                        "Exported {} request/response pairs to {}",
+                        parsed.len(),
+                        exchange_path.display()
+                    );
                 }
             }
 

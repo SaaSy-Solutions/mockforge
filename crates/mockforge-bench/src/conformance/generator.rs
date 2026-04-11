@@ -105,7 +105,11 @@ impl ConformanceConfig {
             }
         }
 
-        Ok(Some(config.generate_k6_group("BASE_URL", &self.custom_headers)))
+        Ok(Some(config.generate_k6_group_with_options(
+            "BASE_URL",
+            &self.custom_headers,
+            self.export_requests,
+        )))
     }
 
     /// Returns the effective base URL with base_path appended.
@@ -211,6 +215,36 @@ impl ConformanceGenerator {
         script.push_str("    expected: expected,\n");
         script.push_str("  }));\n");
         script.push_str("}\n\n");
+
+        // Request/response capture for --export-requests (uses console.log since
+        // k6's handleSummary runs in a separate JS context with no access to
+        // module-level variables — the CLI parses the output log after k6 exits).
+        if self.config.export_requests {
+            script.push_str("function __captureExchange(checkName, res) {\n");
+            script.push_str("  let bodyStr = '';\n");
+            script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+            script.push_str("  let reqHeaders = {};\n");
+            script.push_str(
+                "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
+            );
+            script.push_str("  let reqBody = '';\n");
+            script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str("  console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
+            script.push_str("    check: checkName,\n");
+            script.push_str("    request: {\n");
+            script.push_str("      method: res.request ? res.request.method : 'unknown',\n");
+            script.push_str("      url: res.request ? res.request.url : res.url || 'unknown',\n");
+            script.push_str("      headers: reqHeaders,\n");
+            script.push_str("      body: reqBody,\n");
+            script.push_str("    },\n");
+            script.push_str("    response: {\n");
+            script.push_str("      status: res.status,\n");
+            script.push_str("      headers: res.headers ? Object.fromEntries(Object.entries(res.headers).slice(0, 30)) : {},\n");
+            script.push_str("      body: bodyStr,\n");
+            script.push_str("    },\n");
+            script.push_str("  }));\n");
+            script.push_str("}\n\n");
+        }
 
         // Default function
         script.push_str("export default function () {\n");
@@ -335,6 +369,7 @@ impl ConformanceGenerator {
             }
         }
         self.maybe_clear_cookie_jar(script);
+        self.maybe_capture_exchange(script);
     }
 
     /// Emit a POST/PUT/PATCH request with optional custom headers merged in.
@@ -352,6 +387,7 @@ impl ConformanceGenerator {
             method, url, body, merged
         ));
         self.maybe_clear_cookie_jar(script);
+        self.maybe_capture_exchange(script);
     }
 
     /// Emit a DELETE/HEAD/OPTIONS request with optional custom headers.
@@ -367,6 +403,16 @@ impl ConformanceGenerator {
             script.push_str(&format!("      let res = http.{}(`{}`);\n", method, url));
         }
         self.maybe_clear_cookie_jar(script);
+        self.maybe_capture_exchange(script);
+    }
+
+    /// Emit `__captureExchange` call when `--export-requests` is enabled.
+    fn maybe_capture_exchange(&self, script: &mut String) {
+        if self.config.export_requests {
+            script.push_str(
+                "      if (typeof __captureExchange === 'function') __captureExchange('', res);\n",
+            );
+        }
     }
 
     /// Emit cookie jar clearing after a request when custom Cookie headers are used.
@@ -814,7 +860,7 @@ impl ConformanceGenerator {
         script.push_str("  if (data.root_group) {\n");
         script.push_str("    walkGroups(data.root_group);\n");
         script.push_str("  }\n");
-        script.push_str("  return {\n");
+        script.push_str("  let result = {\n");
         script.push_str(&format!(
             "    '{}': JSON.stringify({{ checks: checkResults, overall: checks }}, null, 2),\n",
             report_path
@@ -822,6 +868,7 @@ impl ConformanceGenerator {
         script.push_str("    'summary.json': JSON.stringify(data),\n");
         script.push_str("    stdout: textSummary(data, { indent: '  ', enableColors: true }),\n");
         script.push_str("  };\n");
+        script.push_str("  return result;\n");
         script.push_str("}\n\n");
         script.push_str("// textSummary fallback\n");
         script.push_str("function textSummary(data, opts) {\n");

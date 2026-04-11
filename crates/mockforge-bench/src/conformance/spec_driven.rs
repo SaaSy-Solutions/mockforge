@@ -720,6 +720,34 @@ impl SpecDrivenConformanceGenerator {
         script.push_str("  console.log('MOCKFORGE_FAILURE:' + JSON.stringify(payload));\n");
         script.push_str("}\n\n");
 
+        // Request/response capture for --export-requests
+        if self.config.export_requests {
+            script.push_str("function __captureExchange(checkName, res) {\n");
+            script.push_str("  let bodyStr = '';\n");
+            script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+            script.push_str("  let reqHeaders = {};\n");
+            script.push_str(
+                "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
+            );
+            script.push_str("  let reqBody = '';\n");
+            script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str("  console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
+            script.push_str("    check: checkName,\n");
+            script.push_str("    request: {\n");
+            script.push_str("      method: res.request ? res.request.method : 'unknown',\n");
+            script.push_str("      url: res.request ? res.request.url : res.url || 'unknown',\n");
+            script.push_str("      headers: reqHeaders,\n");
+            script.push_str("      body: reqBody,\n");
+            script.push_str("    },\n");
+            script.push_str("    response: {\n");
+            script.push_str("      status: res.status,\n");
+            script.push_str("      headers: res.headers ? Object.fromEntries(Object.entries(res.headers).slice(0, 30)) : {},\n");
+            script.push_str("      body: bodyStr,\n");
+            script.push_str("    },\n");
+            script.push_str("  }));\n");
+            script.push_str("}\n\n");
+        }
+
         // Default function
         script.push_str("export default function () {\n");
 

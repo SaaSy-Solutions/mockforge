@@ -74,6 +74,17 @@ impl CustomConformanceConfig {
     /// `base_url` is the JS expression for the base URL (e.g., `"BASE_URL"`).
     /// `custom_headers` are additional headers to inject into every request.
     pub fn generate_k6_group(&self, base_url: &str, custom_headers: &[(String, String)]) -> String {
+        self.generate_k6_group_with_options(base_url, custom_headers, false)
+    }
+
+    /// Generate a k6 `group('Custom', ...)` block for all custom checks.
+    /// When `export_requests` is true, emits `__captureExchange` calls after each request.
+    pub fn generate_k6_group_with_options(
+        &self,
+        base_url: &str,
+        custom_headers: &[(String, String)],
+        export_requests: bool,
+    ) -> String {
         let mut script = String::with_capacity(4096);
         script.push_str("  group('Custom', function () {\n");
 
@@ -141,6 +152,14 @@ impl CustomConformanceConfig {
                         k6_method, url, body_expr, headers_js
                     ));
                 }
+            }
+
+            // Capture request/response when --export-requests is enabled
+            if export_requests {
+                script.push_str(&format!(
+                    "      if (typeof __captureExchange === 'function') __captureExchange('{}', res);\n",
+                    escaped_name
+                ));
             }
 
             // Status check with failure detail capture
