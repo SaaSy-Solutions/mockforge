@@ -80,7 +80,7 @@ test.describe('API Tokens — Deployed Site', () => {
       const dialog = page.getByRole('dialog');
       await expect(dialog.getByText('Scopes')).toBeVisible();
 
-      const scopes = ['Read Packages', 'Publish Packages', 'Read Projects', 'Write Projects', 'Deploy Mocks', 'Admin Organization'];
+      const scopes = ['Read Packages', 'Publish Packages', 'Deploy Mocks', 'Admin Organization', 'Read Usage', 'Manage Billing'];
       for (const scope of scopes) {
         await expect(dialog.getByText(scope, { exact: true }).first()).toBeVisible();
       }
@@ -138,7 +138,7 @@ test.describe('API Tokens — Deployed Site', () => {
       const dialog = page.getByRole('dialog');
       const checkboxes = dialog.getByRole('checkbox');
       // Click each labeled wrapper instead of the underlying input.
-      const labels = ['Read Packages', 'Publish Packages', 'Read Projects'];
+      const labels = ['Read Packages', 'Publish Packages', 'Deploy Mocks'];
       for (const label of labels) {
         await dialog.getByText(label).click();
       }
@@ -237,7 +237,7 @@ test.describe('API Tokens — Deployed Site', () => {
       // Click labeled wrappers (native checkboxes are inside cursor:pointer containers)
       await dialog.getByText('Read Packages').click();
       await dialog.getByText('Publish Packages').click();
-      await dialog.getByText('Read Projects').click();
+      await dialog.getByText('Deploy Mocks').click();
 
       await expect(checkboxes.nth(0)).toBeChecked();
       await expect(checkboxes.nth(1)).toBeChecked();
