@@ -163,8 +163,8 @@ test.describe('Organization — Deployed Site', () => {
       const dialog = page.getByRole('dialog');
       await expect(dialog).toBeVisible({ timeout: 10000 });
       await expect(dialog.getByRole('heading', { name: 'Add Member' })).toBeVisible({ timeout: 5000 });
-      await expect(dialog.getByText('Email')).toBeVisible();
-      await expect(dialog.getByText('Role')).toBeVisible();
+      await expect(dialog.getByText('Email', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('Role', { exact: true })).toBeVisible();
     });
 
     test('should close Add Member dialog on Cancel', async ({ page }) => {
