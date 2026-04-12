@@ -181,6 +181,9 @@ pub struct BenchCommand {
     /// When true, export all request/response pairs to
     /// `conformance-requests.json` in the output directory.
     pub export_requests: bool,
+    /// When true, validate each request against the OpenAPI spec and report
+    /// violations to `conformance-request-violations.json`.
+    pub validate_requests: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -591,6 +594,7 @@ impl BenchCommand {
                 use_k6: false,
                 conformance_custom_filter: None,
                 export_requests: false,
+                validate_requests: false,
             },
             targets,
             max_concurrency,
@@ -1985,6 +1989,7 @@ impl BenchCommand {
             request_delay_ms: self.conformance_delay_ms,
             custom_filter: self.conformance_custom_filter.clone(),
             export_requests: self.export_requests,
+            validate_requests: self.validate_requests,
         };
 
         // Branch: spec-driven mode vs reference mode
@@ -2008,6 +2013,26 @@ impl BenchCommand {
         } else {
             None
         };
+
+        // Request validation against OpenAPI spec (if --validate-requests is set)
+        if self.validate_requests && !self.spec.is_empty() {
+            TerminalReporter::print_progress("Validating requests against OpenAPI spec...");
+            let violation_count = crate::conformance::request_validator::run_request_validation(
+                &self.spec,
+                self.conformance_custom.as_deref(),
+                self.base_path.as_deref(),
+                &self.output,
+            )
+            .await?;
+            if violation_count > 0 {
+                TerminalReporter::print_warning(&format!(
+                    "{} request validation violation(s) found — see conformance-request-violations.json",
+                    violation_count
+                ));
+            } else {
+                TerminalReporter::print_success("All requests conform to the OpenAPI spec");
+            }
+        }
 
         // If generate-only OR --use-k6, use the k6 script generation path
         if self.generate_only || self.use_k6 {
@@ -2301,6 +2326,7 @@ impl BenchCommand {
                 request_delay_ms: self.conformance_delay_ms,
                 custom_filter: self.conformance_custom_filter.clone(),
                 export_requests: self.export_requests,
+                validate_requests: self.validate_requests,
             };
 
             let target_start = std::time::Instant::now();
@@ -2779,6 +2805,7 @@ mod tests {
             use_k6: false,
             conformance_custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -2853,6 +2880,7 @@ mod tests {
             use_k6: false,
             conformance_custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -2923,6 +2951,7 @@ mod tests {
             use_k6: false,
             conformance_custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

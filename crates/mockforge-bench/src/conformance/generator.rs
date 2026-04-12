@@ -42,6 +42,9 @@ pub struct ConformanceConfig {
     /// When true, export all request/response pairs to a JSON file
     /// in the output directory (`conformance-requests.json`).
     pub export_requests: bool,
+    /// When true, validate each request against the OpenAPI spec before
+    /// sending and report violations to `conformance-request-violations.json`.
+    pub validate_requests: bool,
 }
 
 impl ConformanceConfig {
@@ -923,6 +926,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -967,6 +971,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -992,6 +997,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -1014,6 +1020,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert!(config.should_include_category("Parameters"));
         assert!(config.should_include_category("Security"));
@@ -1038,6 +1045,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1065,6 +1073,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com");
     }
@@ -1085,6 +1094,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -1105,6 +1115,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://example.com/api");
     }
@@ -1127,6 +1138,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         assert_eq!(config.effective_base_url(), "https://192.168.2.86");
     }
@@ -1147,6 +1159,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1175,6 +1188,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let generator = ConformanceGenerator::new(config);
         let script = generator.generate().unwrap();
@@ -1207,6 +1221,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));

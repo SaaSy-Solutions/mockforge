@@ -180,6 +180,7 @@ async fn start_run(
             request_delay_ms: req.request_delay_ms.unwrap_or(0),
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         // Build executor

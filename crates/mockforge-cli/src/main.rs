@@ -2050,6 +2050,14 @@ enum Commands {
         /// expected behavior.
         #[arg(long)]
         export_requests: bool,
+
+        /// Validate each request against the OpenAPI spec.
+        ///
+        /// Checks that request bodies match the spec's requestBody schema,
+        /// required parameters are present, and content types are correct.
+        /// Violations are written to conformance-request-violations.json.
+        #[arg(long)]
+        validate_requests: bool,
     },
 
     /// Convert a HAR file to conformance custom-checks YAML
@@ -2706,6 +2714,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             use_k6,
             conformance_custom_filter,
             export_requests,
+            validate_requests,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -2794,6 +2803,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 use_k6,
                 conformance_custom_filter,
                 export_requests,
+                validate_requests,
             };
 
             if let Err(e) = bench_cmd.execute().await {

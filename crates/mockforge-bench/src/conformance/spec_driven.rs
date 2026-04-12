@@ -1362,6 +1362,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1406,6 +1407,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
 
         let operations = vec![AnnotatedOperation {
@@ -1481,6 +1483,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1626,6 +1629,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1672,6 +1676,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![annotated]);
         let (script, _check_count) = gen.generate().unwrap();
@@ -1716,6 +1721,7 @@ mod tests {
             request_delay_ms: 0,
             custom_filter: None,
             export_requests: false,
+            validate_requests: false,
         };
         let gen = SpecDrivenConformanceGenerator::new(config, vec![]);
 
