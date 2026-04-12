@@ -946,6 +946,14 @@ impl SpecDrivenConformanceGenerator {
             }
         }
 
+        // Capture request/response for --export-requests
+        if self.config.export_requests {
+            script.push_str(&format!(
+                "      if (typeof __captureExchange === 'function') __captureExchange('{}', res);\n",
+                check_name.replace('\'', "\\'")
+            ));
+        }
+
         // Check: emit assertion based on feature type, with failure detail capture
         if matches!(
             feature,

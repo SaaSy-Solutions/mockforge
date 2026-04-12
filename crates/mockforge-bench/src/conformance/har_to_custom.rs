@@ -46,12 +46,25 @@ pub struct HarQueryParam {
     pub value: String,
 }
 
+/// HAR post data
+#[derive(Debug, Deserialize, Default)]
+pub struct HarPostData {
+    /// MIME type
+    #[serde(rename = "mimeType", default)]
+    pub mime_type: String,
+    /// Request body text
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
 /// HAR request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct HarRequest {
     /// HTTP method (GET, POST, etc.)
+    #[serde(default)]
     pub method: String,
     /// Full request URL
+    #[serde(default)]
     pub url: String,
     /// Request headers
     #[serde(default)]
@@ -59,6 +72,9 @@ pub struct HarRequest {
     /// Query string parameters (structured)
     #[serde(rename = "queryString", default)]
     pub query_string: Vec<HarQueryParam>,
+    /// POST/PUT/PATCH request body
+    #[serde(rename = "postData", default)]
+    pub post_data: Option<HarPostData>,
 }
 
 /// HAR response
@@ -140,6 +156,9 @@ struct OutputCheck {
     path: String,
     method: String,
     expected_status: u16,
+    /// Request body for POST/PUT/PATCH (extracted from HAR postData)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<String>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     expected_headers: HashMap<String, String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -246,6 +265,15 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
         // Extract body fields from JSON response
         let expected_body_fields = extract_body_fields(entry);
 
+        // Extract request body from HAR postData (for POST/PUT/PATCH)
+        let body = entry
+            .request
+            .post_data
+            .as_ref()
+            .and_then(|pd| pd.text.as_deref())
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_string());
+
         // Build a human-readable check name (use path without query string)
         let slug = path_only.replace('/', "-").trim_matches('-').to_string();
         let name =
@@ -256,6 +284,7 @@ fn generate_custom_yaml(archive: &HarArchive, options: &HarToCustomOptions) -> R
             path,
             method,
             expected_status: entry.response.status,
+            body,
             expected_headers,
             expected_body_fields,
         });
@@ -513,6 +542,7 @@ mod tests {
                             url: "http://localhost:3000/api/users".to_string(),
                             headers: vec![],
                             query_string: vec![],
+                            post_data: None,
                         },
                         response: HarResponse {
                             status: 200,
@@ -540,6 +570,7 @@ mod tests {
                             url: "http://localhost:3000/api/users".to_string(),
                             headers: vec![],
                             query_string: vec![],
+                            post_data: None,
                         },
                         response: HarResponse {
                             status: 201,
@@ -559,6 +590,7 @@ mod tests {
                             url: "http://localhost:3000/static/app.js".to_string(),
                             headers: vec![],
                             query_string: vec![],
+                            post_data: None,
                         },
                         response: HarResponse {
                             status: 200,
@@ -678,6 +710,7 @@ mod tests {
                 url: "https://api.example.com:8443/v1/health".to_string(),
                 headers: vec![],
                 query_string: vec![],
+                post_data: None,
             },
             response: HarResponse {
                 status: 200,
@@ -732,6 +765,7 @@ mod tests {
                     value: "10".to_string(),
                 },
             ],
+            post_data: None,
         };
         let qs = extract_query_string(&request).unwrap();
         assert_eq!(qs, "page=1&limit=10");
@@ -744,6 +778,7 @@ mod tests {
             url: "http://localhost:3000/api/users?page=1&limit=10".to_string(),
             headers: vec![],
             query_string: vec![],
+            post_data: None,
         };
         let qs = extract_query_string(&request).unwrap();
         assert_eq!(qs, "page=1&limit=10");
@@ -756,6 +791,7 @@ mod tests {
             url: "http://localhost:3000/api/users".to_string(),
             headers: vec![],
             query_string: vec![],
+            post_data: None,
         };
         assert!(extract_query_string(&request).is_none());
     }
@@ -779,6 +815,7 @@ mod tests {
                                 value: "10".to_string(),
                             },
                         ],
+                        post_data: None,
                     },
                     response: HarResponse {
                         status: 200,
@@ -806,6 +843,7 @@ mod tests {
                         url: "http://localhost:3000/api/data".to_string(),
                         headers: vec![],
                         query_string: vec![],
+                        post_data: None,
                     },
                     response: HarResponse {
                         status: 200,
@@ -888,6 +926,7 @@ mod tests {
                 url: "http://localhost:3000/api/data".to_string(),
                 headers: vec![],
                 query_string: vec![],
+                post_data: None,
             },
             response: HarResponse {
                 status: 200,
@@ -928,6 +967,7 @@ mod tests {
                 url: "http://localhost:3000/api/data".to_string(),
                 headers: vec![],
                 query_string: vec![],
+                post_data: None,
             },
             response: HarResponse {
                 status: 200,
@@ -956,6 +996,7 @@ mod tests {
                 url: "http://localhost:3000/deep".to_string(),
                 headers: vec![],
                 query_string: vec![],
+                post_data: None,
             },
             response: HarResponse {
                 status: 200,
