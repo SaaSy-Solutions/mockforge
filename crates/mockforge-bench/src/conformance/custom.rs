@@ -144,7 +144,14 @@ impl CustomConformanceConfig {
                     // POST, PUT, PATCH
                     let k6_method = method.to_lowercase();
                     let body_expr = match &check.body {
-                        Some(b) => format!("'{}'", b.replace('\'', "\\'")),
+                        Some(b) => format!(
+                            "'{}'",
+                            b.replace('\\', "\\\\")
+                                .replace('\'', "\\'")
+                                .replace('\n', "\\n")
+                                .replace('\r', "\\r")
+                                .replace('\t', "\\t")
+                        ),
                         None => "null".to_string(),
                     };
                     script.push_str(&format!(
