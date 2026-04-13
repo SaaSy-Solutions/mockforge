@@ -7675,6 +7675,7 @@ dependencies = [
  "mockforge-tunnel",
  "mockforge-ui",
  "mockforge-vbr",
+ "mockforge-workspace",
  "mockforge-ws",
  "openapiv3",
  "predicates",
@@ -8957,6 +8958,17 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "mockforge-workspace"
+version = "0.3.112"
+dependencies = [
+ "globwalk",
+ "mockforge-core",
+ "serde",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

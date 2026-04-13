@@ -1,0 +1,17 @@
+[package]
+name = "mockforge-workspace"
+description = "Workspace management, Git sync, encryption, and multi-tenant routing for MockForge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["mock", "workspace", "git", "sync"]
+categories = ["development-tools::testing"]
+
+[dependencies]
+mockforge-core = { path = "../mockforge-core" }
+globwalk = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
