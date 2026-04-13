@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-workspace and mockforge-import crates are extracted
+#![allow(deprecated)]
+
 //! # `MockForge` Pipelines
 //!
 //! Event-driven pipeline orchestration for `MockForge`.

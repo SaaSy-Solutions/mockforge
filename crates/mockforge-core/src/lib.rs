@@ -312,7 +312,9 @@ pub mod priority_handler;
 pub mod protocol_abstraction;
 /// Protocol server lifecycle trait for uniform server startup and shutdown
 pub mod protocol_server;
-#[deprecated(note = "Will be extracted to mockforge-proxy crate")]
+/// Proxy module — migrating to `mockforge-proxy` crate.
+/// Import from `mockforge_proxy` instead of `mockforge_core::proxy`.
+#[deprecated(note = "Use mockforge_proxy crate directly")]
 pub mod proxy;
 pub mod reality;
 #[cfg(feature = "advanced")]

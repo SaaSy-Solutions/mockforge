@@ -268,10 +268,9 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<i64>;
 
     // ---------------------------------------------------------------------
-    // Suspicious activity
+    // Suspicious activity — record_suspicious_activity is below after Users
     // ---------------------------------------------------------------------
 
-    /// Record a suspicious-activity event. Failures are logged and swallowed.
     // ---------------------------------------------------------------------
     // Users
     // ---------------------------------------------------------------------

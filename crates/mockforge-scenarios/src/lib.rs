@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-intelligence and mockforge-contracts crates are extracted
+#![allow(deprecated)]
+
 //! # MockForge Scenarios Marketplace
 //!
 //! A marketplace system for sharing and importing complete mock system configurations.

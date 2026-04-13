@@ -53,6 +53,7 @@ oauth2 = { workspace = true }
 ring = { workspace = true }
 governor = "0.8"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-proxy = { path = "../mockforge-proxy" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }

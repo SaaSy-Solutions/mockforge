@@ -78,11 +78,11 @@ async fn handle_socket(socket: WebSocket, state: WsState, user_id: Option<Uuid>)
                     Some(Ok(Message::Text(text))) => {
                         if let Err(e) = handle_client_message(&text, client_id, user_id, &state, &mut subscriptions, &mut sender).await {
                             tracing::error!("Error handling client message: {}", e);
-                            let _ = sender.send(Message::Text(
-                                serde_json::to_string(&SyncMessage::Error {
+                            if let Ok(json) = serde_json::to_string(&SyncMessage::Error {
                                     message: e.to_string(),
-                                }).unwrap().into()
-                            )).await;
+                                }) {
+                                let _ = sender.send(Message::Text(json.into())).await;
+                            }
                         }
                     }
                     Some(Ok(Message::Close(_))) => {

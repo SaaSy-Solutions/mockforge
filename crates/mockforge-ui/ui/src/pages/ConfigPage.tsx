@@ -1,7 +1,7 @@
 import { logger } from '@/utils/logger';
 import { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
-import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
+import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateProtocols, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { toast } from 'sonner';
 import {
@@ -86,6 +86,7 @@ export function ConfigPage() {
   const updateLatency = useUpdateLatency();
   const updateFaults = useUpdateFaults();
   const updateProxy = useUpdateProxy();
+  const updateProtocols = useUpdateProtocols();
   const updateValidation = useUpdateValidation();
   const restartServers = useRestartServers();
   const { data: restartStatus } = useRestartStatus();
@@ -390,6 +391,11 @@ export function ConfigPage() {
           break;
         }
 
+        case 'protocols':
+          await updateProtocols.mutateAsync(formData.protocols);
+          toast.success('Protocol configuration saved successfully');
+          break;
+
         case 'traffic-shaping':
           // Traffic shaping configuration
           try {
@@ -583,7 +589,7 @@ export function ConfigPage() {
   };
 
   const handleSaveAll = async () => {
-    const sections = ['general', 'latency', 'faults', 'traffic-shaping', 'proxy', 'validation'];
+    const sections = ['general', 'latency', 'faults', 'traffic-shaping', 'proxy', 'validation', 'protocols'];
     let successCount = 0;
     let errorCount = 0;
 

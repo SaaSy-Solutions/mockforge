@@ -5,7 +5,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use super::{ManagementState, ServerConfig, ServerStats};
+use super::{ManagementState, ServerStats};
 
 /// Request to validate configuration
 #[derive(Debug, Deserialize)]

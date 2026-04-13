@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-workspace crate is extracted
+#![allow(deprecated)]
+
 //! Pillars: [Cloud]
 //!
 //! # `MockForge` Collaboration

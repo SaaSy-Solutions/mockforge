@@ -15,8 +15,6 @@
 //! Follow-up commits will fill in real SQLite queries for the
 //! OSS-essential paths (users, api tokens, orgs, audit logging).
 
-#![cfg(feature = "sqlite")]
-
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
@@ -509,7 +507,7 @@ impl RegistryStore for SqliteRegistryStore {
     ) -> StoreResult<Organization> {
         let id = Uuid::new_v4();
         let now = Utc::now().to_rfc3339();
-        let plan_str = serde_json::to_value(&plan)
+        let plan_str = serde_json::to_value(plan)
             .ok()
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "free".to_string());
@@ -588,7 +586,7 @@ impl RegistryStore for SqliteRegistryStore {
     }
 
     async fn update_organization_plan(&self, org_id: Uuid, plan: Plan) -> StoreResult<()> {
-        let plan_str = serde_json::to_value(&plan)
+        let plan_str = serde_json::to_value(plan)
             .ok()
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "free".to_string());
@@ -623,7 +621,7 @@ impl RegistryStore for SqliteRegistryStore {
     ) -> StoreResult<OrgMember> {
         let id = Uuid::new_v4();
         let now = Utc::now().to_rfc3339();
-        let role_str = serde_json::to_value(&role)
+        let role_str = serde_json::to_value(role)
             .ok()
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "member".to_string());
@@ -665,7 +663,7 @@ impl RegistryStore for SqliteRegistryStore {
         user_id: Uuid,
         role: OrgRole,
     ) -> StoreResult<()> {
-        let role_str = serde_json::to_value(&role)
+        let role_str = serde_json::to_value(role)
             .ok()
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "member".to_string());

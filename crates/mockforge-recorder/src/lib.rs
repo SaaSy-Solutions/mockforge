@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-intelligence crate is extracted
+#![allow(deprecated)]
+
 //! MockForge API Flight Recorder
 //!
 //! Records all API requests and responses for analysis, replay, and debugging.

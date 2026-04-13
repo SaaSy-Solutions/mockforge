@@ -12,8 +12,6 @@
 //! struct so any future handler can take `State<CoreAppState>` and reach
 //! the store through a stable `Arc<dyn RegistryStore>` dispatch.
 
-#![cfg(feature = "registry-admin")]
-
 use std::sync::Arc;
 
 use axum::{

@@ -136,10 +136,8 @@ impl PipelineEvent {
         version: Option<String>,
     ) -> Self {
         let mut payload = HashMap::new();
-        payload.insert(
-            "scenario_id".to_string(),
-            serde_json::to_value(scenario_id.to_string()).unwrap(),
-        );
+        payload
+            .insert("scenario_id".to_string(), serde_json::Value::String(scenario_id.to_string()));
         payload.insert("scenario_name".to_string(), serde_json::Value::String(scenario_name));
         if let Some(v) = version {
             payload.insert("version".to_string(), serde_json::Value::String(v));
@@ -168,8 +166,8 @@ impl PipelineEvent {
     ) -> Self {
         let mut payload = HashMap::new();
         payload.insert("endpoint".to_string(), serde_json::Value::String(endpoint));
-        payload.insert("drift_count".to_string(), serde_json::to_value(drift_count).unwrap());
-        payload.insert("threshold".to_string(), serde_json::to_value(threshold).unwrap());
+        payload.insert("drift_count".to_string(), serde_json::json!(drift_count));
+        payload.insert("threshold".to_string(), serde_json::json!(threshold));
 
         Self::new(
             PipelineEventType::DriftThresholdExceeded,
@@ -196,7 +194,7 @@ impl PipelineEvent {
         let mut payload = HashMap::new();
         payload.insert(
             "promotion_id".to_string(),
-            serde_json::to_value(promotion_id.to_string()).unwrap(),
+            serde_json::Value::String(promotion_id.to_string()),
         );
         payload.insert("entity_type".to_string(), serde_json::Value::String(entity_type));
         payload.insert("from_environment".to_string(), serde_json::Value::String(from_env));

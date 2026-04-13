@@ -25,6 +25,7 @@ pub struct CloudFixture {
 
 #[cfg(feature = "postgres")]
 impl CloudFixture {
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Uuid,
@@ -69,6 +70,7 @@ impl CloudFixture {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &sqlx::PgPool,
         id: Uuid,

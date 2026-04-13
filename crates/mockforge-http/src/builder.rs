@@ -24,7 +24,7 @@ use mockforge_chaos::core_failure_injection::FailureConfig;
 use mockforge_core::intelligent_behavior::MockAI;
 use mockforge_core::openapi::response::AiGenerator;
 use mockforge_core::openapi_routes::ValidationOptions;
-use mockforge_core::proxy::config::ProxyConfig;
+use mockforge_proxy::config::ProxyConfig;
 use mockforge_core::request_chaining::ChainConfig;
 use mockforge_chaos::core_traffic_shaping::TrafficShaper;
 use mockforge_core::MultiTenantConfig;

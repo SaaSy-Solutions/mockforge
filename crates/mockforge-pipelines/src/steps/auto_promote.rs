@@ -125,7 +125,7 @@ impl PipelineStepExecutor for AutoPromoteStep {
                 .and_then(|s| Uuid::parse_str(s).ok())
                 .unwrap_or_else(|| {
                     // Use a system user ID - in production this should come from event context
-                    Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap()
+                    Uuid::nil()
                 });
 
             // Get entity version from config or event

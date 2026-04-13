@@ -6,7 +6,7 @@
 use axum::{
     extract::Request, http::StatusCode, middleware::Next, response::Response, routing::get, Router,
 };
-use mockforge_core::proxy::{body_transform::BodyTransformationMiddleware, config::ProxyConfig};
+use mockforge_proxy::{body_transform::BodyTransformationMiddleware, config::ProxyConfig};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -158,7 +158,7 @@ async fn proxy_handler(
     }
 
     // Use ProxyClient directly with the full upstream URL to bypass ProxyHandler's URL construction
-    use mockforge_core::proxy::client::ProxyClient;
+    use mockforge_proxy::client::ProxyClient;
     let proxy_client = ProxyClient::new();
 
     // Convert method to reqwest method
@@ -378,7 +378,7 @@ pub async fn get_proxy_stats(state: &ProxyServer) -> ProxyStats {
 mod tests {
     use super::*;
     use axum::http::StatusCode;
-    use mockforge_core::proxy::config::ProxyConfig;
+    use mockforge_proxy::config::ProxyConfig;
 
     #[tokio::test]
     async fn test_proxy_server_creation() {

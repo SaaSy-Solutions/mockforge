@@ -79,7 +79,7 @@ pub(crate) async fn set_route_migration_mode(
         }
     };
 
-    use mockforge_core::proxy::config::MigrationMode;
+    use mockforge_proxy::config::MigrationMode;
     let mode = match request.mode.to_lowercase().as_str() {
         "mock" => MigrationMode::Mock,
         "shadow" => MigrationMode::Shadow,
@@ -145,7 +145,7 @@ pub(crate) async fn set_group_migration_mode(
         }
     };
 
-    use mockforge_core::proxy::config::MigrationMode;
+    use mockforge_proxy::config::MigrationMode;
     let mode = match request.mode.to_lowercase().as_str() {
         "mock" => MigrationMode::Mock,
         "shadow" => MigrationMode::Shadow,
@@ -225,10 +225,10 @@ pub(crate) async fn get_migration_status(
 
     for route in &routes {
         match route.migration_mode {
-            mockforge_core::proxy::config::MigrationMode::Mock => mock_count += 1,
-            mockforge_core::proxy::config::MigrationMode::Shadow => shadow_count += 1,
-            mockforge_core::proxy::config::MigrationMode::Real => real_count += 1,
-            mockforge_core::proxy::config::MigrationMode::Auto => auto_count += 1,
+            mockforge_proxy::config::MigrationMode::Mock => mock_count += 1,
+            mockforge_proxy::config::MigrationMode::Shadow => shadow_count += 1,
+            mockforge_proxy::config::MigrationMode::Real => real_count += 1,
+            mockforge_proxy::config::MigrationMode::Auto => auto_count += 1,
         }
     }
 

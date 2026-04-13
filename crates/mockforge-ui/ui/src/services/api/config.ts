@@ -13,7 +13,7 @@ class ConfigApiService {
     return fetchJson('/__mockforge/config/latency', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify({ config_type: 'latency', data: config }),
     }) as Promise<{ message: string }>;
   }
 
@@ -21,7 +21,7 @@ class ConfigApiService {
     return fetchJson('/__mockforge/config/faults', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify({ config_type: 'faults', data: config }),
     }) as Promise<{ message: string }>;
   }
 
@@ -29,7 +29,15 @@ class ConfigApiService {
     return fetchJson('/__mockforge/config/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify({ config_type: 'proxy', data: config }),
+    }) as Promise<{ message: string }>;
+  }
+
+  async updateProtocols(config: Record<string, boolean>): Promise<{ message: string }> {
+    return fetchJson('/__mockforge/config/protocols', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config_type: 'protocols', data: config }),
     }) as Promise<{ message: string }>;
   }
 }

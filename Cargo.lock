@@ -8044,6 +8044,7 @@ dependencies = [
  "mockforge-performance",
  "mockforge-pipelines",
  "mockforge-plugin-core",
+ "mockforge-proxy",
  "mockforge-recorder",
  "mockforge-route-chaos",
  "mockforge-runtime-daemon",
@@ -8094,6 +8095,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-data",
  "mockforge-http",
+ "mockforge-proxy",
  "mockforge-recorder",
  "mockforge-route-chaos",
  "mockforge-scenarios",
@@ -8390,6 +8392,20 @@ dependencies = [
  "tokio",
  "uuid",
  "wit-bindgen 0.46.0",
+]
+
+[[package]]
+name = "mockforge-proxy"
+version = "0.3.112"
+dependencies = [
+ "axum 0.8.8",
+ "mockforge-core",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tracing",
+ "url",
 ]
 
 [[package]]

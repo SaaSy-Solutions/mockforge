@@ -1,17 +1,23 @@
+#[cfg(any(feature = "smtp", feature = "mqtt", feature = "kafka"))]
+use axum::extract::Path;
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
+use axum::extract::Query;
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use axum::response::sse::{Event, Sse};
 use axum::{
-    extract::{Path, Query, State},
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Json},
 };
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use futures::stream::{self, Stream};
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use std::convert::Infallible;
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use tokio::sync::broadcast;
+#[cfg(any(feature = "mqtt", feature = "kafka"))]
 use tracing::*;
 
 use super::ManagementState;
@@ -264,6 +270,7 @@ pub(crate) async fn disconnect_mqtt_client(
 #[cfg(feature = "mqtt")]
 /// Request to publish a single MQTT message
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct MqttPublishRequest {
     /// Topic to publish to
     pub topic: String,
@@ -278,6 +285,7 @@ pub struct MqttPublishRequest {
 }
 
 #[cfg(feature = "mqtt")]
+#[allow(dead_code)]
 fn default_qos() -> u8 {
     0
 }
@@ -388,6 +396,7 @@ pub(crate) async fn publish_mqtt_message_handler(
 #[cfg(feature = "mqtt")]
 /// Request to publish multiple MQTT messages
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct MqttBatchPublishRequest {
     /// List of messages to publish
     pub messages: Vec<MqttPublishRequest>,
@@ -397,6 +406,7 @@ pub struct MqttBatchPublishRequest {
 }
 
 #[cfg(feature = "mqtt")]
+#[allow(dead_code)]
 fn default_delay() -> u64 {
     100
 }
