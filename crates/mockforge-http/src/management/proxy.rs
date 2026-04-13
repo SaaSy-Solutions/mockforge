@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::proxy::config::{BodyTransform, BodyTransformRule, TransformOperation};
+use mockforge_proxy::config::{BodyTransform, BodyTransformRule, TransformOperation};
 use serde::{Deserialize, Serialize};
 
 use super::{default_true, ManagementState};

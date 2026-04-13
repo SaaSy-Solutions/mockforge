@@ -153,6 +153,7 @@ pub fn create_admin_router(
         .route("/__mockforge/config/faults", post(update_faults))
         .route("/__mockforge/config/proxy", post(update_proxy))
         .route("/__mockforge/config/traffic-shaping", post(update_traffic_shaping))
+        .route("/__mockforge/config/protocols", post(update_protocols))
         .route("/__mockforge/logs", delete(clear_logs))
         .route("/__mockforge/restart", post(restart_servers))
         .route("/__mockforge/restart/status", get(get_restart_status))

@@ -50,6 +50,18 @@ export function useUpdateProxy() {
   });
 }
 
+export function useUpdateProtocols() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: configApi.updateProtocols,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.config });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
 /**
  * Environment variables hooks (global env vars, not workspace-scoped)
  */

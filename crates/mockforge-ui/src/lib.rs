@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-intelligence, mockforge-workspace, etc. crates are extracted
+#![allow(deprecated)]
+
 //! Pillars: [DevX]
 //!
 //! # MockForge UI

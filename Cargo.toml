@@ -34,6 +34,9 @@ members = [
     "crates/mockforge-analytics",
     "crates/mockforge-reporting",
 
+    # Extracted from mockforge-core
+    "crates/mockforge-proxy",
+
     # Advanced features
     "crates/mockforge-chaos",
     "crates/mockforge-federation",

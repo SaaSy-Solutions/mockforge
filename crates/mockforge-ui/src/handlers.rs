@@ -227,6 +227,8 @@ pub struct ConfigurationState {
     pub validation_settings: ValidationSettings,
     /// Traffic shaping settings
     pub traffic_shaping: TrafficShapingConfig,
+    /// Protocol enable/disable state
+    pub protocols: crate::models::ProtocolsState,
 }
 
 /// Import history entry
@@ -455,6 +457,19 @@ impl AdminState {
                         recovery_time_ms: 30000,
                         tag_overrides: HashMap::new(),
                     },
+                },
+                protocols: crate::models::ProtocolsState {
+                    http: true,
+                    graphql: true,
+                    grpc: true,
+                    websocket: true,
+                    smtp: false,
+                    mqtt: false,
+                    ftp: false,
+                    kafka: false,
+                    rabbitmq: false,
+                    amqp: false,
+                    tcp: false,
                 },
             })),
             logs: Arc::new(RwLock::new(Vec::new())),
@@ -760,6 +775,12 @@ impl AdminState {
         config.proxy_config.enabled = enabled;
         config.proxy_config.upstream_url = upstream_url;
         config.proxy_config.timeout_seconds = timeout_seconds;
+    }
+
+    /// Update protocol enable/disable state
+    pub async fn update_protocols_config(&self, protocols: crate::models::ProtocolsState) {
+        let mut config = self.config.write().await;
+        config.protocols = protocols;
     }
 
     /// Update validation settings
@@ -1518,6 +1539,36 @@ pub async fn update_proxy(
     Json(ApiResponse::success("Proxy configuration updated".to_string()))
 }
 
+/// Update protocol enable/disable configuration
+pub async fn update_protocols(
+    State(state): State<AdminState>,
+    Json(update): Json<ConfigUpdate>,
+) -> Json<ApiResponse<String>> {
+    if update.config_type != "protocols" {
+        return Json(ApiResponse::error("Invalid config type".to_string()));
+    }
+
+    let protocols = crate::models::ProtocolsState {
+        http: update.data.get("http").and_then(|v| v.as_bool()).unwrap_or(true),
+        graphql: update.data.get("graphql").and_then(|v| v.as_bool()).unwrap_or(false),
+        grpc: update.data.get("grpc").and_then(|v| v.as_bool()).unwrap_or(false),
+        websocket: update.data.get("websocket").and_then(|v| v.as_bool()).unwrap_or(false),
+        smtp: update.data.get("smtp").and_then(|v| v.as_bool()).unwrap_or(false),
+        mqtt: update.data.get("mqtt").and_then(|v| v.as_bool()).unwrap_or(false),
+        ftp: update.data.get("ftp").and_then(|v| v.as_bool()).unwrap_or(false),
+        kafka: update.data.get("kafka").and_then(|v| v.as_bool()).unwrap_or(false),
+        rabbitmq: update.data.get("rabbitmq").and_then(|v| v.as_bool()).unwrap_or(false),
+        amqp: update.data.get("amqp").and_then(|v| v.as_bool()).unwrap_or(false),
+        tcp: update.data.get("tcp").and_then(|v| v.as_bool()).unwrap_or(false),
+    };
+
+    state.update_protocols_config(protocols).await;
+
+    tracing::info!("Updated protocol configuration");
+
+    Json(ApiResponse::success("Protocol configuration updated".to_string()))
+}
+
 /// Clear request logs
 pub async fn clear_logs(State(state): State<AdminState>) -> Json<ApiResponse<String>> {
     // Clear the actual logs from state
@@ -1827,6 +1878,19 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
             "aggregate_errors": config_state.validation_settings.aggregate_errors,
             "validate_responses": config_state.validation_settings.validate_responses,
             "overrides": config_state.validation_settings.overrides
+        },
+        "protocols": {
+            "http": config_state.protocols.http,
+            "graphql": config_state.protocols.graphql,
+            "grpc": config_state.protocols.grpc,
+            "websocket": config_state.protocols.websocket,
+            "smtp": config_state.protocols.smtp,
+            "mqtt": config_state.protocols.mqtt,
+            "ftp": config_state.protocols.ftp,
+            "kafka": config_state.protocols.kafka,
+            "rabbitmq": config_state.protocols.rabbitmq,
+            "amqp": config_state.protocols.amqp,
+            "tcp": config_state.protocols.tcp
         }
     });
 
@@ -4899,6 +4963,19 @@ mod tests {
                     recovery_time_ms: 30000,
                     tag_overrides: HashMap::new(),
                 },
+            },
+            protocols: crate::models::ProtocolsState {
+                http: true,
+                graphql: true,
+                grpc: true,
+                websocket: true,
+                smtp: false,
+                mqtt: false,
+                ftp: false,
+                kafka: false,
+                rabbitmq: false,
+                amqp: false,
+                tcp: false,
             },
         };
 

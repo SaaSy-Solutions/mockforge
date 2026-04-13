@@ -1,11 +1,14 @@
 //! Subscription and billing models
 
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+#[cfg(feature = "postgres")]
 use crate::models::Plan;
+#[cfg(feature = "postgres")]
+use chrono::Datelike;
 
 /// Subscription status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

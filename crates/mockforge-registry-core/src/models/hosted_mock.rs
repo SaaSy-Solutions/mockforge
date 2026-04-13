@@ -33,6 +33,7 @@ impl std::fmt::Display for DeploymentStatus {
 }
 
 impl DeploymentStatus {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "pending" => Some(DeploymentStatus::Pending),
@@ -66,6 +67,7 @@ impl std::fmt::Display for HealthStatus {
 }
 
 impl HealthStatus {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "healthy" => Some(HealthStatus::Healthy),

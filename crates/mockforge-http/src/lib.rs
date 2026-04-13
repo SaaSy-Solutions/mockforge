@@ -1,3 +1,6 @@
+// TODO: remove once mockforge-intelligence, mockforge-proxy, etc. crates are extracted
+#![allow(deprecated)]
+
 //! # MockForge HTTP
 //!
 //! HTTP/REST API mocking library for MockForge.
@@ -1550,7 +1553,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     health_manager: Option<Arc<HealthManager>>,
     _mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
-    proxy_config: Option<mockforge_core::proxy::config::ProxyConfig>,
+    proxy_config: Option<mockforge_proxy::config::ProxyConfig>,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;

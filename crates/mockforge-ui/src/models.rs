@@ -265,6 +265,22 @@ pub struct ConfigUpdate {
     pub data: serde_json::Value,
 }
 
+/// Protocol enable/disable state for the admin UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProtocolsState {
+    pub http: bool,
+    pub graphql: bool,
+    pub grpc: bool,
+    pub websocket: bool,
+    pub smtp: bool,
+    pub mqtt: bool,
+    pub ftp: bool,
+    pub kafka: bool,
+    pub rabbitmq: bool,
+    pub amqp: bool,
+    pub tcp: bool,
+}
+
 /// Route management request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteUpdate {

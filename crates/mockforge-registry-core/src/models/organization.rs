@@ -347,6 +347,7 @@ impl OrgRole {
 }
 
 /// Get default limits for a plan
+#[cfg(feature = "postgres")]
 fn get_default_limits(plan: Plan) -> serde_json::Value {
     match plan {
         Plan::Free => serde_json::json!({

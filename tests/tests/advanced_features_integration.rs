@@ -8,14 +8,14 @@ use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::{
     config::{RouteConfig, RouteFaultInjectionConfig, RouteFaultType, RouteLatencyConfig},
     priority_handler::RouteChaosInjectorTrait,
-    proxy::{
-        conditional::{evaluate_proxy_condition, find_matching_rule},
-        config::ProxyRule,
-    },
     stateful_handler::{
         ResourceIdExtract, StateResponse, StatefulConfig, StatefulResponseHandler,
         TransitionTrigger,
     },
+};
+use mockforge_proxy::{
+    conditional::{evaluate_proxy_condition, find_matching_rule},
+    config::ProxyRule,
 };
 use mockforge_recorder::{
     models::{Protocol, RecordedExchange, RecordedRequest, RecordedResponse},
@@ -225,7 +225,7 @@ async fn test_conditional_proxying_jsonpath() {
         enabled: true,
         pattern: "/api/users".to_string(),
         upstream_url: "http://example.com".to_string(),
-        migration_mode: mockforge_core::proxy::config::MigrationMode::Auto,
+        migration_mode: mockforge_proxy::config::MigrationMode::Auto,
         migration_group: None,
         condition: Some("$.user.role == 'admin'".to_string()),
     };
@@ -269,7 +269,7 @@ async fn test_conditional_proxying_header() {
         enabled: true,
         pattern: "/api/protected/*".to_string(),
         upstream_url: "http://example.com".to_string(),
-        migration_mode: mockforge_core::proxy::config::MigrationMode::Auto,
+        migration_mode: mockforge_proxy::config::MigrationMode::Auto,
         migration_group: None,
         condition: Some("header[authorization] != ''".to_string()),
     };
@@ -302,7 +302,7 @@ async fn test_conditional_proxying_query_param() {
         enabled: true,
         pattern: "/api/data/*".to_string(),
         upstream_url: "http://example.com".to_string(),
-        migration_mode: mockforge_core::proxy::config::MigrationMode::Auto,
+        migration_mode: mockforge_proxy::config::MigrationMode::Auto,
         migration_group: None,
         condition: Some("query[env] == 'production'".to_string()),
     };
@@ -335,7 +335,7 @@ async fn test_find_matching_rule_with_condition() {
             enabled: true,
             pattern: "/api/users/*".to_string(),
             upstream_url: "http://users.example.com".to_string(),
-            migration_mode: mockforge_core::proxy::config::MigrationMode::Auto,
+            migration_mode: mockforge_proxy::config::MigrationMode::Auto,
             migration_group: None,
             condition: Some("header[authorization] != ''".to_string()),
         },
@@ -345,7 +345,7 @@ async fn test_find_matching_rule_with_condition() {
             enabled: true,
             pattern: "/api/public/*".to_string(),
             upstream_url: "http://public.example.com".to_string(),
-            migration_mode: mockforge_core::proxy::config::MigrationMode::Auto,
+            migration_mode: mockforge_proxy::config::MigrationMode::Auto,
             migration_group: None,
             condition: None, // No condition - always matches
         },

@@ -10,7 +10,7 @@ class ServerApiService {
   }
 
   async restartServer(reason?: string): Promise<RestartStatus> {
-    return fetchJson('/__mockforge/servers/restart', {
+    return fetchJson('/__mockforge/restart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: reason || 'Manual restart' }),
@@ -18,7 +18,7 @@ class ServerApiService {
   }
 
   async getRestartStatus(): Promise<RestartStatus> {
-    return fetchJson('/__mockforge/servers/restart/status') as Promise<RestartStatus>;
+    return fetchJson('/__mockforge/restart/status') as Promise<RestartStatus>;
   }
 }
 

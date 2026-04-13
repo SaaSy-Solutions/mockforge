@@ -20,7 +20,7 @@ use axum::{
     Router,
 };
 use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::proxy::config::ProxyConfig;
+use mockforge_proxy::config::ProxyConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};

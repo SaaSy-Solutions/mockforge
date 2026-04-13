@@ -1,0 +1,23 @@
+[package]
+name = "mockforge-proxy"
+description = "Proxy functionality for forwarding requests to upstream services"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["mock", "proxy", "api", "testing"]
+categories = ["development-tools::testing"]
+
+[features]
+schema = ["dep:schemars"]
+
+[dependencies]
+schemars = { version = "0.8", optional = true }
+mockforge-core = { path = "../mockforge-core" }
+axum = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }

@@ -21,6 +21,7 @@ export {
   useUpdateLatency,
   useUpdateFaults,
   useUpdateProxy,
+  useUpdateProtocols,
   useEnvVars,
   useUpdateEnvVar,
   useConfiguration,

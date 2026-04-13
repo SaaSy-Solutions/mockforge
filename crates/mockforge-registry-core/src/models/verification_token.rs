@@ -1,6 +1,5 @@
 //! Email verification token model
 
-use base64::Engine as _;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -27,7 +26,7 @@ impl VerificationToken {
             let mut rng = rand::thread_rng();
             rng.gen()
         };
-        use base64::engine::general_purpose;
+        use base64::{engine::general_purpose, Engine as _};
         let token = general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);
 
         // Token expires in 24 hours

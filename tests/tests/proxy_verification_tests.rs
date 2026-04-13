@@ -8,8 +8,8 @@ use axum::{
     http::{Method, Request, StatusCode},
     Router,
 };
-use mockforge_core::proxy::config::ProxyConfig;
 use mockforge_http::proxy_server::ProxyServer;
+use mockforge_proxy::config::ProxyConfig;
 use tower::ServiceExt;
 
 /// Test configuration for proxy verification

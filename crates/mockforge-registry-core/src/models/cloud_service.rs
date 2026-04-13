@@ -63,6 +63,7 @@ impl CloudService {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &sqlx::PgPool,
         id: Uuid,

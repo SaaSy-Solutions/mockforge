@@ -1,5 +1,4 @@
 import { Node, Edge } from '@xyflow/react';
-import type { GraphData } from '../types/graph';
 
 export type LayoutType = 'hierarchical' | 'force-directed' | 'grid' | 'circular';
 
@@ -11,7 +10,6 @@ export function applyHierarchicalLayout(
   edges: Edge[],
   direction: 'TB' | 'LR' = 'TB'
 ): Node[] {
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
   const childrenMap = new Map<string, string[]>();
   const parentMap = new Map<string, string>();
   const levels = new Map<string, number>();
@@ -59,8 +57,6 @@ export function applyHierarchicalLayout(
   // Position nodes
   const HORIZONTAL_SPACING = 200;
   const VERTICAL_SPACING = 150;
-  const maxLevel = Math.max(...Array.from(nodesByLevel.keys()));
-
   return nodes.map((node) => {
     const level = levels.get(node.id) || 0;
     const levelNodes = nodesByLevel.get(level) || [];
