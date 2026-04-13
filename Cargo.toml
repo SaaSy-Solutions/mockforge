@@ -39,6 +39,7 @@ members = [
     "crates/mockforge-import",
     "crates/mockforge-contracts",
     "crates/mockforge-workspace",
+    "crates/mockforge-intelligence",
 
     # Advanced features
     "crates/mockforge-chaos",
