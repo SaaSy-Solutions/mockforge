@@ -7659,6 +7659,7 @@ dependencies = [
  "mockforge-graphql",
  "mockforge-grpc",
  "mockforge-http",
+ "mockforge-import",
  "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
@@ -8038,6 +8039,7 @@ dependencies = [
  "mockforge-chaos",
  "mockforge-core",
  "mockforge-data",
+ "mockforge-import",
  "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
@@ -8082,6 +8084,23 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "mockforge-import"
+version = "0.3.112"
+dependencies = [
+ "axum 0.8.8",
+ "base64 0.22.1",
+ "mockforge-core",
+ "once_cell",
+ "openapiv3",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "url",
+ "urlencoding",
 ]
 
 [[package]]
@@ -8227,6 +8246,7 @@ dependencies = [
  "handlebars 5.1.2",
  "lettre",
  "mockforge-core",
+ "mockforge-import",
  "once_cell",
  "parking_lot",
  "reqwest 0.12.28",

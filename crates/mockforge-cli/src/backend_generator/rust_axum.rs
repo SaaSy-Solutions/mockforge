@@ -4,11 +4,11 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
-use mockforge_core::codegen::backend_generator::{
+use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_import::codegen::backend_generator::{
     extract_routes, extract_schemas, generate_handler_name, sanitize_name, schema_to_rust_type,
     to_pascal_case, to_snake_case, RouteInfo,
 };
-use mockforge_core::openapi::spec::OpenApiSpec;
 use mockforge_plugin_core::backend_generator::{
     BackendGenerationMetadata, BackendGenerationResult, BackendGeneratorConfig,
     BackendGeneratorPlugin, Complexity, TodoCategory, TodoItem,

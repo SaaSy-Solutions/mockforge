@@ -1,0 +1,28 @@
+[package]
+name = "mockforge-import"
+description = "Import and code generation utilities for MockForge — OpenAPI, Postman, cURL, HAR, Insomnia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["mock", "import", "openapi", "codegen"]
+categories = ["development-tools::testing"]
+
+[features]
+default = ["import", "codegen"]
+import = []
+codegen = []
+
+[dependencies]
+mockforge-core = { path = "../mockforge-core" }
+axum = { workspace = true }
+base64 = { workspace = true }
+once_cell = { workspace = true }
+openapiv3 = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+url = { workspace = true }
+urlencoding = { workspace = true }

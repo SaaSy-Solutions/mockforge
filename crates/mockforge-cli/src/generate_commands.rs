@@ -802,14 +802,14 @@ async fn execute_generation(
     let mut output_file = config.output.path.join(format!("{}.{}", base_filename, extension));
 
     // Generate mock server code using the codegen module
-    let codegen_config = mockforge_core::codegen::CodegenConfig {
-        mock_data_strategy: mockforge_core::codegen::MockDataStrategy::ExamplesOrRandom,
+    let codegen_config = mockforge_import::codegen::CodegenConfig {
+        mock_data_strategy: mockforge_import::codegen::MockDataStrategy::ExamplesOrRandom,
         port: None, // Will use default 3000
         enable_cors: false,
         default_delay_ms: None,
     };
 
-    let raw_mock_code = mockforge_core::codegen::generate_mock_server_code(
+    let raw_mock_code = mockforge_import::codegen::generate_mock_server_code(
         &parsed_spec,
         &extension,
         &codegen_config,

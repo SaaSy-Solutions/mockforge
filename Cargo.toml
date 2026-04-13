@@ -36,6 +36,7 @@ members = [
 
     # Extracted from mockforge-core
     "crates/mockforge-proxy",
+    "crates/mockforge-import",
 
     # Advanced features
     "crates/mockforge-chaos",

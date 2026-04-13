@@ -10,8 +10,8 @@ use axum::{
     Router,
 };
 use mockforge_core::config::ServerConfig;
-use mockforge_core::import::asyncapi_import::import_asyncapi_spec;
-use mockforge_core::import::openapi_import::import_openapi_spec;
+use mockforge_import::import::asyncapi_import::import_asyncapi_spec;
+use mockforge_import::import::openapi_import::import_openapi_spec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -856,7 +856,7 @@ async fn import_asyncapi_spec_handler(
 
         // Map AsyncAPI protocol to MockForge protocol
         let (protocol, config) = match channel.protocol {
-            mockforge_core::import::asyncapi_import::ChannelProtocol::Websocket => {
+            mockforge_import::import::asyncapi_import::ChannelProtocol::Websocket => {
                 // Create WebSocket endpoint
                 let on_message = if let Some(op) = channel.operations.first() {
                     if let Some(example) = &op.example_message {
