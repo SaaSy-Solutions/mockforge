@@ -38,6 +38,7 @@ members = [
     "crates/mockforge-proxy",
     "crates/mockforge-import",
     "crates/mockforge-contracts",
+    "crates/mockforge-workspace",
 
     # Advanced features
     "crates/mockforge-chaos",

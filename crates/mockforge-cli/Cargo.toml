@@ -27,6 +27,7 @@ tracing-subscriber = { workspace = true }
 tracing-opentelemetry = "0.22"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core", features = ["schema"] }
 mockforge-import = { path = "../mockforge-import" }
+mockforge-workspace = { path = "../mockforge-workspace" }
 mockforge-http = { version = "0.3.70", path = "../mockforge-http", optional = true }
 mockforge-ws = { version = "0.3.70", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.70", path = "../mockforge-grpc", optional = true }

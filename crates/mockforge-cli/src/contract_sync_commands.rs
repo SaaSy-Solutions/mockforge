@@ -6,10 +6,10 @@
 
 use mockforge_core::{
     contract_validation::{ContractValidator, ValidationResult},
-    git_watch::{GitWatchConfig, GitWatchService},
     openapi::OpenApiSpec,
     Error, Result,
 };
+use mockforge_workspace::git_watch::{GitWatchConfig, GitWatchService};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 

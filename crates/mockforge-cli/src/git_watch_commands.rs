@@ -2,7 +2,8 @@
 //!
 //! Commands for monitoring Git repositories for OpenAPI spec changes and auto-syncing mocks.
 
-use mockforge_core::{git_watch::GitWatchConfig, git_watch::GitWatchService, Error, Result};
+use mockforge_core::{Error, Result};
+use mockforge_workspace::git_watch::{GitWatchConfig, GitWatchService};
 use std::path::PathBuf;
 use tracing::{error, info, warn};
 
