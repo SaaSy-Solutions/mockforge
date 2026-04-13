@@ -7755,6 +7755,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-contracts"
+version = "0.3.112"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "hex",
+ "hmac",
+ "openapiv3",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mockforge-core"
 version = "0.3.116"
 dependencies = [
