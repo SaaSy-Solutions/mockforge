@@ -947,10 +947,11 @@ impl SpecDrivenConformanceGenerator {
         }
 
         // Capture request/response for --export-requests
+        // (check_name is already escaped at line 829 above — don't double-escape)
         if self.config.export_requests {
             script.push_str(&format!(
                 "      if (typeof __captureExchange === 'function') __captureExchange('{}', res);\n",
-                check_name.replace('\'', "\\'")
+                check_name
             ));
         }
 
