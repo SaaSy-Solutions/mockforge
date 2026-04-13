@@ -53,5 +53,6 @@ pub mod diff_types;
 pub mod error;
 pub mod incidents;
 pub mod protocol;
+pub mod schema_diff;
 
 pub use error::{ContractError, Result};

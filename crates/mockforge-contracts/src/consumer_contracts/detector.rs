@@ -33,12 +33,10 @@ impl ConsumerBreakingChangeDetector {
         // Get consumer usage for this endpoint
         let usage = self.usage_recorder.get_endpoint_usage(consumer_id, endpoint, method).await;
 
-        if usage.is_none() {
+        let Some(usage) = usage else {
             // No usage recorded, can't detect violations
             return vec![];
-        }
-
-        let usage = usage.unwrap();
+        };
         let mut violations = Vec::new();
 
         // Check each mismatch to see if it affects fields the consumer uses

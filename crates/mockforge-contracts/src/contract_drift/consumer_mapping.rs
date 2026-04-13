@@ -176,8 +176,9 @@ impl ConsumerMappingRegistry {
 
             for app in sdk_method.consuming_apps {
                 if !existing_app_ids.contains(&app.app_id) {
+                    let app_id = app.app_id.clone();
                     existing.consuming_apps.push(app);
-                    existing_app_ids.insert(existing.consuming_apps.last().unwrap().app_id.clone());
+                    existing_app_ids.insert(app_id);
                 }
             }
         } else {
