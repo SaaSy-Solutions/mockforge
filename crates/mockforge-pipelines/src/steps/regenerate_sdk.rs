@@ -4,10 +4,8 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::{Context, Result};
-use mockforge_core::{
-    codegen::{CodegenConfig, MockDataStrategy},
-    OpenApiSpec,
-};
+use mockforge_core::OpenApiSpec;
+use mockforge_import::codegen::{CodegenConfig, MockDataStrategy};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -129,7 +127,7 @@ impl PipelineStepExecutor for RegenerateSDKStep {
                     .and_then(handlebars::JsonValue::as_u64),
             };
 
-            match mockforge_core::codegen::generate_mock_server_code(
+            match mockforge_import::codegen::generate_mock_server_code(
                 &spec,
                 language,
                 &codegen_config,

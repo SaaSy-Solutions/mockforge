@@ -10,8 +10,8 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use mockforge_core::import::asyncapi_import::{import_asyncapi_spec, AsyncApiImportResult};
-use mockforge_core::import::openapi_import::{import_openapi_spec, OpenApiImportResult};
+use mockforge_import::import::asyncapi_import::{import_asyncapi_spec, AsyncApiImportResult};
+use mockforge_import::import::openapi_import::{import_openapi_spec, OpenApiImportResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -3587,6 +3587,7 @@ pub async fn import_postman(
     let base_url = request.get("base_url").and_then(|v| v.as_str());
 
     // Import the collection
+    #[allow(deprecated)]
     let import_result = match mockforge_core::import::import_postman_collection(content, base_url) {
         Ok(result) => result,
         Err(e) => {
@@ -3710,6 +3711,7 @@ pub async fn import_insomnia(
     let base_url = request.get("base_url").and_then(|v| v.as_str());
 
     // Import the export
+    #[allow(deprecated)]
     let import_result = match mockforge_core::import::import_insomnia_export(content, environment) {
         Ok(result) => result,
         Err(e) => {
@@ -3828,6 +3830,7 @@ pub async fn import_curl(
     let base_url = request.get("base_url").and_then(|v| v.as_str());
 
     // Import the commands
+    #[allow(deprecated)]
     let import_result = match mockforge_core::import::import_curl_commands(content, base_url) {
         Ok(result) => result,
         Err(e) => {
@@ -3921,6 +3924,7 @@ pub async fn preview_import(
     State(_state): State<AdminState>,
     Json(request): Json<serde_json::Value>,
 ) -> Json<ApiResponse<serde_json::Value>> {
+    #[allow(deprecated)]
     use mockforge_core::import::{
         import_curl_commands, import_insomnia_export, import_postman_collection,
     };

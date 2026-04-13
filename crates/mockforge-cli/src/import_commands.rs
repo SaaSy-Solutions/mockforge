@@ -6,8 +6,8 @@
 use crate::insomnia_import::import_insomnia_export;
 use clap::Subcommand;
 use colored::Colorize;
-use mockforge_core::import::asyncapi_import::{import_asyncapi_spec, AsyncApiImportResult};
-use mockforge_core::import::openapi_import::{import_openapi_spec, OpenApiImportResult};
+use mockforge_import::import::asyncapi_import::{import_asyncapi_spec, AsyncApiImportResult};
+use mockforge_import::import::openapi_import::{import_openapi_spec, OpenApiImportResult};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -642,7 +642,7 @@ fn save_openapi_routes(
 
 /// Save AsyncAPI channels to JSON file
 fn save_asyncapi_channels(
-    channels: &[mockforge_core::import::asyncapi_import::MockForgeChannel],
+    channels: &[mockforge_import::import::asyncapi_import::MockForgeChannel],
     output_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let json = serde_json::to_string_pretty(&channels)?;
