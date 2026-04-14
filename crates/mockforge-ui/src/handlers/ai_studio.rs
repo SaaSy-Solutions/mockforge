@@ -17,7 +17,7 @@ use mockforge_core::ai_studio::{
     DebugRequest, DebugResponse, FreezeRequest, FrozenArtifact, MockGenerator, OrgAiControlsConfig,
     OrgControls, PersonaGenerationRequest, PersonaGenerationResponse, PersonaGenerator, UsageStats,
 };
-use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

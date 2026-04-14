@@ -1371,7 +1371,7 @@ async fn merge_mockai_config_from_scenario(
         // Try to merge intelligent_behavior if present
         if let Some(behavior_json) = mockai_config_json.get("intelligent_behavior") {
             if let Ok(behavior_config) = serde_json::from_value::<
-                mockforge_core::intelligent_behavior::IntelligentBehaviorConfig,
+                mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig,
             >(behavior_json.clone())
             {
                 config.mockai.intelligent_behavior = behavior_config;

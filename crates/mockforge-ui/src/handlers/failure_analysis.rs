@@ -8,7 +8,7 @@ use axum::{
     response::Json as ResponseJson,
 };
 use mockforge_core::failure_analysis::{FailureContextCollector, FailureNarrativeGenerator};
-use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
