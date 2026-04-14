@@ -4,13 +4,14 @@
 //! with contract diff analysis.
 
 use axum::{body::Body, extract::Request, http::Response, middleware::Next};
+use mockforge_contracts::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
 use mockforge_core::{
     ai_contract_diff::ContractDiffAnalyzer,
-    consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder},
-    contract_drift::{DriftBudgetEngine, DriftResult},
+    contract_drift::DriftBudgetEngine,
     incidents::{IncidentManager, IncidentSeverity, IncidentType},
     openapi::OpenApiSpec,
 };
+use mockforge_foundation::contract_drift_types::DriftResult;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
