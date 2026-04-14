@@ -1,4 +1,5 @@
-// TODO: remove once mockforge-intelligence and mockforge-contracts crates are extracted
+// TODO: remove once DriftBudgetEngine is extracted from mockforge-core::contract_drift
+// (all other deprecated types used by this crate are now in mockforge-foundation)
 #![allow(deprecated)]
 
 //! # MockForge Scenarios Marketplace
