@@ -13,6 +13,7 @@ keywords = ["contracts", "testing", "drift", "mock"]
 categories = ["development-tools"]
 
 [dependencies]
+mockforge-foundation = { path = "../mockforge-foundation" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

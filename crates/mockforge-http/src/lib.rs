@@ -2163,8 +2163,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::handlers::drift_budget::{drift_budget_router, DriftBudgetState};
         use crate::middleware::drift_tracking::DriftTrackingState;
+        use mockforge_contracts::consumer_contracts::{
+            ConsumerBreakingChangeDetector, UsageRecorder,
+        };
         use mockforge_core::ai_contract_diff::ContractDiffAnalyzer;
-        use mockforge_core::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
         use std::sync::Arc;
 
         // Initialize usage recorder and consumer detector
@@ -2472,7 +2474,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::handlers::consumer_contracts::{
             consumer_contracts_router, ConsumerContractsState,
         };
-        use mockforge_core::consumer_contracts::{
+        use mockforge_contracts::consumer_contracts::{
             ConsumerBreakingChangeDetector, ConsumerRegistry, UsageRecorder,
         };
         use std::sync::Arc;
