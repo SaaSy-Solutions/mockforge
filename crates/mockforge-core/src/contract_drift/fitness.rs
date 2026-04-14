@@ -91,20 +91,11 @@ pub enum FitnessFunctionType {
     },
 }
 
-/// Result of evaluating a fitness function
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FitnessTestResult {
-    /// ID of the fitness function that was evaluated
-    pub function_id: String,
-    /// Name of the fitness function
-    pub function_name: String,
-    /// Whether the test passed
-    pub passed: bool,
-    /// Human-readable message about the result
-    pub message: String,
-    /// Metrics collected during evaluation (e.g., "response_size": 1024.0, "increase_percent": 15.5)
-    pub metrics: HashMap<String, f64>,
-}
+/// Result of evaluating a fitness function.
+///
+/// Re-exported from `mockforge-foundation` so consumers do not need to depend
+/// on deprecated core modules.
+pub use mockforge_foundation::contract_drift_types::FitnessTestResult;
 
 /// Trait for evaluating fitness functions
 pub trait FitnessEvaluator: Send + Sync {

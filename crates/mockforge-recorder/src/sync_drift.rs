@@ -3,16 +3,17 @@
 //! This module provides functionality to evaluate drift budgets when sync changes are detected
 //! and create incidents with before/after samples.
 
-// DriftBudgetEngine and DriftResult will be extracted to mockforge-contracts;
-// allow here until that extraction lands.
+// DriftBudgetEngine still lives in mockforge-core (depends on OpenApiSpec);
+// allow here until it is extracted to mockforge-contracts. `DriftResult` is
+// now in mockforge-foundation, so it no longer contributes to the allow.
 #![allow(deprecated)]
 
+use mockforge_core::contract_drift::DriftBudgetEngine;
+use mockforge_core::incidents::{IncidentManager, IncidentSeverity, IncidentType};
+
 use crate::{database::RecorderDatabase, sync::DetectedChange, Result};
-use mockforge_core::{
-    contract_drift::{DriftBudgetEngine, DriftResult},
-    incidents::{IncidentManager, IncidentSeverity, IncidentType},
-};
 use mockforge_foundation::contract_diff_types::{Mismatch, MismatchSeverity, MismatchType};
+use mockforge_foundation::contract_drift_types::DriftResult;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
