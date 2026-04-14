@@ -12,11 +12,12 @@ use crate::domain_pack::{
 use crate::error::{Result, ScenarioError};
 use crate::installer::{InstallOptions, ScenarioInstaller};
 use mockforge_core::consistency::ConsistencyEngine;
-use mockforge_core::contract_drift::{DriftBudgetConfig, DriftBudgetEngine};
+use mockforge_core::contract_drift::DriftBudgetEngine;
 use mockforge_core::reality_continuum::{ContinuumConfig, RealityContinuumEngine};
 use mockforge_data::domains::Domain;
 use mockforge_data::PersonaProfile;
 use mockforge_data::PersonaRegistry;
+use mockforge_foundation::contract_drift_types::DriftBudgetConfig;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{info, warn};
