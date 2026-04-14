@@ -182,7 +182,7 @@ impl DriftBudgetEngine {
         };
 
         // Evaluate against budget
-        let mut result = DriftResult::from_diff_result(
+        let mut result = crate::contract_drift::types::drift_result_from_diff(
             diff_result,
             endpoint.to_string(),
             method.to_string(),
@@ -313,7 +313,7 @@ impl DriftBudgetEngine {
         };
 
         // Evaluate against budget
-        let mut result = DriftResult::from_diff_result(
+        let mut result = crate::contract_drift::types::drift_result_from_diff(
             diff_result,
             endpoint.to_string(),
             method.to_string(),
