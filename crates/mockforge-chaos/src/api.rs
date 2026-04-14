@@ -107,7 +107,7 @@ pub struct ChaosApiState {
     pub scheduler: Arc<RwLock<ScenarioScheduler>>,
     pub latency_tracker: Arc<LatencyMetricsTracker>,
     pub profile_manager: Arc<ProfileManager>,
-    pub mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    pub mockai: Option<Arc<RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>>>,
 }
 
 /// Create the chaos management API router
@@ -120,7 +120,7 @@ pub struct ChaosApiState {
 /// Tuple of (Router, Config, LatencyTracker, ChaosApiState) - The router, config, latency tracker, and API state for hot-reload support
 pub fn create_chaos_api_router(
     config: ChaosConfig,
-    mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    mockai: Option<Arc<RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>>>,
 ) -> (Router, Arc<RwLock<ChaosConfig>>, Arc<LatencyMetricsTracker>, Arc<ChaosApiState>) {
     let config_arc = Arc::new(RwLock::new(config));
     let scenario_engine = Arc::new(ScenarioEngine::new());
@@ -2254,9 +2254,13 @@ mod tests {
         let config = ChaosConfig::default();
         let mockai_config =
             mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig::default();
-        let mockai = Arc::new(tokio::sync::RwLock::new(
-            mockforge_core::intelligent_behavior::MockAI::new(mockai_config),
-        ));
+        // Construct the concrete MockAI in core (only place that has the impl),
+        // coerce to the foundation trait object for storage in chaos.
+        #[allow(deprecated)]
+        let concrete = mockforge_core::intelligent_behavior::MockAI::new(mockai_config);
+        let mockai: Arc<
+            tokio::sync::RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>,
+        > = Arc::new(tokio::sync::RwLock::new(concrete));
 
         let (_router, _config_arc, _latency_tracker, state) =
             create_chaos_api_router(config, Some(mockai.clone()));

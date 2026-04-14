@@ -1,6 +1,3 @@
-// TODO: remove once mockforge-intelligence crate is extracted
-#![allow(deprecated)]
-
 //! Pillars: [Reality]
 //!
 //! MockForge Chaos Engineering

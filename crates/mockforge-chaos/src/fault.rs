@@ -260,7 +260,11 @@ impl FaultInjector {
     pub async fn generate_error_message(
         &self,
         status_code: u16,
-        mockai: Option<&Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+        mockai: Option<
+            &Arc<
+                tokio::sync::RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>,
+            >,
+        >,
         request_context: Option<&str>,
     ) -> String {
         // If MockAI is enabled and available, use it to generate context-aware error messages
