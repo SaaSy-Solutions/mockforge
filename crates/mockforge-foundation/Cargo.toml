@@ -11,13 +11,16 @@ categories = ["development-tools::testing"]
 
 [features]
 default = []
+schema = ["dep:schemars"]
 scripting = ["dep:rquickjs"]
 
 [dependencies]
 chrono = { workspace = true }
 regex = { workspace = true }
+serde = { workspace = true }
 reqwest = { workspace = true }
 rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
+schemars = { version = "0.8", optional = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }

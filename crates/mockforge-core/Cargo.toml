@@ -106,7 +106,7 @@ windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 default = ["data", "ai", "contracts", "workspace-mgmt", "voice", "advanced", "scripting"]
 scripting = ["rquickjs", "mockforge-foundation/scripting"]
 parallel-routes = ["rayon"]
-schema = ["schemars"]
+schema = ["schemars", "mockforge-foundation/schema"]
 database = ["sqlx"]
 data = ["mockforge-data"]
 persona-graph = []

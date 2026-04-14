@@ -243,65 +243,8 @@ impl SessionState {
     }
 }
 
-/// LLM generation request
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmGenerationRequest {
-    /// System prompt
-    pub system_prompt: String,
-
-    /// User prompt (constructed from request context)
-    pub user_prompt: String,
-
-    /// Temperature for generation (0.0 to 2.0)
-    #[serde(default = "default_temperature")]
-    pub temperature: f64,
-
-    /// Maximum tokens to generate
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: usize,
-
-    /// Expected response schema (JSON Schema)
-    pub schema: Option<serde_json::Value>,
-}
-
-impl LlmGenerationRequest {
-    /// Create a new LLM generation request
-    pub fn new(system_prompt: impl Into<String>, user_prompt: impl Into<String>) -> Self {
-        Self {
-            system_prompt: system_prompt.into(),
-            user_prompt: user_prompt.into(),
-            temperature: default_temperature(),
-            max_tokens: default_max_tokens(),
-            schema: None,
-        }
-    }
-
-    /// Set temperature
-    pub fn with_temperature(mut self, temperature: f64) -> Self {
-        self.temperature = temperature;
-        self
-    }
-
-    /// Set max tokens
-    pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
-        self.max_tokens = max_tokens;
-        self
-    }
-
-    /// Set expected schema
-    pub fn with_schema(mut self, schema: serde_json::Value) -> Self {
-        self.schema = Some(schema);
-        self
-    }
-}
-
-fn default_temperature() -> f64 {
-    0.7
-}
-
-fn default_max_tokens() -> usize {
-    1024
-}
+// `LlmGenerationRequest` is re-exported from `mockforge_foundation::intelligent_behavior`.
+pub use mockforge_foundation::intelligent_behavior::LlmGenerationRequest;
 
 #[cfg(test)]
 mod tests {
