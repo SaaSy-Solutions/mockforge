@@ -118,3 +118,102 @@ pub trait PromotionService: Send + Sync {
         comments: Option<String>,
     ) -> crate::Result<uuid::Uuid>;
 }
+
+/// Promotion status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PromotionStatus {
+    /// Promotion is pending approval
+    Pending,
+    /// Promotion has been approved
+    Approved,
+    /// Promotion has been rejected
+    Rejected,
+    /// Promotion has been completed
+    Completed,
+    /// Promotion failed
+    Failed,
+}
+
+impl std::fmt::Display for PromotionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PromotionStatus::Pending => write!(f, "pending"),
+            PromotionStatus::Approved => write!(f, "approved"),
+            PromotionStatus::Rejected => write!(f, "rejected"),
+            PromotionStatus::Completed => write!(f, "completed"),
+            PromotionStatus::Failed => write!(f, "failed"),
+        }
+    }
+}
+
+/// Generic promotion request that supports scenarios, personas, and configs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromotionRequest {
+    /// Entity type being promoted
+    pub entity_type: PromotionEntityType,
+    /// Entity ID to promote (scenario ID, persona ID, or "config" for config promotion)
+    pub entity_id: String,
+    /// Entity version (for scenarios/personas) or config snapshot ID (for configs)
+    pub entity_version: Option<String>,
+    /// Workspace ID
+    pub workspace_id: String,
+    /// Source environment
+    pub from_environment: MockEnvironmentName,
+    /// Target environment
+    pub to_environment: MockEnvironmentName,
+    /// Whether this requires approval
+    pub requires_approval: bool,
+    /// Reason why approval is required
+    pub approval_required_reason: Option<String>,
+    /// Comments from promoter
+    pub comments: Option<String>,
+    /// Additional metadata for the promotion (e.g., config changes diff)
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Promotion history for an entity
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromotionHistory {
+    /// Entity type
+    pub entity_type: PromotionEntityType,
+    /// Entity ID
+    pub entity_id: String,
+    /// Workspace ID
+    pub workspace_id: String,
+    /// List of promotions in chronological order
+    pub promotions: Vec<PromotionHistoryEntry>,
+}
+
+/// Single promotion history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromotionHistoryEntry {
+    /// Promotion ID
+    pub promotion_id: String,
+    /// Entity type
+    pub entity_type: PromotionEntityType,
+    /// Entity ID
+    pub entity_id: String,
+    /// Entity version (for scenarios/personas) or config snapshot ID (for configs)
+    pub entity_version: Option<String>,
+    /// From environment
+    pub from_environment: MockEnvironmentName,
+    /// To environment
+    pub to_environment: MockEnvironmentName,
+    /// Promoted by user ID
+    pub promoted_by: String,
+    /// Approved by user ID (if applicable)
+    pub approved_by: Option<String>,
+    /// Status
+    pub status: PromotionStatus,
+    /// Timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Comments
+    pub comments: Option<String>,
+    /// GitOps PR URL if created
+    pub pr_url: Option<String>,
+    /// Additional metadata (e.g., config changes diff)
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+}
