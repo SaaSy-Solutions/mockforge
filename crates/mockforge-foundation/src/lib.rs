@@ -10,6 +10,7 @@
 //! - `EncryptionError`, `EncryptionResult` — encryption-specific error types
 
 pub mod contract_diff_types;
+pub mod contract_drift_types;
 pub mod encryption_error;
 pub mod error;
 pub mod intelligent_behavior;
