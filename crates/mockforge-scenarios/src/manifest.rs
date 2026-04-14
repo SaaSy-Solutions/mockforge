@@ -5,7 +5,7 @@
 
 use crate::error::{Result, ScenarioError};
 use chrono::{DateTime, Utc};
-use mockforge_core::intelligent_behavior::{rules::StateMachine, VisualLayout};
+use mockforge_foundation::state_machine::{rules::StateMachine, VisualLayout};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;

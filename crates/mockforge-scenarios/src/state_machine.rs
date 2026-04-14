@@ -6,8 +6,10 @@
 use crate::error::{Result, ScenarioError};
 use crate::manifest::ScenarioManifest;
 use mockforge_core::intelligent_behavior::{
-    condition_evaluator::ConditionEvaluator, history::HistoryManager, rules::StateMachine,
-    sub_scenario::SubScenario, visual_layout::VisualLayout,
+    condition_evaluator::ConditionEvaluator, history::HistoryManager,
+};
+use mockforge_foundation::state_machine::{
+    rules::StateMachine, sub_scenario::SubScenario, visual_layout::VisualLayout,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -733,7 +735,7 @@ impl Default for ScenarioStateMachineManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::intelligent_behavior::rules::{StateMachine, StateTransition};
+    use mockforge_foundation::state_machine::rules::{StateMachine, StateTransition};
 
     fn create_test_state_machine() -> StateMachine {
         StateMachine::new(

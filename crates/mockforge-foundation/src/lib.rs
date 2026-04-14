@@ -12,6 +12,7 @@
 pub mod encryption_error;
 pub mod error;
 pub mod intelligent_behavior;
+pub mod state_machine;
 
 pub use encryption_error::{EncryptionError, EncryptionResult};
 pub use error::{Error, Result};

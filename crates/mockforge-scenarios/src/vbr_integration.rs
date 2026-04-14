@@ -35,7 +35,7 @@ pub struct VbrEntityDefinition {
     /// If provided, the entity will use this state machine for
     /// lifecycle management and state transitions.
     #[serde(default)]
-    pub state_machine: Option<mockforge_core::intelligent_behavior::rules::StateMachine>,
+    pub state_machine: Option<mockforge_foundation::state_machine::rules::StateMachine>,
 }
 
 impl VbrEntityDefinition {
@@ -58,7 +58,7 @@ impl VbrEntityDefinition {
     /// Set the state machine
     pub fn with_state_machine(
         mut self,
-        state_machine: mockforge_core::intelligent_behavior::rules::StateMachine,
+        state_machine: mockforge_foundation::state_machine::rules::StateMachine,
     ) -> Self {
         self.state_machine = Some(state_machine);
         self

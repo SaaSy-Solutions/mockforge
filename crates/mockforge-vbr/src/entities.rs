@@ -6,7 +6,7 @@
 use crate::database::VirtualDatabase;
 use crate::schema::VbrSchemaDefinition;
 use crate::{Error, Result};
-use mockforge_core::intelligent_behavior::rules::StateMachine;
+use mockforge_foundation::state_machine::rules::StateMachine;
 use std::collections::HashMap;
 use tracing::warn;
 
