@@ -4,8 +4,8 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::{Context, Result};
-use mockforge_core::PromotionService;
 use mockforge_foundation::workspace_promotion::PromotionEntityType;
+use mockforge_foundation::workspace_promotion::PromotionService;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;

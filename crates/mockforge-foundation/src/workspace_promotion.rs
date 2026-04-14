@@ -97,3 +97,24 @@ impl std::fmt::Display for PromotionEntityType {
         }
     }
 }
+
+/// Trait for services that can perform promotions.
+///
+/// Allows pipeline steps and other consumers to trigger promotions without
+/// creating circular dependencies between crates.
+#[allow(clippy::too_many_arguments)]
+#[async_trait::async_trait]
+pub trait PromotionService: Send + Sync {
+    /// Promote an entity from one environment to another.
+    async fn promote_entity(
+        &self,
+        workspace_id: uuid::Uuid,
+        entity_type: PromotionEntityType,
+        entity_id: String,
+        entity_version: Option<String>,
+        from_environment: MockEnvironmentName,
+        to_environment: MockEnvironmentName,
+        promoted_by: uuid::Uuid,
+        comments: Option<String>,
+    ) -> crate::Result<uuid::Uuid>;
+}
