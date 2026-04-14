@@ -4,8 +4,8 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::{Context, Result};
-use mockforge_core::workspace::scenario_promotion::PromotionEntityType;
 use mockforge_core::PromotionService;
+use mockforge_foundation::workspace_promotion::PromotionEntityType;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -90,10 +90,10 @@ impl PipelineStepExecutor for AutoPromoteStep {
 
         // Parse environments
         let from_environment =
-            mockforge_core::workspace::mock_environment::MockEnvironmentName::from_str(from_env)
+            mockforge_foundation::workspace_promotion::MockEnvironmentName::from_str(from_env)
                 .ok_or_else(|| anyhow::anyhow!("Invalid from_environment: {from_env}"))?;
         let to_environment =
-            mockforge_core::workspace::mock_environment::MockEnvironmentName::from_str(to_env)
+            mockforge_foundation::workspace_promotion::MockEnvironmentName::from_str(to_env)
                 .ok_or_else(|| anyhow::anyhow!("Invalid to_environment: {to_env}"))?;
 
         // Get workspace ID from event

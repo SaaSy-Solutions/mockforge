@@ -15,12 +15,13 @@ schema = ["dep:schemars"]
 scripting = ["dep:rquickjs"]
 
 [dependencies]
+async-trait = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["serde", "v4"] }
 reqwest = { workspace = true }
 rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
 schemars = { version = "0.8", optional = true }

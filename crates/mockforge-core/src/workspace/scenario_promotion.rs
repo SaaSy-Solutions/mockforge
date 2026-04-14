@@ -8,27 +8,8 @@ use crate::workspace::mock_environment::MockEnvironmentName;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Entity type that can be promoted
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PromotionEntityType {
-    /// Scenario promotion
-    Scenario,
-    /// Persona promotion
-    Persona,
-    /// Configuration promotion (reality, chaos, drift budget)
-    Config,
-}
-
-impl std::fmt::Display for PromotionEntityType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PromotionEntityType::Scenario => write!(f, "scenario"),
-            PromotionEntityType::Persona => write!(f, "persona"),
-            PromotionEntityType::Config => write!(f, "config"),
-        }
-    }
-}
+// `PromotionEntityType` is re-exported from `mockforge_foundation::workspace_promotion`.
+pub use mockforge_foundation::workspace_promotion::PromotionEntityType;
 
 /// Generic promotion request that supports scenarios, personas, and configs
 #[derive(Debug, Clone, Serialize, Deserialize)]
