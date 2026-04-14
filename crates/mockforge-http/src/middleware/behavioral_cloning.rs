@@ -8,7 +8,7 @@ use axum::{
     http::{Request, Response, StatusCode},
     middleware::Next,
 };
-use mockforge_core::behavioral_cloning::ProbabilisticModel;
+use mockforge_intelligence::behavioral_cloning::ProbabilisticModel;
 use mockforge_recorder::database::RecorderDatabase;
 use rand::Rng;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ pub struct BehavioralCloningMiddlewareState {
     /// Cache for loaded probability models (to avoid repeated DB queries)
     pub model_cache: Arc<
         tokio::sync::RwLock<
-            HashMap<String, mockforge_core::behavioral_cloning::EndpointProbabilityModel>,
+            HashMap<String, mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel>,
         >,
     >,
 }
@@ -68,7 +68,7 @@ impl BehavioralCloningMiddlewareState {
         &self,
         endpoint: &str,
         method: &str,
-    ) -> Option<mockforge_core::behavioral_cloning::EndpointProbabilityModel> {
+    ) -> Option<mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel> {
         let cache_key = format!("{}:{}", method, endpoint);
 
         // Check cache first

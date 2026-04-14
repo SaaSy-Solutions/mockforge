@@ -725,7 +725,7 @@ impl RecorderDatabase {
     /// Insert a behavioral sequence
     pub async fn insert_behavioral_sequence(
         &self,
-        sequence: &mockforge_core::behavioral_cloning::BehavioralSequence,
+        sequence: &mockforge_intelligence::behavioral_cloning::BehavioralSequence,
     ) -> Result<()> {
         let steps_json = serde_json::to_string(&sequence.steps)?;
         let learned_from_json = serde_json::to_string(&sequence.learned_from)?;
@@ -756,7 +756,7 @@ impl RecorderDatabase {
     /// Get all behavioral sequences
     pub async fn get_behavioral_sequences(
         &self,
-    ) -> Result<Vec<mockforge_core::behavioral_cloning::BehavioralSequence>> {
+    ) -> Result<Vec<mockforge_intelligence::behavioral_cloning::BehavioralSequence>> {
         let rows = sqlx::query(
             r#"
             SELECT id, name, steps, frequency, confidence, learned_from, description, tags
@@ -774,7 +774,7 @@ impl RecorderDatabase {
             let learned_from_json: String = row.try_get("learned_from")?;
             let tags_json: String = row.try_get("tags")?;
 
-            sequences.push(mockforge_core::behavioral_cloning::BehavioralSequence {
+            sequences.push(mockforge_intelligence::behavioral_cloning::BehavioralSequence {
                 id: row.try_get("id")?,
                 name: row.try_get("name")?,
                 steps: serde_json::from_str(&steps_json)?,
@@ -792,7 +792,7 @@ impl RecorderDatabase {
     /// Insert or update endpoint probability model
     pub async fn insert_endpoint_probability_model(
         &self,
-        model: &mockforge_core::behavioral_cloning::EndpointProbabilityModel,
+        model: &mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel,
     ) -> Result<()> {
         let status_code_dist_json = serde_json::to_string(&model.status_code_distribution)?;
         let latency_dist_json = serde_json::to_string(&model.latency_distribution)?;
@@ -827,7 +827,7 @@ impl RecorderDatabase {
         &self,
         endpoint: &str,
         method: &str,
-    ) -> Result<Option<mockforge_core::behavioral_cloning::EndpointProbabilityModel>> {
+    ) -> Result<Option<mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel>> {
         let row = sqlx::query(
             r#"
             SELECT endpoint, method, status_code_distribution, latency_distribution,
@@ -848,7 +848,7 @@ impl RecorderDatabase {
             let error_patterns_json: String = row.try_get("error_patterns")?;
             let payload_variations_json: String = row.try_get("payload_variations")?;
 
-            Ok(Some(mockforge_core::behavioral_cloning::EndpointProbabilityModel {
+            Ok(Some(mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel {
                 endpoint: row.try_get("endpoint")?,
                 method: row.try_get("method")?,
                 status_code_distribution: serde_json::from_str(&status_code_dist_json)?,
@@ -868,7 +868,7 @@ impl RecorderDatabase {
     /// Get all endpoint probability models
     pub async fn get_all_endpoint_probability_models(
         &self,
-    ) -> Result<Vec<mockforge_core::behavioral_cloning::EndpointProbabilityModel>> {
+    ) -> Result<Vec<mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel>> {
         let rows = sqlx::query(
             r#"
             SELECT endpoint, method, status_code_distribution, latency_distribution,
@@ -888,7 +888,7 @@ impl RecorderDatabase {
             let error_patterns_json: String = row.try_get("error_patterns")?;
             let payload_variations_json: String = row.try_get("payload_variations")?;
 
-            models.push(mockforge_core::behavioral_cloning::EndpointProbabilityModel {
+            models.push(mockforge_intelligence::behavioral_cloning::EndpointProbabilityModel {
                 endpoint: row.try_get("endpoint")?,
                 method: row.try_get("method")?,
                 status_code_distribution: serde_json::from_str(&status_code_dist_json)?,

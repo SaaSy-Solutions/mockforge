@@ -2,7 +2,7 @@ use chrono::Utc;
 use mockforge_core::fixture_store::{load_fixtures_from_dir, FixtureLoadOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
@@ -125,7 +125,7 @@ impl AutoProducer {
 
 impl KafkaFixture {
     /// Load fixtures from a directory
-    pub fn load_from_dir(dir: &PathBuf) -> mockforge_core::Result<Vec<Self>> {
+    pub fn load_from_dir(dir: &Path) -> mockforge_core::Result<Vec<Self>> {
         load_fixtures_from_dir(dir, &FixtureLoadOptions::yaml_array_strict())
     }
 
@@ -171,6 +171,7 @@ impl KafkaFixture {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -546,7 +547,7 @@ mod tests {
     #[test]
     fn test_load_from_dir_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let result = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let result = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
         assert!(result.is_empty());
     }
 
@@ -569,7 +570,7 @@ mod tests {
         let yaml_content = serde_yaml::to_string(&fixtures).unwrap();
         fs::write(&fixture_path, yaml_content).unwrap();
 
-        let loaded = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let loaded = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].identifier, "test-fixture");
     }
@@ -593,7 +594,7 @@ mod tests {
         let yaml_content = serde_yaml::to_string(&fixtures).unwrap();
         fs::write(&fixture_path, yaml_content).unwrap();
 
-        let loaded = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let loaded = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].identifier, "yml-test");
     }
@@ -604,7 +605,7 @@ mod tests {
         let txt_path = temp_dir.path().join("readme.txt");
         fs::write(&txt_path, "This is not a YAML file").unwrap();
 
-        let loaded = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let loaded = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
         assert!(loaded.is_empty());
     }
 
@@ -646,7 +647,7 @@ mod tests {
         )
         .unwrap();
 
-        let loaded = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let loaded = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(loaded.len(), 2);
     }
 

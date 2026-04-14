@@ -8,8 +8,8 @@
 
 use axum::extract::{Path, Query, State};
 use axum::response::Json;
-use mockforge_core::behavioral_cloning::types::BehavioralSequence;
-use mockforge_core::behavioral_cloning::{
+use mockforge_intelligence::behavioral_cloning::types::BehavioralSequence;
+use mockforge_intelligence::behavioral_cloning::{
     EdgeAmplificationConfig, EdgeAmplifier, EndpointProbabilityModel, ProbabilisticModel,
     SequenceLearner,
 };
@@ -410,11 +410,14 @@ pub async fn apply_amplification(
 
     // Determine which models to update based on scope
     let models_to_update = match &request.config.scope {
-        mockforge_core::behavioral_cloning::AmplificationScope::Global => db
+        mockforge_intelligence::behavioral_cloning::AmplificationScope::Global => db
             .get_all_endpoint_probability_models()
             .await
             .map_err(|e| format!("Failed to query models: {}", e))?,
-        mockforge_core::behavioral_cloning::AmplificationScope::Endpoint { endpoint, method } => {
+        mockforge_intelligence::behavioral_cloning::AmplificationScope::Endpoint {
+            endpoint,
+            method,
+        } => {
             if let Some(model) = db
                 .get_endpoint_probability_model(endpoint, method)
                 .await
@@ -425,7 +428,9 @@ pub async fn apply_amplification(
                 return Err(format!("No probability model found for {} {}", method, endpoint));
             }
         }
-        mockforge_core::behavioral_cloning::AmplificationScope::Sequence { sequence_id } => {
+        mockforge_intelligence::behavioral_cloning::AmplificationScope::Sequence {
+            sequence_id,
+        } => {
             let sequences = db
                 .get_behavioral_sequences()
                 .await
