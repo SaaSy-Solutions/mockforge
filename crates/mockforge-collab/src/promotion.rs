@@ -8,11 +8,11 @@ use chrono::{DateTime, Utc};
 use mockforge_core::pr_generation::{
     PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
 };
-use mockforge_core::workspace::scenario_promotion::{
-    PromotionEntityType, PromotionHistory, PromotionHistoryEntry, PromotionRequest, PromotionStatus,
-};
 use mockforge_foundation::workspace_promotion::MockEnvironmentName;
 use mockforge_foundation::workspace_promotion::PromotionService as PromotionServiceTrait;
+use mockforge_foundation::workspace_promotion::{
+    PromotionEntityType, PromotionHistory, PromotionHistoryEntry, PromotionRequest, PromotionStatus,
+};
 use serde_json;
 use sqlx::{Pool, Sqlite};
 use std::fmt::Write;
@@ -854,10 +854,10 @@ impl PromotionServiceTrait for PromotionService {
 mod tests {
     use super::*;
     use mockforge_core::pr_generation::PRProvider;
-    use mockforge_core::workspace::scenario_promotion::{
+    use mockforge_foundation::workspace_promotion::MockEnvironmentName;
+    use mockforge_foundation::workspace_promotion::{
         PromotionEntityType, PromotionRequest, PromotionStatus,
     };
-    use mockforge_foundation::workspace_promotion::MockEnvironmentName;
     use sqlx::SqlitePool;
 
     async fn setup_test_db() -> Pool<Sqlite> {
