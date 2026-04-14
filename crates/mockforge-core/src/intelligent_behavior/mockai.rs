@@ -40,6 +40,12 @@ pub struct MockAI {
     session_contexts: std::sync::Arc<tokio::sync::RwLock<HashMap<String, StatefulAiContext>>>,
 }
 
+impl mockforge_foundation::intelligent_behavior::MockAiBehavior for MockAI {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 impl MockAI {
     /// Create MockAI from OpenAPI specification
     ///
