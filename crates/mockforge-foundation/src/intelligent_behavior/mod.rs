@@ -6,6 +6,10 @@
 //!
 //! Kept minimal: only pure data with no cross-crate dependencies.
 
+pub mod session;
+
+pub use session::{InteractionRecord, SessionState};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

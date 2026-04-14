@@ -576,6 +576,9 @@ pub fn register_global_clock(clock: Arc<VirtualClock>) {
         GLOBAL_CLOCK_REGISTRY.write().unwrap_or_else(|poisoned| poisoned.into_inner());
     *registry = Some(clock);
     info!("Virtual clock registered globally");
+    // Also register with mockforge-foundation so types there (e.g. SessionState)
+    // honor the virtual clock. Ignored if already set (OnceLock semantics).
+    let _ = mockforge_foundation::clock::set_clock(now);
 }
 
 /// Unregister the global virtual clock
