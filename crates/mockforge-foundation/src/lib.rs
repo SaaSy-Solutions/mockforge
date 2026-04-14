@@ -1,0 +1,16 @@
+//! Foundation types for MockForge
+//!
+//! This crate sits at the bottom of the MockForge dependency graph. It has **no
+//! dependencies on other mockforge-* crates**, so both `mockforge-core` and the
+//! various extracted crates (`mockforge-proxy`, `mockforge-import`, etc.) can depend
+//! on it without creating circular dependencies.
+//!
+//! Currently exports:
+//! - `Error`, `Result` — canonical error/result types used throughout MockForge
+//! - `EncryptionError`, `EncryptionResult` — encryption-specific error types
+
+pub mod encryption_error;
+pub mod error;
+
+pub use encryption_error::{EncryptionError, EncryptionResult};
+pub use error::{Error, Result};

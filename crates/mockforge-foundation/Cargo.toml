@@ -1,0 +1,24 @@
+[package]
+name = "mockforge-foundation"
+description = "Foundation types shared across the MockForge workspace (Error, Result, EncryptionError)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["mock", "foundation", "types"]
+categories = ["development-tools::testing"]
+
+[features]
+default = []
+scripting = ["dep:rquickjs"]
+
+[dependencies]
+chrono = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }

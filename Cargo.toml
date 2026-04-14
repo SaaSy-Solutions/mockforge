@@ -34,6 +34,9 @@ members = [
     "crates/mockforge-analytics",
     "crates/mockforge-reporting",
 
+    # Foundation (no inter-crate deps — lowest level)
+    "crates/mockforge-foundation",
+
     # Extracted from mockforge-core
     "crates/mockforge-proxy",
     "crates/mockforge-import",
