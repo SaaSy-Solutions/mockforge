@@ -1,4 +1,4 @@
-// TODO: remove once mockforge-intelligence crate is extracted
+// TODO: remove once DriftBudgetEngine/DriftResult are extracted (contract_drift::types are in foundation but the impls are still in core)
 #![allow(deprecated)]
 
 //! MockForge API Flight Recorder
