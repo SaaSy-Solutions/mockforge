@@ -36,34 +36,20 @@ use tracing;
 
 // Windows Credential Manager types are imported locally in the platform-specific methods below.
 
-/// Errors that can occur during encryption/decryption operations
-#[derive(Error, Debug)]
-pub enum EncryptionError {
-    /// Encryption operation failed
-    #[error("Encryption failure: {0}")]
-    Encryption(String),
-    /// Decryption operation failed
-    #[error("Decryption failure: {0}")]
-    Decryption(String),
-    /// Invalid encryption key format or missing key
-    #[error("Invalid key: {0}")]
-    InvalidKey(String),
-    /// Invalid ciphertext format or corrupted data
-    #[error("Invalid ciphertext: {0}")]
-    InvalidCiphertext(String),
-    /// Key derivation function failed
-    #[error("Key derivation failure: {0}")]
-    KeyDerivation(String),
-    /// Generic encryption error
-    #[error("Generic encryption error: {message}")]
-    Generic {
-        /// Error message describing the failure
-        message: String,
-    },
-}
+// EncryptionError and EncryptionResult are re-exported from the `errors` submodule
+// (see `pub use errors::*;` above). The former simple 6-variant enum that lived here
+// has been unified with the richer 17-variant enum in `encryption/errors.rs`.
+//
+// Variant mapping applied to call sites below:
+//   Encryption(s)         → CipherOperationFailed { message: s }
+//   Decryption(s)         → CipherOperationFailed { message: s }
+//   InvalidKey(s)         → InvalidKey { message: s }
+//   InvalidCiphertext(s)  → InvalidCiphertext { message: s }
+//   KeyDerivation(s)      → KeyDerivationFailed { message: s }
+//   Generic { message }   → Generic { message }      (unchanged)
 
-/// Result type alias for encryption operations
-pub type Result<T> = std::result::Result<T, EncryptionError>;
+/// Local result alias — points to `EncryptionResult<T>` from the `errors` submodule.
+pub type Result<T> = EncryptionResult<T>;
 
 /// Encryption algorithms supported by MockForge
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,12 +102,14 @@ impl EncryptionKey {
         };
 
         if key_data.len() != expected_len {
-            return Err(EncryptionError::InvalidKey(format!(
-                "Key must be {} bytes for {}, got {}",
-                expected_len,
-                algorithm,
-                key_data.len()
-            )));
+            return Err(EncryptionError::InvalidKey {
+                message: format!(
+                    "Key must be {} bytes for {}, got {}",
+                    expected_len,
+                    algorithm,
+                    key_data.len()
+                ),
+            });
         }
 
         Ok(Self {
@@ -153,30 +141,41 @@ impl EncryptionKey {
         algorithm: EncryptionAlgorithm,
     ) -> Result<Self> {
         let salt_string = if let Some(salt) = salt {
-            SaltString::encode_b64(salt)
-                .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?
+            SaltString::encode_b64(salt).map_err(|e| EncryptionError::KeyDerivationFailed {
+                message: e.to_string(),
+            })?
         } else {
             // Generate a random salt
             let mut salt_bytes = [0u8; 32];
             thread_rng().fill(&mut salt_bytes);
-            SaltString::encode_b64(&salt_bytes)
-                .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?
+            SaltString::encode_b64(&salt_bytes).map_err(|e| {
+                EncryptionError::KeyDerivationFailed {
+                    message: e.to_string(),
+                }
+            })?
         };
 
         let argon2 = Argon2::new(
             argon2::Algorithm::Argon2id,
             argon2::Version::V0x13,
-            Params::new(65536, 3, 1, Some(32))
-                .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?,
+            Params::new(65536, 3, 1, Some(32)).map_err(|e| {
+                EncryptionError::KeyDerivationFailed {
+                    message: e.to_string(),
+                }
+            })?,
         );
 
-        let hash = argon2
-            .hash_password(password.as_bytes(), &salt_string)
-            .map_err(|e| EncryptionError::KeyDerivation(e.to_string()))?;
+        let hash = argon2.hash_password(password.as_bytes(), &salt_string).map_err(|e| {
+            EncryptionError::KeyDerivationFailed {
+                message: e.to_string(),
+            }
+        })?;
 
         let key_bytes = hash
             .hash
-            .ok_or_else(|| EncryptionError::KeyDerivation("Failed to derive key hash".to_string()))?
+            .ok_or_else(|| EncryptionError::KeyDerivationFailed {
+                message: "Failed to derive key hash".to_string(),
+            })?
             .as_bytes()
             .to_vec();
         Self::new(algorithm, key_bytes)
@@ -205,16 +204,18 @@ impl EncryptionKey {
     fn encrypt_aes_gcm(&self, plaintext: &str, associated_data: Option<&[u8]>) -> Result<String> {
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
         let key_array: [u8; 32] =
-            self.key_data.as_slice().try_into().map_err(|_| {
-                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            self.key_data.as_slice().try_into().map_err(|_| EncryptionError::InvalidKey {
+                message: "Key length must be 32 bytes".to_string(),
             })?;
         let cipher = Aes256Gcm::new(&key_array.into());
         let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce
         let nonce = Nonce::from(nonce);
 
-        let ciphertext = cipher
-            .encrypt(&nonce, plaintext.as_bytes())
-            .map_err(|e| EncryptionError::Encryption(e.to_string()))?;
+        let ciphertext = cipher.encrypt(&nonce, plaintext.as_bytes()).map_err(|e| {
+            EncryptionError::CipherOperationFailed {
+                message: e.to_string(),
+            }
+        })?;
 
         let mut result = nonce.to_vec();
         result.extend_from_slice(&ciphertext);
@@ -228,18 +229,23 @@ impl EncryptionKey {
     }
 
     fn decrypt_aes_gcm(&self, ciphertext: &str, associated_data: Option<&[u8]>) -> Result<String> {
-        let data = general_purpose::STANDARD
-            .decode(ciphertext)
-            .map_err(|e| EncryptionError::InvalidCiphertext(e.to_string()))?;
+        let data = general_purpose::STANDARD.decode(ciphertext).map_err(|e| {
+            EncryptionError::InvalidCiphertext {
+                message: e.to_string(),
+            }
+        })?;
 
         if data.len() < 12 {
-            return Err(EncryptionError::InvalidCiphertext("Ciphertext too short".to_string()));
+            return Err(EncryptionError::InvalidCiphertext {
+                message: "Ciphertext too short".to_string(),
+            });
         }
 
         // Extract nonce (first 12 bytes)
-        let nonce_array: [u8; 12] = data[0..12].try_into().map_err(|_| {
-            EncryptionError::InvalidCiphertext("Nonce must be 12 bytes".to_string())
-        })?;
+        let nonce_array: [u8; 12] =
+            data[0..12].try_into().map_err(|_| EncryptionError::InvalidCiphertext {
+                message: "Nonce must be 12 bytes".to_string(),
+            })?;
         let nonce = Nonce::from(nonce_array);
 
         let ciphertext_len = if let Some(aad) = &associated_data {
@@ -254,17 +260,20 @@ impl EncryptionKey {
 
         // Convert key bytes to fixed-size array for Aes256Gcm::new()
         let key_array: [u8; 32] =
-            self.key_data.as_slice().try_into().map_err(|_| {
-                EncryptionError::InvalidKey("Key length must be 32 bytes".to_string())
+            self.key_data.as_slice().try_into().map_err(|_| EncryptionError::InvalidKey {
+                message: "Key length must be 32 bytes".to_string(),
             })?;
         let cipher = Aes256Gcm::new(&key_array.into());
 
-        let plaintext = cipher
-            .decrypt(&nonce, ciphertext.as_ref())
-            .map_err(|e| EncryptionError::Decryption(e.to_string()))?;
+        let plaintext = cipher.decrypt(&nonce, ciphertext.as_ref()).map_err(|e| {
+            EncryptionError::CipherOperationFailed {
+                message: e.to_string(),
+            }
+        })?;
 
-        String::from_utf8(plaintext)
-            .map_err(|e| EncryptionError::Decryption(format!("Invalid UTF-8: {}", e)))
+        String::from_utf8(plaintext).map_err(|e| EncryptionError::CipherOperationFailed {
+            message: format!("Invalid UTF-8: {}", e),
+        })
     }
 
     /// Encrypt text using ChaCha20-Poly1305 authenticated encryption
@@ -285,9 +294,11 @@ impl EncryptionKey {
         let nonce: [u8; 12] = thread_rng().random(); // 96-bit nonce for ChaCha20-Poly1305
         let nonce = chacha20poly1305::Nonce::from_slice(&nonce);
 
-        let ciphertext = cipher
-            .encrypt(nonce, plaintext.as_bytes())
-            .map_err(|e| EncryptionError::Encryption(e.to_string()))?;
+        let ciphertext = cipher.encrypt(nonce, plaintext.as_bytes()).map_err(|e| {
+            EncryptionError::CipherOperationFailed {
+                message: e.to_string(),
+            }
+        })?;
 
         let mut result = nonce.to_vec();
         result.extend_from_slice(&ciphertext);
@@ -308,12 +319,16 @@ impl EncryptionKey {
         ciphertext: &str,
         _associated_data: Option<&[u8]>,
     ) -> Result<String> {
-        let data = general_purpose::STANDARD
-            .decode(ciphertext)
-            .map_err(|e| EncryptionError::InvalidCiphertext(e.to_string()))?;
+        let data = general_purpose::STANDARD.decode(ciphertext).map_err(|e| {
+            EncryptionError::InvalidCiphertext {
+                message: e.to_string(),
+            }
+        })?;
 
         if data.len() < 12 {
-            return Err(EncryptionError::InvalidCiphertext("Ciphertext too short".to_string()));
+            return Err(EncryptionError::InvalidCiphertext {
+                message: "Ciphertext too short".to_string(),
+            });
         }
 
         let nonce = chacha20poly1305::Nonce::from_slice(&data[0..12]);
@@ -321,12 +336,15 @@ impl EncryptionKey {
         let key = ChaChaKey::from_slice(&self.key_data);
         let cipher = ChaCha20Poly1305::new(key);
 
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext_data.as_ref())
-            .map_err(|e| EncryptionError::Decryption(e.to_string()))?;
+        let plaintext = cipher.decrypt(nonce, ciphertext_data.as_ref()).map_err(|e| {
+            EncryptionError::CipherOperationFailed {
+                message: e.to_string(),
+            }
+        })?;
 
-        String::from_utf8(plaintext)
-            .map_err(|e| EncryptionError::Decryption(format!("Invalid UTF-8: {}", e)))
+        String::from_utf8(plaintext).map_err(|e| EncryptionError::CipherOperationFailed {
+            message: format!("Invalid UTF-8: {}", e),
+        })
     }
 }
 
@@ -466,12 +484,16 @@ impl MasterKeyManager {
     /// Retrieve the master key from OS keychain
     pub fn get_master_key(&self) -> Result<EncryptionKey> {
         let master_key_b64 = self.retrieve_from_keychain()?;
-        let master_key_bytes = general_purpose::STANDARD
-            .decode(master_key_b64)
-            .map_err(|e| EncryptionError::InvalidKey(e.to_string()))?;
+        let master_key_bytes = general_purpose::STANDARD.decode(master_key_b64).map_err(|e| {
+            EncryptionError::InvalidKey {
+                message: e.to_string(),
+            }
+        })?;
 
         if master_key_bytes.len() != 32 {
-            return Err(EncryptionError::InvalidKey("Invalid master key length".to_string()));
+            return Err(EncryptionError::InvalidKey {
+                message: "Invalid master key length".to_string(),
+            });
         }
 
         EncryptionKey::new(EncryptionAlgorithm::ChaCha20Poly1305, master_key_bytes)
@@ -487,30 +509,32 @@ impl MasterKeyManager {
     fn store_in_macos_keychain(&self, key: &str) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
-        let home = std::env::var("HOME").map_err(|_| {
-            EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+        let home = std::env::var("HOME").map_err(|_| EncryptionError::InvalidKey {
+            message: "HOME environment variable not set".to_string(),
         })?;
         let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
 
         // Create directory if it doesn't exist
         if let Some(parent) = key_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                EncryptionError::InvalidKey(format!("Failed to create directory: {}", e))
+            std::fs::create_dir_all(parent).map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to create directory: {}", e),
             })?;
         }
 
         // Write the key
-        std::fs::write(&key_path, key).map_err(|e| {
-            EncryptionError::InvalidKey(format!("Failed to write master key: {}", e))
+        std::fs::write(&key_path, key).map_err(|e| EncryptionError::InvalidKey {
+            message: format!("Failed to write master key: {}", e),
         })?;
 
         // Set permissions to 600 (owner read/write only)
         let mut perms = std::fs::metadata(&key_path)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to get metadata: {}", e)))?
+            .map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to get metadata: {}", e),
+            })?
             .permissions();
         perms.set_mode(0o600);
-        std::fs::set_permissions(&key_path, perms).map_err(|e| {
-            EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e))
+        std::fs::set_permissions(&key_path, perms).map_err(|e| EncryptionError::InvalidKey {
+            message: format!("Failed to set permissions: {}", e),
         })?;
 
         Ok(())
@@ -520,30 +544,32 @@ impl MasterKeyManager {
     fn store_in_linux_keyring(&self, key: &str) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
 
-        let home = std::env::var("HOME").map_err(|_| {
-            EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+        let home = std::env::var("HOME").map_err(|_| EncryptionError::InvalidKey {
+            message: "HOME environment variable not set".to_string(),
         })?;
         let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
 
         // Create directory if it doesn't exist
         if let Some(parent) = key_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                EncryptionError::InvalidKey(format!("Failed to create directory: {}", e))
+            std::fs::create_dir_all(parent).map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to create directory: {}", e),
             })?;
         }
 
         // Write the key
-        std::fs::write(&key_path, key).map_err(|e| {
-            EncryptionError::InvalidKey(format!("Failed to write master key: {}", e))
+        std::fs::write(&key_path, key).map_err(|e| EncryptionError::InvalidKey {
+            message: format!("Failed to write master key: {}", e),
         })?;
 
         // Set permissions to 600 (owner read/write only)
         let mut perms = std::fs::metadata(&key_path)
-            .map_err(|e| EncryptionError::InvalidKey(format!("Failed to get metadata: {}", e)))?
+            .map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to get metadata: {}", e),
+            })?
             .permissions();
         perms.set_mode(0o600);
-        std::fs::set_permissions(&key_path, perms).map_err(|e| {
-            EncryptionError::InvalidKey(format!("Failed to set permissions: {}", e))
+        std::fs::set_permissions(&key_path, perms).map_err(|e| EncryptionError::InvalidKey {
+            message: format!("Failed to set permissions: {}", e),
         })?;
 
         Ok(())
@@ -586,8 +612,8 @@ impl MasterKeyManager {
         // The wide string buffers (target_name_wide, credential_blob) remain
         // valid for the duration of this call.
         unsafe {
-            CredWriteW(&credential, 0).map_err(|e| {
-                EncryptionError::InvalidKey(format!("Failed to store credential: {:?}", e))
+            CredWriteW(&credential, 0).map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to store credential: {:?}", e),
             })?;
         }
 
@@ -598,26 +624,28 @@ impl MasterKeyManager {
         // Try platform-specific keychain first
         #[cfg(target_os = "macos")]
         {
-            let home = std::env::var("HOME").map_err(|_| {
-                EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+            let home = std::env::var("HOME").map_err(|_| EncryptionError::InvalidKey {
+                message: "HOME environment variable not set".to_string(),
             })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            let key_str = std::fs::read_to_string(&key_path).map_err(|_| {
-                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })?;
+            let key_str =
+                std::fs::read_to_string(&key_path).map_err(|_| EncryptionError::InvalidKey {
+                    message: "Master key not found in keychain".to_string(),
+                })?;
             // Trim whitespace/newlines that might have been added during storage
             Ok(key_str.trim().to_string())
         }
 
         #[cfg(target_os = "linux")]
         {
-            let home = std::env::var("HOME").map_err(|_| {
-                EncryptionError::InvalidKey("HOME environment variable not set".to_string())
+            let home = std::env::var("HOME").map_err(|_| EncryptionError::InvalidKey {
+                message: "HOME environment variable not set".to_string(),
             })?;
             let key_path = std::path::Path::new(&home).join(".mockforge").join("master_key");
-            let key_str = std::fs::read_to_string(&key_path).map_err(|_| {
-                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })?;
+            let key_str =
+                std::fs::read_to_string(&key_path).map_err(|_| EncryptionError::InvalidKey {
+                    message: "Master key not found in keychain".to_string(),
+                })?;
             // Trim whitespace/newlines that might have been added during storage
             Ok(key_str.trim().to_string())
         }
@@ -631,9 +659,10 @@ impl MasterKeyManager {
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             // Fallback for other platforms
-            let key_str = std::env::var("MOCKFORGE_MASTER_KEY").map_err(|_| {
-                EncryptionError::InvalidKey("Master key not found in keychain".to_string())
-            })?;
+            let key_str =
+                std::env::var("MOCKFORGE_MASTER_KEY").map_err(|_| EncryptionError::InvalidKey {
+                    message: "Master key not found in keychain".to_string(),
+                })?;
             // Trim whitespace/newlines that might have been added
             Ok(key_str.trim().to_string())
         }
@@ -667,12 +696,14 @@ impl MasterKeyManager {
                 None,
                 &mut credential_ptr,
             )
-            .map_err(|e| {
-                EncryptionError::InvalidKey(format!("Failed to read credential: {:?}", e))
+            .map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to read credential: {:?}", e),
             })?;
 
             if credential_ptr.is_null() {
-                return Err(EncryptionError::InvalidKey("Credential not found".to_string()));
+                return Err(EncryptionError::InvalidKey {
+                    message: "Credential not found".to_string(),
+                });
             }
 
             // Dereference the credential pointer
@@ -760,12 +791,17 @@ impl WorkspaceKeyManager {
         let decrypted_key_b64 =
             master_key.decrypt_chacha20(&encrypted_key_b64, Some(workspace_id.as_bytes()))?;
 
-        let workspace_key_bytes = general_purpose::STANDARD
-            .decode(decrypted_key_b64)
-            .map_err(|e| EncryptionError::InvalidKey(e.to_string()))?;
+        let workspace_key_bytes =
+            general_purpose::STANDARD.decode(decrypted_key_b64).map_err(|e| {
+                EncryptionError::InvalidKey {
+                    message: e.to_string(),
+                }
+            })?;
 
         if workspace_key_bytes.len() != 32 {
-            return Err(EncryptionError::InvalidKey("Invalid workspace key length".to_string()));
+            return Err(EncryptionError::InvalidKey {
+                message: "Invalid workspace key length".to_string(),
+            });
         }
 
         EncryptionKey::new(EncryptionAlgorithm::ChaCha20Poly1305, workspace_key_bytes)
@@ -802,17 +838,19 @@ impl WorkspaceKeyManager {
         self.key_storage
             .borrow_mut()
             .store_key(&workspace_id.to_string(), encrypted_key.as_bytes())
-            .map_err(|e| {
-                EncryptionError::InvalidKey(format!("Failed to store workspace key: {:?}", e))
+            .map_err(|e| EncryptionError::InvalidKey {
+                message: format!("Failed to store workspace key: {:?}", e),
             })
     }
 
     fn retrieve_workspace_key(&self, workspace_id: &str) -> Result<String> {
         // First try the new secure storage
         match self.key_storage.borrow().retrieve_key(&workspace_id.to_string()) {
-            Ok(encrypted_bytes) => String::from_utf8(encrypted_bytes).map_err(|e| {
-                EncryptionError::InvalidKey(format!("Invalid UTF-8 in stored key: {}", e))
-            }),
+            Ok(encrypted_bytes) => {
+                String::from_utf8(encrypted_bytes).map_err(|e| EncryptionError::InvalidKey {
+                    message: format!("Invalid UTF-8 in stored key: {}", e),
+                })
+            }
             Err(_) => {
                 // Fall back to old file-based storage for backward compatibility
                 let old_key_file = format!("workspace_{}_key.enc", workspace_id);
@@ -834,10 +872,9 @@ impl WorkspaceKeyManager {
                         }
                         Ok(encrypted_key)
                     }
-                    Err(_) => Err(EncryptionError::InvalidKey(format!(
-                        "Workspace key not found for: {}",
-                        workspace_id
-                    ))),
+                    Err(_) => Err(EncryptionError::InvalidKey {
+                        message: format!("Workspace key not found for: {}", workspace_id),
+                    }),
                 }
             }
         }
@@ -1142,12 +1179,13 @@ pub fn encrypt_with_key(
     plaintext: &str,
     associated_data: Option<&[u8]>,
 ) -> Result<String> {
-    let store = get_key_store()
-        .ok_or_else(|| EncryptionError::InvalidKey("Key store not initialized".to_string()))?;
+    let store = get_key_store().ok_or_else(|| EncryptionError::InvalidKey {
+        message: "Key store not initialized".to_string(),
+    })?;
 
-    let key = store
-        .get_key(key_id)
-        .ok_or_else(|| EncryptionError::InvalidKey(format!("Key '{}' not found", key_id)))?;
+    let key = store.get_key(key_id).ok_or_else(|| EncryptionError::InvalidKey {
+        message: format!("Key '{}' not found", key_id),
+    })?;
 
     key.encrypt(plaintext, associated_data)
 }
@@ -1169,12 +1207,13 @@ pub fn decrypt_with_key(
     ciphertext: &str,
     associated_data: Option<&[u8]>,
 ) -> Result<String> {
-    let store = get_key_store()
-        .ok_or_else(|| EncryptionError::InvalidKey("Key store not initialized".to_string()))?;
+    let store = get_key_store().ok_or_else(|| EncryptionError::InvalidKey {
+        message: "Key store not initialized".to_string(),
+    })?;
 
-    let key = store
-        .get_key(key_id)
-        .ok_or_else(|| EncryptionError::InvalidKey(format!("Key '{}' not found", key_id)))?;
+    let key = store.get_key(key_id).ok_or_else(|| EncryptionError::InvalidKey {
+        message: format!("Key '{}' not found", key_id),
+    })?;
 
     key.decrypt(ciphertext, associated_data)
 }
@@ -1251,7 +1290,7 @@ mod tests {
     #[test]
     fn test_invalid_key_length() {
         let result = EncryptionKey::new(EncryptionAlgorithm::Aes256Gcm, vec![1, 2, 3]);
-        assert!(matches!(result, Err(EncryptionError::InvalidKey(_))));
+        assert!(matches!(result, Err(EncryptionError::InvalidKey { message: _ })));
     }
 
     #[test]
@@ -1259,7 +1298,7 @@ mod tests {
         let key = EncryptionKey::from_password_pbkdf2("test", None, EncryptionAlgorithm::Aes256Gcm)
             .unwrap();
         let result = key.decrypt("invalid_base64!", None);
-        assert!(matches!(result, Err(EncryptionError::InvalidCiphertext(_))));
+        assert!(matches!(result, Err(EncryptionError::InvalidCiphertext { message: _ })));
     }
 
     #[test]
