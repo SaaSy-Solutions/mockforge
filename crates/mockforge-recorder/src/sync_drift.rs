@@ -3,6 +3,10 @@
 //! This module provides functionality to evaluate drift budgets when sync changes are detected
 //! and create incidents with before/after samples.
 
+// DriftBudgetEngine and DriftResult will be extracted to mockforge-contracts;
+// allow here until that extraction lands.
+#![allow(deprecated)]
+
 use crate::{database::RecorderDatabase, sync::DetectedChange, Result};
 use mockforge_core::{
     contract_drift::{DriftBudgetEngine, DriftResult},
@@ -157,7 +161,7 @@ impl SyncDriftEvaluator {
             breaking_mismatches,
             potentially_breaking_mismatches,
             non_breaking_mismatches,
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: change.path.clone(),
                 method: change.method.clone(),
                 breaking_changes,
@@ -390,7 +394,7 @@ mod tests {
     }
 
     fn create_test_drift_engine() -> Arc<DriftBudgetEngine> {
-        use mockforge_core::contract_drift::types::DriftBudgetConfig;
+        use mockforge_foundation::contract_drift_types::DriftBudgetConfig;
         Arc::new(DriftBudgetEngine::new(DriftBudgetConfig::default()))
     }
 
@@ -444,7 +448,7 @@ mod tests {
             breaking_mismatches: vec![],
             potentially_breaking_mismatches: vec![],
             non_breaking_mismatches: vec![],
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: "/test".to_string(),
                 method: "GET".to_string(),
                 breaking_changes: 6,
@@ -478,7 +482,7 @@ mod tests {
             breaking_mismatches: vec![],
             potentially_breaking_mismatches: vec![],
             non_breaking_mismatches: vec![],
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: "/test".to_string(),
                 method: "GET".to_string(),
                 breaking_changes: 3,
@@ -512,7 +516,7 @@ mod tests {
             breaking_mismatches: vec![],
             potentially_breaking_mismatches: vec![],
             non_breaking_mismatches: vec![],
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: "/test".to_string(),
                 method: "GET".to_string(),
                 breaking_changes: 1,
@@ -546,7 +550,7 @@ mod tests {
             breaking_mismatches: vec![],
             potentially_breaking_mismatches: vec![],
             non_breaking_mismatches: vec![],
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: "/test".to_string(),
                 method: "GET".to_string(),
                 breaking_changes: 0,
@@ -580,7 +584,7 @@ mod tests {
             breaking_mismatches: vec![],
             potentially_breaking_mismatches: vec![],
             non_breaking_mismatches: vec![],
-            metrics: mockforge_core::contract_drift::types::DriftMetrics {
+            metrics: mockforge_foundation::contract_drift_types::DriftMetrics {
                 endpoint: "/test".to_string(),
                 method: "GET".to_string(),
                 breaking_changes: 0,

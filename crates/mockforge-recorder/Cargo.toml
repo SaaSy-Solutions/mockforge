@@ -57,6 +57,7 @@ reqwest = { workspace = true }
 # Core types for OpenAPI generation
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-foundation = { path = "../mockforge-foundation" }
+mockforge-intelligence = { path = "../mockforge-intelligence" }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

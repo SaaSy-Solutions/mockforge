@@ -85,7 +85,7 @@ async fn test_fixture_loading() {
     let mut file = File::create(&yaml_path).unwrap();
     file.write_all(yaml_content.as_bytes()).unwrap();
 
-    let fixtures = KafkaFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+    let fixtures = KafkaFixture::load_from_dir(temp_dir.path()).unwrap();
     assert_eq!(fixtures.len(), 2);
     assert_eq!(fixtures[0].identifier, "test-fixture-1");
     assert_eq!(fixtures[0].topic, "test-topic");
