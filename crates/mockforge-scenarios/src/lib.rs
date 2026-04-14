@@ -1,7 +1,3 @@
-// TODO: remove once DriftBudgetEngine is extracted from mockforge-core::contract_drift
-#![allow(deprecated)]
-// (all other deprecated types used by this crate are now in mockforge-foundation)
-
 //! # MockForge Scenarios Marketplace
 //!
 //! A marketplace system for sharing and importing complete mock system configurations.
