@@ -7940,6 +7940,7 @@ dependencies = [
 name = "mockforge-foundation"
 version = "0.3.112"
 dependencies = [
+ "async-trait",
  "chrono",
  "rand 0.9.2",
  "regex",
@@ -8305,6 +8306,7 @@ dependencies = [
  "handlebars 5.1.2",
  "lettre",
  "mockforge-core",
+ "mockforge-foundation",
  "mockforge-import",
  "once_cell",
  "parking_lot",

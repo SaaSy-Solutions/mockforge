@@ -11,72 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Mock environment name (dev/test/prod)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum MockEnvironmentName {
-    /// Development environment - typically permissive, high chaos for testing
-    Dev,
-    /// Test environment - balanced settings for integration testing
-    Test,
-    /// Production-like environment - strict settings, minimal chaos
-    Prod,
-}
-
-impl MockEnvironmentName {
-    /// Convert to string
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            MockEnvironmentName::Dev => "dev",
-            MockEnvironmentName::Test => "test",
-            MockEnvironmentName::Prod => "prod",
-        }
-    }
-
-    /// Parse from string
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "dev" => Some(MockEnvironmentName::Dev),
-            "test" => Some(MockEnvironmentName::Test),
-            "prod" => Some(MockEnvironmentName::Prod),
-            _ => None,
-        }
-    }
-
-    /// Get all environment names in promotion order
-    pub fn promotion_order() -> Vec<Self> {
-        vec![
-            MockEnvironmentName::Dev,
-            MockEnvironmentName::Test,
-            MockEnvironmentName::Prod,
-        ]
-    }
-
-    /// Get the next environment in promotion order
-    pub fn next(&self) -> Option<Self> {
-        match self {
-            MockEnvironmentName::Dev => Some(MockEnvironmentName::Test),
-            MockEnvironmentName::Test => Some(MockEnvironmentName::Prod),
-            MockEnvironmentName::Prod => None,
-        }
-    }
-
-    /// Get the previous environment in promotion order
-    pub fn previous(&self) -> Option<Self> {
-        match self {
-            MockEnvironmentName::Dev => None,
-            MockEnvironmentName::Test => Some(MockEnvironmentName::Dev),
-            MockEnvironmentName::Prod => Some(MockEnvironmentName::Test),
-        }
-    }
-}
-
-impl std::fmt::Display for MockEnvironmentName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
+// `MockEnvironmentName` is re-exported from `mockforge_foundation::workspace_promotion`.
+pub use mockforge_foundation::workspace_promotion::MockEnvironmentName;
 
 /// Mock environment configuration
 ///
