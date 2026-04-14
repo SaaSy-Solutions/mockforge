@@ -4,7 +4,7 @@
 //! historical incidents, generating forecasts, and managing forecast cache.
 
 use chrono::{DateTime, Duration, Utc};
-use mockforge_core::contract_drift::forecasting::{
+use mockforge_contracts::contract_drift::forecasting::{
     ChangeForecast, Forecaster, ForecastingConfig,
 };
 use mockforge_core::incidents::types::DriftIncident;

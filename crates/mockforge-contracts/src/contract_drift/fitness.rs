@@ -4,7 +4,6 @@
 //! The full evaluator logic remains in `mockforge-core` as it depends on `OpenApiSpec`.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// A fitness function that evaluates contract changes
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,17 +86,8 @@ pub enum FitnessFunctionType {
     },
 }
 
-/// Result of evaluating a fitness function
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FitnessTestResult {
-    /// ID of the fitness function that was evaluated
-    pub function_id: String,
-    /// Name of the fitness function
-    pub function_name: String,
-    /// Whether the test passed
-    pub passed: bool,
-    /// Human-readable message about the result
-    pub message: String,
-    /// Metrics collected during evaluation (e.g., "response_size": 1024.0, "increase_percent": 15.5)
-    pub metrics: HashMap<String, f64>,
-}
+/// Result of evaluating a fitness function.
+///
+/// Re-exported from `mockforge-foundation::contract_drift_types` so consumers
+/// (core and contracts) share the same type.
+pub use mockforge_foundation::contract_drift_types::FitnessTestResult;

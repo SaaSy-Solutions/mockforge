@@ -3,117 +3,14 @@
 //! This module provides functionality for mapping API endpoints to SDK methods and
 //! tracking which applications consume those methods. This enables consumer-focused
 //! drift insights that show which apps will be affected by contract changes.
+//!
+//! The data types are re-exported from `mockforge-foundation::contract_drift_types`
+//! so `mockforge-core` and `mockforge-contracts` share the same underlying types.
 
-use serde::{Deserialize, Serialize};
+pub use mockforge_foundation::contract_drift_types::{
+    AppType, ConsumerImpact, ConsumerMapping, ConsumingApp, SDKMethod,
+};
 use std::collections::{HashMap, HashSet};
-
-/// Type of consuming application
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum AppType {
-    /// Web application
-    Web,
-    /// Mobile application (iOS)
-    #[serde(rename = "mobile_ios")]
-    MobileIos,
-    /// Mobile application (Android)
-    #[serde(rename = "mobile_android")]
-    MobileAndroid,
-    /// Internal tool or service
-    InternalTool,
-    /// CLI tool
-    Cli,
-    /// Other/unknown
-    Other,
-}
-
-impl std::fmt::Display for AppType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AppType::Web => write!(f, "Web App"),
-            AppType::MobileIos => write!(f, "Mobile App (iOS)"),
-            AppType::MobileAndroid => write!(f, "Mobile App (Android)"),
-            AppType::InternalTool => write!(f, "Internal Tool"),
-            AppType::Cli => write!(f, "CLI Tool"),
-            AppType::Other => write!(f, "Other"),
-        }
-    }
-}
-
-/// A consuming application that uses SDK methods
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct ConsumingApp {
-    /// Unique identifier for the app
-    pub app_id: String,
-    /// Human-readable name
-    pub app_name: String,
-    /// Type of application
-    pub app_type: AppType,
-    /// Optional repository URL
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository_url: Option<String>,
-    /// Timestamp when this app was last updated
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_updated: Option<i64>,
-    /// Optional description
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-}
-
-/// An SDK method that calls an endpoint
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct SDKMethod {
-    /// SDK name (e.g., "typescript-sdk", "python-sdk")
-    pub sdk_name: String,
-    /// Method name (e.g., "getUser", "createOrder")
-    pub method_name: String,
-    /// List of consuming apps that use this SDK method
-    #[serde(default)]
-    pub consuming_apps: Vec<ConsumingApp>,
-}
-
-/// Mapping from endpoint to SDK methods
-///
-/// For HTTP endpoints:
-/// - endpoint: "/api/users"
-/// - method: "GET", "POST", etc.
-///
-/// For protocol-specific operations:
-/// - gRPC: endpoint="service.method" (e.g., "user.UserService.GetUser"), method="grpc"
-/// - WebSocket: endpoint="message_type" (e.g., "user_joined"), method="websocket"
-/// - MQTT: endpoint="topic" (e.g., "devices/+/telemetry"), method="mqtt"
-/// - Kafka: endpoint="topic" (e.g., "user-events"), method="kafka"
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsumerMapping {
-    /// Endpoint path or operation ID
-    pub endpoint: String,
-    /// HTTP method or protocol identifier
-    pub method: String,
-    /// SDK methods that call this endpoint/operation
-    #[serde(default)]
-    pub sdk_methods: Vec<SDKMethod>,
-    /// Timestamp when this mapping was created
-    #[serde(default)]
-    pub created_at: i64,
-    /// Timestamp when this mapping was last updated
-    #[serde(default)]
-    pub updated_at: i64,
-}
-
-/// Impact analysis result showing which consumers are affected by drift
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsumerImpact {
-    /// Endpoint path
-    pub endpoint: String,
-    /// HTTP method
-    pub method: String,
-    /// SDK methods that are affected
-    pub affected_sdk_methods: Vec<SDKMethod>,
-    /// Applications that are affected
-    pub affected_apps: Vec<ConsumingApp>,
-    /// Human-readable impact summary
-    pub impact_summary: String,
-}
 
 /// Registry for managing consumer mappings
 #[derive(Debug, Clone)]

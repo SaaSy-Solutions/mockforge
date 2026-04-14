@@ -7,14 +7,14 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::contract_drift::forecasting::{ChangeForecast, Forecaster};
+use mockforge_contracts::contract_drift::forecasting::{ChangeForecast, Forecaster};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[cfg(feature = "database")]
 use chrono::{DateTime, Utc};
 #[cfg(feature = "database")]
-use mockforge_core::contract_drift::forecasting::SeasonalPattern;
+use mockforge_contracts::contract_drift::forecasting::SeasonalPattern;
 #[cfg(feature = "database")]
 use uuid::Uuid;
 
