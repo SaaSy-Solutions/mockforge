@@ -17,7 +17,7 @@ use uuid::Uuid;
 /// Test basic pipeline creation and execution
 #[tokio::test]
 async fn test_pipeline_creation_and_execution() {
-    let executor = PipelineExecutor::new();
+    let _executor = PipelineExecutor::new();
 
     // Create a simple pipeline definition
     let definition = PipelineDefinition {
@@ -91,8 +91,8 @@ async fn test_pipeline_event_matching() {
 /// Test pipeline execution with notify step
 #[tokio::test]
 async fn test_pipeline_execution_notify_step() {
-    let executor = PipelineExecutor::new();
-    let notify_step = NotifyStep::new();
+    let _executor = PipelineExecutor::new();
+    let _notify_step = NotifyStep::new();
 
     let mut executor = PipelineExecutor::new();
     executor.register_step_executor("notify".to_string(), Box::new(NotifyStep::new()));
@@ -328,7 +328,7 @@ async fn test_pipeline_multiple_steps() {
 /// Test disabled pipeline doesn't execute
 #[tokio::test]
 async fn test_disabled_pipeline() {
-    let executor = PipelineExecutor::new();
+    let _executor = PipelineExecutor::new();
 
     let definition = PipelineDefinition {
         name: "disabled-pipeline".to_string(),
