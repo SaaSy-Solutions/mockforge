@@ -10,7 +10,7 @@ use crate::{
     Result,
 };
 use chrono::{DateTime, Utc};
-use mockforge_core::intelligent_behavior::openapi_generator::HttpExchange;
+use mockforge_foundation::intelligent_behavior::HttpExchange;
 
 /// Converter from recorded exchanges to HttpExchange format
 pub struct RecordingsToOpenApi;

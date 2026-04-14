@@ -6,6 +6,7 @@
 //!
 //! Kept minimal: only pure data with no cross-crate dependencies.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -127,4 +128,31 @@ pub struct Response {
     pub body: Value,
     /// Response headers.
     pub headers: HashMap<String, String>,
+}
+
+/// Captured HTTP request/response exchange used for behavioral analysis.
+#[derive(Debug, Clone)]
+pub struct HttpExchange {
+    /// HTTP method.
+    pub method: String,
+    /// Request path.
+    pub path: String,
+    /// Query parameters (raw query string).
+    pub query_params: Option<String>,
+    /// Request headers (JSON string).
+    pub headers: String,
+    /// Request body (optional).
+    pub body: Option<String>,
+    /// Request body encoding.
+    pub body_encoding: String,
+    /// Response status code.
+    pub status_code: Option<i32>,
+    /// Response headers (JSON string).
+    pub response_headers: Option<String>,
+    /// Response body (optional).
+    pub response_body: Option<String>,
+    /// Response body encoding.
+    pub response_body_encoding: Option<String>,
+    /// Timestamp.
+    pub timestamp: DateTime<Utc>,
 }

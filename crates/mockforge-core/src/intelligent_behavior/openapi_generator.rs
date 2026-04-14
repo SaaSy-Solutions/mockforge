@@ -14,36 +14,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-/// HTTP exchange data for OpenAPI generation
-///
-/// This is a simplified representation of recorded HTTP exchanges
-/// that can be passed to the OpenAPI generator without requiring
-/// the full recorder crate dependency.
-#[derive(Debug, Clone)]
-pub struct HttpExchange {
-    /// HTTP method
-    pub method: String,
-    /// Request path
-    pub path: String,
-    /// Query parameters
-    pub query_params: Option<String>,
-    /// Request headers (JSON string)
-    pub headers: String,
-    /// Request body (optional)
-    pub body: Option<String>,
-    /// Request body encoding
-    pub body_encoding: String,
-    /// Response status code
-    pub status_code: Option<i32>,
-    /// Response headers (JSON string)
-    pub response_headers: Option<String>,
-    /// Response body (optional)
-    pub response_body: Option<String>,
-    /// Response body encoding
-    pub response_body_encoding: Option<String>,
-    /// Timestamp
-    pub timestamp: DateTime<Utc>,
-}
+// `HttpExchange` is re-exported from `mockforge_foundation::intelligent_behavior`.
+pub use mockforge_foundation::intelligent_behavior::HttpExchange;
 
 /// Configuration for OpenAPI spec generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
