@@ -5,10 +5,10 @@
 
 use crate::{database::RecorderDatabase, sync::DetectedChange, Result};
 use mockforge_core::{
-    ai_contract_diff::{Mismatch, MismatchSeverity, MismatchType},
     contract_drift::{DriftBudgetEngine, DriftResult},
     incidents::{IncidentManager, IncidentSeverity, IncidentType},
 };
+use mockforge_foundation::contract_diff_types::{Mismatch, MismatchSeverity, MismatchType};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::info;
