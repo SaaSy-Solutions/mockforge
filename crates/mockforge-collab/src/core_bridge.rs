@@ -4,6 +4,10 @@
 //! - `TeamWorkspace` (collaboration workspace with metadata)
 //! - `Workspace` (full mockforge-core workspace with mocks, folders, etc.)
 
+// Workspace, WorkspacePersistence and Folder will be extracted to
+// mockforge-workspace; allow here until then.
+#![allow(deprecated)]
+
 use crate::error::{CollabError, Result};
 use crate::models::TeamWorkspace;
 use mockforge_core::workspace::Workspace as CoreWorkspace;
