@@ -7,8 +7,10 @@
 //! Kept minimal: only pure data with no cross-crate dependencies.
 
 pub mod session;
+pub mod session_state;
 
-pub use session::{InteractionRecord, SessionState};
+pub use session::{SessionManager, SessionTracking, SessionTrackingMethod};
+pub use session_state::{InteractionRecord, SessionState};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
