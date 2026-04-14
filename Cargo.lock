@@ -7727,6 +7727,7 @@ dependencies = [
  "hyper 1.8.1",
  "jsonwebtoken",
  "mockforge-core",
+ "mockforge-foundation",
  "mockforge-pipelines",
  "parking_lot",
  "reqwest 0.12.28",
