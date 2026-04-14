@@ -557,7 +557,7 @@ pub async fn build_router_with_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
     failure_config: Option<FailureConfig>,
-    multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+    multi_tenant_config: Option<mockforge_foundation::multi_tenant_types::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
@@ -1080,9 +1080,9 @@ pub async fn build_router_with_multi_tenant(
             info!(
                 "Multi-tenant mode enabled with {} routing strategy",
                 match mt_config.routing_strategy {
-                    mockforge_core::RoutingStrategy::Path => "path-based",
-                    mockforge_core::RoutingStrategy::Port => "port-based",
-                    mockforge_core::RoutingStrategy::Both => "hybrid",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Path => "path-based",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Port => "port-based",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Both => "hybrid",
                 }
             );
 
@@ -1542,7 +1542,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
     _circling_config: Option<mockforge_core::request_chaining::ChainConfig>,
-    multi_tenant_config: Option<mockforge_core::MultiTenantConfig>,
+    multi_tenant_config: Option<mockforge_foundation::multi_tenant_types::MultiTenantConfig>,
     route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
     _ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
@@ -2729,9 +2729,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
             info!(
                 "Multi-tenant mode enabled with {} routing strategy",
                 match mt_config.routing_strategy {
-                    mockforge_core::RoutingStrategy::Path => "path-based",
-                    mockforge_core::RoutingStrategy::Port => "port-based",
-                    mockforge_core::RoutingStrategy::Both => "hybrid",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Path => "path-based",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Port => "port-based",
+                    mockforge_foundation::multi_tenant_types::RoutingStrategy::Both => "hybrid",
                 }
             );
 

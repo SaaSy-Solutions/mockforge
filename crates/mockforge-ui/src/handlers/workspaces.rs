@@ -1482,7 +1482,7 @@ pub async fn confirm_sync_changes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::MultiTenantConfig;
+    use mockforge_foundation::multi_tenant_types::MultiTenantConfig;
 
     fn create_test_state() -> WorkspaceState {
         let config = MultiTenantConfig::default();

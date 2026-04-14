@@ -15,6 +15,7 @@ pub mod contract_drift_types;
 pub mod encryption_error;
 pub mod error;
 pub mod intelligent_behavior;
+pub mod multi_tenant_types;
 pub mod state_machine;
 pub mod workspace_promotion;
 
