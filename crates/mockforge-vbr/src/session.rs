@@ -112,7 +112,7 @@ impl SessionDataManager {
     pub async fn get_session_state(
         &self,
         session_id: &str,
-    ) -> Option<mockforge_core::intelligent_behavior::types::SessionState> {
+    ) -> Option<mockforge_foundation::intelligent_behavior::SessionState> {
         self.session_manager.get_session(session_id).await
     }
 
@@ -120,7 +120,7 @@ impl SessionDataManager {
     pub async fn update_session_state(
         &self,
         session_id: &str,
-        state: mockforge_core::intelligent_behavior::types::SessionState,
+        state: mockforge_foundation::intelligent_behavior::SessionState,
     ) -> Result<()> {
         self.session_manager.update_session(session_id, state).await
     }
