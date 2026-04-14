@@ -12,7 +12,7 @@
 //! # async fn example() {
 //! let router = HttpRouterBuilder::new()
 //!     .spec_path("api-spec.json".to_string())
-//!     .with_multi_tenant(mockforge_core::MultiTenantConfig::default())
+//!     .with_multi_tenant(mockforge_foundation::multi_tenant_types::MultiTenantConfig::default())
 //!     .build()
 //!     .await;
 //! # }
@@ -27,7 +27,7 @@ use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_proxy::config::ProxyConfig;
 use mockforge_core::request_chaining::ChainConfig;
 use mockforge_chaos::core_traffic_shaping::TrafficShaper;
-use mockforge_core::MultiTenantConfig;
+use mockforge_foundation::multi_tenant_types::MultiTenantConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
