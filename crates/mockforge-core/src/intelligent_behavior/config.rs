@@ -63,42 +63,8 @@ impl PersonasConfig {
     }
 }
 
-/// A persona defines consistent data patterns across endpoints
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-pub struct Persona {
-    /// Persona name (e.g., "commercial_midwest", "hobbyist_urban")
-    pub name: String,
-
-    /// Persona traits (key-value pairs, e.g., "apiary_count": "20-40", "hive_count": "800-1500")
-    #[serde(default)]
-    pub traits: HashMap<String, String>,
-}
-
-impl Persona {
-    /// Get a numeric trait value, parsing ranges like "20-40" or single values
-    /// Returns the midpoint for ranges, or the value for single numbers
-    pub fn get_numeric_trait(&self, key: &str) -> Option<u64> {
-        self.traits.get(key).and_then(|value| {
-            // Try to parse as range (e.g., "20-40")
-            if let Some((min_str, max_str)) = value.split_once('-') {
-                if let (Ok(min), Ok(max)) =
-                    (min_str.trim().parse::<u64>(), max_str.trim().parse::<u64>())
-                {
-                    // Return midpoint for ranges
-                    return Some((min + max) / 2);
-                }
-            }
-            // Try to parse as single number
-            value.parse::<u64>().ok()
-        })
-    }
-
-    /// Get a trait value as string
-    pub fn get_trait(&self, key: &str) -> Option<&String> {
-        self.traits.get(key)
-    }
-}
+// `Persona` is re-exported from `mockforge_foundation::intelligent_behavior`.
+pub use mockforge_foundation::intelligent_behavior::Persona;
 
 /// Behavior model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

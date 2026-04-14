@@ -19,31 +19,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use uuid;
 
-/// HTTP request for MockAI
-#[derive(Debug, Clone)]
-pub struct Request {
-    /// HTTP method
-    pub method: String,
-    /// Request path
-    pub path: String,
-    /// Request body
-    pub body: Option<Value>,
-    /// Query parameters
-    pub query_params: HashMap<String, String>,
-    /// Headers
-    pub headers: HashMap<String, String>,
-}
-
-/// HTTP response from MockAI
-#[derive(Debug, Clone)]
-pub struct Response {
-    /// HTTP status code
-    pub status_code: u16,
-    /// Response body
-    pub body: Value,
-    /// Response headers
-    pub headers: HashMap<String, String>,
-}
+// `Request` and `Response` are re-exported from `mockforge_foundation::intelligent_behavior`.
+pub use mockforge_foundation::intelligent_behavior::{Request, Response};
 
 /// MockAI unified interface
 pub struct MockAI {
