@@ -7,11 +7,11 @@
 mod speech_to_text;
 
 use clap::Subcommand;
-use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::multi_tenant::{MultiTenantConfig, MultiTenantWorkspaceRegistry};
 use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::voice::WorkspaceBuilder;
 use mockforge_core::{ConversationManager, HookTranspiler, VoiceCommandParser, VoiceSpecGenerator};
+use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use speech_to_text::{InteractiveVoiceInput, SpeechToTextManager};
 use std::io::{self, Write};
 use std::path::PathBuf;

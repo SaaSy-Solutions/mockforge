@@ -540,7 +540,7 @@ pub fn ai_studio_router(state: AiStudioState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::intelligent_behavior::config::BehaviorModelConfig;
+    use mockforge_foundation::intelligent_behavior::BehaviorModelConfig;
 
     fn create_test_state() -> AiStudioState {
         let config = IntelligentBehaviorConfig {

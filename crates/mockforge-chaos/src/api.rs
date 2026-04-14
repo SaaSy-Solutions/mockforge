@@ -2253,7 +2253,7 @@ mod tests {
     async fn test_chaos_api_state_with_mockai() {
         let config = ChaosConfig::default();
         let mockai_config =
-            mockforge_core::intelligent_behavior::IntelligentBehaviorConfig::default();
+            mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig::default();
         let mockai = Arc::new(tokio::sync::RwLock::new(
             mockforge_core::intelligent_behavior::MockAI::new(mockai_config),
         ));

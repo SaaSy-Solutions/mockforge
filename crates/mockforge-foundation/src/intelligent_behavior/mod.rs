@@ -6,11 +6,18 @@
 //!
 //! Kept minimal: only pure data with no cross-crate dependencies.
 
+pub mod config;
 pub mod session;
 pub mod session_state;
+pub mod types;
 
+pub use config::{
+    BehaviorModelConfig, IntelligentBehaviorConfig, PerformanceConfig, PersonasConfig,
+    VectorStoreConfig,
+};
 pub use session::{SessionManager, SessionTracking, SessionTrackingMethod};
 pub use session_state::{InteractionRecord, SessionState};
+pub use types::BehaviorRules;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

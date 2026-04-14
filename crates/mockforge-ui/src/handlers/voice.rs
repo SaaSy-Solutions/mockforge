@@ -8,7 +8,6 @@ use axum::{
     http::StatusCode,
     response::Json as ResponseJson,
 };
-use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
 use mockforge_core::voice::{
     command_parser::{ParsedWorkspaceCreation, VoiceCommandParser},
     hook_transpiler::HookTranspiler,
@@ -16,6 +15,7 @@ use mockforge_core::voice::{
     workspace_builder::WorkspaceBuilder,
     workspace_scenario_generator::{GeneratedWorkspaceScenario, WorkspaceScenarioGenerator},
 };
+use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
