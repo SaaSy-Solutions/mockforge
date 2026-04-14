@@ -5,11 +5,9 @@
 
 use crate::error::{Result, ScenarioError};
 use crate::manifest::ScenarioManifest;
-use mockforge_core::intelligent_behavior::{
-    condition_evaluator::ConditionEvaluator, history::HistoryManager,
-};
 use mockforge_foundation::state_machine::{
-    rules::StateMachine, sub_scenario::SubScenario, visual_layout::VisualLayout,
+    condition_evaluator::ConditionEvaluator, history::HistoryManager, rules::StateMachine,
+    sub_scenario::SubScenario, visual_layout::VisualLayout,
 };
 use serde_json::Value;
 use std::collections::HashMap;
