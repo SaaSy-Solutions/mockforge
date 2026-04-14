@@ -1,5 +1,9 @@
 //! Workspace management and collaboration
 
+// Workspace and related types will be extracted to mockforge-workspace;
+// allow here until then.
+#![allow(deprecated)]
+
 use crate::core_bridge::CoreBridge;
 use crate::error::{CollabError, Result};
 use crate::models::{TeamWorkspace, UserRole, WorkspaceFork, WorkspaceMember};

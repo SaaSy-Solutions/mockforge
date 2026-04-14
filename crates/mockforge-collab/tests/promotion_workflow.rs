@@ -6,7 +6,11 @@
 //! - `GitOps` integration
 //! - Promotion history tracking
 
-use mockforge_collab::promotion::{PromotionGitOpsConfig, PromotionService};
+// ScenarioPromotionWorkflow/ApprovalRules will be extracted to
+// mockforge-workspace; allow here until then.
+#![allow(deprecated)]
+
+use mockforge_collab::promotion::PromotionService;
 use mockforge_core::workspace::{
     mock_environment::MockEnvironmentName,
     scenario_promotion::{
@@ -362,8 +366,6 @@ async fn test_promotion_with_metadata() {
 
 #[tokio::test]
 async fn test_pillar_tag_approval_detection() {
-    use mockforge_core::pillars::Pillar;
-
     let rules = ApprovalRules::default();
 
     // Test [Cloud][Contracts][Reality] combination requires approval
@@ -449,8 +451,6 @@ async fn test_pillar_tags_preserved_in_promotion() {
 
 #[tokio::test]
 async fn test_prod_promotion_with_pillar_tags() {
-    use mockforge_core::pillars::Pillar;
-
     let rules = ApprovalRules::default();
 
     // Test that prod promotions always require approval, even without pillar tags

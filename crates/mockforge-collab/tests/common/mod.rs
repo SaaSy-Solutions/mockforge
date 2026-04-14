@@ -1,6 +1,8 @@
 //! Common test utilities and helpers
 
-#![allow(unreachable_pub)]
+// Each integration-test binary only uses a subset of these helpers, so dead-code
+// lints fire per-binary. Silence them at the shared module level.
+#![allow(unreachable_pub, dead_code, unused_imports)]
 
 use axum::Router;
 use mockforge_collab::{
