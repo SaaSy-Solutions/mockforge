@@ -19,6 +19,8 @@ chrono = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
 reqwest = { workspace = true }
 rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
 schemars = { version = "0.8", optional = true }

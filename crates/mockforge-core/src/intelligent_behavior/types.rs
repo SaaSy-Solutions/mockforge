@@ -1,11 +1,10 @@
 //! Core types for the Intelligent Mock Behavior system
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // `InteractionRecord` is re-exported from `mockforge_foundation::intelligent_behavior::session`.
-pub use mockforge_foundation::intelligent_behavior::session::InteractionRecord;
+pub use mockforge_foundation::intelligent_behavior::session_state::InteractionRecord;
 
 /// Behavior rules that define how the mock API should behave
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,7 +61,7 @@ fn default_true() -> bool {
 // `SessionState` is re-exported from `mockforge_foundation::intelligent_behavior::session`.
 // The foundation version uses the registered clock (see `mockforge_core::time_travel::register_with_foundation`
 // which is called during core initialization).
-pub use mockforge_foundation::intelligent_behavior::session::SessionState;
+pub use mockforge_foundation::intelligent_behavior::session_state::SessionState;
 
 // `LlmGenerationRequest` is re-exported from `mockforge_foundation::intelligent_behavior`.
 pub use mockforge_foundation::intelligent_behavior::LlmGenerationRequest;

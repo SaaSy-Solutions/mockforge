@@ -31,7 +31,6 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::fmt;
-use thiserror::Error;
 use tracing;
 
 // Windows Credential Manager types are imported locally in the platform-specific methods below.

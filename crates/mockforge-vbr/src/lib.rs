@@ -1,6 +1,3 @@
-// TODO: remove once mockforge-intelligence crate is extracted
-#![allow(deprecated)]
-
 //! # MockForge Virtual Backend Reality (VBR) Engine
 //!
 //! The VBR engine creates stateful mock servers with persistent virtual databases,
