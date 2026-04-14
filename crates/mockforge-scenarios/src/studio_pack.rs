@@ -3,6 +3,9 @@
 //! This module provides functionality for installing and applying studio packs,
 //! which bundle scenarios, personas, chaos rules, contract diffs, and reality blends.
 
+// DriftBudgetEngine will be extracted to mockforge-contracts; allow here until then.
+#![allow(deprecated)]
+
 #[path = "studio_pack/packs.rs"]
 pub mod packs;
 
