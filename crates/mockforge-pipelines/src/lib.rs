@@ -1,4 +1,4 @@
-// TODO: remove once mockforge-workspace and mockforge-import crates are extracted
+// TODO: remove once mockforge-workspace crate is fully extracted (needs PromotionService, PromotionEntityType, MockEnvironmentName)
 #![allow(deprecated)]
 
 //! # `MockForge` Pipelines
