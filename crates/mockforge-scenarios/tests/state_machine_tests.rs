@@ -7,7 +7,7 @@
 //! - Invalid states
 //! - Concurrent state updates
 
-use mockforge_core::intelligent_behavior::rules::StateMachine;
+use mockforge_foundation::state_machine::rules::StateMachine;
 use mockforge_scenarios::state_machine::{ScenarioStateMachineManager, StateInstance};
 use serde_json::json;
 
@@ -106,7 +106,7 @@ async fn test_state_machine_with_no_transitions() {
 
 #[tokio::test]
 async fn test_state_machine_with_circular_transitions() {
-    use mockforge_core::intelligent_behavior::rules::StateTransition;
+    use mockforge_foundation::state_machine::rules::StateTransition;
 
     let state_machine = StateMachine::new(
         "circular".to_string(),
@@ -168,7 +168,7 @@ async fn test_state_machine_initial_state_validation() {
 
 #[tokio::test]
 async fn test_state_machine_multiple_final_states() {
-    use mockforge_core::intelligent_behavior::rules::StateTransition;
+    use mockforge_foundation::state_machine::rules::StateTransition;
 
     let state_machine = StateMachine::new(
         "multi_final".to_string(),

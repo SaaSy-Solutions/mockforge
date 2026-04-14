@@ -16,6 +16,7 @@ scripting = ["dep:rquickjs"]
 
 [dependencies]
 chrono = { workspace = true }
+rand = { workspace = true }
 regex = { workspace = true }
 serde = { workspace = true }
 reqwest = { workspace = true }
