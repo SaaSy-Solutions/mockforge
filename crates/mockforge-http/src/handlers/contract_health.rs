@@ -228,7 +228,7 @@ pub async fn get_timeline(
         .fetch_all(pool)
         .await
         {
-            use mockforge_core::contract_drift::threat_modeling::ThreatLevel;
+            use mockforge_foundation::threat_modeling_types::ThreatLevel;
             for row in ta_rows {
                 let id: uuid::Uuid = match row.try_get("id") {
                     Ok(id) => id,

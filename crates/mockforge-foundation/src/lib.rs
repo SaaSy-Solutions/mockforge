@@ -19,6 +19,7 @@ pub mod intelligent_behavior;
 pub mod multi_tenant_types;
 pub mod protocol;
 pub mod state_machine;
+pub mod threat_modeling_types;
 pub mod workspace_promotion;
 
 pub use encryption_error::{EncryptionError, EncryptionResult};
