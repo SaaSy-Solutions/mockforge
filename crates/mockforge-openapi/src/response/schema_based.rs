@@ -821,37 +821,37 @@ impl ResponseGenerator {
         if prop_lower.contains("id") || prop_lower.contains("uuid") {
             Value::String(uuid::Uuid::new_v4().to_string())
         } else if prop_lower.contains("email") {
-            Value::String(format!("user{}@example.com", thread_rng().random_range(1000..=9999)))
+            Value::String(format!("user{}@example.com", rand::rng().random_range(1000..=9999)))
         } else if prop_lower.contains("name") || prop_lower.contains("title") {
             let names = ["John Doe", "Jane Smith", "Bob Johnson", "Alice Brown"];
-            Value::String(names[thread_rng().random_range(0..names.len())].to_string())
+            Value::String(names[rand::rng().random_range(0..names.len())].to_string())
         } else if prop_lower.contains("phone") || prop_lower.contains("mobile") {
-            Value::String(format!("+1-555-{:04}", thread_rng().random_range(1000..=9999)))
+            Value::String(format!("+1-555-{:04}", rand::rng().random_range(1000..=9999)))
         } else if prop_lower.contains("address") || prop_lower.contains("street") {
             let streets = ["123 Main St", "456 Oak Ave", "789 Pine Rd", "321 Elm St"];
-            Value::String(streets[thread_rng().random_range(0..streets.len())].to_string())
+            Value::String(streets[rand::rng().random_range(0..streets.len())].to_string())
         } else if prop_lower.contains("city") {
             let cities = ["New York", "London", "Tokyo", "Paris", "Sydney"];
-            Value::String(cities[thread_rng().random_range(0..cities.len())].to_string())
+            Value::String(cities[rand::rng().random_range(0..cities.len())].to_string())
         } else if prop_lower.contains("country") {
             let countries = ["USA", "UK", "Japan", "France", "Australia"];
-            Value::String(countries[thread_rng().random_range(0..countries.len())].to_string())
+            Value::String(countries[rand::rng().random_range(0..countries.len())].to_string())
         } else if prop_lower.contains("company") || prop_lower.contains("organization") {
             let companies = ["Acme Corp", "Tech Solutions", "Global Inc", "Innovate Ltd"];
-            Value::String(companies[thread_rng().random_range(0..companies.len())].to_string())
+            Value::String(companies[rand::rng().random_range(0..companies.len())].to_string())
         } else if prop_lower.contains("url") || prop_lower.contains("website") {
             Value::String("https://example.com".to_string())
         } else if prop_lower.contains("age") {
-            Value::Number((18 + thread_rng().random_range(0..60)).into())
+            Value::Number((18 + rand::rng().random_range(0..60)).into())
         } else if prop_lower.contains("count") || prop_lower.contains("quantity") {
-            Value::Number((1 + thread_rng().random_range(0..100)).into())
+            Value::Number((1 + rand::rng().random_range(0..100)).into())
         } else if prop_lower.contains("price")
             || prop_lower.contains("amount")
             || prop_lower.contains("cost")
         {
             Value::Number(
                 serde_json::Number::from_f64(
-                    (thread_rng().random::<f64>() * 1000.0 * 100.0).round() / 100.0,
+                    (rand::rng().random::<f64>() * 1000.0 * 100.0).round() / 100.0,
                 )
                 .expect("rounded price calculation produces valid f64"),
             )
@@ -859,7 +859,7 @@ impl ResponseGenerator {
             || prop_lower.contains("enabled")
             || prop_lower.contains("is_")
         {
-            Value::Bool(thread_rng().random_bool(0.5))
+            Value::Bool(rand::rng().random_bool(0.5))
         } else if prop_lower.contains("date") || prop_lower.contains("time") {
             Value::String(chrono::Utc::now().to_rfc3339())
         } else if prop_lower.contains("description") || prop_lower.contains("comment") {

@@ -6,15 +6,14 @@
 mod ai_assisted;
 mod schema_based;
 
-use crate::intelligent_behavior::config::Persona;
-use crate::{
-    ai_response::{AiResponseConfig, RequestContext},
-    OpenApiSpec, Result,
-};
+use crate::OpenApiSpec;
 use async_trait::async_trait;
 use chrono;
+use mockforge_foundation::ai_response::{AiResponseConfig, RequestContext};
+use mockforge_foundation::error::Result;
+use mockforge_foundation::intelligent_behavior::Persona;
 use openapiv3::{Operation, ReferenceOr, Response, Responses, Schema};
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid;
@@ -76,8 +75,8 @@ impl ResponseGenerator {
         status_code: u16,
         content_type: Option<&str>,
         expand_tokens: bool,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
     ) -> Result<Value> {
         Self::generate_response_with_expansion_and_mode_and_persona(
             spec,
@@ -99,8 +98,8 @@ impl ResponseGenerator {
         status_code: u16,
         content_type: Option<&str>,
         expand_tokens: bool,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
         persona: Option<&Persona>,
     ) -> Result<Value> {
         Self::generate_response_with_scenario_and_mode_and_persona(
@@ -170,8 +169,8 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
     ) -> Result<Value> {
         Self::generate_response_with_scenario_and_mode_and_persona(
             spec,
@@ -195,8 +194,8 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
         _persona: Option<&Persona>,
     ) -> Result<Value> {
         // Find the response for the status code
@@ -329,8 +328,8 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
     ) -> Result<Value> {
         Self::generate_from_response_with_scenario_and_mode_and_persona(
             spec,
@@ -353,8 +352,8 @@ impl ResponseGenerator {
         content_type: Option<&str>,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
         persona: Option<&Persona>,
     ) -> Result<Value> {
         // If content_type is specified, look for that media type
@@ -441,8 +440,8 @@ impl ResponseGenerator {
         media_type: &openapiv3::MediaType,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
     ) -> Result<Value> {
         Self::generate_from_media_type_with_scenario_and_mode_and_persona(
             spec,
@@ -461,8 +460,8 @@ impl ResponseGenerator {
         media_type: &openapiv3::MediaType,
         expand_tokens: bool,
         scenario: Option<&str>,
-        selection_mode: Option<crate::openapi::response_selection::ResponseSelectionMode>,
-        selector: Option<&crate::openapi::response_selection::ResponseSelector>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
         persona: Option<&Persona>,
     ) -> Result<Value> {
         // First, check if there's an explicit example
@@ -483,7 +482,7 @@ impl ResponseGenerator {
         // CRITICAL: Always use examples if available, even if query parameters are missing
         // This fixes the bug where GET requests without query params return POST-style responses
         if !media_type.examples.is_empty() {
-            use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
+            use crate::response_selection::{ResponseSelectionMode, ResponseSelector};
 
             tracing::debug!(
                 "Found {} examples in media type, available examples: {:?}",
@@ -978,7 +977,7 @@ components:
     async fn test_generate_ai_response_with_generator() {
         let ai_config = AiResponseConfig {
             enabled: true,
-            mode: crate::ai_response::AiResponseMode::Intelligent,
+            mode: mockforge_foundation::ai_response::AiResponseMode::Intelligent,
             prompt: Some("Generate a response for {{method}} {{path}}".to_string()),
             context: None,
             temperature: 0.7,
@@ -1013,7 +1012,7 @@ components:
     async fn test_generate_ai_response_without_generator() {
         let ai_config = AiResponseConfig {
             enabled: true,
-            mode: crate::ai_response::AiResponseMode::Intelligent,
+            mode: mockforge_foundation::ai_response::AiResponseMode::Intelligent,
             prompt: Some("Generate a response for {{method}} {{path}}".to_string()),
             context: None,
             temperature: 0.7,
@@ -1048,7 +1047,7 @@ components:
     async fn test_generate_ai_response_no_prompt() {
         let ai_config = AiResponseConfig {
             enabled: true,
-            mode: crate::ai_response::AiResponseMode::Intelligent,
+            mode: mockforge_foundation::ai_response::AiResponseMode::Intelligent,
             prompt: None,
             context: None,
             temperature: 0.7,

@@ -28,6 +28,9 @@
 //!   [`spec`] (re-exported for advanced callers).
 
 pub mod multi_spec;
+pub mod response;
+pub mod response_trace;
+pub mod route;
 pub mod schema;
 pub mod spec;
 pub mod spec_parser;
@@ -42,7 +45,9 @@ pub use mockforge_foundation::response_selection;
 
 // Mirror the blanket re-exports that the legacy `mockforge_core::openapi`
 // module exposed, so consumers can continue to glob-import from the facade.
+pub use response::*;
 pub use response_selection::*;
+pub use route::*;
 pub use schema::*;
 pub use spec::*;
 pub use validation::*;
