@@ -27,7 +27,9 @@
 //! - [`swagger_convert`] — Swagger 2.0 → OpenAPI 3.0 conversion helper used by
 //!   [`spec`] (re-exported for advanced callers).
 
+pub mod custom_fixture;
 pub mod multi_spec;
+pub mod request_fingerprint;
 pub mod response;
 pub mod response_trace;
 pub mod route;
@@ -36,6 +38,9 @@ pub mod spec;
 pub mod spec_parser;
 pub mod swagger_convert;
 pub mod validation;
+
+pub use custom_fixture::CustomFixtureLoader;
+pub use request_fingerprint::RequestFingerprint;
 
 /// `ResponseSelectionMode` / `ResponseSelector` live in
 /// [`mockforge_foundation::response_selection`] — it's a generic selection

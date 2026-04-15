@@ -24,6 +24,9 @@ serde_yaml = { workspace = true }
 # Async I/O for spec loading
 tokio = { workspace = true }
 
+# HTTP fingerprinting types (RequestFingerprint carries Method/Uri/Headers)
+axum = { workspace = true }
+
 # OpenAPI types
 openapiv3 = { workspace = true }
 indexmap = "2.0"
@@ -46,3 +49,6 @@ globwalk = "0.9.1"
 
 # Diagnostics
 tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"

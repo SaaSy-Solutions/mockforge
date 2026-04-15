@@ -2,7 +2,7 @@
 //!
 //! Latency simulation and fault injection for MockForge
 
-use crate::Result;
+use crate::error::Result;
 use rand::Rng;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -126,7 +126,7 @@ impl LatencyProfile {
 
     /// Calculate latency for a request with optional tags
     pub fn calculate_latency(&self, tags: &[String]) -> Duration {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Check for tag overrides (use the first matching tag)
         // Note: Tag overrides always use fixed latency for simplicity
@@ -231,13 +231,13 @@ impl FaultConfig {
             return true;
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         rng.random_bool(self.failure_rate)
     }
 
     /// Get a random failure response
     pub fn get_failure_response(&self) -> (u16, Option<serde_json::Value>) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let status_code = if self.status_codes.is_empty() {
             500
