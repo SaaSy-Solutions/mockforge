@@ -259,7 +259,9 @@ pub mod contract_validation;
 #[cfg(feature = "contracts")]
 #[allow(dead_code)]
 pub(crate) mod contract_webhooks;
-pub mod custom_fixture;
+/// `custom_fixture` was promoted to [`mockforge_openapi::custom_fixture`];
+/// re-exported here for backwards compatibility.
+pub use mockforge_openapi::custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
 /// Deceptive canary mode for routing team traffic to deceptive deploys
@@ -295,7 +297,9 @@ pub mod incidents;
 // Data types moved to mockforge-foundation (A12/A17);
 // MockAI, RuleGenerator, OpenApiSpecGenerator stay here (LLM-bound).
 pub mod intelligent_behavior;
-pub mod latency;
+/// `latency` was promoted to [`mockforge_foundation::latency`]; re-exported
+/// here so the legacy `mockforge_core::latency::*` path continues to resolve.
+pub use mockforge_foundation::latency;
 pub mod lifecycle;
 #[cfg(feature = "advanced")]
 // Config types moved to mockforge-foundation (A14);
@@ -329,7 +333,9 @@ pub mod reality_continuum;
 pub mod record_replay;
 pub mod request_capture;
 pub mod request_chaining;
-pub mod request_fingerprint;
+/// `request_fingerprint` was promoted to [`mockforge_openapi::request_fingerprint`];
+/// re-exported here for backwards compatibility.
+pub use mockforge_openapi::request_fingerprint;
 pub mod request_logger;
 #[cfg(feature = "scripting")]
 pub(crate) mod request_scripting;

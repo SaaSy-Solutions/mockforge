@@ -8290,6 +8290,7 @@ name = "mockforge-openapi"
 version = "0.3.112"
 dependencies = [
  "async-trait",
+ "axum 0.8.8",
  "chrono",
  "globwalk",
  "indexmap 2.13.0",
@@ -8300,6 +8301,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "tokio",
  "tracing",
  "uuid",

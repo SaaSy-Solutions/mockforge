@@ -133,7 +133,7 @@ impl RequestFingerprint {
     }
 
     /// Get tags for the request from OpenAPI operation if available
-    pub fn openapi_tags(&self, spec: &crate::openapi::spec::OpenApiSpec) -> Option<Vec<String>> {
+    pub fn openapi_tags(&self, spec: &crate::spec::OpenApiSpec) -> Option<Vec<String>> {
         // Find the operation that matches this fingerprint
         if let Some(operation) = self.find_operation(spec) {
             let mut tags = operation.tags.clone();
@@ -149,7 +149,7 @@ impl RequestFingerprint {
     /// Find the OpenAPI operation that matches this fingerprint
     fn find_operation<'a>(
         &self,
-        spec: &'a crate::openapi::spec::OpenApiSpec,
+        spec: &'a crate::spec::OpenApiSpec,
     ) -> Option<&'a openapiv3::Operation> {
         // Look for the path in the spec
         if let Some(path_item) = spec.spec.paths.paths.get(&self.path) {
@@ -291,7 +291,7 @@ mod tests {
 
     #[test]
     fn test_openapi_tags() {
-        use crate::openapi::spec::OpenApiSpec;
+        use crate::spec::OpenApiSpec;
 
         let spec_json = r#"
         {

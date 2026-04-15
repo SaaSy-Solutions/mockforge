@@ -18,6 +18,7 @@ pub mod encryption_error;
 pub mod error;
 pub mod incidents_types;
 pub mod intelligent_behavior;
+pub mod latency;
 pub mod multi_tenant_types;
 pub mod protocol;
 pub mod protocol_contract_types;

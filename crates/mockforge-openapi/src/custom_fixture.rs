@@ -34,7 +34,8 @@
 //!
 //! Paths are automatically normalized (trailing slashes removed, multiple slashes collapsed)
 
-use crate::{Error, RequestFingerprint, Result};
+use crate::request_fingerprint::RequestFingerprint;
+use mockforge_foundation::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
