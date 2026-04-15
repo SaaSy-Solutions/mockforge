@@ -353,7 +353,8 @@ pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states
 #[cfg(feature = "advanced")]
 pub mod snapshots;
-pub mod spec_parser;
+/// Re-export of the extracted [`mockforge_openapi::spec_parser`] module.
+pub use mockforge_openapi::spec_parser;
 pub mod stateful_handler;
 // sync_watcher stays in core.
 pub mod sync_watcher;

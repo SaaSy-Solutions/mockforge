@@ -5,8 +5,8 @@
 //! It also supports Swagger 2.0 specifications by converting them
 //! to OpenAPI 3.0 format automatically.
 
-use crate::openapi::swagger_convert;
-use crate::{Error, Result};
+use crate::swagger_convert;
+use mockforge_foundation::error::{Error, Result};
 use openapiv3::{OpenAPI, ReferenceOr, Schema};
 use std::collections::HashSet;
 use std::path::Path;
@@ -308,8 +308,8 @@ impl OpenApiSpec {
     }
 
     /// Get a schema by reference (returns wrapped OpenApiSchema)
-    pub fn get_schema(&self, reference: &str) -> Option<crate::openapi::schema::OpenApiSchema> {
-        self.resolve_schema(reference).map(crate::openapi::schema::OpenApiSchema::new)
+    pub fn get_schema(&self, reference: &str) -> Option<crate::schema::OpenApiSchema> {
+        self.resolve_schema(reference).map(crate::schema::OpenApiSchema::new)
     }
 
     /// Resolve a schema reference to the raw Schema

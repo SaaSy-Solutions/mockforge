@@ -94,8 +94,8 @@ impl ResponseSelector {
             }
             ResponseSelectionMode::Random => {
                 use rand::Rng;
-                let mut rng = rand::thread_rng();
-                rng.gen_range(0..options.len())
+                let mut rng = rand::rng();
+                rng.random_range(0..options.len())
             }
             ResponseSelectionMode::WeightedRandom => self.select_weighted_random(options),
         }
@@ -104,7 +104,7 @@ impl ResponseSelector {
     /// Select using weighted random distribution
     fn select_weighted_random(&self, options: &[String]) -> usize {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // If weights are provided, use them
         if let Some(ref weights) = self.weights {
@@ -112,7 +112,7 @@ impl ResponseSelector {
                 options.iter().map(|opt| weights.get(opt).copied().unwrap_or(1.0)).sum();
 
             if total_weight > 0.0 {
-                let random = rng.gen::<f64>() * total_weight;
+                let random = rng.random::<f64>() * total_weight;
                 let mut cumulative = 0.0;
 
                 for (idx, opt) in options.iter().enumerate() {
@@ -125,7 +125,7 @@ impl ResponseSelector {
         }
 
         // Fall back to uniform random if no weights or invalid weights
-        rng.gen_range(0..options.len())
+        rng.random_range(0..options.len())
     }
 
     /// Reset the sequential counter (useful for testing)

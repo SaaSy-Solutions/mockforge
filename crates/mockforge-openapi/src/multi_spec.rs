@@ -4,8 +4,8 @@
 //! group them by version, detect conflicts, and merge them according to
 //! configurable strategies.
 
-use crate::openapi::spec::OpenApiSpec;
-use crate::{Error, Result};
+use crate::spec::OpenApiSpec;
+use mockforge_foundation::error::{Error, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};

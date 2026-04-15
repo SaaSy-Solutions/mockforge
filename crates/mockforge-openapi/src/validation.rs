@@ -3,9 +3,9 @@
 //! This module provides validation functionality for requests and responses
 //! against OpenAPI specifications.
 
-use crate::Result;
 use indexmap::IndexMap;
 use jsonschema::{self, Draft};
+use mockforge_foundation::error::Result;
 use openapiv3::{
     Header, MediaType, Operation, Parameter, ParameterData, ParameterSchemaOrContent, ReferenceOr,
     Response, Responses,
@@ -73,7 +73,7 @@ pub struct RequestValidator;
 impl RequestValidator {
     /// Validate a request against an OpenAPI operation
     pub fn validate_request(
-        spec: &crate::openapi::OpenApiSpec,
+        spec: &crate::spec::OpenApiSpec,
         operation: &Operation,
         path_params: &HashMap<String, String>,
         query_params: &HashMap<String, String>,
@@ -194,7 +194,7 @@ pub struct ResponseValidator;
 impl ResponseValidator {
     /// Validate a response against an OpenAPI operation
     pub fn validate_response(
-        spec: &crate::openapi::OpenApiSpec,
+        spec: &crate::spec::OpenApiSpec,
         operation: &Operation,
         status_code: u16,
         headers: &HashMap<String, String>,
@@ -256,7 +256,7 @@ fn find_response_for_status(
 fn validate_response_headers(
     actual_headers: &HashMap<String, String>,
     expected_headers: &IndexMap<String, ReferenceOr<Header>>,
-    spec: &crate::openapi::OpenApiSpec,
+    spec: &crate::spec::OpenApiSpec,
 ) -> Option<Vec<String>> {
     let mut errors = Vec::new();
 
@@ -360,7 +360,7 @@ fn validate_response_headers(
 fn validate_response_body(
     body: Option<&Value>,
     content: &IndexMap<String, MediaType>,
-    spec: &crate::openapi::OpenApiSpec,
+    spec: &crate::spec::OpenApiSpec,
 ) -> Option<Vec<String>> {
     // For now, only validate JSON content
     if let Some(media_type) = content.get("application/json") {
@@ -461,7 +461,7 @@ fn validate_response_body(
 fn validate_request_body(
     body: Option<&Value>,
     content: &IndexMap<String, MediaType>,
-    spec: &crate::openapi::OpenApiSpec,
+    spec: &crate::spec::OpenApiSpec,
 ) -> Option<Vec<String>> {
     // For now, only validate JSON content
     if let Some(media_type) = content.get("application/json") {
@@ -563,7 +563,7 @@ fn validate_parameter_data(
     parameter_data: &ParameterData,
     params_map: &HashMap<String, String>,
     location: &str,
-    spec: &crate::openapi::OpenApiSpec,
+    spec: &crate::spec::OpenApiSpec,
     errors: &mut Vec<String>,
 ) {
     // Check if required parameter is present
@@ -796,7 +796,7 @@ mod tests {
 
     #[test]
     fn test_validate_request_with_path_params() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -845,7 +845,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_missing_required_path_param() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -893,7 +893,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_query_params() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -949,7 +949,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_request_body() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1008,7 +1008,7 @@ paths:
 
     #[test]
     fn test_validate_response_with_valid_body() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1062,7 +1062,7 @@ paths:
 
     #[test]
     fn test_validate_response_with_invalid_status_code() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1099,7 +1099,7 @@ paths:
 
     #[test]
     fn test_validate_response_with_default_response() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1137,7 +1137,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_header_params() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1187,7 +1187,7 @@ paths:
 
     #[test]
     fn test_validate_response_with_headers() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1238,7 +1238,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_cookie_params() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1303,7 +1303,7 @@ paths:
 
     #[test]
     fn test_validate_request_with_referenced_request_body() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API
@@ -1361,7 +1361,7 @@ components:
 
     #[test]
     fn test_validate_response_with_referenced_schema() {
-        let spec = crate::openapi::spec::OpenApiSpec::from_string(
+        let spec = crate::spec::OpenApiSpec::from_string(
             r#"openapi: 3.0.0
 info:
   title: Test API

@@ -83,6 +83,7 @@ rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 webpki-roots = "0.26"
 mockforge-data = { version = "0.3.70", path = "../mockforge-data", optional = true }
+mockforge-openapi = { version = "0.3.112", path = "../mockforge-openapi" }
 
 [dev-dependencies]
 tempfile = "3.10"
