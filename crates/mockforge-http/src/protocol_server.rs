@@ -3,8 +3,8 @@
 use async_trait::async_trait;
 use axum::Router;
 use mockforge_core::config::HttpTlsConfig;
-use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::protocol_server::MockProtocolServer;
+use mockforge_foundation::protocol::Protocol;
 
 /// A `MockProtocolServer` wrapper around the HTTP server startup.
 ///
