@@ -1,0 +1,41 @@
+[package]
+name = "mockforge-openapi"
+description = "OpenAPI 3.x / Swagger 2.0 spec loading, parsing, schema validation, and response selection for MockForge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["mock", "openapi", "swagger", "schema"]
+categories = ["development-tools::testing", "web-programming"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+mockforge-foundation = { version = "0.3.112", path = "../mockforge-foundation" }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Async I/O for spec loading
+tokio = { workspace = true }
+
+# OpenAPI types
+openapiv3 = { workspace = true }
+indexmap = "2.0"
+
+# JSON Schema validation
+jsonschema = { workspace = true }
+
+# Random response selection (weighted / sequential modes)
+rand = { workspace = true }
+
+# Multi-spec directory walking
+globwalk = "0.9.1"
+
+# Diagnostics
+tracing = { workspace = true }

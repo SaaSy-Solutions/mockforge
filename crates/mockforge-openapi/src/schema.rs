@@ -3,8 +3,8 @@
 //! This module provides functionality for working with OpenAPI schemas,
 //! including validation, type checking, and schema manipulation.
 
-use crate::{Error, Result};
 use jsonschema::{self, Draft};
+use mockforge_foundation::error::{Error, Result};
 use openapiv3::Schema;
 use serde_json::Value;
 

@@ -6,7 +6,7 @@
 //!
 //! It provides consistent error handling and validation for all spec types.
 
-use crate::{Error, Result};
+use mockforge_foundation::error::{Error, Result};
 use serde_json::Value;
 use std::path::Path;
 
