@@ -2,6 +2,9 @@
 //!
 //! This module provides HTTP handlers for managing drift budgets and incidents.
 
+// DriftBudgetEngine / IncidentManager depend on OpenApiSpec and stay in core.
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

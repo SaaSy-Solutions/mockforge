@@ -1,5 +1,8 @@
 // TODO: remove once mockforge-intelligence, mockforge-proxy, etc. crates are extracted
-#![allow(deprecated)]
+// Deprecation allowances are now scoped to individual handler files
+// (handlers/*.rs, middleware/drift_tracking.rs, rag_ai_generator.rs,
+// management/ai_gen.rs) and to specific build_router functions below,
+// rather than being crate-wide.
 
 //! # MockForge HTTP
 //!
@@ -553,6 +556,7 @@ fn apply_cors_middleware(
 
 /// Build the base HTTP router with multi-tenant workspace support
 #[allow(clippy::too_many_arguments)]
+#[allow(deprecated)] // uses MockAI, MultiTenantWorkspaceRegistry, WorkspaceRouter, Workspace (all stay in core)
 pub async fn build_router_with_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,
@@ -1538,6 +1542,7 @@ async fn apply_route_chaos(
 
 /// Build the base HTTP router with chaining and multi-tenant support
 #[allow(clippy::too_many_arguments)]
+#[allow(deprecated)] // uses core engines (DriftBudgetEngine, ThreatAnalyzer, Forecaster, ProtocolContractRegistry, MockAI, MultiTenantWorkspaceRegistry, etc.) that stay in core
 pub async fn build_router_with_chains_and_multi_tenant(
     spec_path: Option<String>,
     options: Option<ValidationOptions>,

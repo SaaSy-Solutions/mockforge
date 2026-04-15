@@ -2,6 +2,9 @@
 //!
 //! This module provides endpoints for security threat assessments.
 
+// ThreatAnalyzer stays in core (OpenApiSpec + LLM dep).
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
