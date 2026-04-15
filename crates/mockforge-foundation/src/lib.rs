@@ -9,6 +9,7 @@
 //! - `Error`, `Result` — canonical error/result types used throughout MockForge
 //! - `EncryptionError`, `EncryptionResult` — encryption-specific error types
 
+pub mod ai_response;
 pub mod ai_studio_types;
 pub mod clock;
 pub mod contract_diff_types;
@@ -20,6 +21,9 @@ pub mod intelligent_behavior;
 pub mod multi_tenant_types;
 pub mod protocol;
 pub mod protocol_contract_types;
+pub mod response_generation_trace;
+pub mod response_selection;
+pub mod schema_diff;
 pub mod state_machine;
 pub mod threat_modeling_types;
 pub mod workspace_promotion;

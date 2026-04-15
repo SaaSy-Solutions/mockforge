@@ -11,8 +11,16 @@ pub mod config;
 pub mod engine;
 pub mod field_mixer;
 pub mod merge_strategy;
-pub mod response_trace;
 pub mod schedule;
+
+/// `ResponseGenerationTrace` and friends were promoted to
+/// [`mockforge_foundation::response_generation_trace`] so that
+/// `mockforge-openapi` can hold traces without depending on `mockforge-core`.
+/// This module re-exports them under their legacy path for backwards
+/// compatibility.
+pub mod response_trace {
+    pub use mockforge_foundation::response_generation_trace::*;
+}
 
 pub use blender::ResponseBlender;
 pub use config::{ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode};
