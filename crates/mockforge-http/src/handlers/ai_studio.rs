@@ -14,13 +14,15 @@ use axum::{
 };
 use mockforge_core::{
     ai_studio::{
-        api_critique::{ApiCritiqueEngine, CritiqueRequest},
-        artifact_freezer::{ArtifactFreezer, FreezeMetadata, FreezeRequest},
-        behavioral_simulator::{BehavioralSimulator, CreateAgentRequest, SimulateBehaviorRequest},
-        config::DeterministicModeConfig,
-        system_generator::{SystemGenerationRequest, SystemGenerator},
+        api_critique::ApiCritiqueEngine, artifact_freezer::ArtifactFreezer,
+        behavioral_simulator::BehavioralSimulator, config::DeterministicModeConfig,
+        system_generator::SystemGenerator,
     },
     intelligent_behavior::IntelligentBehaviorConfig,
+};
+use mockforge_foundation::ai_studio_types::{
+    CreateAgentRequest, CritiqueRequest, FreezeMetadata, FreezeRequest, SimulateBehaviorRequest,
+    SystemGenerationRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -47,7 +49,7 @@ pub struct AiStudioState {
     pub workspace_id: Option<String>,
     /// In-memory storage for generated systems (system_id -> GeneratedSystem)
     pub system_storage:
-        Arc<RwLock<HashMap<String, mockforge_core::ai_studio::system_generator::GeneratedSystem>>>,
+        Arc<RwLock<HashMap<String, mockforge_foundation::ai_studio_types::GeneratedSystem>>>,
 }
 
 impl AiStudioState {
@@ -207,7 +209,7 @@ pub struct SystemGenerationHttpRequest {
 #[derive(Debug, Serialize)]
 pub struct SystemGenerationResponse {
     /// Generated system
-    pub system: mockforge_core::ai_studio::system_generator::GeneratedSystem,
+    pub system: mockforge_foundation::ai_studio_types::GeneratedSystem,
 }
 
 /// Request body for apply system design endpoint
@@ -428,7 +430,7 @@ pub struct CreateAgentHttpRequest {
 #[derive(Debug, Serialize)]
 pub struct CreateAgentResponse {
     /// Created agent
-    pub agent: mockforge_core::ai_studio::behavioral_simulator::NarrativeAgent,
+    pub agent: mockforge_foundation::ai_studio_types::NarrativeAgent,
 }
 
 /// Request body for simulate behavior endpoint
@@ -441,7 +443,7 @@ pub struct SimulateBehaviorHttpRequest {
     pub persona_id: Option<String>,
 
     /// Current app state
-    pub current_state: mockforge_core::ai_studio::behavioral_simulator::AppState,
+    pub current_state: mockforge_foundation::ai_studio_types::AppState,
 
     /// Trigger event
     pub trigger_event: Option<String>,
@@ -490,10 +492,7 @@ pub async fn create_agent_handler(
 pub async fn simulate_behavior_handler(
     State(_state): State<AiStudioState>,
     Json(_request): Json<SimulateBehaviorHttpRequest>,
-) -> Result<
-    Json<mockforge_core::ai_studio::behavioral_simulator::SimulateBehaviorResponse>,
-    StatusCode,
-> {
+) -> Result<Json<mockforge_foundation::ai_studio_types::SimulateBehaviorResponse>, StatusCode> {
     info!("Simulate behavior request received");
     let state = _state;
     let request = _request;
