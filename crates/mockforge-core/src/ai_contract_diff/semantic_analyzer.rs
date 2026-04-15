@@ -10,49 +10,11 @@ use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::openapi::OpenApiSpec;
 use crate::Result;
+// Semantic drift data types re-exported from foundation.
+pub use mockforge_foundation::contract_diff_types::{SemanticChangeType, SemanticDriftResult};
 use openapiv3;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-
-/// Semantic drift analysis result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticDriftResult {
-    /// Semantic confidence score (0.0-1.0)
-    pub semantic_confidence: f64,
-    /// Soft-breaking score (0.0-1.0) - likelihood this is a soft-breaking change
-    pub soft_breaking_score: f64,
-    /// Type of semantic change detected
-    pub change_type: SemanticChangeType,
-    /// Full LLM analysis and reasoning
-    pub llm_analysis: Value,
-    /// Before semantic state
-    pub before_semantic_state: Value,
-    /// After semantic state
-    pub after_semantic_state: Value,
-    /// Detected semantic mismatches
-    pub semantic_mismatches: Vec<Mismatch>,
-}
-
-/// Type of semantic change
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SemanticChangeType {
-    /// Description meaning changed
-    DescriptionChange,
-    /// Enum values narrowed (values removed)
-    EnumNarrowing,
-    /// Nullable → non-nullable change hidden behind oneOf/anyOf
-    NullableChange,
-    /// Error code removed
-    ErrorCodeRemoved,
-    /// Semantic constraint changed (e.g., format, pattern)
-    SemanticConstraintChange,
-    /// General meaning shift
-    MeaningShift,
-    /// Soft-breaking change
-    SoftBreakingChange,
-}
 
 /// Semantic analyzer for detecting meaning changes
 pub struct SemanticAnalyzer {
