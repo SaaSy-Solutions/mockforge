@@ -11,38 +11,11 @@ use crate::contract_drift::protocol_contracts::{
 };
 use crate::protocol_abstraction::Protocol;
 use jsonschema::{self, Draft, Validator as JSONSchema};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// WebSocket message type definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebSocketMessageType {
-    /// Unique identifier for this message type
-    pub message_type: String,
-    /// Optional topic or channel name
-    pub topic: Option<String>,
-    /// JSON schema for this message type
-    pub schema: Value,
-    /// Direction: "inbound" (client to server), "outbound" (server to client), or "bidirectional"
-    pub direction: MessageDirection,
-    /// Description of this message type
-    pub description: Option<String>,
-    /// Example message payload
-    pub example: Option<Value>,
-}
-
-/// Message direction for WebSocket messages
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum MessageDirection {
-    /// Message sent from client to server
-    Inbound,
-    /// Message sent from server to client
-    Outbound,
-    /// Message can be sent in either direction
-    Bidirectional,
-}
+// WebSocketMessageType + MessageDirection re-exported from foundation.
+pub use mockforge_foundation::protocol_contract_types::{MessageDirection, WebSocketMessageType};
 
 /// WebSocket contract implementation
 ///
