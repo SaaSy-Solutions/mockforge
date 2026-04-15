@@ -277,7 +277,9 @@ pub mod drift_gitops;
 pub mod encryption;
 pub mod error;
 pub mod failure_analysis;
-pub mod failure_injection;
+/// `failure_injection` was promoted to [`mockforge_foundation::failure_injection`];
+/// re-exported here for backwards compatibility.
+pub use mockforge_foundation::failure_injection;
 pub mod fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;
