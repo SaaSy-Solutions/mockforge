@@ -454,3 +454,47 @@ impl ConfidenceLevel {
         }
     }
 }
+
+// ============================================================================
+// Semantic drift analysis (A18) — pure data; SemanticAnalyzer impl stays in
+// mockforge-core because it depends on OpenApiSpec and LLM integration.
+// ============================================================================
+
+/// Semantic drift analysis result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticDriftResult {
+    /// Semantic confidence score (0.0-1.0)
+    pub semantic_confidence: f64,
+    /// Soft-breaking score (0.0-1.0) - likelihood this is a soft-breaking change
+    pub soft_breaking_score: f64,
+    /// Type of semantic change detected
+    pub change_type: SemanticChangeType,
+    /// Full LLM analysis and reasoning
+    pub llm_analysis: serde_json::Value,
+    /// Before semantic state
+    pub before_semantic_state: serde_json::Value,
+    /// After semantic state
+    pub after_semantic_state: serde_json::Value,
+    /// Detected semantic mismatches
+    pub semantic_mismatches: Vec<Mismatch>,
+}
+
+/// Type of semantic change
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticChangeType {
+    /// Description meaning changed
+    DescriptionChange,
+    /// Enum values narrowed (values removed)
+    EnumNarrowing,
+    /// Nullable to non-nullable change hidden behind oneOf/anyOf
+    NullableChange,
+    /// Error code removed
+    ErrorCodeRemoved,
+    /// Semantic constraint changed (e.g., format, pattern)
+    SemanticConstraintChange,
+    /// General meaning shift
+    MeaningShift,
+    /// Soft-breaking change
+    SoftBreakingChange,
+}
