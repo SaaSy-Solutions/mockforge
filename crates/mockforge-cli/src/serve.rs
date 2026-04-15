@@ -82,7 +82,9 @@ pub(crate) struct ServeArgs {
     pub(crate) chaos_random_max_delay: u64,
     pub(crate) reality_level: Option<u8>,
     pub(crate) dry_run: bool,
+    #[allow(dead_code)]
     pub(crate) progress: bool,
+    #[allow(dead_code)]
     pub(crate) verbose: bool,
 }
 

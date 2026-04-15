@@ -35,6 +35,7 @@ type StubStore = Arc<RwLock<Vec<StoredStub>>>;
 pub struct MockServer {
     port: u16,
     address: SocketAddr,
+    #[allow(dead_code)]
     config: ServerConfig,
     server_handle: Option<JoinHandle<()>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
@@ -292,7 +293,8 @@ impl MockServer {
                 let headers = headers.clone();
                 async move {
                     let mut response = Json(body).into_response();
-                    *response.status_mut() = StatusCode::from_u16(status).unwrap();
+                    *response.status_mut() = StatusCode::from_u16(status)
+                        .expect("status code validated at stub registration");
 
                     for (key, value) in headers {
                         if let Ok(header_name) = axum::http::HeaderName::from_bytes(key.as_bytes())
@@ -419,7 +421,9 @@ impl Default for MockServer {
     fn default() -> Self {
         Self {
             port: 0,
-            address: "127.0.0.1:0".parse().unwrap(),
+            address: "127.0.0.1:0"
+                .parse()
+                .expect("hardcoded loopback literal parses as SocketAddr"),
             config: ServerConfig::default(),
             server_handle: None,
             shutdown_tx: None,

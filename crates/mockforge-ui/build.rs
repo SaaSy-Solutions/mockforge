@@ -179,8 +179,13 @@ fn generate_asset_paths(out_path: &Path, ui_dist_path: &Path) {
     let dest = out_path.join("asset_paths.rs");
     let assets_dir = ui_dist_path.join("assets");
 
+    // Generated file is `include!`d into a module, so inner attributes don't
+    // apply — use an outer attribute on the fn. Silences lints that depend on
+    // whether the map is populated (unused_mut when empty, let_and_return with
+    // no inserts).
     let mut code = String::from(
-        "pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {\n",
+        "#[allow(unused_mut, clippy::let_and_return)]\n\
+         pub fn get_asset_map() -> std::collections::HashMap<&'static str, &'static str> {\n",
     );
     code.push_str("    let mut map = std::collections::HashMap::new();\n");
 

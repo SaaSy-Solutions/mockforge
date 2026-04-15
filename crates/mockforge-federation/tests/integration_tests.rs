@@ -5,7 +5,7 @@
 
 use mockforge_federation::{
     federation::{Federation, FederationConfig, FederationService},
-    router::{FederationRouter, RoutingResult},
+    router::FederationRouter,
     service::{ServiceBoundary, ServiceRealityLevel},
 };
 use std::collections::HashMap;

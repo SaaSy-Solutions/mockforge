@@ -337,6 +337,7 @@ pub fn generate_blueprint_schema() -> serde_json::Value {
 /// # Returns
 ///
 /// A pretty-printed JSON string containing the schema
+#[allow(dead_code)]
 pub fn generate_config_schema_json() -> String {
     let schema = generate_config_schema();
     serde_json::to_string_pretty(&schema).expect("Failed to format schema as JSON")

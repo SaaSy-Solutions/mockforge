@@ -2895,6 +2895,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod cli_tests {
     use super::*;
 

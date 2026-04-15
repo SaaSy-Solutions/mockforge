@@ -1,6 +1,8 @@
 //! Live integration tests that verify the TUI client can parse actual server responses.
 //! These tests require a running `MockForge` server at localhost:9080.
 
+#![allow(clippy::unwrap_used)]
+
 use mockforge_tui::api::client::MockForgeClient;
 
 fn client() -> MockForgeClient {

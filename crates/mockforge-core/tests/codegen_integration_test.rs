@@ -1,6 +1,12 @@
 //! Integration tests for code generation
 //!
 //! These tests verify that generated code can compile and run as expected.
+//!
+//! `codegen` is deprecated pending extraction to `mockforge-import`. Crate-level
+//! `#![allow(deprecated)]` in `src/lib.rs` does not propagate to integration
+//! test binaries, so the allow is repeated here per the project convention.
+
+#![allow(deprecated)]
 
 use mockforge_core::codegen::{generate_mock_server_code, CodegenConfig};
 use mockforge_core::openapi::spec::OpenApiSpec;
