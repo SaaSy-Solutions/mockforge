@@ -1332,7 +1332,13 @@ impl OpenApiRouteRegistry {
     /// Axum router with MockAI-powered response generation
     pub fn build_router_with_mockai(
         &self,
-        mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+        mockai: Option<
+            Arc<
+                tokio::sync::RwLock<
+                    dyn mockforge_foundation::intelligent_behavior::MockAiBehavior + Send + Sync,
+                >,
+            >,
+        >,
     ) -> Router {
         use crate::intelligent_behavior::Request as MockAIRequest;
 
