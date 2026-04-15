@@ -14,7 +14,7 @@ use mockforge_core::contract_drift::{
     GrpcContract, KafkaContract, KafkaTopicSchema, MqttContract, MqttTopicSchema, SchemaFormat,
     TopicSchema, WebSocketContract, WebSocketMessageType,
 };
-use mockforge_core::protocol_abstraction::Protocol;
+use mockforge_foundation::protocol::Protocol;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

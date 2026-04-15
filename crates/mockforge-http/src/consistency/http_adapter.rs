@@ -6,8 +6,8 @@
 use mockforge_core::consistency::adapters::ProtocolAdapter;
 use mockforge_core::consistency::types::{PersonaProfile, ProtocolState, StateChangeEvent};
 use mockforge_core::consistency::ConsistencyEngine;
-use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::Result;
+use mockforge_foundation::protocol::Protocol;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
