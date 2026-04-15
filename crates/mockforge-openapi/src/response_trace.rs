@@ -3,11 +3,11 @@
 //! This module provides helpers to instrument response generation
 //! and collect trace data for debugging and observability.
 
-use crate::openapi::response::ResponseGenerator;
-use crate::openapi::response_selection::ResponseSelectionMode;
-use crate::openapi::OpenApiSpec;
-use crate::reality_continuum::response_trace::ResponseGenerationTrace;
-use crate::Result;
+use crate::response::ResponseGenerator;
+use crate::response_selection::ResponseSelectionMode;
+use crate::spec::OpenApiSpec;
+use mockforge_foundation::error::Result;
+use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
 use openapiv3::Operation;
 use serde_json::Value;
 use std::time::Instant;
@@ -39,8 +39,8 @@ pub fn generate_response_with_trace(
     expand_tokens: bool,
     scenario: Option<&str>,
     selection_mode: Option<ResponseSelectionMode>,
-    selector: Option<&crate::openapi::response_selection::ResponseSelector>,
-    persona: Option<&crate::intelligent_behavior::config::Persona>,
+    selector: Option<&crate::response_selection::ResponseSelector>,
+    persona: Option<&mockforge_foundation::intelligent_behavior::Persona>,
 ) -> Result<(Value, ResponseGenerationTrace)> {
     let start_time = Instant::now();
     let mut trace = ResponseGenerationTrace::new();

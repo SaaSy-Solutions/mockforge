@@ -31,8 +31,15 @@ indexmap = "2.0"
 # JSON Schema validation
 jsonschema = { workspace = true }
 
+# Async trait objects (AiGenerator + MockAiBehavior dispatch)
+async-trait = { workspace = true }
+
 # Random response selection (weighted / sequential modes)
 rand = { workspace = true }
+
+# Response generation: UUID + chrono token placeholders
+uuid = { workspace = true, features = ["v4"] }
+chrono = { workspace = true }
 
 # Multi-spec directory walking
 globwalk = "0.9.1"

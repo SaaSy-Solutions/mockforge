@@ -3,9 +3,11 @@
 //! This module provides functionality for generating Axum routes
 //! from OpenAPI path definitions.
 
-use crate::intelligent_behavior::config::Persona;
-use crate::openapi::response_selection::{ResponseSelectionMode, ResponseSelector};
-use crate::{ai_response::AiResponseConfig, openapi::spec::OpenApiSpec, Result};
+use crate::response_selection::{ResponseSelectionMode, ResponseSelector};
+use crate::spec::OpenApiSpec;
+use mockforge_foundation::ai_response::AiResponseConfig;
+use mockforge_foundation::error::Result;
+use mockforge_foundation::intelligent_behavior::Persona;
 use openapiv3::{Operation, PathItem, ReferenceOr};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -314,10 +316,10 @@ impl OpenApiRoute {
     /// * `ai_generator` - Optional AI generator implementation for actual LLM calls
     pub async fn mock_response_with_status_async(
         &self,
-        context: &crate::ai_response::RequestContext,
-        ai_generator: Option<&dyn crate::openapi::response::AiGenerator>,
+        context: &mockforge_foundation::ai_response::RequestContext,
+        ai_generator: Option<&dyn crate::response::AiGenerator>,
     ) -> (u16, serde_json::Value) {
-        use crate::openapi::response::ResponseGenerator;
+        use crate::response::ResponseGenerator;
 
         // Find the first available status code from the OpenAPI spec
         let status_code = self.find_first_available_status_code();
@@ -457,10 +459,10 @@ impl OpenApiRoute {
     ) -> (
         u16,
         serde_json::Value,
-        crate::reality_continuum::response_trace::ResponseGenerationTrace,
+        mockforge_foundation::response_generation_trace::ResponseGenerationTrace,
     ) {
-        use crate::openapi::response_trace;
-        use crate::reality_continuum::response_trace::ResponseGenerationTrace;
+        use crate::response_trace;
+        use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
 
         // Use status override if the spec has a response for that code, otherwise default
         let status_code = status_override
