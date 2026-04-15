@@ -9,6 +9,12 @@
 //! - import: Data import operations
 //! - fixtures: Fixture management operations
 
+// The import flow here uses mockforge_core::import types that are deprecated
+// in favour of mockforge-import. A full migration is blocked on also moving
+// mockforge_core::workspace_import's create_workspace_from_* signatures, so
+// scope the allow to just this file until that happens.
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::{self, StatusCode},
