@@ -11,10 +11,12 @@ use mockforge_core::contract_drift::protocol_contracts::{
     compare_contracts, ProtocolContractRegistry,
 };
 use mockforge_core::contract_drift::{
-    GrpcContract, KafkaContract, KafkaTopicSchema, MqttContract, MqttTopicSchema, SchemaFormat,
-    TopicSchema, WebSocketContract, WebSocketMessageType,
+    GrpcContract, KafkaContract, MqttContract, WebSocketContract,
 };
 use mockforge_foundation::protocol::Protocol;
+use mockforge_foundation::protocol_contract_types::{
+    KafkaTopicSchema, MqttTopicSchema, SchemaFormat, TopicSchema, WebSocketMessageType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

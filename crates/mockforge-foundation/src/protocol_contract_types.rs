@@ -270,3 +270,121 @@ pub fn extract_breaking_changes(diff: &ContractDiffResult) -> Vec<&Mismatch> {
         })
         .collect()
 }
+
+// ============================================================================
+// WebSocket, MQTT, Kafka topic/message schema types (A21) — pure data;
+// per-protocol contract impls (WebSocketContract, MqttContract, KafkaContract)
+// stay in core because they hold compiled JSON schema caches and perform
+// validation.
+// ============================================================================
+
+/// WebSocket message type definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSocketMessageType {
+    /// Unique identifier for this message type
+    pub message_type: String,
+    /// Optional topic or channel name
+    pub topic: Option<String>,
+    /// JSON schema for this message type
+    pub schema: serde_json::Value,
+    /// Direction: "inbound" (client to server), "outbound" (server to client), or "bidirectional"
+    pub direction: MessageDirection,
+    /// Description of this message type
+    pub description: Option<String>,
+    /// Example message payload
+    pub example: Option<serde_json::Value>,
+}
+
+/// Message direction for WebSocket messages
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageDirection {
+    /// Message sent from client to server
+    Inbound,
+    /// Message sent from server to client
+    Outbound,
+    /// Message can be sent in either direction
+    Bidirectional,
+}
+
+/// MQTT topic schema definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MqttTopicSchema {
+    /// Topic name (supports wildcards + and #)
+    pub topic: String,
+    /// Quality of Service level (0, 1, or 2)
+    pub qos: Option<u8>,
+    /// JSON schema for messages on this topic
+    pub schema: serde_json::Value,
+    /// Whether messages are retained
+    pub retained: Option<bool>,
+    /// Description of this topic
+    pub description: Option<String>,
+    /// Example message payload
+    pub example: Option<serde_json::Value>,
+}
+
+/// Schema format for Kafka messages
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SchemaFormat {
+    /// JSON schema format
+    Json,
+    /// Avro schema format
+    Avro,
+    /// Protobuf schema format
+    Protobuf,
+}
+
+/// Kafka topic schema definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaTopicSchema {
+    /// Topic name
+    pub topic: String,
+    /// Key schema (optional - for keyed messages)
+    pub key_schema: Option<TopicSchema>,
+    /// Value schema (required - message payload)
+    pub value_schema: TopicSchema,
+    /// Number of partitions
+    pub partitions: Option<u32>,
+    /// Replication factor
+    pub replication_factor: Option<u16>,
+    /// Description of this topic
+    pub description: Option<String>,
+    /// Evolution rules for schema changes
+    pub evolution_rules: Option<EvolutionRules>,
+}
+
+/// Schema definition for a topic (key or value)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopicSchema {
+    /// Schema format (JSON, Avro, Protobuf)
+    pub format: SchemaFormat,
+    /// Schema definition (JSON schema, Avro schema JSON, or proto descriptor)
+    pub schema: serde_json::Value,
+    /// Schema registry ID (if using schema registry)
+    pub schema_id: Option<String>,
+    /// Schema version
+    pub version: Option<String>,
+}
+
+/// Evolution rules for schema changes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvolutionRules {
+    /// Allow backward compatible changes (add optional fields, etc.)
+    pub allow_backward_compatible: bool,
+    /// Allow forward compatible changes (remove optional fields, etc.)
+    pub allow_forward_compatible: bool,
+    /// Require explicit version bump for breaking changes
+    pub require_version_bump: bool,
+}
+
+impl Default for EvolutionRules {
+    fn default() -> Self {
+        Self {
+            allow_backward_compatible: true,
+            allow_forward_compatible: false,
+            require_version_bump: true,
+        }
+    }
+}
