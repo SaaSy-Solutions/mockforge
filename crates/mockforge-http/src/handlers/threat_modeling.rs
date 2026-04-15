@@ -7,8 +7,9 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::contract_drift::threat_modeling::{ThreatAnalyzer, ThreatAssessment};
+use mockforge_core::contract_drift::threat_modeling::ThreatAnalyzer;
 use mockforge_core::openapi::OpenApiSpec;
+use mockforge_foundation::threat_modeling_types::ThreatAssessment;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -24,7 +25,7 @@ use crate::database::Database;
 fn map_row_to_threat_assessment(
     row: &sqlx::postgres::PgRow,
 ) -> Result<ThreatAssessment, sqlx::Error> {
-    use mockforge_core::contract_drift::threat_modeling::{
+    use mockforge_foundation::threat_modeling_types::{
         AggregationLevel, RemediationSuggestion, ThreatCategory, ThreatFinding, ThreatLevel,
     };
     use sqlx::Row;
@@ -457,7 +458,7 @@ pub async fn list_findings(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-        use mockforge_core::contract_drift::threat_modeling::{ThreatCategory, ThreatLevel};
+        use mockforge_foundation::threat_modeling_types::{ThreatCategory, ThreatLevel};
         use std::collections::HashMap;
 
         let _finding_type = match finding_type_str.as_str() {

@@ -431,7 +431,7 @@ pub(crate) async fn list_rule_explanations(
     State(state): State<ManagementState>,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    use mockforge_core::intelligent_behavior::RuleType;
+    use mockforge_foundation::intelligent_behavior::rule_types::RuleType;
 
     let explanations = state.rule_explanations.read().await;
     let mut explanations_vec: Vec<_> = explanations.values().cloned().collect();

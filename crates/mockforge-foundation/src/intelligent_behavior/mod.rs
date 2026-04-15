@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod mockai;
+pub mod rule_types;
 pub mod session;
 pub mod session_state;
 pub mod types;

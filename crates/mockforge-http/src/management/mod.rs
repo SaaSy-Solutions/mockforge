@@ -729,7 +729,7 @@ pub struct ManagementState {
         RwLock<
             std::collections::HashMap<
                 String,
-                mockforge_core::intelligent_behavior::RuleExplanation,
+                mockforge_foundation::intelligent_behavior::rule_types::RuleExplanation,
             >,
         >,
     >,
