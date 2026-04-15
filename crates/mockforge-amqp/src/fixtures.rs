@@ -1,6 +1,5 @@
 use crate::exchanges::ExchangeType;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
 
 /// Configuration for an exchange in fixtures
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +49,7 @@ pub struct AmqpFixture {
 
 impl AmqpFixture {
     /// Load fixtures from a directory
-    pub fn load_from_dir(dir: &std::path::PathBuf) -> mockforge_core::Result<Vec<Self>> {
+    pub fn load_from_dir(dir: &std::path::Path) -> mockforge_core::Result<Vec<Self>> {
         use mockforge_core::fixture_store::{load_fixtures_from_dir, FixtureLoadOptions};
 
         load_fixtures_from_dir(dir, &FixtureLoadOptions::yaml_single())
@@ -352,7 +351,7 @@ mod tests {
     #[test]
     fn test_load_from_dir_empty() {
         let temp_dir = TempDir::new().unwrap();
-        let fixtures = AmqpFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let fixtures = AmqpFixture::load_from_dir(temp_dir.path()).unwrap();
         assert!(fixtures.is_empty());
     }
 
@@ -387,7 +386,7 @@ bindings:
         let mut file = std::fs::File::create(&file_path).unwrap();
         file.write_all(yaml_content.as_bytes()).unwrap();
 
-        let fixtures = AmqpFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let fixtures = AmqpFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(fixtures.len(), 1);
         assert_eq!(fixtures[0].identifier, "test-fixture");
         assert_eq!(fixtures[0].name, "Test Fixture");
@@ -424,7 +423,7 @@ bindings: []
         let mut file2 = std::fs::File::create(&file2_path).unwrap();
         file2.write_all(yaml2.as_bytes()).unwrap();
 
-        let fixtures = AmqpFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let fixtures = AmqpFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(fixtures.len(), 2);
     }
 
@@ -449,7 +448,7 @@ bindings: []
         let mut txt_file = std::fs::File::create(&txt_path).unwrap();
         txt_file.write_all(b"This is not a YAML file").unwrap();
 
-        let fixtures = AmqpFixture::load_from_dir(&temp_dir.path().to_path_buf()).unwrap();
+        let fixtures = AmqpFixture::load_from_dir(temp_dir.path()).unwrap();
         assert_eq!(fixtures.len(), 1);
     }
 
@@ -463,7 +462,7 @@ bindings: []
         file.write_all(invalid_yaml.as_bytes()).unwrap();
 
         // WarnAndContinue mode: returns Ok with empty vec
-        let result = AmqpFixture::load_from_dir(&temp_dir.path().to_path_buf());
+        let result = AmqpFixture::load_from_dir(temp_dir.path());
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }

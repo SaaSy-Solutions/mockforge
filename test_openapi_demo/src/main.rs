@@ -1,3 +1,8 @@
+// `mockforge_core::import` is deprecated pending extraction to
+// `mockforge-import`; this demo binary exercises the API through its legacy
+// entry point until that extraction lands.
+#![allow(deprecated)]
+
 use mockforge_core::import::openapi_command_generator::{
     generate_commands_from_openapi, CommandFormat, CommandGenerationOptions,
 };

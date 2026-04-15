@@ -349,9 +349,8 @@ impl FederationDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::federation::{Federation, FederationConfig, FederationService};
+    use crate::federation::Federation;
     use crate::service::{ServiceBoundary, ServiceRealityLevel};
-    use std::collections::HashMap;
     use tempfile::TempDir;
 
     async fn create_test_db() -> (FederationDatabase, TempDir) {

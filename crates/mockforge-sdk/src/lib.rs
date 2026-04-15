@@ -52,6 +52,11 @@
 //! }
 //! ```
 
+// `mockforge_core::ProxyConfig` is deprecated pending migration to the
+// `mockforge-proxy` crate; the SDK re-exports it for now so we scope the allow
+// here rather than touching every public re-export site.
+#![allow(deprecated)]
+
 pub mod admin;
 pub mod builder;
 pub mod conformance;

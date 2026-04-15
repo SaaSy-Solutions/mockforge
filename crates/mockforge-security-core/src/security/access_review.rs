@@ -457,7 +457,7 @@ impl AccessReviewEngine {
             }
 
             // Check for no recent access
-            if user.last_login.is_none() || user.last_login.unwrap() < now - Duration::days(90) {
+            if user.last_login.is_none_or(|t| t < now - Duration::days(90)) {
                 findings.no_recent_access += 1;
             }
 

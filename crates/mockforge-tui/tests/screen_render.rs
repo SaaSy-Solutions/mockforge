@@ -4,6 +4,8 @@
 //! then renders it into a headless `TestBackend` terminal. This catches panics,
 //! layout errors, and rendering regressions without needing a real terminal.
 
+#![allow(clippy::unwrap_used)]
+
 use mockforge_tui::screens::Screen;
 use ratatui::backend::TestBackend;
 use ratatui::layout::Rect;

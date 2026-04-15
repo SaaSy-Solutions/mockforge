@@ -155,7 +155,8 @@ impl KeyDerivationManager {
         parallelism: u32,
         algorithm: EncryptionAlgorithm,
     ) -> EncryptionResult<EncryptionKey> {
-        let salt = SaltString::encode_b64(b"randomsalt12345678901234567890123456789012").unwrap();
+        let salt = SaltString::encode_b64(b"randomsalt12345678901234567890123456789012")
+            .expect("encoding a fixed-length literal salt into base64 cannot fail");
 
         let params = Params::new(
             memory_kib,
@@ -170,7 +171,9 @@ impl KeyDerivationManager {
             .hash_password(secret, &salt)
             .map_err(|e| EncryptionError::key_derivation_failed(e.to_string()))?;
 
-        let hash_binding = password_hash.hash.unwrap();
+        let hash_binding = password_hash
+            .hash
+            .expect("argon2 hash_password always populates the hash output on success");
         let hash_bytes = hash_binding.as_bytes();
         let key_bytes: Vec<u8> = hash_bytes.to_vec();
 
