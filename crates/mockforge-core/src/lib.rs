@@ -204,21 +204,24 @@
 #[cfg(feature = "advanced")]
 pub mod ab_testing;
 #[cfg(feature = "ai")]
-#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
+// Data types moved to mockforge-foundation (A15/A19);
+// ContractDiffAnalyzer stays here as it is LLM-bound.
 pub mod ai_contract_diff;
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_response;
-/// AI Studio - Unified AI Copilot for all AI-powered features
+/// AI Studio - Unified AI Copilot for all AI-powered features.
+/// Data types moved to mockforge-foundation (A20); engines
+/// (ApiCritiqueEngine, SystemGenerator, BehavioralSimulator,
+/// ArtifactFreezer) stay here as they hold LlmClient + do I/O.
 #[cfg(feature = "ai")]
-#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod behavioral_cloning;
 #[cfg(feature = "advanced")]
-#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
+// behavioral_economics depends on priority_handler + core internals; staying in core.
 pub mod behavioral_economics;
 #[allow(dead_code)]
 pub(crate) mod cache;
@@ -243,12 +246,14 @@ pub mod consistency;
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
 pub mod consumer_contracts;
 #[cfg(feature = "contracts")]
-#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
-/// Contract validation for ensuring API contracts match specifications
+/// Contract drift detection. Data types moved to mockforge-foundation
+/// (A13–A21); engines (DriftBudgetEngine, ThreatAnalyzer,
+/// ProtocolContractRegistry, WebSocket/MQTT/Kafka contract impls) stay
+/// here because they depend on OpenApiSpec and jsonschema validators.
 pub mod contract_drift;
 #[cfg(feature = "contracts")]
-#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
-/// Contract validation for ensuring API contracts match specifications
+/// Contract validation for ensuring API contracts match specifications.
+/// Depends on OpenApiSpec; stays in core.
 pub mod contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
 #[cfg(feature = "contracts")]
@@ -263,10 +268,10 @@ pub mod deceptive_canary;
 #[allow(dead_code)]
 pub(crate) mod docker_compose;
 #[cfg(feature = "contracts")]
-#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
-/// GitOps integration for drift budget violations
+/// GitOps integration for drift budget violations. Depends on core
+/// incidents + contract_drift; stays in core.
 pub mod drift_gitops;
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
+// Encryption utility; stays in core (small, widely used).
 pub mod encryption;
 pub mod error;
 pub mod failure_analysis;
@@ -287,12 +292,14 @@ pub mod import;
 #[cfg(feature = "contracts")]
 pub mod incidents;
 #[cfg(feature = "ai")]
-#[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
+// Data types moved to mockforge-foundation (A12/A17);
+// MockAI, RuleGenerator, OpenApiSpecGenerator stay here (LLM-bound).
 pub mod intelligent_behavior;
 pub mod latency;
 pub mod lifecycle;
 #[cfg(feature = "advanced")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
+// Config types moved to mockforge-foundation (A14);
+// MultiTenantWorkspaceRegistry + WorkspaceRouter stay here (hold Workspace).
 pub mod multi_tenant;
 pub mod network_profiles;
 /// OData function call URI rewrite middleware
@@ -339,7 +346,7 @@ pub mod runtime_validation;
 pub mod scenario_studio;
 #[cfg(feature = "advanced")]
 pub mod scenarios;
-#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
+// schema_diff has a parallel copy in mockforge-contracts; staying in core.
 pub mod schema_diff;
 pub mod security;
 pub mod server_utils;
@@ -348,7 +355,7 @@ pub mod server_utils;
 pub mod snapshots;
 pub mod spec_parser;
 pub mod stateful_handler;
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
+// sync_watcher stays in core.
 pub mod sync_watcher;
 /// Template expansion utilities (Send-safe, isolated from templating module)
 pub mod template_expansion;
@@ -367,13 +374,13 @@ pub mod verification;
 #[cfg(feature = "voice")]
 pub mod voice;
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
+// Workspace family (Workspace, WorkspaceConfig, WorkspaceRegistry, etc.) —
+// 11k+ LoC surface area. Staying in core; future extraction would need
+// its own dedicated planning.
 pub mod workspace;
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod workspace_import;
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub mod workspace_persistence;
 pub mod ws_proxy;
 
@@ -439,7 +446,6 @@ pub use lifecycle::{
     ServerLifecycleEvent,
 };
 #[cfg(feature = "advanced")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use multi_tenant::{
     MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
     WorkspaceContext, WorkspaceRouter, WorkspaceStats,
@@ -510,7 +516,6 @@ pub use scenarios::{
     ScenarioStep,
 };
 #[cfg(feature = "contracts")]
-#[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
@@ -522,7 +527,6 @@ pub use stateful_handler::{
     StatefulResponseHandler, TransitionTrigger,
 };
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use sync_watcher::{FileChange, SyncEvent, SyncService, SyncWatcher};
 pub use template_library::{
     TemplateLibrary, TemplateLibraryEntry, TemplateLibraryManager, TemplateMarketplace,
@@ -555,20 +559,16 @@ pub use voice::{
     WorkspaceConfigSummary, WorkspaceScenarioGenerator,
 };
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace::promotion_trait::PromotionService;
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace::{EntityId, Folder, MockRequest, Workspace, WorkspaceConfig, WorkspaceRegistry};
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace_import::{
     create_workspace_from_curl, create_workspace_from_har, create_workspace_from_insomnia,
     create_workspace_from_postman, import_postman_to_existing_workspace,
     import_postman_to_workspace, WorkspaceImportConfig, WorkspaceImportResult,
 };
 #[cfg(feature = "workspace-mgmt")]
-#[deprecated(note = "Will be extracted to mockforge-workspace crate")]
 pub use workspace_persistence::WorkspacePersistence;
 pub use ws_proxy::{WsProxyConfig, WsProxyHandler, WsProxyRule};
 // Note: ValidationError and ValidationResult from spec_parser conflict with schema_diff::ValidationError
