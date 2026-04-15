@@ -28,12 +28,17 @@
 //!   [`spec`] (re-exported for advanced callers).
 
 pub mod multi_spec;
-pub mod response_selection;
 pub mod schema;
 pub mod spec;
 pub mod spec_parser;
 pub mod swagger_convert;
 pub mod validation;
+
+/// `ResponseSelectionMode` / `ResponseSelector` live in
+/// [`mockforge_foundation::response_selection`] — it's a generic selection
+/// primitive used by non-OpenAPI response trace code. Re-export here so
+/// `mockforge_openapi::response_selection::...` paths keep resolving.
+pub use mockforge_foundation::response_selection;
 
 // Mirror the blanket re-exports that the legacy `mockforge_core::openapi`
 // module exposed, so consumers can continue to glob-import from the facade.

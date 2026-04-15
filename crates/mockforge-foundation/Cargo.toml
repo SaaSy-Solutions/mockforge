@@ -29,3 +29,8 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+# `ai_response` tests cross-validate against mockforge-template-expansion's
+# prompt expander; dev-only so foundation itself has no mockforge-* deps.
+mockforge-template-expansion = { path = "../mockforge-template-expansion" }

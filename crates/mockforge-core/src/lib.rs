@@ -346,8 +346,10 @@ pub mod runtime_validation;
 pub mod scenario_studio;
 #[cfg(feature = "advanced")]
 pub mod scenarios;
-// schema_diff has a parallel copy in mockforge-contracts; staying in core.
-pub mod schema_diff;
+/// `schema_diff` was promoted to [`mockforge_foundation::schema_diff`] so that
+/// leaf crates can use its `ValidationError` + diff helpers without depending
+/// on `mockforge-core`. Re-exported here for backwards compatibility.
+pub use mockforge_foundation::schema_diff;
 pub mod security;
 pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states

@@ -7945,6 +7945,7 @@ version = "0.3.112"
 dependencies = [
  "async-trait",
  "chrono",
+ "mockforge-template-expansion",
  "rand 0.9.2",
  "regex",
  "reqwest 0.12.28",

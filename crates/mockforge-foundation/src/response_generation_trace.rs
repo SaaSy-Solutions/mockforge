@@ -4,7 +4,7 @@
 //! including template selection, persona graph usage, rules/hooks execution,
 //! and template expansion details.
 
-use crate::openapi::response_selection::ResponseSelectionMode;
+use crate::response_selection::ResponseSelectionMode;
 use crate::schema_diff::ValidationError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
