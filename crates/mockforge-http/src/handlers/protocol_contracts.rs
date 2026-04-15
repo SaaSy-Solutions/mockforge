@@ -2,6 +2,12 @@
 //!
 //! This module provides HTTP handlers for managing protocol contracts (gRPC, WebSocket, MQTT, Kafka).
 
+// Per-protocol contract impls (GrpcContract, KafkaContract, MqttContract,
+// WebSocketContract, ProtocolContractRegistry) stay in mockforge-core because
+// they hold compiled jsonschema validators. Allow here until a future phase
+// extracts them to mockforge-contracts.
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

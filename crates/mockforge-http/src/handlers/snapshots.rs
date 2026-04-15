@@ -2,6 +2,8 @@
 //!
 //! This module provides HTTP handlers for managing snapshots via REST API.
 
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

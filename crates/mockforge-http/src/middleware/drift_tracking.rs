@@ -3,6 +3,9 @@
 //! This middleware integrates drift budget evaluation and consumer usage tracking
 //! with contract diff analysis.
 
+// Uses DriftBudgetEngine + ContractDiffAnalyzer which stay in core.
+#![allow(deprecated)]
+
 use axum::{body::Body, extract::Request, http::Response, middleware::Next};
 use mockforge_contracts::consumer_contracts::{ConsumerBreakingChangeDetector, UsageRecorder};
 use mockforge_core::{

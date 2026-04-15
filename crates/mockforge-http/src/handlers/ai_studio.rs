@@ -5,6 +5,12 @@
 //! - System Generation
 //! - Behavioral Simulation
 
+// AI Studio engines (ApiCritiqueEngine, SystemGenerator, BehavioralSimulator,
+// ArtifactFreezer) hold LlmClient + do I/O, so they stay in core. Data types
+// were extracted to foundation::ai_studio_types (A20). Allow here for the
+// remaining engine imports.
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,

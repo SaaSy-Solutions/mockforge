@@ -1,3 +1,8 @@
+// Uses deprecated LLM-bound engines (MockAI, RuleGenerator,
+// OpenApiSpecGenerator) that stay in core pending mockforge-intelligence
+// migration. Data types (RuleType, RuleExplanation) already in foundation.
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

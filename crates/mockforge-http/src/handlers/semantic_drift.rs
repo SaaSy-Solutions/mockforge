@@ -2,6 +2,9 @@
 //!
 //! This module provides endpoints for managing semantic drift incidents.
 
+// ContractDiffAnalyzer stays in core (LLM-bound).
+#![allow(deprecated)]
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,

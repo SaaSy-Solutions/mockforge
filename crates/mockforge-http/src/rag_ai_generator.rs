@@ -3,6 +3,9 @@
 //! This module provides an implementation of the AiGenerator trait
 //! using the RAG engine from mockforge-data.
 
+// Uses ai_response::AiResponseConfig which stays in core.
+#![allow(deprecated)]
+
 use async_trait::async_trait;
 use mockforge_core::{ai_response::AiResponseConfig, openapi::response::AiGenerator, Result};
 use mockforge_data::rag::{LlmProvider, RagConfig, RagEngine};
