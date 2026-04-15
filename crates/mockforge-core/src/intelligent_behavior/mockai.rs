@@ -40,9 +40,15 @@ pub struct MockAI {
     session_contexts: std::sync::Arc<tokio::sync::RwLock<HashMap<String, StatefulAiContext>>>,
 }
 
+#[async_trait::async_trait]
 impl mockforge_foundation::intelligent_behavior::MockAiBehavior for MockAI {
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    async fn process_request(&self, request: &Request) -> Result<Response> {
+        // Delegate to the inherent implementation below.
+        Self::process_request(self, request).await
     }
 }
 
