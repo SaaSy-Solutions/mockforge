@@ -5,7 +5,8 @@
 
 use crate::Result;
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+// Data types re-exported from foundation.
+pub use mockforge_foundation::ai_studio_types::{FreezeMetadata, FreezeRequest, FrozenArtifact};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -283,76 +284,4 @@ impl Default for ArtifactFreezer {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Request to freeze an artifact
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FreezeRequest {
-    /// Type of artifact (mock, persona, scenario, etc.)
-    pub artifact_type: String,
-
-    /// Artifact content
-    pub content: Value,
-
-    /// Output format (yaml or json)
-    pub format: String,
-
-    /// Output path
-    pub path: Option<String>,
-
-    /// Optional metadata for tracking
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<FreezeMetadata>,
-}
-
-/// Metadata for frozen artifacts
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FreezeMetadata {
-    /// LLM provider used (e.g., "openai", "anthropic", "ollama")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub llm_provider: Option<String>,
-
-    /// LLM model used (e.g., "gpt-4", "claude-3-opus")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub llm_model: Option<String>,
-
-    /// LLM version (if available)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub llm_version: Option<String>,
-
-    /// Hash of the input prompt/description
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_hash: Option<String>,
-
-    /// Hash of the output content
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_hash: Option<String>,
-
-    /// Original prompt/description (optional, for reference)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub original_prompt: Option<String>,
-}
-
-/// Frozen artifact result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FrozenArtifact {
-    /// Type of artifact
-    pub artifact_type: String,
-
-    /// Frozen content
-    pub content: Value,
-
-    /// Output format
-    pub format: String,
-
-    /// File path where artifact was saved
-    pub path: String,
-
-    /// Metadata used for freezing (if any)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<FreezeMetadata>,
-
-    /// Output hash for integrity verification
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_hash: Option<String>,
 }

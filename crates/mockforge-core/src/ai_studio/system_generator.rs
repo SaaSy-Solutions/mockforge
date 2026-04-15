@@ -51,110 +51,14 @@ use crate::intelligent_behavior::{
     types::LlmGenerationRequest,
 };
 use crate::Result;
-use serde::{Deserialize, Serialize};
+// Data types re-exported from foundation.
+pub use mockforge_foundation::ai_studio_types::{
+    AppliedSystem, GeneratedSystem, SystemArtifact, SystemGenerationRequest, SystemMetadata,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use uuid::Uuid;
-
-/// Request for system generation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemGenerationRequest {
-    /// Natural language description of the system to generate
-    pub description: String,
-
-    /// Output formats to generate
-    /// Valid values: "openapi", "graphql", "personas", "lifecycles", "websocket", "chaos", "ci"
-    #[serde(default)]
-    pub output_formats: Vec<String>,
-
-    /// Optional workspace ID
-    pub workspace_id: Option<String>,
-
-    /// Optional system ID (for versioning - if provided, creates new version)
-    pub system_id: Option<String>,
-}
-
-/// Generated system with all artifacts
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeneratedSystem {
-    /// System ID
-    pub system_id: String,
-
-    /// Version (v1, v2, etc.)
-    pub version: String,
-
-    /// Generated artifacts by type
-    pub artifacts: HashMap<String, SystemArtifact>,
-
-    /// Workspace ID
-    pub workspace_id: Option<String>,
-
-    /// Status: "draft" or "frozen"
-    pub status: String,
-
-    /// Token usage for this generation
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tokens_used: Option<u64>,
-
-    /// Estimated cost in USD
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cost_usd: Option<f64>,
-
-    /// Generation metadata
-    pub metadata: SystemMetadata,
-}
-
-/// Result of applying a system design
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AppliedSystem {
-    /// System ID
-    pub system_id: String,
-
-    /// Version
-    pub version: String,
-
-    /// Artifact IDs that were applied
-    pub applied_artifacts: Vec<String>,
-
-    /// Whether artifacts were frozen
-    pub frozen: bool,
-}
-
-/// System artifact (OpenAPI spec, persona, lifecycle, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemArtifact {
-    /// Artifact type: "openapi", "persona", "lifecycle", "websocket", "chaos", "ci", "graphql", "typings"
-    pub artifact_type: String,
-
-    /// Artifact content (JSON or YAML string)
-    pub content: Value,
-
-    /// Artifact format: "json" or "yaml"
-    pub format: String,
-
-    /// Artifact ID
-    pub artifact_id: String,
-}
-
-/// System generation metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SystemMetadata {
-    /// Original description
-    pub description: String,
-
-    /// Detected entities from description
-    pub entities: Vec<String>,
-
-    /// Detected relationships
-    pub relationships: Vec<String>,
-
-    /// Detected operations
-    pub operations: Vec<String>,
-
-    /// Generated at timestamp
-    pub generated_at: String,
-}
 
 /// System Generator Engine
 pub struct SystemGenerator {
