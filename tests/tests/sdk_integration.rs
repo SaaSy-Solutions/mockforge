@@ -36,7 +36,13 @@ async fn test_rust_sdk_integration() {
     };
 
     let http_port = server.http_port();
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Simulate Rust SDK usage: create stub programmatically
@@ -92,7 +98,13 @@ async fn test_nodejs_sdk_integration() {
         }
     };
 
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test endpoints that Node.js SDK would use
@@ -150,7 +162,13 @@ async fn test_python_sdk_integration() {
         }
     };
 
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test endpoints that Python SDK would use
@@ -198,7 +216,13 @@ async fn test_go_sdk_integration() {
         }
     };
 
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test endpoints that Go SDK would use
@@ -246,7 +270,13 @@ async fn test_java_sdk_integration() {
         }
     };
 
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test endpoints that Java SDK would use
@@ -294,7 +324,13 @@ async fn test_dotnet_sdk_integration() {
         }
     };
 
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server (which has RBAC middleware that
+    // would reject our anonymous requests). Use http_port; the older
+    // hardcoded `admin_port = 9080` only "passed" because it silently hit
+    // an unrelated mockforge instance that happened to listen on 9080.
+    let http_port = server.http_port();
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test endpoints that .NET SDK would use
@@ -342,7 +378,12 @@ async fn test_sdk_common_functionality() {
     };
 
     let http_port = server.http_port();
-    let admin_port = 9080;
+    // The mockforge management API (`/__mockforge/api/*`) is mounted on the
+    // HTTP server, not the admin UI server — the admin UI applies RBAC
+    // middleware that requires login, while the management API on the HTTP
+    // port does not. Earlier versions of this test sent to a hardcoded
+    // port 9080 and "passed" only because they were silently hitting an
+    // unrelated mockforge instance running on the developer machine.
     let client = Client::new();
 
     // Test health check (all SDKs use this)
@@ -354,9 +395,10 @@ async fn test_sdk_common_functionality() {
 
     assert!(health_response.status().is_success());
 
-    // Test stub creation (all SDKs use this)
+    // Test stub creation (all SDKs use this) — use the HTTP port for the
+    // management API (no auth required there).
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
         .json(&json!({
             "path": "/api/common-test",
             "method": "GET",
@@ -369,11 +411,18 @@ async fn test_sdk_common_functionality() {
         .await
         .expect("Failed to create stub");
 
-    assert!(stub_response.status().is_success() || stub_response.status().as_u16() == 201);
+    let status = stub_response.status();
+    let body = stub_response.text().await.unwrap_or_default();
+    assert!(
+        status.is_success() || status.as_u16() == 201,
+        "stub POST returned {} body={}",
+        status,
+        body
+    );
 
     // Test stub retrieval (all SDKs use this)
     let get_stub_response = client
-        .get(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .get(format!("http://localhost:{}/__mockforge/api/mocks", http_port))
         .send()
         .await;
 

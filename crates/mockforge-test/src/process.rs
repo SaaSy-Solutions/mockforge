@@ -142,9 +142,19 @@ impl Drop for ManagedProcess {
     }
 }
 
-/// Find the MockForge binary
+/// Find the MockForge binary.
+///
+/// Resolution order:
+/// 1. Explicit `config.binary_path` (when the test set one).
+/// 2. `MOCKFORGE_TEST_BINARY` env var (lets `cargo test` point at the
+///    freshly-built `target/debug/mockforge` instead of an older
+///    `mockforge` on PATH).
+/// 3. The workspace's `target/debug/mockforge` and `target/release/mockforge`,
+///    if either exists — auto-detected via `CARGO_TARGET_DIR` or by walking
+///    up from `CARGO_MANIFEST_DIR`. This makes `cargo test` "just work" on
+///    a fresh checkout without having to `cargo install --path`.
+/// 4. `mockforge` on `$PATH` as a last resort.
 fn find_mockforge_binary(config: &ServerConfig) -> Result<PathBuf> {
-    // If binary path is explicitly provided, use it
     if let Some(binary_path) = &config.binary_path {
         if binary_path.exists() {
             return Ok(binary_path.clone());
@@ -152,10 +162,49 @@ fn find_mockforge_binary(config: &ServerConfig) -> Result<PathBuf> {
         return Err(Error::BinaryNotFound);
     }
 
-    // Try to find mockforge in PATH
+    if let Ok(env_path) = std::env::var("MOCKFORGE_TEST_BINARY") {
+        let p = PathBuf::from(env_path);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
+    if let Some(p) = workspace_target_binary() {
+        return Ok(p);
+    }
+
     which::which("mockforge")
         .map_err(|_| Error::BinaryNotFound)
         .map(|p| p.to_path_buf())
+}
+
+/// Look for a freshly-built `mockforge` binary under the workspace's
+/// `target/{debug,release}` directory, preferring debug. Returns `None`
+/// when neither candidate exists.
+fn workspace_target_binary() -> Option<PathBuf> {
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from).or_else(|| {
+        // CARGO_MANIFEST_DIR points at the *test* crate; walk up until
+        // we find a Cargo.toml that owns a `target/` sibling.
+        let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from)?;
+        let mut dir: &std::path::Path = &manifest_dir;
+        loop {
+            let candidate = dir.join("target");
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+            dir = dir.parent()?;
+        }
+    })?;
+
+    let debug = target_dir.join("debug").join("mockforge");
+    if debug.exists() {
+        return Some(debug);
+    }
+    let release = target_dir.join("release").join("mockforge");
+    if release.exists() {
+        return Some(release);
+    }
+    None
 }
 
 /// Check if a port is available
@@ -164,18 +213,38 @@ pub fn is_port_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-/// Find an available port starting from a given port
+/// Find an available port near `start_port`.
+///
+/// Sequentially probes `start_port..start_port+100`, returning the first
+/// port that isn't currently bound. If every port in that range is taken
+/// (which happens under heavy parallel test load), falls back to asking
+/// the OS for an ephemeral port via binding to port 0 — the test will get
+/// *some* free port even when its preferred range is saturated.
 pub fn find_available_port(start_port: u16) -> Result<u16> {
-    for port in start_port..start_port + 100 {
+    for port in start_port..start_port.saturating_add(100) {
         if is_port_available(port) {
             return Ok(port);
         }
     }
-    Err(Error::ConfigError(format!(
-        "No available ports found in range {}-{}",
-        start_port,
-        start_port + 100
-    )))
+    // Fallback: ask the OS to assign an ephemeral port. Without this,
+    // running many integration tests in parallel could exhaust the
+    // sequential range and surface a confusing "no available ports"
+    // error even though the machine had thousands of free ports.
+    use std::net::TcpListener;
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| {
+        Error::ConfigError(format!(
+            "No available ports in {}-{} and OS-assigned fallback failed: {}",
+            start_port,
+            start_port.saturating_add(100),
+            e
+        ))
+    })?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| Error::ConfigError(format!("Failed to read OS-assigned port: {}", e)))?
+        .port();
+    drop(listener);
+    Ok(port)
 }
 
 #[cfg(test)]

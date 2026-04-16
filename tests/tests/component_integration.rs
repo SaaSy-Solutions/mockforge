@@ -29,7 +29,8 @@ async fn test_core_protocol_routing() {
     };
 
     let http_port = server.http_port();
-    let admin_port = 9080;
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Create multiple routes via Core routing system
@@ -107,7 +108,8 @@ async fn test_data_protocol_generation() {
     };
 
     let http_port = server.http_port();
-    let admin_port = 9080;
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Create route with data generation tokens
@@ -170,8 +172,9 @@ async fn test_data_protocol_fixtures() {
         }
     };
 
-    let _http_port = server.http_port();
-    let admin_port = 9080;
+    let http_port = server.http_port();
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Create route that uses fixture
@@ -221,7 +224,9 @@ async fn test_plugin_protocol_handlers() {
         }
     };
 
-    let admin_port = 9080;
+    let http_port = server.http_port();
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Test plugin API endpoints (Plugin → Protocol integration)
@@ -260,8 +265,9 @@ async fn test_plugin_protocol_transformations() {
         }
     };
 
-    let _http_port = server.http_port();
-    let admin_port = 9080;
+    let http_port = server.http_port();
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Create route that might use plugin transformation
@@ -313,7 +319,8 @@ async fn test_core_data_protocol_integration() {
     };
 
     let http_port = server.http_port();
-    let admin_port = 9080;
+    // Use http_port — management API (`/__mockforge/api/*`) is on HTTP server
+    let admin_port = http_port;
     let client = Client::new();
 
     // Create route that uses Core routing, Data generation, and Protocol handling

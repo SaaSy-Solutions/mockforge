@@ -19,6 +19,8 @@ pub struct MockForgeServer {
     http_port: u16,
     ws_port: Option<u16>,
     grpc_port: Option<u16>,
+    admin_port: Option<u16>,
+    metrics_port: Option<u16>,
 }
 
 impl MockForgeServer {
@@ -29,11 +31,40 @@ impl MockForgeServer {
 
     /// Start a MockForge server with the given configuration
     pub async fn start(config: ServerConfig) -> Result<Self> {
-        // Resolve port (auto-assign if 0)
+        // Resolve any ports the caller asked us to auto-assign (port == 0).
+        // Without this the SDK would forward `--<service>-port 0` to the CLI,
+        // which leaves the SDK with no way to know the OS-assigned port — and
+        // any test that hardcoded a port (e.g. 9080) would silently talk to a
+        // *different* mockforge process if one happened to be running.
         let mut resolved_config = config.clone();
         if resolved_config.http_port == 0 {
             resolved_config.http_port = find_available_port(30000)?;
             info!("Auto-assigned HTTP port: {}", resolved_config.http_port);
+        }
+        if resolved_config.admin_port == Some(0) {
+            let port = find_available_port(31000)?;
+            resolved_config.admin_port = Some(port);
+            info!("Auto-assigned admin port: {}", port);
+        }
+        if resolved_config.metrics_port == Some(0) {
+            let port = find_available_port(32000)?;
+            resolved_config.metrics_port = Some(port);
+            info!("Auto-assigned metrics port: {}", port);
+        }
+        // The mockforge CLI always starts a WS server (default 3001) and gRPC
+        // server (default 50051) even when not explicitly requested. When
+        // multiple test instances spin up in parallel, all of them race for
+        // those default ports — and lose. Auto-assign whenever the caller
+        // didn't pin them, so each test gets its own private ports.
+        if resolved_config.ws_port.is_none() || resolved_config.ws_port == Some(0) {
+            let port = find_available_port(33000)?;
+            resolved_config.ws_port = Some(port);
+            info!("Auto-assigned WebSocket port: {}", port);
+        }
+        if resolved_config.grpc_port.is_none() || resolved_config.grpc_port == Some(0) {
+            let port = find_available_port(34000)?;
+            resolved_config.grpc_port = Some(port);
+            info!("Auto-assigned gRPC port: {}", port);
         }
 
         // Spawn the process
@@ -63,6 +94,8 @@ impl MockForgeServer {
             http_port,
             ws_port: resolved_config.ws_port,
             grpc_port: resolved_config.grpc_port,
+            admin_port: resolved_config.admin_port,
+            metrics_port: resolved_config.metrics_port,
         })
     }
 
@@ -79,6 +112,21 @@ impl MockForgeServer {
     /// Get the gRPC port if configured
     pub fn grpc_port(&self) -> Option<u16> {
         self.grpc_port
+    }
+
+    /// Get the admin UI port if admin was enabled.
+    ///
+    /// When the builder set `.admin_port(0)` this returns the
+    /// auto-assigned port; when the builder set a specific port it
+    /// returns that port; when the builder didn't enable admin at all
+    /// it returns `None`.
+    pub fn admin_port(&self) -> Option<u16> {
+        self.admin_port
+    }
+
+    /// Get the metrics endpoint port if metrics was enabled.
+    pub fn metrics_port(&self) -> Option<u16> {
+        self.metrics_port
     }
 
     /// Get the base URL of the server
