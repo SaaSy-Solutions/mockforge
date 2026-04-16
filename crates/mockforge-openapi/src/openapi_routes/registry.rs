@@ -9,12 +9,12 @@
 //! This module will be removed in a future version.
 
 use super::validation::{ValidationMode, ValidationOptions};
-use crate::ai_response::RequestContext;
-use crate::openapi::response::AiGenerator;
-use crate::openapi::route::OpenApiRoute;
-use crate::openapi::spec::OpenApiSpec;
+use crate::response::AiGenerator;
+use crate::route::OpenApiRoute;
+use crate::spec::OpenApiSpec;
 use axum::extract::Json;
 use axum::http::HeaderMap;
+use mockforge_foundation::ai_response::RequestContext;
 use openapiv3::{PathItem, ReferenceOr};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -107,7 +107,7 @@ impl OpenApiRouteRegistry {
         let base_paths = Self::collect_base_paths(spec);
 
         // Optimize: Use parallel iteration for route generation when beneficial
-        #[cfg(feature = "rayon")]
+        #[cfg(feature = "parallel-routes")]
         {
             use rayon::prelude::*;
             let path_items: Vec<_> = spec.spec.paths.paths.iter().collect();
@@ -460,8 +460,8 @@ impl OpenApiRouteRegistry {
     /// Axum router with chaos engineering capabilities
     pub fn build_router_with_injectors(
         &self,
-        latency_injector: crate::latency::LatencyInjector,
-        failure_injector: Option<crate::failure_injection::FailureInjector>,
+        latency_injector: mockforge_foundation::latency::LatencyInjector,
+        failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
     ) -> axum::Router {
         use axum::routing::{delete, get, patch, post, put};
 
@@ -695,7 +695,7 @@ impl OpenApiRouteRegistry {
             >,
         >,
     ) -> axum::Router {
-        use crate::intelligent_behavior::Request as MockAIRequest;
+        use mockforge_foundation::intelligent_behavior::Request as MockAIRequest;
 
         use axum::routing::{delete, get, patch, post, put};
 
