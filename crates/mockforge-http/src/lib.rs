@@ -744,6 +744,11 @@ pub async fn build_router_with_multi_tenant(
                 // Measure router building
                 let router_build_start = Instant::now();
                 let overrides_enabled = overrides.is_some();
+                let response_rewriter: Option<
+                    std::sync::Arc<dyn mockforge_openapi::response_rewriter::ResponseRewriter>,
+                > = Some(std::sync::Arc::new(
+                    mockforge_core::openapi_rewriter::CoreResponseRewriter::new(overrides),
+                ));
                 let openapi_router = if let Some(mockai_instance) = &mockai {
                     tracing::debug!("Building router with MockAI support");
                     registry.build_router_with_mockai(Some(mockai_instance.clone()))
@@ -756,7 +761,7 @@ pub async fn build_router_with_multi_tenant(
                     registry.build_router_with_injectors_and_overrides(
                         LatencyInjector::default(),
                         Some(failure_injector),
-                        overrides,
+                        response_rewriter,
                         overrides_enabled,
                     )
                 } else {
@@ -764,7 +769,7 @@ pub async fn build_router_with_multi_tenant(
                     registry.build_router_with_injectors_and_overrides(
                         LatencyInjector::default(),
                         None,
-                        overrides,
+                        response_rewriter,
                         overrides_enabled,
                     )
                 };

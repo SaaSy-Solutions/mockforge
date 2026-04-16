@@ -8094,6 +8094,7 @@ dependencies = [
  "mockforge-kafka",
  "mockforge-mqtt",
  "mockforge-observability",
+ "mockforge-openapi",
  "mockforge-performance",
  "mockforge-pipelines",
  "mockforge-plugin-core",
