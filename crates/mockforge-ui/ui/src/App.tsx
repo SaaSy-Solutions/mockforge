@@ -6,6 +6,7 @@ import { ErrorBoundary } from './components/error/ErrorBoundary';
 import { ToastProvider } from './components/ui/ToastProvider';
 import { useStartupPrefetch } from './hooks/usePrefetch';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
+import { useAuthStore } from './stores/useAuthStore';
 import { useI18n } from './i18n/I18nProvider';
 import { routes } from './routes';
 
@@ -40,14 +41,19 @@ function App() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
 
   // Prefetch data on startup for better performance
   useStartupPrefetch();
 
-  // Load workspaces on app startup
+  // Load workspaces once the user is authenticated. Firing this before auth
+  // resolves causes a 401 on /api/v1/workspaces (and wasted network) in cloud
+  // mode, since the persisted token may be expired or revoked.
   useEffect(() => {
-    loadWorkspaces();
-  }, [loadWorkspaces]);
+    if (isAuthenticated) {
+      loadWorkspaces();
+    }
+  }, [isAuthenticated, loadWorkspaces]);
 
   // Handle deep-link navigation events (e.g., from RealityTracePanel)
   useEffect(() => {
