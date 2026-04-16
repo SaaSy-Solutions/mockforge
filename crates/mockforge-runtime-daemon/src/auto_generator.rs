@@ -772,7 +772,7 @@ export let baseUrl = 'http://localhost:3000';
 
     /// Update the OpenAPI schema with the new endpoint
     async fn update_openapi_schema(&self, method: &str, path: &str) -> Result<()> {
-        use mockforge_core::openapi::OpenApiSpec;
+        use mockforge_openapi::OpenApiSpec;
 
         // Determine OpenAPI spec file path
         let spec_path = self.find_or_create_openapi_spec_path().await?;
@@ -837,8 +837,8 @@ export let baseUrl = 'http://localhost:3000';
     }
 
     /// Create a new OpenAPI spec
-    async fn create_new_openapi_spec(&self) -> Result<mockforge_core::openapi::OpenApiSpec> {
-        use mockforge_core::openapi::OpenApiSpec;
+    async fn create_new_openapi_spec(&self) -> Result<mockforge_openapi::OpenApiSpec> {
+        use mockforge_openapi::OpenApiSpec;
         use serde_json::json;
 
         let spec_json = json!({
@@ -860,7 +860,7 @@ export let baseUrl = 'http://localhost:3000';
     /// Add an endpoint to the OpenAPI spec
     async fn add_endpoint_to_spec(
         &self,
-        spec: &mut mockforge_core::openapi::OpenApiSpec,
+        spec: &mut mockforge_openapi::OpenApiSpec,
         method: &str,
         path: &str,
     ) -> Result<()> {
@@ -907,7 +907,7 @@ export let baseUrl = 'http://localhost:3000';
         path_entry[method_lower] = operation;
 
         // Reload the spec from the updated JSON
-        *spec = mockforge_core::openapi::OpenApiSpec::from_json(spec_json)
+        *spec = mockforge_openapi::OpenApiSpec::from_json(spec_json)
             .context("Failed to reload OpenAPI spec after update")?;
 
         Ok(())
@@ -941,7 +941,7 @@ export let baseUrl = 'http://localhost:3000';
     /// Save OpenAPI spec to file
     async fn save_openapi_spec(
         &self,
-        spec: &mockforge_core::openapi::OpenApiSpec,
+        spec: &mockforge_openapi::OpenApiSpec,
         path: &PathBuf,
     ) -> Result<()> {
         use tokio::fs;

@@ -13,6 +13,7 @@ path = "src/lib.rs"
 # Workspace dependencies
 mockforge-test = { path = "../crates/mockforge-test" }
 mockforge-core = { path = "../crates/mockforge-core" }
+mockforge-openapi = { path = "../crates/mockforge-openapi" }
 mockforge-proxy = { path = "../crates/mockforge-proxy" }
 mockforge-http = { path = "../crates/mockforge-http" }
 mockforge-vbr = { path = "../crates/mockforge-vbr" }

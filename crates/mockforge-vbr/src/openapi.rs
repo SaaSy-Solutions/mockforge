@@ -5,8 +5,8 @@
 
 use crate::schema::{AutoGenerationRule, CascadeAction, ForeignKeyDefinition, VbrSchemaDefinition};
 use crate::{Error, Result};
-use mockforge_core::openapi::OpenApiSpec;
 use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
+use mockforge_openapi::OpenApiSpec;
 use openapiv3::{ReferenceOr, Schema, SchemaKind, Type};
 use std::collections::HashMap;
 
@@ -438,7 +438,7 @@ fn extract_target_entity(field_name: &str, entity_names: &[String]) -> Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::openapi::OpenApiSpec;
+    use mockforge_openapi::OpenApiSpec;
 
     #[test]
     fn test_extract_schemas() {

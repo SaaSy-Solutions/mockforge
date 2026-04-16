@@ -10,8 +10,8 @@ pub mod typescript_generator;
 #[cfg(test)]
 mod tests;
 
-use mockforge_core::openapi::spec::OpenApiSpec;
 use mockforge_core::Result;
+use mockforge_openapi::spec::OpenApiSpec;
 
 /// Configuration for code generation
 #[derive(Debug, Clone, Default)]

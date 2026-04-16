@@ -12,7 +12,7 @@ use axum::{
 };
 use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
 use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
-use mockforge_core::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

@@ -4,8 +4,8 @@
 //! from OpenAPI specifications. These utilities can be used by backend generator
 //! plugins to extract routes, convert schemas, and generate common patterns.
 
-use mockforge_core::openapi::spec::OpenApiSpec;
 use mockforge_core::Result;
+use mockforge_openapi::spec::OpenApiSpec;
 use openapiv3::{Operation, ParameterSchemaOrContent, PathItem, ReferenceOr, Schema};
 use std::collections::HashMap;
 

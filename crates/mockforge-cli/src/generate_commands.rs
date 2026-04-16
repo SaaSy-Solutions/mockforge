@@ -562,7 +562,8 @@ async fn execute_generation(
     };
 
     // Detect format and validate
-    let format = match mockforge_core::spec_parser::SpecFormat::detect(&spec_content, Some(spec)) {
+    let format = match mockforge_openapi::spec_parser::SpecFormat::detect(&spec_content, Some(spec))
+    {
         Ok(fmt) => fmt,
         Err(e) => CliError::new(
             format!("Failed to detect specification format: {}", e),
@@ -583,9 +584,9 @@ async fn execute_generation(
 
     // Validate based on format
     match format {
-        mockforge_core::spec_parser::SpecFormat::OpenApi20
-        | mockforge_core::spec_parser::SpecFormat::OpenApi30
-        | mockforge_core::spec_parser::SpecFormat::OpenApi31 => {
+        mockforge_openapi::spec_parser::SpecFormat::OpenApi20
+        | mockforge_openapi::spec_parser::SpecFormat::OpenApi30
+        | mockforge_openapi::spec_parser::SpecFormat::OpenApi31 => {
             // Optimize parsing: try JSON first, then YAML (avoids double parsing)
             let json_value: serde_json::Value =
                 match serde_json::from_str::<serde_json::Value>(&spec_content) {
@@ -604,7 +605,7 @@ async fn execute_generation(
                 };
 
             let validation =
-                mockforge_core::spec_parser::OpenApiValidator::validate(&json_value, format);
+                mockforge_openapi::spec_parser::OpenApiValidator::validate(&json_value, format);
             if !validation.is_valid {
                 let error_details: Vec<String> = validation
                     .errors
@@ -641,8 +642,9 @@ async fn execute_generation(
                 progress_mgr.log(LogLevel::Success, "\u{2705} OpenAPI specification is valid");
             }
         }
-        mockforge_core::spec_parser::SpecFormat::GraphQL => {
-            let validation = mockforge_core::spec_parser::GraphQLValidator::validate(&spec_content);
+        mockforge_openapi::spec_parser::SpecFormat::GraphQL => {
+            let validation =
+                mockforge_openapi::spec_parser::GraphQLValidator::validate(&spec_content);
             if !validation.is_valid {
                 let error_details: Vec<String> = validation
                     .errors
@@ -676,7 +678,7 @@ async fn execute_generation(
                 progress_mgr.log(LogLevel::Success, "\u{2705} GraphQL schema is valid");
             }
         }
-        mockforge_core::spec_parser::SpecFormat::Protobuf => {
+        mockforge_openapi::spec_parser::SpecFormat::Protobuf => {
             if verbose {
                 progress_mgr.log(
                     LogLevel::Info,

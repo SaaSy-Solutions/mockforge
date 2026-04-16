@@ -18,6 +18,7 @@ workspace = true
 [dependencies]
 # Core dependencies
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-import = { path = "../mockforge-import" }
 

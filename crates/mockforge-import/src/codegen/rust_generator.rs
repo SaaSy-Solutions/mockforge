@@ -1,8 +1,8 @@
 //! Rust code generator for mock servers from OpenAPI specifications
 
 use crate::codegen::{CodegenConfig, MockDataStrategy};
-use mockforge_core::openapi::spec::OpenApiSpec;
 use mockforge_core::{Error, Result};
+use mockforge_openapi::spec::OpenApiSpec;
 use openapiv3::{Operation, ReferenceOr, Schema, StatusCode};
 
 /// Generate Rust mock server code from OpenAPI spec

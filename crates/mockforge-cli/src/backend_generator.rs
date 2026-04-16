@@ -7,7 +7,7 @@ pub mod rust_axum;
 
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use mockforge_plugin_core::backend_generator::{
     BackendGenerationResult, BackendGeneratorConfig, BackendGeneratorPlugin,
 };

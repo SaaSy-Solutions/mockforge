@@ -15,6 +15,7 @@ categories = ["development-tools", "api-bindings"]
 [dependencies]
 # Core dependencies
 mockforge-core = { version = "0.3.103", path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-data = { version = "0.3.103", path = "../mockforge-data" }
 mockforge-recorder = { version = "0.3.103", path = "../mockforge-recorder", optional = true }
 

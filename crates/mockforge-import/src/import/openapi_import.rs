@@ -4,7 +4,7 @@
 //! to MockForge routes and configurations.
 
 use crate::import::schema_data_generator::generate_from_schema;
-use mockforge_core::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -74,7 +74,7 @@ pub fn import_openapi_spec(
     _base_url: Option<&str>,
 ) -> Result<OpenApiImportResult, String> {
     // Detect format and validate using enhanced validator
-    let format = mockforge_core::spec_parser::SpecFormat::detect(content, None)
+    let format = mockforge_openapi::spec_parser::SpecFormat::detect(content, None)
         .map_err(|e| format!("Failed to detect spec format: {}", e))?;
 
     // Parse as JSON value first for validation - optimized to avoid double parsing
@@ -90,9 +90,9 @@ pub fn import_openapi_spec(
 
     // Validate using enhanced validator for better error messages
     match format {
-        mockforge_core::spec_parser::SpecFormat::OpenApi20 => {
+        mockforge_openapi::spec_parser::SpecFormat::OpenApi20 => {
             let validation =
-                mockforge_core::spec_parser::OpenApiValidator::validate(&json_value, format);
+                mockforge_openapi::spec_parser::OpenApiValidator::validate(&json_value, format);
             if !validation.is_valid {
                 // Format errors on separate lines for better readability
                 let error_msg = validation
@@ -111,10 +111,10 @@ pub fn import_openapi_spec(
                 Please convert your Swagger 2.0 spec to OpenAPI 3.x format. \
                 You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec.".to_string());
         }
-        mockforge_core::spec_parser::SpecFormat::OpenApi30
-        | mockforge_core::spec_parser::SpecFormat::OpenApi31 => {
+        mockforge_openapi::spec_parser::SpecFormat::OpenApi30
+        | mockforge_openapi::spec_parser::SpecFormat::OpenApi31 => {
             let validation =
-                mockforge_core::spec_parser::OpenApiValidator::validate(&json_value, format);
+                mockforge_openapi::spec_parser::OpenApiValidator::validate(&json_value, format);
             if !validation.is_valid {
                 // Format errors on separate lines for better readability
                 let error_msg = validation

@@ -4,8 +4,8 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::{Context, Result};
-use mockforge_core::OpenApiSpec;
 use mockforge_import::codegen::{CodegenConfig, MockDataStrategy};
+use mockforge_openapi::OpenApiSpec;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
