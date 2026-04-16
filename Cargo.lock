@@ -7763,7 +7763,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7944,7 +7944,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8147,7 +8147,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",
@@ -8194,7 +8194,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8297,7 +8297,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -8520,7 +8520,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "axum 0.8.8",
  "mockforge-core",
@@ -9056,7 +9056,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.112"
+version = "0.3.116"
 dependencies = [
  "globwalk",
  "mockforge-core",
