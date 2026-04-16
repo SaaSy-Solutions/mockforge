@@ -5,7 +5,7 @@
 
 use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::record_replay::{RecordHandler, RecordReplayHandler, ReplayHandler};
-use mockforge_core::request_fingerprint::RequestFingerprint;
+use mockforge_openapi::request_fingerprint::RequestFingerprint;
 use tempfile::TempDir;
 
 /// Test ReplayHandler with disabled replay

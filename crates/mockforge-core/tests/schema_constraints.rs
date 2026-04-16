@@ -3,7 +3,7 @@
 //! These tests verify that schema constraints such as pattern matching,
 //! array size limits, and value ranges are correctly enforced.
 
-use mockforge_core::{OpenApiRouteRegistry, OpenApiSpec};
+use mockforge_openapi::{openapi_routes::OpenApiRouteRegistry, OpenApiSpec};
 use serde_json::json;
 
 #[tokio::test]

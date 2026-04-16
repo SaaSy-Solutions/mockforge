@@ -261,7 +261,7 @@ pub mod contract_validation;
 pub(crate) mod contract_webhooks;
 /// `custom_fixture` was promoted to [`mockforge_openapi::custom_fixture`];
 /// re-exported here for backwards compatibility.
-pub use mockforge_openapi::custom_fixture;
+pub(crate) use mockforge_openapi::custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
 /// Deceptive canary mode for routing team traffic to deceptive deploys
@@ -279,7 +279,7 @@ pub mod error;
 pub mod failure_analysis;
 /// `failure_injection` was promoted to [`mockforge_foundation::failure_injection`];
 /// re-exported here for backwards compatibility.
-pub use mockforge_foundation::failure_injection;
+pub(crate) use mockforge_foundation::failure_injection;
 pub mod fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;
@@ -301,7 +301,7 @@ pub mod incidents;
 pub mod intelligent_behavior;
 /// `latency` was promoted to [`mockforge_foundation::latency`]; re-exported
 /// here so the legacy `mockforge_core::latency::*` path continues to resolve.
-pub use mockforge_foundation::latency;
+pub(crate) use mockforge_foundation::latency;
 pub mod lifecycle;
 #[cfg(feature = "advanced")]
 // Config types moved to mockforge-foundation (A14);
@@ -321,7 +321,7 @@ pub mod openapi_rewriter;
 /// `mockforge_core::openapi_routes::{OpenApiRouteRegistry, ValidationOptions,
 /// create_registry_from_file, create_registry_from_json, ...}` path
 /// keeps resolving.
-pub use mockforge_openapi::openapi_routes;
+pub(crate) use mockforge_openapi::openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
@@ -347,7 +347,7 @@ pub mod request_capture;
 pub mod request_chaining;
 /// `request_fingerprint` was promoted to [`mockforge_openapi::request_fingerprint`];
 /// re-exported here for backwards compatibility.
-pub use mockforge_openapi::request_fingerprint;
+pub(crate) use mockforge_openapi::request_fingerprint;
 pub mod request_logger;
 #[cfg(feature = "scripting")]
 pub(crate) mod request_scripting;
@@ -367,14 +367,14 @@ pub mod scenarios;
 /// `schema_diff` was promoted to [`mockforge_foundation::schema_diff`] so that
 /// leaf crates can use its `ValidationError` + diff helpers without depending
 /// on `mockforge-core`. Re-exported here for backwards compatibility.
-pub use mockforge_foundation::schema_diff;
+pub(crate) use mockforge_foundation::schema_diff;
 pub mod security;
 pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states
 #[cfg(feature = "advanced")]
 pub mod snapshots;
 /// Re-export of the extracted [`mockforge_openapi::spec_parser`] module.
-pub use mockforge_openapi::spec_parser;
+pub(crate) use mockforge_openapi::spec_parser;
 pub mod stateful_handler;
 // sync_watcher stays in core.
 pub mod sync_watcher;
@@ -430,7 +430,7 @@ pub use config::{
 pub use consistency::{
     ConsistencyEngine, EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
 };
-pub use custom_fixture::{CustomFixture, CustomFixtureLoader, NestedFixture};
+pub(crate) use custom_fixture::CustomFixtureLoader;
 pub use data_source::{
     DataSource, DataSourceConfig, DataSourceContent, DataSourceFactory, DataSourceManager,
     DataSourceType, GitDataSource, HttpDataSource, LocalDataSource,
@@ -445,9 +445,7 @@ pub use failure_analysis::{
     FailureNarrativeGenerator, NarrativeFrame,
 };
 #[deprecated(note = "Use mockforge_chaos::core_failure_injection instead")]
-pub use failure_injection::{
-    create_failure_injector, FailureConfig, FailureInjector, TagFailureConfig,
-};
+pub(crate) use failure_injection::FailureInjector;
 pub use fidelity::{FidelityCalculator, FidelityScore, SampleComparator, SchemaComparator};
 pub use generate_config::{
     discover_config_file, load_generate_config, load_generate_config_with_fallback,
@@ -461,7 +459,7 @@ pub use graph::{
     builder::GraphBuilder, relationships, ClusterType, EdgeType, GraphCluster, GraphData,
     GraphEdge, GraphNode, NodeType, Protocol as GraphProtocol,
 };
-pub use latency::LatencyProfile;
+pub(crate) use latency::LatencyProfile;
 pub use lifecycle::{
     LifecycleHook, LifecycleHookRegistry, MockLifecycleEvent, RequestContext, ResponseContext,
     ServerLifecycleEvent,
@@ -473,12 +471,7 @@ pub use multi_tenant::{
 };
 #[deprecated(note = "Use mockforge_chaos::core_network_profiles instead")]
 pub use network_profiles::{NetworkProfile, NetworkProfileCatalog};
-pub use openapi::{
-    OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSecurityRequirement, OpenApiSpec,
-};
-pub use openapi_routes::{
-    create_registry_from_file, create_registry_from_json, OpenApiRouteRegistry, ValidationOptions,
-};
+pub(crate) use openapi::OpenApiSpec;
 pub use output_control::{
     apply_banner, apply_extension, apply_file_naming_template, build_file_naming_context,
     process_generated_file, BarrelGenerator, FileNamingContext, GeneratedFile,
@@ -510,9 +503,7 @@ pub use request_chaining::{
     ChainConfig, ChainContext, ChainDefinition, ChainExecutionContext, ChainLink, ChainRequest,
     ChainResponse, ChainStore, ChainTemplatingContext, RequestChainRegistry,
 };
-pub use request_fingerprint::{
-    RequestFingerprint, RequestHandlerResult, ResponsePriority, ResponseSource,
-};
+pub(crate) use request_fingerprint::{RequestFingerprint, ResponsePriority, ResponseSource};
 pub use request_logger::{
     create_grpc_log_entry, create_http_log_entry, create_http_log_entry_with_query,
     create_websocket_log_entry, get_global_logger, init_global_logger, log_request_global,
@@ -536,13 +527,10 @@ pub use scenarios::{
     ScenarioDefinition, ScenarioExecutor, ScenarioParameter, ScenarioRegistry, ScenarioResult,
     ScenarioStep,
 };
-#[cfg(feature = "contracts")]
-pub use schema_diff::{to_enhanced_422_json, validation_diff, ValidationError};
 pub use server_utils::errors::{json_error, json_success};
 pub use server_utils::{create_socket_addr, localhost_socket_addr, wildcard_socket_addr};
 #[cfg(feature = "advanced")]
 pub use snapshots::{SnapshotComponents, SnapshotManager, SnapshotManifest, SnapshotMetadata};
-pub use spec_parser::{GraphQLValidator, OpenApiValidator, SpecFormat};
 pub use stateful_handler::{
     ResourceIdExtract, StateInfo, StateResponse, StatefulConfig, StatefulResponse,
     StatefulResponseHandler, TransitionTrigger,
@@ -672,7 +660,7 @@ pub struct Config {
     /// Enable traffic shaping (bandwidth + burst loss)
     pub traffic_shaping_enabled: bool,
     /// Failure injection configuration
-    pub failure_config: Option<FailureConfig>,
+    pub failure_config: Option<mockforge_foundation::failure_injection::FailureConfig>,
     /// Proxy configuration
     pub proxy: Option<ProxyConfig>,
     /// Default latency profile

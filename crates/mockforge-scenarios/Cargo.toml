@@ -75,6 +75,7 @@ mockforge-plugin-loader = { version = "0.3.70", path = "../mockforge-plugin-load
 
 # Core types for state machines
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 
 # Data types for schemas

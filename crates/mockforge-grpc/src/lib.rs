@@ -41,7 +41,7 @@
 //! ```rust,no_run
 //! use mockforge_grpc::{start_with_config, DynamicGrpcConfig};
 //! use mockforge_grpc::dynamic::http_bridge::HttpBridgeConfig;
-//! use mockforge_core::LatencyProfile;
+//! use mockforge_foundation::latency::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let config = DynamicGrpcConfig {
@@ -201,7 +201,7 @@
 //! - [gRPC Mocking Guide](https://docs.mockforge.dev/user-guide/grpc-mocking.html)
 //! - [API Reference](https://docs.rs/mockforge-grpc)
 
-use mockforge_core::LatencyProfile;
+use mockforge_foundation::latency::LatencyProfile;
 
 pub mod dynamic;
 /// Unified protocol server lifecycle implementation

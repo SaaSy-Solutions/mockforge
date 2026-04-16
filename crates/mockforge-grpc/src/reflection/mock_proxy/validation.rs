@@ -4,7 +4,7 @@
 //! including service/method validation and request routing.
 
 use crate::reflection::mock_proxy::proxy::MockReflectionProxy;
-use mockforge_core::openapi_routes::ValidationMode;
+use mockforge_openapi::openapi_routes::ValidationMode;
 use prost::bytes::Bytes as ProstBytes;
 use prost_reflect::ReflectMessage;
 use prost_reflect::{DynamicMessage, Kind, MessageDescriptor, Value};

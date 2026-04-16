@@ -5,7 +5,7 @@ use mockforge_core::output_control::{
     apply_banner, apply_extension, apply_file_naming_template, build_file_naming_context,
     process_generated_file, BarrelGenerator, GeneratedFile,
 };
-use mockforge_core::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 

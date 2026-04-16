@@ -23,7 +23,7 @@ use mockforge_core::config::{DeceptiveDeployConfig, HttpCorsConfig, RouteConfig}
 use mockforge_chaos::core_failure_injection::FailureConfig;
 use mockforge_core::intelligent_behavior::MockAI;
 use mockforge_openapi::response::AiGenerator;
-use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_openapi::openapi_routes::ValidationOptions;
 use mockforge_proxy::config::ProxyConfig;
 use mockforge_core::request_chaining::ChainConfig;
 use mockforge_chaos::core_traffic_shaping::TrafficShaper;

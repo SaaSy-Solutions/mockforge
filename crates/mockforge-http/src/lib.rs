@@ -30,7 +30,7 @@
 //!
 //! ```rust,no_run
 //! use axum::Router;
-//! use mockforge_core::openapi_routes::ValidationMode;
+//! use mockforge_openapi::openapi_routes::ValidationMode;
 //! use mockforge_openapi::openapi_routes::ValidationOptions;
 //! use mockforge_http::build_router;
 //!
@@ -298,16 +298,16 @@ use axum::response::Json;
 use axum::Router;
 use mockforge_chaos::core_failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::intelligent_behavior::config::Persona;
-use mockforge_core::latency::LatencyInjector;
-use mockforge_core::openapi_routes::OpenApiRouteRegistry;
-use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_foundation::latency::LatencyInjector;
+use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
+use mockforge_openapi::openapi_routes::ValidationOptions;
 use mockforge_openapi::OpenApiSpec;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
-use mockforge_core::LatencyProfile;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
+use mockforge_foundation::latency::LatencyProfile;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -1622,7 +1622,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     .unwrap_or(true); // Enabled by default
 
                 if custom_fixtures_enabled {
-                    use mockforge_core::CustomFixtureLoader;
+                    use mockforge_openapi::CustomFixtureLoader;
                     use std::path::PathBuf;
                     use std::sync::Arc;
 

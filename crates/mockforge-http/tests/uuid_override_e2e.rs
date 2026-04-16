@@ -5,8 +5,8 @@
 //! are correctly applied to response templates.
 
 use axum::Router;
-use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
+use mockforge_openapi::openapi_routes::ValidationOptions;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::net::SocketAddr;

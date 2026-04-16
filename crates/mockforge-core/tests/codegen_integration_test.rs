@@ -9,7 +9,7 @@
 #![allow(deprecated)]
 
 use mockforge_core::codegen::{generate_mock_server_code, CodegenConfig};
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use serde_json::json;
 
 #[tokio::test]

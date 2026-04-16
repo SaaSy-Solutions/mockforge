@@ -5,8 +5,8 @@
 
 use axum::Router;
 use mockforge_chaos::core_failure_injection::FailureConfig;
-use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
+use mockforge_openapi::openapi_routes::ValidationOptions;
 use std::net::SocketAddr;
 
 /// Test that fault injection can trigger 500 errors
@@ -40,7 +40,7 @@ async fn test_fault_injection_triggers_500() {
         default_status_codes: vec![500, 502, 503],
         tag_configs: std::collections::HashMap::from([(
             "faulty".to_string(),
-            mockforge_core::failure_injection::TagFailureConfig {
+            mockforge_foundation::failure_injection::TagFailureConfig {
                 error_rate: 1.0, // 100% error rate
                 status_codes: Some(vec![500]),
                 error_message: Some("Injected fault for testing".to_string()),
@@ -181,7 +181,7 @@ async fn test_fault_injection_different_status_codes() {
         tag_configs: std::collections::HashMap::from([
             (
                 "error-502".to_string(),
-                mockforge_core::failure_injection::TagFailureConfig {
+                mockforge_foundation::failure_injection::TagFailureConfig {
                     error_rate: 1.0,
                     status_codes: Some(vec![502]),
                     error_message: Some("Bad Gateway".to_string()),
@@ -189,7 +189,7 @@ async fn test_fault_injection_different_status_codes() {
             ),
             (
                 "error-503".to_string(),
-                mockforge_core::failure_injection::TagFailureConfig {
+                mockforge_foundation::failure_injection::TagFailureConfig {
                     error_rate: 1.0,
                     status_codes: Some(vec![503]),
                     error_message: Some("Service Unavailable".to_string()),
@@ -291,7 +291,7 @@ async fn test_fault_injection_tag_filters() {
         default_status_codes: vec![500],
         tag_configs: std::collections::HashMap::from([(
             "included".to_string(),
-            mockforge_core::failure_injection::TagFailureConfig {
+            mockforge_foundation::failure_injection::TagFailureConfig {
                 error_rate: 1.0,
                 status_codes: Some(vec![500]),
                 error_message: Some("Included tag fault".to_string()),

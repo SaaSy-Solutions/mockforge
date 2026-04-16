@@ -3,8 +3,8 @@
 //! These tests cover error paths, edge cases, and boundary conditions
 //! for latency simulation and failure injection.
 
-use mockforge_core::failure_injection::{FailureConfig, FailureInjector, TagFailureConfig};
-use mockforge_core::latency::LatencyProfile;
+use mockforge_foundation::failure_injection::{FailureConfig, FailureInjector, TagFailureConfig};
+use mockforge_foundation::latency::LatencyProfile;
 use std::collections::HashMap;
 
 /// Test latency profile with zero base latency

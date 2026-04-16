@@ -4,7 +4,7 @@
 //! Can validate individual files or entire directories.
 
 use anyhow::{bail, Context, Result};
-use mockforge_core::CustomFixture;
+use mockforge_openapi::custom_fixture::CustomFixture;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;

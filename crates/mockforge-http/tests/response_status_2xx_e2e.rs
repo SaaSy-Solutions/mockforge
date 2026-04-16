@@ -4,8 +4,8 @@
 //! (200, 201, 202, etc.) based on the OpenAPI specification.
 
 use axum::Router;
-use mockforge_core::openapi_routes::ValidationOptions;
 use mockforge_http::build_router;
+use mockforge_openapi::openapi_routes::ValidationOptions;
 use std::net::SocketAddr;
 
 #[tokio::test]

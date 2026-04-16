@@ -81,7 +81,8 @@ pub use stub::{
 };
 pub use verification::Verification;
 
-// Re-export commonly used types from mockforge-core
-pub use mockforge_core::{
-    Config, FailureConfig, LatencyProfile, OpenApiSpec, ProxyConfig, ServerConfig,
-};
+// Re-export commonly used types
+pub use mockforge_core::{Config, ProxyConfig, ServerConfig};
+pub use mockforge_foundation::failure_injection::FailureConfig;
+pub use mockforge_foundation::latency::LatencyProfile;
+pub use mockforge_openapi::OpenApiSpec;

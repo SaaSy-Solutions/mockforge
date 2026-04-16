@@ -4,7 +4,7 @@
 //! converted into mock routes with proper request/response handling.
 
 use axum::{body::Body, http::Request, Router};
-use mockforge_core::openapi_routes::*;
+use mockforge_openapi::openapi_routes::*;
 use serde_json::json;
 
 #[tokio::test]
@@ -115,7 +115,7 @@ async fn test_mock_route_generation() {
 
 // #[tokio::test]
 // async fn test_request_logger_middleware() {
-//     use mockforge_core::openapi_routes::builder::request_logger;
+//     use mockforge_openapi::openapi_routes::builder::request_logger;
 //
 //     // Create a simple request
 //     let request = Request::builder().method("GET").uri("/test").body(Body::empty()).unwrap();
@@ -135,7 +135,7 @@ async fn test_mock_route_generation() {
 
 // #[tokio::test]
 // async fn test_error_handler_middleware() {
-//     use mockforge_core::openapi_routes::builder::error_handler;
+//     use mockforge_openapi::openapi_routes::builder::error_handler;
 //
 //     // Create a simple request
 //     let request = Request::builder().method("GET").uri("/test").body(Body::empty()).unwrap();

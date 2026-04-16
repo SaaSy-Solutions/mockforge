@@ -5,7 +5,7 @@
 
 use mockforge_core::intelligent_behavior::config::IntelligentBehaviorConfig;
 use mockforge_core::intelligent_behavior::MockAI;
-use mockforge_core::latency::{FaultConfig, LatencyInjector, LatencyProfile};
+use mockforge_foundation::latency::{FaultConfig, LatencyInjector, LatencyProfile};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

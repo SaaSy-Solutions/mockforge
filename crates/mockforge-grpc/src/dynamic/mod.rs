@@ -218,7 +218,7 @@ pub async fn discover_services(
 pub async fn start_dynamic_server(
     port: u16,
     config: DynamicGrpcConfig,
-    latency_profile: Option<mockforge_core::LatencyProfile>,
+    latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::time::Instant;
 
@@ -227,8 +227,9 @@ pub async fn start_dynamic_server(
     #[cfg(feature = "data-faker")]
     mockforge_data::provider::register_core_faker_provider();
 
-    let _latency_injector = latency_profile
-        .map(|profile| mockforge_core::latency::LatencyInjector::new(profile, Default::default()));
+    let _latency_injector = latency_profile.map(|profile| {
+        mockforge_foundation::latency::LatencyInjector::new(profile, Default::default())
+    });
 
     // Discover services
     let registry = discover_services(&config).await?;
@@ -268,7 +269,7 @@ pub async fn start_dynamic_server(
 pub async fn start_dynamic_grpc_server(
     port: u16,
     config: DynamicGrpcConfig,
-    latency_profile: Option<mockforge_core::LatencyProfile>,
+    latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Disable HTTP bridge
     let mut grpc_only_config = config;

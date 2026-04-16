@@ -43,7 +43,7 @@ impl GraphQLExecutor {
 /// Start GraphQL server
 pub async fn start_graphql_server(
     port: u16,
-    latency_profile: Option<mockforge_core::LatencyProfile>,
+    latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = mockforge_core::wildcard_socket_addr(port);
     tracing::info!("GraphQL server listening on {}", addr);
@@ -58,7 +58,7 @@ pub async fn start_graphql_server(
 
 /// Create GraphQL router
 pub async fn create_graphql_router(
-    latency_profile: Option<mockforge_core::LatencyProfile>,
+    latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
 ) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
     // Create a basic schema
     let schema = GraphQLSchema::generate_basic_schema();
@@ -72,7 +72,7 @@ pub async fn create_graphql_router(
     // Add latency injection if configured
     if let Some(profile) = latency_profile {
         let latency_injector =
-            mockforge_core::latency::LatencyInjector::new(profile, Default::default());
+            mockforge_foundation::latency::LatencyInjector::new(profile, Default::default());
         app = app.layer(axum::middleware::from_fn(
             move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| {
                 let injector = latency_injector.clone();
@@ -165,14 +165,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_graphql_router_with_latency() {
-        let latency = mockforge_core::LatencyProfile::default();
+        let latency = mockforge_foundation::latency::LatencyProfile::default();
         let result = create_graphql_router(Some(latency)).await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_create_graphql_router_with_custom_latency() {
-        let latency = mockforge_core::LatencyProfile::new(100, 25);
+        let latency = mockforge_foundation::latency::LatencyProfile::new(100, 25);
         let result = create_graphql_router(Some(latency)).await;
         assert!(result.is_ok());
     }

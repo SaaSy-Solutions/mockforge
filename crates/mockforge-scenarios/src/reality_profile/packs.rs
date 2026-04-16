@@ -12,7 +12,7 @@ use crate::reality_profile::{
     ProtocolBehavior,
 };
 use crate::reality_profile_pack::RealityProfilePackManifest;
-use mockforge_core::latency::LatencyDistribution;
+use mockforge_foundation::latency::LatencyDistribution;
 use serde_json::json;
 use std::collections::HashMap;
 

@@ -6,7 +6,7 @@
 //! behave under various conditions rather than what entities and schemas exist.
 
 use crate::error::{Result, ScenarioError};
-use mockforge_core::latency::LatencyDistribution;
+use mockforge_foundation::latency::LatencyDistribution;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

@@ -4,8 +4,8 @@
 //! constraints and returns appropriate error responses for invalid requests.
 
 use axum::Router;
-use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use mockforge_http::build_router;
+use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
 use std::net::SocketAddr;
 
 #[tokio::test]

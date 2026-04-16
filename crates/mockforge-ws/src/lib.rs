@@ -49,8 +49,8 @@
 //!
 //! ```rust,no_run
 //! use mockforge_ws::router_with_latency;
-//! use mockforge_core::latency::{FaultConfig, LatencyInjector};
-//! use mockforge_core::LatencyProfile;
+//! use mockforge_foundation::latency::{FaultConfig, LatencyInjector};
+//! use mockforge_foundation::latency::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let latency = LatencyProfile::with_normal_distribution(250, 75.0)
@@ -159,9 +159,10 @@ use axum::extract::{Path, State};
 use axum::{response::IntoResponse, routing::get, Router};
 use futures::sink::SinkExt;
 use futures::stream::StreamExt;
-use mockforge_core::{latency::LatencyInjector, LatencyProfile, WsProxyHandler};
+use mockforge_core::WsProxyHandler;
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
+use mockforge_foundation::latency::{LatencyInjector, LatencyProfile};
 use mockforge_observability::get_global_registry;
 use serde_json::Value;
 use tokio::fs;

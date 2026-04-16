@@ -1,7 +1,8 @@
 //! Configuration for the reflection proxy
 
 use crate::reflection::error_handling::ErrorConfig;
-use mockforge_core::{openapi_routes::ValidationMode, overrides::Overrides};
+use mockforge_core::overrides::Overrides;
+use mockforge_openapi::openapi_routes::ValidationMode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
