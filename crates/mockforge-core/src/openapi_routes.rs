@@ -20,8 +20,7 @@ use crate::openapi::response::AiGenerator;
 use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 use crate::reality_continuum::response_trace::ResponseGenerationTrace;
 use crate::schema_diff::validation_diff;
-use crate::templating::expand_tokens as core_expand_tokens;
-use crate::{latency::LatencyInjector, overrides::Overrides, Error, Result};
+use crate::{latency::LatencyInjector, Error, Result};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
@@ -30,6 +29,7 @@ use axum::{Json, Router};
 pub use builder::*;
 use chrono::Utc;
 pub use generation::*;
+use mockforge_openapi::response_rewriter::ResponseRewriter;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
@@ -108,14 +108,25 @@ pub struct RouterContext {
     pub latency_injector: Option<LatencyInjector>,
     /// Failure injector (per-tag fault injection)
     pub failure_injector: Option<crate::FailureInjector>,
-    /// Response overrides
-    pub overrides: Option<Overrides>,
-    /// Whether overrides are active
+    /// Response-body mutation hook — used for template token expansion
+    /// and override rule application. Core's concrete impl is
+    /// [`crate::openapi_rewriter::CoreResponseRewriter`].
+    pub response_rewriter: Option<Arc<dyn ResponseRewriter>>,
+    /// Whether override application is active (gates the
+    /// [`ResponseRewriter::apply_overrides`] call).
     pub overrides_enabled: bool,
     /// AI response generator
     pub ai_generator: Option<Arc<dyn crate::openapi::response::AiGenerator + Send + Sync>>,
-    /// MockAI intelligent behavior engine
-    pub mockai: Option<Arc<tokio::sync::RwLock<crate::intelligent_behavior::MockAI>>>,
+    /// MockAI intelligent behavior handle (type-erased via
+    /// [`mockforge_foundation::intelligent_behavior::MockAiBehavior`] so
+    /// the OpenAPI router doesn't depend on core's concrete `MockAI`).
+    pub mockai: Option<
+        Arc<
+            tokio::sync::RwLock<
+                dyn mockforge_foundation::intelligent_behavior::MockAiBehavior + Send + Sync,
+            >,
+        >,
+    >,
     /// Enable full validation (422 enhanced responses, response validation, trace)
     pub enable_full_validation: bool,
     /// Enable template token expansion
@@ -130,7 +141,7 @@ impl Default for RouterContext {
             custom_fixture_loader: None,
             latency_injector: None,
             failure_injector: None,
-            overrides: None,
+            response_rewriter: None,
             overrides_enabled: false,
             ai_generator: None,
             mockai: None,
@@ -714,15 +725,17 @@ impl OpenApiRouteRegistry {
                     || validator.options.response_template_expand
                     || env_expand;
                 if expand {
-                    final_response = core_expand_tokens(&final_response);
+                    if let Some(ref rewriter) = ctx.response_rewriter {
+                        rewriter.expand_tokens(&mut final_response);
+                    }
                 }
 
-                // (h) Apply overrides if provided and enabled
-                if let Some(ref overrides) = ctx.overrides {
-                    if ctx.overrides_enabled {
+                // (h) Apply overrides if a rewriter is wired up and overrides are enabled.
+                if ctx.overrides_enabled {
+                    if let Some(ref rewriter) = ctx.response_rewriter {
                         let op_tags =
                             operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
-                        overrides.apply(
+                        rewriter.apply_overrides(
                             &operation.operation_id.clone().unwrap_or_default(),
                             &op_tags,
                             &path_template,
@@ -867,19 +880,21 @@ impl OpenApiRouteRegistry {
         )
     }
 
-    /// Build an Axum router from the OpenAPI spec with latency, failure injection, and overrides support
+    /// Build an Axum router from the OpenAPI spec with latency, failure
+    /// injection, and a response-rewriter hook (typically wrapping
+    /// core's `Overrides` + `templating::expand_tokens`).
     pub fn build_router_with_injectors_and_overrides(
         self,
         latency_injector: LatencyInjector,
         failure_injector: Option<crate::FailureInjector>,
-        overrides: Option<Overrides>,
+        response_rewriter: Option<Arc<dyn ResponseRewriter>>,
         overrides_enabled: bool,
     ) -> Router {
         let ctx = RouterContext {
             custom_fixture_loader: self.custom_fixture_loader.clone(),
             latency_injector: Some(latency_injector),
             failure_injector,
-            overrides,
+            response_rewriter,
             overrides_enabled,
             enable_template_expand: true,
             add_spec_endpoint: true,

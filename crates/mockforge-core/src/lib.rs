@@ -311,6 +311,11 @@ pub mod network_profiles;
 /// OData function call URI rewrite middleware
 pub mod odata_rewrite;
 pub mod openapi;
+/// Core's concrete [`mockforge_openapi::response_rewriter::ResponseRewriter`]
+/// implementation wrapping core's `templating::expand_tokens` +
+/// [`overrides::Overrides`]. Used by the OpenAPI router internally; consumer
+/// code rarely constructs this directly.
+pub mod openapi_rewriter;
 pub mod openapi_routes;
 pub mod output_control;
 pub mod overrides;

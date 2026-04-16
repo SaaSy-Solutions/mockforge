@@ -31,6 +31,7 @@ pub mod custom_fixture;
 pub mod multi_spec;
 pub mod request_fingerprint;
 pub mod response;
+pub mod response_rewriter;
 pub mod response_trace;
 pub mod route;
 pub mod schema;
@@ -41,6 +42,7 @@ pub mod validation;
 
 pub use custom_fixture::CustomFixtureLoader;
 pub use request_fingerprint::RequestFingerprint;
+pub use response_rewriter::ResponseRewriter;
 
 /// `ResponseSelectionMode` / `ResponseSelector` live in
 /// [`mockforge_foundation::response_selection`] — it's a generic selection

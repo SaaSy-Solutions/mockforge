@@ -57,6 +57,7 @@ mockforge-contracts = { path = "../mockforge-contracts" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-intelligence = { path = "../mockforge-intelligence" }
 mockforge-import = { path = "../mockforge-import" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-proxy = { path = "../mockforge-proxy" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
