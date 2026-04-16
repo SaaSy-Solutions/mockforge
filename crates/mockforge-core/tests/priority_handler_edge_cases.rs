@@ -5,7 +5,8 @@
 
 use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::priority_handler::{PriorityHttpHandler, SimpleMockGenerator};
-use mockforge_core::{RecordReplayHandler, RequestFingerprint};
+use mockforge_core::RecordReplayHandler;
+use mockforge_openapi::RequestFingerprint;
 use std::sync::Arc;
 use tempfile::TempDir;
 
@@ -39,7 +40,10 @@ async fn test_priority_handler_empty_state() {
     // Should return a mock response (lowest priority)
     assert!(result.is_ok());
     let response = result.unwrap();
-    assert_eq!(response.source.priority, mockforge_core::ResponsePriority::Mock);
+    assert_eq!(
+        response.source.priority,
+        mockforge_openapi::request_fingerprint::ResponsePriority::Mock
+    );
 }
 
 /// Test priority handler with invalid URI
@@ -216,7 +220,7 @@ fn test_request_fingerprint_hash_consistency() {
 /// Test priority handler with custom fixture loader but no matching fixture
 #[tokio::test]
 async fn test_priority_handler_custom_fixture_no_match() {
-    use mockforge_core::CustomFixtureLoader;
+    use mockforge_openapi::CustomFixtureLoader;
 
     let temp_dir = TempDir::new().unwrap();
     let fixtures_dir = temp_dir.path().to_path_buf();
@@ -238,7 +242,10 @@ async fn test_priority_handler_custom_fixture_no_match() {
     assert!(result.is_ok());
     let response = result.unwrap();
     // Should use mock since no custom fixture matches
-    assert_eq!(response.source.priority, mockforge_core::ResponsePriority::Mock);
+    assert_eq!(
+        response.source.priority,
+        mockforge_openapi::request_fingerprint::ResponsePriority::Mock
+    );
 }
 
 /// Test priority handler error handling
@@ -308,7 +315,10 @@ async fn test_priority_handler_minimal_config() {
 
     let response = result.unwrap();
     // Should default to mock response
-    assert_eq!(response.source.priority, mockforge_core::ResponsePriority::Mock);
+    assert_eq!(
+        response.source.priority,
+        mockforge_openapi::request_fingerprint::ResponsePriority::Mock
+    );
 }
 
 /// Test request fingerprint with various header combinations

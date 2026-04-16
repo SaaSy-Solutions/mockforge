@@ -4,8 +4,9 @@
 
 use clap::Subcommand;
 use mockforge_core::{
-    build_file_naming_context, process_generated_file, BarrelGenerator, GeneratedFile, OpenApiSpec,
+    build_file_naming_context, process_generated_file, BarrelGenerator, GeneratedFile,
 };
+use mockforge_openapi::OpenApiSpec;
 use std::path::PathBuf;
 
 use crate::progress;

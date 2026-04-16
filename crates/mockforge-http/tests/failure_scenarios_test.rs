@@ -369,7 +369,7 @@ async fn test_server_handles_spec_with_circular_refs() {
 /// Test that validation options are ignored when spec fails to load
 #[tokio::test]
 async fn test_validation_ignored_when_spec_fails() {
-    use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+    use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
 
     let temp_dir = tempfile::tempdir().unwrap();
     let spec_path = temp_dir.path().join("invalid.json");

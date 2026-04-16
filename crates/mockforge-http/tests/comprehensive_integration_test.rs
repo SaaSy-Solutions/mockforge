@@ -8,8 +8,8 @@
 //! - Plugin system (basic validation)
 
 use axum::Router;
-use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
 use mockforge_http::build_router;
+use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use tokio::time::{timeout, Duration};

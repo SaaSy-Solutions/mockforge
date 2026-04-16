@@ -5,7 +5,7 @@
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use mockforge_core::{latency::LatencyDistribution, LatencyProfile};
+use mockforge_foundation::latency::{LatencyDistribution, LatencyProfile};
 use mockforge_graphql::{create_router, GraphQLExecutor, GraphQLSchema};
 use serde_json::{json, Value};
 use std::collections::HashMap;

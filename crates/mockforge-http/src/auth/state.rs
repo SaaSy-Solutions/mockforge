@@ -4,7 +4,8 @@
 //! and runtime data needed for authentication operations.
 
 use super::types::AuthResult;
-use mockforge_core::{config::AuthConfig, OpenApiSpec};
+use mockforge_core::config::AuthConfig;
+use mockforge_openapi::OpenApiSpec;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

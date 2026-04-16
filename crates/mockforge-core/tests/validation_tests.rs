@@ -75,7 +75,7 @@ mod validation_tests {
             }
         });
 
-        let openapi_spec = mockforge_core::OpenApiSpec::from_json(spec).unwrap();
+        let openapi_spec = mockforge_openapi::OpenApiSpec::from_json(spec).unwrap();
 
         // Test with valid Bearer token
         let result = validate_openapi_operation_security(
@@ -133,7 +133,7 @@ mod validation_tests {
             }
         });
 
-        let openapi_spec = mockforge_core::OpenApiSpec::from_json(spec).unwrap();
+        let openapi_spec = mockforge_openapi::OpenApiSpec::from_json(spec).unwrap();
 
         // Test with valid API key in header
         let result = validate_openapi_operation_security(
@@ -168,7 +168,7 @@ mod validation_tests {
             }
         });
 
-        let openapi_spec = mockforge_core::OpenApiSpec::from_json(spec).unwrap();
+        let openapi_spec = mockforge_openapi::OpenApiSpec::from_json(spec).unwrap();
 
         // No security requirements - should pass
         let result =

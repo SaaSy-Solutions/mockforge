@@ -3,7 +3,7 @@
 //! This module tests the ability to switch between different response examples
 //! using the X-Mockforge-Scenario header or MOCKFORGE_HTTP_SCENARIO environment variable.
 
-use mockforge_core::openapi_routes::create_registry_from_json;
+use mockforge_openapi::openapi_routes::create_registry_from_json;
 use serde_json::json;
 
 #[tokio::test]

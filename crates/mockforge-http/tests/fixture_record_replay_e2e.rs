@@ -8,7 +8,7 @@
 
 use axum::http::{HeaderMap, Method, Uri};
 use mockforge_core::record_replay::RecordReplayHandler;
-use mockforge_core::RequestFingerprint;
+use mockforge_openapi::RequestFingerprint;
 use tempfile::TempDir;
 
 /// Test the complete record/replay cycle
@@ -229,7 +229,7 @@ async fn test_import_manual_fixture_file() {
 
     // Create a fixture file manually (simulating a user importing/uploading a fixture)
     // First, create the fingerprint to get the correct path structure
-    use mockforge_core::RequestFingerprint;
+    use mockforge_openapi::RequestFingerprint;
     let fingerprint = RequestFingerprint::new(
         Method::GET,
         &Uri::from_static("/api/test/import"),

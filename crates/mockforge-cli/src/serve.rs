@@ -5,8 +5,9 @@ use mockforge_chaos::api::create_chaos_api_router;
 #[cfg(feature = "chaos")]
 use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
-use mockforge_core::{OpenApiSpec, ServerConfig};
+use mockforge_core::ServerConfig;
 use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use mockforge_openapi::OpenApiSpec;
 use std::any::Any;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -1377,7 +1378,7 @@ pub async fn handle_serve(
     };
 
     // Create ValidationOptions from config for template expansion
-    use mockforge_core::openapi_routes::{ValidationMode, ValidationOptions};
+    use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
     let request_mode = if let Some(ref validation) = config.http.validation {
         match validation.mode.as_str() {
             "off" | "disable" | "disabled" => ValidationMode::Disabled,
@@ -2322,7 +2323,7 @@ pub async fn handle_serve(
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Create latency injector if latency is enabled (for hot-reload support)
-    use mockforge_core::latency::{FaultConfig, LatencyInjector};
+    use mockforge_foundation::latency::{FaultConfig, LatencyInjector};
     use tokio::sync::RwLock;
 
     let latency_injector_for_admin = if config.core.latency_enabled {

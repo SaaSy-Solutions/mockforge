@@ -48,7 +48,7 @@ pub fn create_admin_router(
     prometheus_url: String,
     chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
     latency_injector: Option<
-        std::sync::Arc<tokio::sync::RwLock<mockforge_core::latency::LatencyInjector>>,
+        std::sync::Arc<tokio::sync::RwLock<mockforge_foundation::latency::LatencyInjector>>,
     >,
     mockai: Option<
         std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,

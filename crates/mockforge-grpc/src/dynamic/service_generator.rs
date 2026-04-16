@@ -4,7 +4,7 @@
 
 use crate::dynamic::proto_parser::{ProtoMethod, ProtoParser, ProtoService};
 use crate::reflection::smart_mock_generator::{SmartMockConfig, SmartMockGenerator};
-use mockforge_core::latency::LatencyInjector;
+use mockforge_foundation::latency::LatencyInjector;
 use prost_reflect::DescriptorPool;
 use prost_types::Any;
 use std::collections::HashMap;
@@ -858,7 +858,7 @@ mod tests {
 
     #[test]
     fn test_dynamic_grpc_service_with_latency_injector() {
-        use mockforge_core::latency::{FaultConfig, LatencyProfile};
+        use mockforge_foundation::latency::{FaultConfig, LatencyProfile};
 
         let proto_service = create_test_proto_service();
         let latency_injector =
@@ -1320,7 +1320,7 @@ mod tests {
 
     #[test]
     fn test_create_service_from_proto_with_latency() {
-        use mockforge_core::latency::{FaultConfig, LatencyProfile};
+        use mockforge_foundation::latency::{FaultConfig, LatencyProfile};
 
         let proto_service = create_test_proto_service();
         let latency_injector =

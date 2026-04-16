@@ -5,7 +5,7 @@ use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::protocol_server::MockProtocolServer;
 
 use crate::dynamic::DynamicGrpcConfig;
-use mockforge_core::LatencyProfile;
+use mockforge_foundation::latency::LatencyProfile;
 
 /// A `MockProtocolServer` wrapper around the gRPC server startup.
 ///

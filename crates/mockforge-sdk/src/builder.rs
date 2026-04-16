@@ -3,7 +3,9 @@
 
 use crate::server::MockServer;
 use crate::{Error, Result};
-use mockforge_core::{Config, FailureConfig, LatencyProfile, ProxyConfig, ServerConfig};
+use mockforge_core::{Config, ProxyConfig, ServerConfig};
+use mockforge_foundation::failure_injection::FailureConfig;
+use mockforge_foundation::latency::LatencyProfile;
 use std::net::TcpListener;
 use std::path::PathBuf;
 

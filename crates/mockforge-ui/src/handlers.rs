@@ -310,7 +310,7 @@ pub struct AdminState {
     pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
     /// Latency injector for HTTP middleware (optional)
     /// Allows updating latency profile at runtime
-    pub latency_injector: Option<Arc<RwLock<mockforge_core::latency::LatencyInjector>>>,
+    pub latency_injector: Option<Arc<RwLock<mockforge_foundation::latency::LatencyInjector>>>,
     /// MockAI instance (optional)
     /// Allows updating MockAI configuration at runtime
     pub mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
@@ -398,7 +398,7 @@ impl AdminState {
         api_enabled: bool,
         admin_port: u16,
         chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
-        latency_injector: Option<Arc<RwLock<mockforge_core::latency::LatencyInjector>>>,
+        latency_injector: Option<Arc<RwLock<mockforge_foundation::latency::LatencyInjector>>>,
         mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
         continuum_config: Option<mockforge_core::ContinuumConfig>,
         virtual_clock: Option<Arc<mockforge_core::VirtualClock>>,
@@ -4283,7 +4283,7 @@ pub async fn set_reality_level(
 
     // Update latency injector if available
     if let Some(ref latency_injector) = state.latency_injector {
-        match mockforge_core::latency::LatencyInjector::update_profile_async(
+        match mockforge_foundation::latency::LatencyInjector::update_profile_async(
             latency_injector,
             config.latency.clone(),
         )

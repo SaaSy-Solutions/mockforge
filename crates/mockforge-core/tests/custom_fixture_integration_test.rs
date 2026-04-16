@@ -5,9 +5,9 @@
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
-use mockforge_core::custom_fixture::CustomFixtureLoader;
-use mockforge_core::openapi::OpenApiSpec;
-use mockforge_core::openapi_routes::OpenApiRouteRegistry;
+use mockforge_openapi::custom_fixture::CustomFixtureLoader;
+use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
+use mockforge_openapi::OpenApiSpec;
 use serde_json::json;
 use std::sync::Arc;
 use tempfile::TempDir;

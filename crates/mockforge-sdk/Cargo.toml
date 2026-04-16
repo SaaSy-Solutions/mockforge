@@ -17,6 +17,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
+mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-http = { version = "0.3.70", path = "../mockforge-http" }
 mockforge-ws = { version = "0.3.70", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.70", path = "../mockforge-grpc", optional = true }

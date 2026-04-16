@@ -34,7 +34,7 @@
 //!
 //! ```rust,no_run
 //! use mockforge_graphql::{create_graphql_router, GraphQLSchema};
-//! use mockforge_core::LatencyProfile;
+//! use mockforge_foundation::latency::LatencyProfile;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 //! let schema = GraphQLSchema::generate_basic_schema();
@@ -147,7 +147,7 @@
 //! - [GraphQL Mocking Guide](https://docs.mockforge.dev/user-guide/graphql-mocking.html)
 //! - [API Reference](https://docs.rs/mockforge-graphql)
 
-use mockforge_core::LatencyProfile;
+use mockforge_foundation::latency::LatencyProfile;
 
 pub mod cache;
 pub mod executor;

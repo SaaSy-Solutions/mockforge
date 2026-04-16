@@ -15,9 +15,9 @@
 //! providing meaningful memory usage insights.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mockforge_core::openapi_routes::create_registry_from_json;
 use mockforge_core::templating::expand_str;
 use mockforge_core::validation::{validate_json_schema, ValidationResult, Validator};
+use mockforge_openapi::openapi_routes::create_registry_from_json;
 use serde_json::json;
 
 /// Benchmark template rendering with different payload sizes
