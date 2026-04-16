@@ -112,19 +112,30 @@ impl AuditLog {
         .await
     }
 
-    /// Get audit logs for an organization
+    /// Get audit logs for an organization, optionally filtered by one or more
+    /// event types.
+    ///
+    /// QueryBuilder generates `$N` placeholders via `push_bind` — never write
+    /// them as literals in `push`/`new`, or the placeholder count won't match
+    /// the bound parameters and Postgres returns "bind message supplies 0
+    /// parameters, but prepared statement requires N".
     pub async fn get_by_org(
         pool: &sqlx::PgPool,
-        _org_id: Uuid,
+        org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = $1");
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
 
-        if let Some(event_type) = event_type {
-            query.push(" AND event_type = $2");
-            query.push_bind(event_type);
+        if let Some(types) = event_types.filter(|t| !t.is_empty()) {
+            query.push(" AND event_type IN (");
+            let mut separated = query.separated(", ");
+            for t in types {
+                separated.push_bind(t);
+            }
+            separated.push_unseparated(")");
         }
 
         query.push(" ORDER BY created_at DESC");
@@ -145,13 +156,15 @@ impl AuditLog {
     /// Get audit logs for a specific user within an organization
     pub async fn get_by_user_in_org(
         pool: &sqlx::PgPool,
-        _org_id: Uuid,
-        _user_id: Uuid,
+        org_id: Uuid,
+        user_id: Uuid,
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new(
-            "SELECT * FROM audit_logs WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC",
-        );
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
+        query.push(" AND user_id = ");
+        query.push_bind(user_id);
+        query.push(" ORDER BY created_at DESC");
 
         if let Some(limit) = limit {
             query.push(" LIMIT ");

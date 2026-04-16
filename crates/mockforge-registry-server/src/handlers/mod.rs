@@ -42,3 +42,4 @@ pub mod template_reviews;
 pub mod templates;
 pub mod token_rotation;
 pub mod waitlist;
+pub mod workspace_environments;

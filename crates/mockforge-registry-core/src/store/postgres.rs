@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::{
     AdminAnalyticsSnapshot, ConversionFunnelSnapshot, OrgSettingRow, ProjectRow, RegistryStore,
-    StoreResult, SubscriptionRow, UserSettingRow,
+    StoreError, StoreResult, SubscriptionRow, UserSettingRow,
 };
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
@@ -39,6 +39,9 @@ use crate::models::template_review::TemplateReview;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
+use crate::models::workspace_environment::{
+    WorkspaceEnvironment, WorkspaceEnvironmentSummary, WorkspaceEnvironmentVariable,
+};
 
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
@@ -272,9 +275,9 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<Vec<AuditLog>> {
-        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_type)
+        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_types)
             .await
             .map_err(Into::into)
     }
@@ -282,20 +285,21 @@ impl RegistryStore for PgRegistryStore {
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<i64> {
-        let count: (i64,) = if let Some(evt) = event_type {
-            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2")
-                .bind(org_id)
-                .bind(evt)
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1")
-                .bind(org_id)
-                .fetch_one(&self.pool)
-                .await?
-        };
+        let mut query = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
+
+        if let Some(types) = event_types.filter(|t| !t.is_empty()) {
+            query.push(" AND event_type IN (");
+            let mut separated = query.separated(", ");
+            for t in types {
+                separated.push_bind(t);
+            }
+            separated.push_unseparated(")");
+        }
+
+        let count: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
         Ok(count.0)
     }
 
@@ -1959,5 +1963,109 @@ impl RegistryStore for PgRegistryStore {
 
         tx.commit().await?;
         Ok(owned_count)
+    }
+
+    // ---------------------------------------------------------------------
+    // Workspace environments
+    // ---------------------------------------------------------------------
+
+    async fn list_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentSummary>> {
+        // Lazily seed a global environment so the workspace always has at
+        // least one row to show in the UI.
+        WorkspaceEnvironment::ensure_global(&self.pool, workspace_id)
+            .await
+            .map_err(StoreError::from)?;
+        WorkspaceEnvironment::list_with_counts(&self.pool, workspace_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn find_workspace_environment_by_id(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<WorkspaceEnvironment>> {
+        WorkspaceEnvironment::find_by_id(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn create_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        name: &str,
+        description: &str,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<WorkspaceEnvironment> {
+        WorkspaceEnvironment::create(&self.pool, workspace_id, name, description, color)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn update_workspace_environment(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<WorkspaceEnvironment>> {
+        WorkspaceEnvironment::update(&self.pool, id, name, description, color)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_workspace_environment(&self, id: Uuid) -> StoreResult<()> {
+        WorkspaceEnvironment::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn set_active_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        environment_id: Uuid,
+    ) -> StoreResult<()> {
+        WorkspaceEnvironment::set_active(&self.pool, workspace_id, environment_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn reorder_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+        environment_ids: &[Uuid],
+    ) -> StoreResult<()> {
+        WorkspaceEnvironment::reorder(&self.pool, workspace_id, environment_ids)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn list_workspace_environment_variables(
+        &self,
+        environment_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentVariable>> {
+        WorkspaceEnvironmentVariable::list_for_environment(&self.pool, environment_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn upsert_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+        value: &str,
+        is_secret: bool,
+    ) -> StoreResult<WorkspaceEnvironmentVariable> {
+        WorkspaceEnvironmentVariable::upsert(&self.pool, environment_id, name, value, is_secret)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn delete_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+    ) -> StoreResult<u64> {
+        WorkspaceEnvironmentVariable::delete(&self.pool, environment_id, name)
+            .await
+            .map_err(Into::into)
     }
 }

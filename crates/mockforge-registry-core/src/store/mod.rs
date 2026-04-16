@@ -42,6 +42,9 @@ use crate::models::template_review::TemplateReview;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
+use crate::models::workspace_environment::{
+    WorkspaceEnvironment, WorkspaceEnvironmentSummary, WorkspaceEnvironmentVariable,
+};
 
 #[cfg(feature = "postgres")]
 pub mod postgres;
@@ -231,19 +234,21 @@ pub trait RegistryStore: Send + Sync + 'static {
     );
 
     /// List audit logs for an organization with optional filters.
+    /// `event_types` accepts one or many enum values; pass `None` (or an empty
+    /// vec) to skip filtering.
     async fn list_audit_logs(
         &self,
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<Vec<AuditLog>>;
 
     /// Count audit logs matching the filter (for pagination).
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<i64>;
 
     // ---------------------------------------------------------------------
@@ -476,6 +481,72 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<Option<CloudWorkspace>>;
 
     async fn delete_cloud_workspace(&self, id: Uuid) -> StoreResult<()>;
+
+    // ---------------------------------------------------------------------
+    // Workspace environments (Postman-style; distinct from MockEnvironment)
+    // ---------------------------------------------------------------------
+
+    /// List environments (with variable counts) for a workspace. Lazily seeds
+    /// a global environment on first access.
+    async fn list_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentSummary>>;
+
+    async fn find_workspace_environment_by_id(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<WorkspaceEnvironment>>;
+
+    async fn create_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        name: &str,
+        description: &str,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<WorkspaceEnvironment>;
+
+    async fn update_workspace_environment(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<WorkspaceEnvironment>>;
+
+    async fn delete_workspace_environment(&self, id: Uuid) -> StoreResult<()>;
+
+    async fn set_active_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        environment_id: Uuid,
+    ) -> StoreResult<()>;
+
+    async fn reorder_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+        environment_ids: &[Uuid],
+    ) -> StoreResult<()>;
+
+    async fn list_workspace_environment_variables(
+        &self,
+        environment_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentVariable>>;
+
+    async fn upsert_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+        value: &str,
+        is_secret: bool,
+    ) -> StoreResult<WorkspaceEnvironmentVariable>;
+
+    /// Returns the number of variables removed (0 if not found).
+    async fn delete_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+    ) -> StoreResult<u64>;
 
     // ---------------------------------------------------------------------
     // Cloud services

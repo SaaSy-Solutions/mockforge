@@ -51,6 +51,9 @@ use crate::models::template_review::TemplateReview;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
+use crate::models::workspace_environment::{
+    WorkspaceEnvironment, WorkspaceEnvironmentSummary, WorkspaceEnvironmentVariable,
+};
 
 /// SQLite-backed [`RegistryStore`] implementation for the OSS admin UI.
 #[derive(Clone)]
@@ -733,21 +736,23 @@ impl RegistryStore for SqliteRegistryStore {
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<Vec<AuditLog>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let rows = if let Some(et) = event_type {
-            let et_str = audit_event_type_to_str(&et);
-            sqlx::query(
-                "SELECT * FROM audit_logs WHERE org_id = ? AND event_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            )
-            .bind(org_id.to_string())
-            .bind(&et_str)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?
+        let types: Vec<String> =
+            event_types.unwrap_or_default().iter().map(audit_event_type_to_str).collect();
+
+        let rows = if !types.is_empty() {
+            let placeholders = vec!["?"; types.len()].join(", ");
+            let sql = format!(
+                "SELECT * FROM audit_logs WHERE org_id = ? AND event_type IN ({placeholders}) ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            );
+            let mut q = sqlx::query(&sql).bind(org_id.to_string());
+            for t in &types {
+                q = q.bind(t);
+            }
+            q.bind(limit).bind(offset).fetch_all(&self.pool).await?
         } else {
             sqlx::query(
                 "SELECT * FROM audit_logs WHERE org_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -764,16 +769,22 @@ impl RegistryStore for SqliteRegistryStore {
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: Option<Vec<AuditEventType>>,
     ) -> StoreResult<i64> {
         use sqlx::Row;
-        let row = if let Some(et) = event_type {
-            let et_str = audit_event_type_to_str(&et);
-            sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ? AND event_type = ?")
-                .bind(org_id.to_string())
-                .bind(&et_str)
-                .fetch_one(&self.pool)
-                .await?
+        let types: Vec<String> =
+            event_types.unwrap_or_default().iter().map(audit_event_type_to_str).collect();
+
+        let row = if !types.is_empty() {
+            let placeholders = vec!["?"; types.len()].join(", ");
+            let sql = format!(
+                "SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ? AND event_type IN ({placeholders})",
+            );
+            let mut q = sqlx::query(&sql).bind(org_id.to_string());
+            for t in &types {
+                q = q.bind(t);
+            }
+            q.fetch_one(&self.pool).await?
         } else {
             sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ?")
                 .bind(org_id.to_string())
@@ -1883,6 +1894,99 @@ impl RegistryStore for SqliteRegistryStore {
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {
         Ok(0)
     }
+
+    // Workspace environments are a SaaS-only feature; the OSS embedded admin
+    // server has no concept of cloud workspaces, so these stubs return
+    // `NotFound` (or an empty list) without touching the database.
+
+    #[allow(unused_variables)]
+    async fn list_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentSummary>> {
+        Ok(Vec::new())
+    }
+
+    #[allow(unused_variables)]
+    async fn find_workspace_environment_by_id(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<WorkspaceEnvironment>> {
+        Ok(None)
+    }
+
+    #[allow(unused_variables)]
+    async fn create_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        name: &str,
+        description: &str,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<WorkspaceEnvironment> {
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn update_workspace_environment(
+        &self,
+        id: Uuid,
+        name: Option<&str>,
+        description: Option<&str>,
+        color: Option<&serde_json::Value>,
+    ) -> StoreResult<Option<WorkspaceEnvironment>> {
+        Ok(None)
+    }
+
+    #[allow(unused_variables)]
+    async fn delete_workspace_environment(&self, id: Uuid) -> StoreResult<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn set_active_workspace_environment(
+        &self,
+        workspace_id: Uuid,
+        environment_id: Uuid,
+    ) -> StoreResult<()> {
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn reorder_workspace_environments(
+        &self,
+        workspace_id: Uuid,
+        environment_ids: &[Uuid],
+    ) -> StoreResult<()> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn list_workspace_environment_variables(
+        &self,
+        environment_id: Uuid,
+    ) -> StoreResult<Vec<WorkspaceEnvironmentVariable>> {
+        Ok(Vec::new())
+    }
+
+    #[allow(unused_variables)]
+    async fn upsert_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+        value: &str,
+        is_secret: bool,
+    ) -> StoreResult<WorkspaceEnvironmentVariable> {
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn delete_workspace_environment_variable(
+        &self,
+        environment_id: Uuid,
+        name: &str,
+    ) -> StoreResult<u64> {
+        Ok(0)
+    }
 }
 
 #[cfg(test)]
@@ -2156,8 +2260,22 @@ mod tests {
         // Count and list
         assert_eq!(store.count_audit_logs(org.id, None).await.unwrap(), 2);
         assert_eq!(
-            store.count_audit_logs(org.id, Some(AuditEventType::OrgCreated)).await.unwrap(),
+            store
+                .count_audit_logs(org.id, Some(vec![AuditEventType::OrgCreated]))
+                .await
+                .unwrap(),
             1
+        );
+        // Multi-event filter (regression: comma-separated event_type used to 500)
+        assert_eq!(
+            store
+                .count_audit_logs(
+                    org.id,
+                    Some(vec![AuditEventType::OrgCreated, AuditEventType::ApiTokenCreated])
+                )
+                .await
+                .unwrap(),
+            2
         );
 
         let logs = store.list_audit_logs(org.id, None, None, None).await.unwrap();
@@ -2170,7 +2288,7 @@ mod tests {
 
         // Filtered list
         let org_created = store
-            .list_audit_logs(org.id, None, None, Some(AuditEventType::OrgCreated))
+            .list_audit_logs(org.id, None, None, Some(vec![AuditEventType::OrgCreated]))
             .await
             .unwrap();
         assert_eq!(org_created.len(), 1);
