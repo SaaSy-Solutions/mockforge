@@ -26,10 +26,10 @@ use crate::spec_dependencies::{
 use crate::spec_parser::SpecParser;
 use crate::target_parser::parse_targets_file;
 use crate::wafbench::WafBenchLoader;
-use mockforge_core::openapi::multi_spec::{
+use mockforge_openapi::multi_spec::{
     load_specs_from_directory, load_specs_from_files, merge_specs, ConflictStrategy,
 };
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;

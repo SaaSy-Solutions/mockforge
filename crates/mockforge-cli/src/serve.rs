@@ -1400,7 +1400,7 @@ pub async fn handle_serve(
 
     // Process multiple specs if provided
     let final_spec_path = if !serve_args.spec.is_empty() || serve_args.spec_dir.is_some() {
-        use mockforge_core::openapi::multi_spec::{
+        use mockforge_openapi::multi_spec::{
             group_specs_by_api_version, group_specs_by_openapi_version, load_specs_from_directory,
             load_specs_from_files, merge_specs, ConflictStrategy,
         };
@@ -1428,8 +1428,7 @@ pub async fn handle_serve(
             let openapi_groups = group_specs_by_openapi_version(specs);
 
             // Process each OpenAPI version group
-            let mut merged_specs: Vec<(String, mockforge_core::openapi::spec::OpenApiSpec)> =
-                Vec::new();
+            let mut merged_specs: Vec<(String, mockforge_openapi::spec::OpenApiSpec)> = Vec::new();
             for (_openapi_version, version_specs) in openapi_groups {
                 // Apply API versioning grouping if enabled
                 let api_versioning = serve_args.api_versioning.as_str();
@@ -1482,7 +1481,7 @@ pub async fn handle_serve(
             } else if merged_specs.is_empty() {
                 config.http.openapi_spec.clone()
             } else if serve_args.api_versioning == "path-prefix" {
-                let mut prefixed_specs: Vec<(PathBuf, mockforge_core::openapi::spec::OpenApiSpec)> =
+                let mut prefixed_specs: Vec<(PathBuf, mockforge_openapi::spec::OpenApiSpec)> =
                     Vec::new();
 
                 for (api_version, spec) in merged_specs {
@@ -1508,15 +1507,13 @@ pub async fn handle_serve(
                         *paths_obj = new_paths;
                     }
 
-                    let prefixed_spec = mockforge_core::openapi::spec::OpenApiSpec::from_json(
-                        spec_json,
-                    )
-                    .map_err(|e| {
-                        format!(
-                            "Failed to build prefixed spec for API version '{}': {}",
-                            api_version, e
-                        )
-                    })?;
+                    let prefixed_spec = mockforge_openapi::spec::OpenApiSpec::from_json(spec_json)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to build prefixed spec for API version '{}': {}",
+                                api_version, e
+                            )
+                        })?;
 
                     prefixed_specs
                         .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));

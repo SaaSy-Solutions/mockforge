@@ -1,7 +1,7 @@
 //! OpenAPI specification parsing for load testing
 
 use crate::error::{BenchError, Result};
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use openapiv3::{OpenAPI, Operation, Parameter, PathItem, ReferenceOr};
 use std::path::Path;
 

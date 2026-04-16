@@ -16,6 +16,7 @@ codegen = []
 
 [dependencies]
 mockforge-core = { path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 axum = { workspace = true }
 base64 = { workspace = true }
 once_cell = { workspace = true }

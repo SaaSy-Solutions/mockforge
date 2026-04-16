@@ -32,6 +32,7 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data", optional = true }
 
 [features]

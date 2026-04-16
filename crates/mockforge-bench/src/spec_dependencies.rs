@@ -7,7 +7,7 @@
 //! - Value extraction and injection between spec groups
 
 use crate::error::{BenchError, Result};
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

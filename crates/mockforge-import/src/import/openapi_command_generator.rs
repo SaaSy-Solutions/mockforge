@@ -3,7 +3,7 @@
 //! This module generates curl and HTTPie commands from OpenAPI specifications
 //! for API testing and exploration.
 
-use mockforge_core::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use openapiv3::Operation;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

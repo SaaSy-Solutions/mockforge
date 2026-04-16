@@ -11,8 +11,8 @@ use axum::{
     response::Json,
 };
 use mockforge_core::contract_drift::threat_modeling::ThreatAnalyzer;
-use mockforge_core::openapi::OpenApiSpec;
 use mockforge_foundation::threat_modeling_types::ThreatAssessment;
+use mockforge_openapi::OpenApiSpec;
 use serde::Deserialize;
 use std::sync::Arc;
 

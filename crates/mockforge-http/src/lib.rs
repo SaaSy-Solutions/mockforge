@@ -31,7 +31,7 @@
 //! ```rust,no_run
 //! use axum::Router;
 //! use mockforge_core::openapi_routes::ValidationMode;
-//! use mockforge_core::ValidationOptions;
+//! use mockforge_openapi::openapi_routes::ValidationOptions;
 //! use mockforge_http::build_router;
 //!
 //! #[tokio::main]
@@ -299,9 +299,9 @@ use axum::Router;
 use mockforge_chaos::core_failure_injection::{FailureConfig, FailureInjector};
 use mockforge_core::intelligent_behavior::config::Persona;
 use mockforge_core::latency::LatencyInjector;
-use mockforge_core::openapi::OpenApiSpec;
 use mockforge_core::openapi_routes::OpenApiRouteRegistry;
 use mockforge_core::openapi_routes::ValidationOptions;
+use mockforge_openapi::OpenApiSpec;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -564,7 +564,7 @@ pub async fn build_router_with_multi_tenant(
     multi_tenant_config: Option<mockforge_foundation::multi_tenant_types::MultiTenantConfig>,
     _route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
-    ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
+    ai_generator: Option<Arc<dyn mockforge_openapi::response::AiGenerator + Send + Sync>>,
     smtp_registry: Option<Arc<dyn std::any::Any + Send + Sync>>,
     mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
@@ -1555,7 +1555,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     multi_tenant_config: Option<mockforge_foundation::multi_tenant_types::MultiTenantConfig>,
     route_configs: Option<Vec<mockforge_core::config::RouteConfig>>,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
-    _ai_generator: Option<Arc<dyn mockforge_core::openapi::response::AiGenerator + Send + Sync>>,
+    _ai_generator: Option<Arc<dyn mockforge_openapi::response::AiGenerator + Send + Sync>>,
     smtp_registry: Option<Arc<dyn std::any::Any + Send + Sync>>,
     mqtt_broker: Option<Arc<dyn std::any::Any + Send + Sync>>,
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,

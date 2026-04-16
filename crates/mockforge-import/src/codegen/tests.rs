@@ -1,7 +1,7 @@
 //! Unit tests for code generation module
 
 use super::{generate_mock_server_code, CodegenConfig, MockDataStrategy};
-use mockforge_core::openapi::spec::OpenApiSpec;
+use mockforge_openapi::spec::OpenApiSpec;
 use serde_json::json;
 
 fn create_test_spec() -> OpenApiSpec {

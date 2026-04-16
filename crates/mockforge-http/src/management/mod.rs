@@ -19,7 +19,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
-use mockforge_core::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use mockforge_proxy::config::ProxyConfig;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

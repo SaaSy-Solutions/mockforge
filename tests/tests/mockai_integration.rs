@@ -4,7 +4,7 @@
 //! including session persistence, mutation detection, and intelligent responses.
 
 use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
-use mockforge_core::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use serde_json::json;
 
 /// Test MockAI with a simple OpenAPI spec

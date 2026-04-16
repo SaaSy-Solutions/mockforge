@@ -164,7 +164,7 @@ impl VbrEngine {
         };
 
         // Load OpenAPI spec
-        let spec = mockforge_core::openapi::OpenApiSpec::from_json(json_value)
+        let spec = mockforge_openapi::OpenApiSpec::from_json(json_value)
             .map_err(|e| Error::internal(format!("Failed to load OpenAPI spec: {}", e)))?;
 
         // Validate spec

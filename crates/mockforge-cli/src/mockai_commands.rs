@@ -11,7 +11,7 @@ use mockforge_core::intelligent_behavior::{
     rule_generator::{ExamplePair, RuleGenerator},
     IntelligentBehaviorConfig, MockAI,
 };
-use mockforge_core::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use mockforge_recorder::{
     database::RecorderDatabase,
     openapi_export::{QueryFilters, RecordingsToOpenApi},
