@@ -3,8 +3,8 @@
 //! This module handles the generation of routes from OpenAPI specifications,
 //! including parameter extraction, path matching, and route creation.
 
-use crate::openapi::route::OpenApiRoute;
-use crate::openapi::spec::OpenApiSpec;
+use crate::route::OpenApiRoute;
+use crate::spec::OpenApiSpec;
 use std::sync::Arc;
 
 /// Generate routes from an OpenAPI specification

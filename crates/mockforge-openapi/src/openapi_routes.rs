@@ -15,12 +15,9 @@ pub mod generation;
 pub mod registry;
 pub mod validation;
 
-use crate::ai_response::RequestContext;
-use crate::openapi::response::AiGenerator;
-use crate::openapi::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
-use crate::reality_continuum::response_trace::ResponseGenerationTrace;
-use crate::schema_diff::validation_diff;
-use crate::{latency::LatencyInjector, Error, Result};
+use crate::response::AiGenerator;
+use crate::response_rewriter::ResponseRewriter;
+use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 use axum::extract::{Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
@@ -29,7 +26,11 @@ use axum::{Json, Router};
 pub use builder::*;
 use chrono::Utc;
 pub use generation::*;
-use mockforge_openapi::response_rewriter::ResponseRewriter;
+use mockforge_foundation::ai_response::RequestContext;
+use mockforge_foundation::error::{Error, Result};
+use mockforge_foundation::latency::LatencyInjector;
+use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
+use mockforge_foundation::schema_diff::validation_diff;
 use once_cell::sync::Lazy;
 use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
@@ -48,7 +49,7 @@ pub struct OpenApiRouteRegistry {
     /// Validation options
     options: ValidationOptions,
     /// Custom fixture loader (optional)
-    custom_fixture_loader: Option<Arc<crate::CustomFixtureLoader>>,
+    custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
 }
 
 /// Validation mode for request/response validation
@@ -103,11 +104,11 @@ impl Default for ValidationOptions {
 #[derive(Clone)]
 pub struct RouterContext {
     /// Custom fixture loader (highest priority response source)
-    pub custom_fixture_loader: Option<Arc<crate::CustomFixtureLoader>>,
+    pub custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
     /// Latency injector (per-operation-tag latency simulation)
     pub latency_injector: Option<LatencyInjector>,
     /// Failure injector (per-tag fault injection)
-    pub failure_injector: Option<crate::FailureInjector>,
+    pub failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
     /// Response-body mutation hook — used for template token expansion
     /// and override rule application. Core's concrete impl is
     /// [`crate::openapi_rewriter::CoreResponseRewriter`].
@@ -116,7 +117,7 @@ pub struct RouterContext {
     /// [`ResponseRewriter::apply_overrides`] call).
     pub overrides_enabled: bool,
     /// AI response generator
-    pub ai_generator: Option<Arc<dyn crate::openapi::response::AiGenerator + Send + Sync>>,
+    pub ai_generator: Option<Arc<dyn crate::response::AiGenerator + Send + Sync>>,
     /// MockAI intelligent behavior handle (type-erased via
     /// [`mockforge_foundation::intelligent_behavior::MockAiBehavior`] so
     /// the OpenAPI router doesn't depend on core's concrete `MockAI`).
@@ -173,7 +174,7 @@ impl OpenApiRouteRegistry {
     /// Create a new registry from an OpenAPI spec with environment-based validation options and persona
     pub fn new_with_env_and_persona(
         spec: OpenApiSpec,
-        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
     ) -> Self {
         tracing::debug!("Creating OpenAPI route registry");
         let spec = Arc::new(spec);
@@ -220,7 +221,7 @@ impl OpenApiRouteRegistry {
     pub fn new_with_options_and_persona(
         spec: OpenApiSpec,
         options: ValidationOptions,
-        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
     ) -> Self {
         tracing::debug!("Creating OpenAPI route registry with custom options");
         let spec = Arc::new(spec);
@@ -234,7 +235,10 @@ impl OpenApiRouteRegistry {
     }
 
     /// Set custom fixture loader
-    pub fn with_custom_fixture_loader(mut self, loader: Arc<crate::CustomFixtureLoader>) -> Self {
+    pub fn with_custom_fixture_loader(
+        mut self,
+        loader: Arc<crate::custom_fixture::CustomFixtureLoader>,
+    ) -> Self {
         self.custom_fixture_loader = Some(loader);
         self
     }
@@ -255,7 +259,7 @@ impl OpenApiRouteRegistry {
     /// Generate routes from the OpenAPI specification with optional persona
     fn generate_routes_with_persona(
         spec: &Arc<OpenApiSpec>,
-        persona: Option<Arc<crate::intelligent_behavior::config::Persona>>,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
     ) -> Vec<OpenApiRoute> {
         let mut routes = Vec::new();
 
@@ -414,7 +418,7 @@ impl OpenApiRouteRegistry {
 
                 // (a) Check for custom fixture first (highest priority)
                 if let Some(ref loader) = ctx.custom_fixture_loader {
-                    use crate::RequestFingerprint;
+                    use crate::request_fingerprint::RequestFingerprint;
                     use axum::http::{Method, Uri};
 
                     // Reconstruct the full path from template and params
@@ -425,7 +429,7 @@ impl OpenApiRouteRegistry {
 
                     // Normalize the path to match fixture normalization
                     let normalized_request_path =
-                        crate::CustomFixtureLoader::normalize_path(&request_path);
+                        crate::custom_fixture::CustomFixtureLoader::normalize_path(&request_path);
 
                     // Build query string
                     let query_string =
@@ -870,7 +874,7 @@ impl OpenApiRouteRegistry {
     pub fn build_router_with_injectors(
         self,
         latency_injector: LatencyInjector,
-        failure_injector: Option<crate::FailureInjector>,
+        failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
     ) -> Router {
         self.build_router_with_injectors_and_overrides(
             latency_injector,
@@ -886,7 +890,7 @@ impl OpenApiRouteRegistry {
     pub fn build_router_with_injectors_and_overrides(
         self,
         latency_injector: LatencyInjector,
-        failure_injector: Option<crate::FailureInjector>,
+        failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
         response_rewriter: Option<Arc<dyn ResponseRewriter>>,
         overrides_enabled: bool,
     ) -> Router {
@@ -1355,7 +1359,7 @@ impl OpenApiRouteRegistry {
             >,
         >,
     ) -> Router {
-        use crate::intelligent_behavior::Request as MockAIRequest;
+        use mockforge_foundation::intelligent_behavior::Request as MockAIRequest;
 
         let mut router = Router::new();
         let deduped = self.deduplicated_routes();
@@ -1388,7 +1392,7 @@ impl OpenApiRouteRegistry {
 
                     // Check for custom fixture first (highest priority, before MockAI)
                     if let Some(ref loader) = custom_loader_clone {
-                        use crate::RequestFingerprint;
+                        use crate::request_fingerprint::RequestFingerprint;
                         use axum::http::{Method, Uri};
 
                         // Build query string from parsed query params
@@ -1405,7 +1409,7 @@ impl OpenApiRouteRegistry {
 
                         // Normalize the path to match fixture normalization
                         let normalized_request_path =
-                            crate::CustomFixtureLoader::normalize_path(&route.path);
+                            crate::custom_fixture::CustomFixtureLoader::normalize_path(&route.path);
 
                         tracing::info!(
                             "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
@@ -1969,7 +1973,7 @@ fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
 }
 
 // Import the enhanced schema diff functionality
-// use crate::schema_diff::{validation_diff, to_enhanced_422_json, ValidationError}; // Not currently used
+// use mockforge_foundation::schema_diff::{validation_diff, to_enhanced_422_json, ValidationError}; // Not currently used
 
 /// Generate an enhanced 422 response with detailed schema validation errors
 /// This function provides comprehensive error information using the new schema diff utility
@@ -2874,8 +2878,10 @@ mod tests {
         let original_routes_len = registry.routes().len();
 
         // Test with_custom_fixture_loader
-        let custom_loader =
-            Arc::new(crate::CustomFixtureLoader::new(temp_dir.path().to_path_buf(), true));
+        let custom_loader = Arc::new(crate::custom_fixture::CustomFixtureLoader::new(
+            temp_dir.path().to_path_buf(),
+            true,
+        ));
         let registry_with_loader = registry.with_custom_fixture_loader(custom_loader);
 
         // Verify the loader was set (we can't directly access it, but we can test it doesn't panic)

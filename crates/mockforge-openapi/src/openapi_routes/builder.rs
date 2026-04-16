@@ -3,8 +3,8 @@
 //! This module handles the creation of Axum routers from OpenAPI specifications,
 //! including route registration and middleware integration.
 
-use crate::openapi::OpenApiSpec;
 use crate::openapi_routes::OpenApiRouteRegistry;
+use crate::spec::OpenApiSpec;
 use axum::{
     body::Body,
     extract::State,
@@ -97,7 +97,7 @@ impl RouterBuilder {
 
 /// Helper function to create route handlers
 pub fn create_route_handler(
-    route: &crate::openapi::route::OpenApiRoute,
+    route: &crate::route::OpenApiRoute,
     registry: &OpenApiRouteRegistry,
 ) -> Router {
     let axum_path = route.axum_path();

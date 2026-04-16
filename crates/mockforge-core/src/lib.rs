@@ -316,7 +316,12 @@ pub mod openapi;
 /// [`overrides::Overrides`]. Used by the OpenAPI router internally; consumer
 /// code rarely constructs this directly.
 pub mod openapi_rewriter;
-pub mod openapi_routes;
+/// `openapi_routes` was moved to [`mockforge_openapi::openapi_routes`];
+/// re-exported here so every existing
+/// `mockforge_core::openapi_routes::{OpenApiRouteRegistry, ValidationOptions,
+/// create_registry_from_file, create_registry_from_json, ...}` path
+/// keeps resolving.
+pub use mockforge_openapi::openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;

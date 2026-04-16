@@ -50,5 +50,15 @@ globwalk = "0.9.1"
 # Diagnostics
 tracing = { workspace = true }
 
+# openapi_routes dependencies
+once_cell = { workspace = true }
+url = { workspace = true }
+base64 = { workspace = true }
+rayon = { version = "1.10", optional = true }
+
+[features]
+default = []
+parallel-routes = ["rayon"]
+
 [dev-dependencies]
 tempfile = "3.10"
