@@ -720,14 +720,24 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // (g) Template expansion (if enabled via context or env var)
+                // (g) Template expansion (if enabled via context or env var).
+                //
+                // The `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` env var is tri-state:
+                //   * unset  -> fall back to context/options flags
+                //   * "true" / "1" -> force expansion on
+                //   * "false" / anything else -> force expansion OFF
+                // Treating it as a forcing override (not just OR) lets tests and
+                // ad-hoc operator overrides disable token expansion explicitly.
                 let mut final_response = mock_response.clone();
-                let env_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                    .unwrap_or(false);
-                let expand = ctx.enable_template_expand
-                    || validator.options.response_template_expand
-                    || env_expand;
+                let env_expand: Option<bool> = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                    .ok()
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+                let expand = match env_expand {
+                    Some(v) => v,
+                    None => {
+                        ctx.enable_template_expand || validator.options.response_template_expand
+                    }
+                };
                 if expand {
                     if let Some(ref rewriter) = ctx.response_rewriter {
                         rewriter.expand_tokens(&mut final_response);
@@ -900,6 +910,7 @@ impl OpenApiRouteRegistry {
             failure_injector,
             response_rewriter,
             overrides_enabled,
+            enable_full_validation: true,
             enable_template_expand: true,
             add_spec_endpoint: true,
             ..Default::default()
