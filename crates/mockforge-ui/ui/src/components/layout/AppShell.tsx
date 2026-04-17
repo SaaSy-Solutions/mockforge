@@ -144,6 +144,7 @@ const navSections = [
     items: [
       { id: 'import', labelKey: 'tab.import', icon: Import },
       { id: 'template-marketplace', labelKey: 'tab.templateMarketplace', icon: Store },
+      { id: 'scenario-marketplace', labelKey: 'tab.scenarioMarketplace', icon: Store },
     ]
   },
   {
@@ -195,6 +196,7 @@ const cloudNavItemIds = new Set([
   'fixtures',
   'hosted-mocks',
   'template-marketplace',
+  'scenario-marketplace',
   'plugin-registry',
   'pillar-analytics',
   'config',

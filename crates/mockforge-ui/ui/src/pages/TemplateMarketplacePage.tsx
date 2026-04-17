@@ -4,7 +4,7 @@
  * Browse, search, and install orchestration templates from the marketplace.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -16,7 +16,6 @@ import {
   Button,
   Chip,
   Rating,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -25,25 +24,33 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Tabs,
-  Tab,
   List,
   ListItem,
-  ListItemText,
   Divider,
   Alert,
-  Avatar,
+  Snackbar,
+  CircularProgress,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Star as StarIcon,
+  StarBorder as StarBorderIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  Category as CategoryIcon,
-  TrendingUp as TrendingIcon,
-  NewReleases as NewIcon,
-  FilterList as FilterIcon,
 } from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import { authenticatedFetch } from '../utils/apiClient';
+import { useAuthStore } from '../stores/useAuthStore';
+import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
+
+interface TemplateStats {
+  downloads: number;
+  stars: number;
+  forks: number;
+  rating: number;
+  rating_count: number;
+}
 
 interface Template {
   id: string;
@@ -53,37 +60,50 @@ interface Template {
   version: string;
   category: string;
   tags: string[];
-  stats: {
-    downloads: number;
-    stars: number;
-    rating: number;
-    ratingCount: number;
-  };
-  createdAt: Date;
-  updatedAt: Date;
+  stats: TemplateStats;
+  created_at: string;
+  updated_at: string;
+  content?: unknown;
 }
 
 interface Review {
   id: string;
-  userName: string;
+  reviewer: string;
   rating: number;
+  title?: string | null;
   comment: string;
-  createdAt: Date;
-  helpfulCount: number;
+  created_at: string;
+  helpful_count: number;
+  verified_use?: boolean;
 }
 
+type Snack = { severity: 'success' | 'error' | 'info'; message: string } | null;
+
 export const TemplateMarketplacePage: React.FC = () => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   const [templates, setTemplates] = useState<Template[]>([]);
   const [filteredTemplates, setFilteredTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [snack, setSnack] = useState<Snack>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState('popular');
   const [minRating, setMinRating] = useState(0);
+
+  // Review form
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  // Star state: map of `${name}@${version}` → starred bool
+  const [starred, setStarred] = useState<Record<string, boolean>>({});
+  const [starringKey, setStarringKey] = useState<string | null>(null);
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -102,62 +122,51 @@ export const TemplateMarketplacePage: React.FC = () => {
     { value: 'most-downloaded', label: 'Most Downloaded' },
   ];
 
-  // Load templates
-  useEffect(() => {
-    loadTemplates();
-  }, []);
-
-  // Apply filters
-  useEffect(() => {
-    filterTemplates();
-  }, [templates, searchQuery, selectedCategory, sortBy, minRating]);
-
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/chaos/templates/search', {
+      const body: Record<string, unknown> = {
+        tags: [],
+        page: 0,
+        per_page: 100,
+      };
+      if (searchQuery.trim()) body.query = searchQuery.trim();
+      if (selectedCategory !== 'all') body.category = selectedCategory;
+
+      const response = await fetch('/api/v1/marketplace/templates/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sortBy,
-          limit: 100,
-          offset: 0,
-        }),
+        body: JSON.stringify(body),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates || []);
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
       }
+
+      const data = await response.json();
+      setTemplates(Array.isArray(data.templates) ? data.templates : []);
     } catch (error) {
       console.error('Failed to load templates:', error);
+      setSnack({ severity: 'error', message: 'Failed to load templates' });
+      setTemplates([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [searchQuery, selectedCategory]);
 
-  const filterTemplates = () => {
+  // Initial load + reload when server-side filters change
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
+
+  // Client-side filtering (rating) + sorting
+  useEffect(() => {
     let filtered = [...templates];
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (t) =>
-          t.name.toLowerCase().includes(query) ||
-          t.description.toLowerCase().includes(query) ||
-          t.author.toLowerCase().includes(query)
-      );
-    }
-
-    // Category filter
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter((t) => t.category === selectedCategory);
-    }
-
-    // Rating filter
     if (minRating > 0) {
       filtered = filtered.filter((t) => t.stats.rating >= minRating);
     }
 
-    // Sort
     switch (sortBy) {
       case 'popular':
         filtered.sort((a, b) => {
@@ -168,7 +177,7 @@ export const TemplateMarketplacePage: React.FC = () => {
         break;
       case 'newest':
         filtered.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         break;
       case 'top-rated':
@@ -180,54 +189,170 @@ export const TemplateMarketplacePage: React.FC = () => {
     }
 
     setFilteredTemplates(filtered);
+  }, [templates, sortBy, minRating]);
+
+  const starKey = (t: Template) => `${t.name}@${t.version}`;
+
+  const handleToggleStar = async (template: Template, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!isAuthenticated) {
+      setSnack({ severity: 'info', message: 'Sign in to star templates.' });
+      return;
+    }
+    const key = starKey(template);
+    setStarringKey(key);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}/star`,
+        { method: 'POST' }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error ?? err.message ?? `HTTP ${resp.status}`);
+      }
+      const data = (await resp.json()) as { starred: boolean; stars: number };
+      setStarred((prev) => ({ ...prev, [key]: data.starred }));
+      setTemplates((prev) =>
+        prev.map((t) =>
+          t.name === template.name && t.version === template.version
+            ? { ...t, stats: { ...t.stats, stars: data.stars } }
+            : t
+        )
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to toggle star';
+      setSnack({ severity: 'error', message: msg });
+    } finally {
+      setStarringKey(null);
+    }
   };
 
-  const handleViewDetails = async (template: Template) => {
-    setSelectedTemplate(template);
-    setDetailsOpen(true);
+  // When authenticated, preload per-template starred state for what's on screen.
+  useEffect(() => {
+    if (!isAuthenticated || templates.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        templates.map(async (t) => {
+          const key = starKey(t);
+          try {
+            const resp = await authenticatedFetch(
+              `/api/v1/marketplace/templates/${encodeURIComponent(t.name)}/${encodeURIComponent(t.version)}/star`
+            );
+            if (!resp.ok) return [key, false] as const;
+            const data = (await resp.json()) as { starred: boolean };
+            return [key, !!data.starred] as const;
+          } catch {
+            return [key, false] as const;
+          }
+        })
+      );
+      if (!cancelled) {
+        setStarred(Object.fromEntries(entries));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [templates, isAuthenticated]);
 
-    // Load reviews
+  const loadReviews = useCallback(async (template: Template) => {
     try {
-      const response = await fetch(`/api/chaos/templates/${template.id}/reviews`);
+      const response = await fetch(
+        `/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}/reviews?page=0&per_page=50`
+      );
       if (response.ok) {
         const data = await response.json();
-        setReviews(data.reviews || []);
+        setReviews(Array.isArray(data.reviews) ? data.reviews : []);
+      } else {
+        setReviews([]);
       }
     } catch (error) {
       console.error('Failed to load reviews:', error);
+      setReviews([]);
     }
+  }, []);
+
+  const handleViewDetails = async (template: Template) => {
+    setSelectedTemplate(template);
+    setReviews([]);
+    setReviewRating(5);
+    setReviewComment('');
+    setDetailsOpen(true);
+    await loadReviews(template);
   };
 
-  const handleDownload = async (templateId: string) => {
+  const handleDownload = async (template: Template) => {
     try {
-      const response = await fetch(`/api/chaos/templates/${templateId}/download`, {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Handle successful download
-        alert('Template downloaded successfully!');
-        loadTemplates(); // Refresh to update download count
+      const response = await fetch(
+        `/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}`
+      );
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status}`);
       }
+      const data = await response.json();
+      const payload = data.content ?? data;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${template.name}-${template.version}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSnack({ severity: 'success', message: `Downloaded ${template.name}@${template.version}` });
     } catch (error) {
       console.error('Failed to download template:', error);
+      setSnack({ severity: 'error', message: 'Download failed' });
     }
   };
 
-  const handleStar = async (templateId: string) => {
+  const handleSubmitReview = async () => {
+    if (!selectedTemplate) return;
+    if (reviewComment.trim().length < 10) {
+      setSnack({ severity: 'error', message: 'Comment must be at least 10 characters' });
+      return;
+    }
+    setReviewSubmitting(true);
     try {
-      await fetch(`/api/chaos/templates/${templateId}/star`, {
-        method: 'POST',
-      });
-      loadTemplates(); // Refresh to update star count
+      const response = await authenticatedFetch(
+        `/api/v1/marketplace/templates/${encodeURIComponent(selectedTemplate.name)}/${encodeURIComponent(selectedTemplate.version)}/reviews`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating: reviewRating,
+            comment: reviewComment.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error ?? err.message ?? `HTTP ${response.status}`);
+      }
+
+      setSnack({ severity: 'success', message: 'Review submitted' });
+      setReviewComment('');
+      setReviewRating(5);
+      await loadReviews(selectedTemplate);
+      // Reload templates so updated rating is reflected in the grid
+      loadTemplates();
     } catch (error) {
-      console.error('Failed to star template:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to submit review';
+      setSnack({ severity: 'error', message: msg });
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
   return (
     <Box sx={{ p: 3 }}>
+      <MarketplaceTabs />
+
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
@@ -299,89 +424,117 @@ export const TemplateMarketplacePage: React.FC = () => {
       </Card>
 
       {/* Results Summary */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="body2" color="text.secondary">
           {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} found
         </Typography>
+        {loading && <CircularProgress size={16} />}
       </Box>
 
       {/* Templates Grid */}
-      <Grid container spacing={3}>
-        {filteredTemplates.map((template) => (
-          <Grid item xs={12} md={6} lg={4} key={template.id}>
-            <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <CardContent sx={{ flexGrow: 1 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h6">{template.name}</Typography>
-                  <Chip label={template.category} size="small" color="primary" />
-                </Box>
+      {!loading && filteredTemplates.length === 0 ? (
+        <Alert severity="info">
+          No templates match your filters. Try broadening your search.
+        </Alert>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredTemplates.map((template) => (
+            <Grid item xs={12} md={6} lg={4} key={template.id}>
+              <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Typography variant="h6">{template.name}</Typography>
+                    <Chip label={template.category} size="small" color="primary" />
+                  </Box>
 
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {template.description}
-                </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {template.description}
+                  </Typography>
 
-                <Box sx={{ mb: 2 }}>
-                  {template.tags.slice(0, 3).map((tag) => (
+                  <Box sx={{ mb: 2 }}>
+                    {template.tags.slice(0, 3).map((tag) => (
+                      <Chip
+                        key={tag}
+                        label={tag}
+                        size="small"
+                        sx={{ mr: 0.5, mb: 0.5 }}
+                        variant="outlined"
+                      />
+                    ))}
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                    <Rating value={template.stats.rating} readOnly size="small" precision={0.5} />
+                    <Typography variant="caption" color="text.secondary">
+                      ({template.stats.rating_count})
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 2 }}>
                     <Chip
-                      key={tag}
-                      label={tag}
+                      icon={<DownloadIcon />}
+                      label={template.stats.downloads.toLocaleString()}
                       size="small"
-                      sx={{ mr: 0.5, mb: 0.5 }}
                       variant="outlined"
                     />
-                  ))}
-                </Box>
+                    <Chip
+                      icon={<StarIcon />}
+                      label={template.stats.stars.toLocaleString()}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                  <Rating value={template.stats.rating} readOnly size="small" />
-                  <Typography variant="caption" color="text.secondary">
-                    ({template.stats.ratingCount})
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                    by {template.author} • v{template.version}
                   </Typography>
-                </Box>
+                </CardContent>
 
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Chip
-                    icon={<DownloadIcon />}
-                    label={template.stats.downloads.toLocaleString()}
+                <CardActions>
+                  <Button
                     size="small"
-                    variant="outlined"
-                  />
-                  <Chip
-                    icon={<StarIcon />}
-                    label={template.stats.stars.toLocaleString()}
+                    startIcon={<ViewIcon />}
+                    onClick={() => handleViewDetails(template)}
+                  >
+                    Details
+                  </Button>
+                  <Button
                     size="small"
-                    variant="outlined"
-                  />
-                </Box>
-
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                  by {template.author} • v{template.version}
-                </Typography>
-              </CardContent>
-
-              <CardActions>
-                <Button
-                  size="small"
-                  startIcon={<ViewIcon />}
-                  onClick={() => handleViewDetails(template)}
-                >
-                  Details
-                </Button>
-                <Button
-                  size="small"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => handleDownload(template.id)}
-                >
-                  Download
-                </Button>
-                <IconButton size="small" onClick={() => handleStar(template.id)}>
-                  <StarIcon />
-                </IconButton>
-              </CardActions>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+                    startIcon={<DownloadIcon />}
+                    onClick={() => handleDownload(template)}
+                  >
+                    Download
+                  </Button>
+                  <Tooltip
+                    title={
+                      isAuthenticated
+                        ? starred[starKey(template)]
+                          ? 'Unstar'
+                          : 'Star'
+                        : 'Sign in to star'
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleToggleStar(template, e)}
+                        disabled={starringKey === starKey(template)}
+                        aria-label={starred[starKey(template)] ? 'Unstar template' : 'Star template'}
+                      >
+                        {starred[starKey(template)] ? (
+                          <StarIcon fontSize="small" color="warning" />
+                        ) : (
+                          <StarBorderIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
       {/* Template Details Dialog */}
       <Dialog
@@ -410,7 +563,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                   {selectedTemplate.description}
                 </Typography>
 
-                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                   {selectedTemplate.tags.map((tag) => (
                     <Chip key={tag} label={tag} size="small" />
                   ))}
@@ -448,9 +601,9 @@ export const TemplateMarketplacePage: React.FC = () => {
                           Rating
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Rating value={selectedTemplate.stats.rating} readOnly />
+                          <Rating value={selectedTemplate.stats.rating} readOnly precision={0.5} />
                           <Typography variant="body2">
-                            ({selectedTemplate.stats.ratingCount} reviews)
+                            ({selectedTemplate.stats.rating_count} reviews)
                           </Typography>
                         </Box>
                       </CardContent>
@@ -465,6 +618,45 @@ export const TemplateMarketplacePage: React.FC = () => {
                 Reviews
               </Typography>
 
+              {/* Submit-review form */}
+              {isAuthenticated ? (
+                <Card variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Leave a review
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Typography variant="body2">Your rating:</Typography>
+                      <Rating
+                        value={reviewRating}
+                        onChange={(_, value) => setReviewRating(value || 1)}
+                      />
+                    </Box>
+                    <TextField
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      placeholder="Share your experience (min 10 characters)"
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={reviewSubmitting || reviewComment.trim().length < 10}
+                      onClick={handleSubmitReview}
+                    >
+                      {reviewSubmitting ? 'Submitting…' : 'Submit review'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Sign in to leave a review.
+                </Alert>
+              )}
+
               {reviews.length === 0 ? (
                 <Alert severity="info">No reviews yet</Alert>
               ) : (
@@ -475,13 +667,18 @@ export const TemplateMarketplacePage: React.FC = () => {
                         <Box sx={{ width: '100%' }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                             <Box>
-                              <Typography variant="subtitle2">{review.userName}</Typography>
+                              <Typography variant="subtitle2">{review.reviewer}</Typography>
                               <Rating value={review.rating} readOnly size="small" />
                             </Box>
                             <Typography variant="caption" color="text.secondary">
-                              {new Date(review.createdAt).toLocaleDateString()}
+                              {new Date(review.created_at).toLocaleDateString()}
                             </Typography>
                           </Box>
+                          {review.title ? (
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {review.title}
+                            </Typography>
+                          ) : null}
                           <Typography variant="body2">{review.comment}</Typography>
                         </Box>
                       </ListItem>
@@ -498,7 +695,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                 variant="contained"
                 startIcon={<DownloadIcon />}
                 onClick={() => {
-                  handleDownload(selectedTemplate.id);
+                  if (selectedTemplate) handleDownload(selectedTemplate);
                   setDetailsOpen(false);
                 }}
               >
@@ -508,6 +705,23 @@ export const TemplateMarketplacePage: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {snack ? (
+          <Alert
+            severity={snack.severity}
+            onClose={() => setSnack(null)}
+            sx={{ width: '100%' }}
+          >
+            {snack.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 };

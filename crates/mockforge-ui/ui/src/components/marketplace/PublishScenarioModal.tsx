@@ -107,7 +107,7 @@ export const PublishScenarioModal: React.FC<PublishScenarioModalProps> = ({
       }
 
       // Submit to API
-      const response = await fetch('/api/v1/scenarios/publish', {
+      const response = await fetch('/api/v1/marketplace/scenarios/publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
