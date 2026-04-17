@@ -91,7 +91,7 @@ test_auth_endpoint() {
 echo "=== Public Endpoints ==="
 test_endpoint "Health Check" "GET" "/health"
 test_endpoint "Stats" "GET" "/api/v1/stats"
-test_endpoint "Plugin Search" "POST" "/api/v1/plugins/search" '{"query": "", "tags": [], "category": null, "sort": "downloads", "per_page": 10, "page": 0}'
+test_endpoint "Plugin Search" "POST" "/api/v1/plugins/search" '{"query": "", "tags": [], "category": null, "sort": "downloads", "perPage": 10, "page": 0}'
 
 echo ""
 echo "=== Authentication ==="

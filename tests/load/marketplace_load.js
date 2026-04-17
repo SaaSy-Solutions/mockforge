@@ -91,7 +91,7 @@ export function searchPlugins() {
     const payload = JSON.stringify({
         query: query,
         page: 0,
-        per_page: 20,
+        perPage: 20,
     });
 
     const startTime = Date.now();
@@ -128,7 +128,7 @@ export function searchTemplates() {
     const payload = JSON.stringify({
         query: query,
         page: 0,
-        per_page: 20,
+        perPage: 20,
     });
 
     const startTime = Date.now();
@@ -165,7 +165,7 @@ export function searchScenarios() {
     const payload = JSON.stringify({
         query: query,
         page: 0,
-        per_page: 20,
+        perPage: 20,
     });
 
     const startTime = Date.now();

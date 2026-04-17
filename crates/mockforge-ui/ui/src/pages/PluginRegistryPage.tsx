@@ -38,6 +38,7 @@ import {
   Avatar,
   Paper,
   Stack,
+  Snackbar,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -49,7 +50,6 @@ import {
   Code as CodeIcon,
   GitHub as GitHubIcon,
   Language as LanguageIcon,
-  Update as UpdateIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon,
   Error as ErrorIcon,
@@ -57,6 +57,9 @@ import {
   ThumbDown as ThumbDownIcon,
 } from '@mui/icons-material';
 import { authenticatedFetch } from '../utils/apiClient';
+import { useAuthStore } from '../stores/useAuthStore';
+import { PublishPluginModal } from '../components/marketplace/PublishPluginModal';
+import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
 
 interface Plugin {
   name: string;
@@ -76,6 +79,12 @@ interface Plugin {
   createdAt: string;
   updatedAt: string;
   versions: VersionInfo[];
+}
+
+interface ReviewStats {
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: Record<string, number>;
 }
 
 interface AuthorInfo {
@@ -123,14 +132,33 @@ interface SecurityFinding {
 }
 
 export const PluginRegistryPage: React.FC = () => {
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdmin = currentUser?.role === 'admin';
+
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [filteredPlugins, setFilteredPlugins] = useState<Plugin[]>([]);
   const [selectedPlugin, setSelectedPlugin] = useState<Plugin | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [securityScan, setSecurityScan] = useState<SecurityScanResult | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [pluginBadges, setPluginBadges] = useState<Record<string, string[]>>({});
+  const [reviewForm, setReviewForm] = useState<{ rating: number; title: string; comment: string }>(
+    { rating: 5, title: '', comment: '' }
+  );
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [totalPlugins, setTotalPlugins] = useState(0);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [yankingVersion, setYankingVersion] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+
+  const PAGE_SIZE = 24;
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,9 +168,6 @@ export const PluginRegistryPage: React.FC = () => {
   const [minRating, setMinRating] = useState(0);
   const [minSecurityScore, setMinSecurityScore] = useState(0);
 
-  // Installation state
-  const [installing, setInstalling] = useState<string | null>(null);
-  const [installProgress, setInstallProgress] = useState(0);
 
   const categories = [
     { value: 'all', label: 'All Categories' },
@@ -173,14 +198,18 @@ export const PluginRegistryPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    loadPlugins();
-  }, []);
+    // Reset paging whenever the server-side sort or language filter changes.
+    setPage(0);
+    loadPlugins(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortBy, selectedLanguage]);
 
   useEffect(() => {
     filterPlugins();
   }, [plugins, searchQuery, selectedCategory, selectedLanguage, sortBy, minRating, minSecurityScore]);
 
-  const loadPlugins = async () => {
+  const loadPlugins = async (nextPage: number, append: boolean) => {
+    setPageLoading(true);
     try {
       const response = await authenticatedFetch('/api/v1/plugins/search', {
         method: 'POST',
@@ -188,20 +217,49 @@ export const PluginRegistryPage: React.FC = () => {
         body: JSON.stringify({
           query: null,
           category: null,
+          language: selectedLanguage === 'all' ? null : selectedLanguage,
           tags: [],
           sort: sortBy,
-          page: 0,
-          per_page: 100,
+          page: nextPage,
+          perPage: PAGE_SIZE,
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setPlugins(data.plugins || []);
+        const loaded: Plugin[] = data.plugins || [];
+        setTotalPlugins(typeof data.total === 'number' ? data.total : loaded.length);
+        setPlugins((prev) => (append ? [...prev, ...loaded] : loaded));
+        loadBadges(loaded);
       }
     } catch (error) {
       console.error('Failed to load plugins:', error);
+    } finally {
+      setPageLoading(false);
     }
+  };
+
+  const handleLoadMore = () => {
+    const next = page + 1;
+    setPage(next);
+    loadPlugins(next, true);
+  };
+
+  const loadBadges = async (list: Plugin[]) => {
+    // Fetch badges per plugin in parallel; failures are non-fatal.
+    const entries = await Promise.all(
+      list.map(async (p) => {
+        try {
+          const resp = await authenticatedFetch(`/api/v1/plugins/${p.name}/badges`);
+          if (!resp.ok) return [p.name, []] as const;
+          const data = await resp.json();
+          return [p.name, (data.badges as string[]) || []] as const;
+        } catch {
+          return [p.name, []] as const;
+        }
+      })
+    );
+    setPluginBadges(Object.fromEntries(entries));
   };
 
   const filterPlugins = () => {
@@ -278,6 +336,7 @@ export const PluginRegistryPage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setReviews(data.reviews || []);
+        setReviewStats(data.stats || null);
       }
     } catch (error) {
       console.error('Failed to load reviews:', error);
@@ -296,51 +355,20 @@ export const PluginRegistryPage: React.FC = () => {
   };
 
   const handleInstall = async (plugin: Plugin, version?: VersionInfo) => {
-    setInstalling(plugin.name);
-    setInstallProgress(0);
-
+    // The cloud registry UI cannot reach a local MockForge server, so the
+    // install action copies a CLI command that the user runs in their own
+    // environment. Local admin UIs use a separate /api/plugins/install path.
+    const selectedVersion = version || plugin.versions[0];
+    const versionStr = selectedVersion?.version || plugin.version;
+    const command = `mockforge plugin install ${plugin.name}@${versionStr}`;
     try {
-      const selectedVersion = version || plugin.versions[0];
-      const source = selectedVersion?.downloadUrl;
-      if (!source) {
-        throw new Error(`No downloadable artifact found for ${plugin.name}`);
-      }
-
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setInstallProgress((prev) => Math.min(prev + 10, 90));
-      }, 200);
-
-      const response = await authenticatedFetch('/api/plugins/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source,
-          force: false,
-          checksum: selectedVersion?.checksum || undefined,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({ success: false, error: 'Invalid response' }));
-      clearInterval(progressInterval);
-      setInstallProgress(100);
-
-      if (response.ok && data?.success) {
-        setTimeout(() => {
-          setInstalling(null);
-          setInstallProgress(0);
-          alert(`Plugin ${plugin.name} installed successfully!`);
-        }, 500);
-      } else {
-        throw new Error(data?.error || 'Installation failed');
-      }
+      await navigator.clipboard.writeText(command);
+      setCopyFeedback(`Copied: ${command}`);
     } catch (error) {
-      console.error('Failed to install plugin:', error);
-      setInstalling(null);
-      setInstallProgress(0);
-      const message = error instanceof Error ? error.message : `Failed to install ${plugin.name}`;
-      alert(message);
+      console.error('Failed to copy install command:', error);
+      setCopyFeedback(`Run: ${command}`);
     }
+    setTimeout(() => setCopyFeedback(null), 4000);
   };
 
   const handleVoteReview = async (reviewId: string, helpful: boolean) => {
@@ -362,6 +390,117 @@ export const PluginRegistryPage: React.FC = () => {
     }
   };
 
+  const openReviewDialog = () => {
+    setReviewForm({ rating: 5, title: '', comment: '' });
+    setReviewError(null);
+    setReviewDialogOpen(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedPlugin) return;
+    setReviewError(null);
+    if (reviewForm.comment.trim().length < 10) {
+      setReviewError('Comment must be at least 10 characters.');
+      return;
+    }
+    if (reviewForm.rating < 1 || reviewForm.rating > 5) {
+      setReviewError('Please choose a rating between 1 and 5 stars.');
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/plugins/${selectedPlugin.name}/reviews`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            version: selectedPlugin.version,
+            rating: reviewForm.rating,
+            title: reviewForm.title.trim() || null,
+            comment: reviewForm.comment.trim(),
+          }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || data?.message || 'Failed to submit review');
+      }
+      setReviewDialogOpen(false);
+      handleViewDetails(selectedPlugin);
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Failed to submit review');
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const refreshBadgesFor = async (name: string) => {
+    try {
+      const resp = await authenticatedFetch(`/api/v1/plugins/${encodeURIComponent(name)}/badges`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setPluginBadges((prev) => ({ ...prev, [name]: (data.badges as string[]) || [] }));
+    } catch {
+      /* non-fatal */
+    }
+  };
+
+  const handleYank = async (plugin: Plugin, version: string) => {
+    if (!window.confirm(`Yank ${plugin.name}@${version}? Installed users keep the file, but new installs will fail.`)) {
+      return;
+    }
+    setYankingVersion(version);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/plugins/${encodeURIComponent(plugin.name)}/versions/${encodeURIComponent(version)}/yank`,
+        { method: 'DELETE' }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `HTTP ${resp.status}`);
+      }
+      setCopyFeedback(`Yanked ${plugin.name}@${version}`);
+      // Refresh detail view so the Yanked chip appears
+      await handleViewDetails(plugin);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Yank failed';
+      setCopyFeedback(`Yank failed: ${msg}`);
+    } finally {
+      setYankingVersion(null);
+      setTimeout(() => setCopyFeedback(null), 4000);
+    }
+  };
+
+  const handleToggleVerify = async (plugin: Plugin) => {
+    const currentlyVerified = (pluginBadges[plugin.name] || []).includes('verified');
+    setVerifyBusy(true);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/admin/plugins/${encodeURIComponent(plugin.name)}/verify`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ verified: !currentlyVerified }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `HTTP ${resp.status}`);
+      }
+      setCopyFeedback(
+        currentlyVerified ? `Unverified ${plugin.name}` : `Verified ${plugin.name}`
+      );
+      await refreshBadgesFor(plugin.name);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Verify action failed';
+      setCopyFeedback(msg);
+    } finally {
+      setVerifyBusy(false);
+      setTimeout(() => setCopyFeedback(null), 4000);
+    }
+  };
+
   const getSecurityBadge = (score: number) => {
     if (score >= 90) return { color: 'success', label: 'Excellent', icon: <CheckCircleIcon /> };
     if (score >= 70) return { color: 'info', label: 'Good', icon: <CheckCircleIcon /> };
@@ -371,14 +510,32 @@ export const PluginRegistryPage: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      <MarketplaceTabs />
+
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Plugin Registry
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Discover and install plugins from the MockForge ecosystem
-        </Typography>
+      <Box
+        sx={{
+          mb: 4,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'start',
+          gap: 2,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Plugin Registry
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Discover and install plugins from the MockForge ecosystem
+          </Typography>
+        </Box>
+        {currentUser && (
+          <Button variant="contained" onClick={() => setPublishOpen(true)}>
+            Publish Plugin
+          </Button>
+        )}
       </Box>
 
       {/* Filters */}
@@ -476,10 +633,17 @@ export const PluginRegistryPage: React.FC = () => {
       </Card>
 
       {/* Results Summary */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {filteredPlugins.length} plugin{filteredPlugins.length !== 1 ? 's' : ''} found
+          {filteredPlugins.length} of {totalPlugins || plugins.length} plugin
+          {totalPlugins === 1 ? '' : 's'} {filteredPlugins.length !== plugins.length && '(filtered) '}
+          loaded
         </Typography>
+        {pageLoading && (
+          <Typography variant="caption" color="text.secondary">
+            Loading…
+          </Typography>
+        )}
       </Box>
 
       {/* Plugins Grid */}
@@ -528,6 +692,28 @@ export const PluginRegistryPage: React.FC = () => {
                     ))}
                   </Box>
 
+                  {(pluginBadges[plugin.name] || []).length > 0 && (
+                    <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {(pluginBadges[plugin.name] || []).map((badge) => (
+                        <Chip
+                          key={badge}
+                          label={badge.replace(/-/g, ' ')}
+                          size="small"
+                          color={
+                            badge === 'official' || badge === 'verified'
+                              ? 'success'
+                              : badge === 'popular' || badge === 'trending'
+                              ? 'info'
+                              : badge === 'highly-rated'
+                              ? 'warning'
+                              : 'default'
+                          }
+                          sx={{ textTransform: 'capitalize' }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
                     <Rating value={plugin.rating} readOnly size="small" precision={0.5} />
                     <Typography variant="caption" color="text.secondary">
@@ -560,15 +746,16 @@ export const PluginRegistryPage: React.FC = () => {
                   <Button size="small" startIcon={<ViewIcon />} onClick={() => handleViewDetails(plugin)}>
                     Details
                   </Button>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    startIcon={installing === plugin.name ? <UpdateIcon /> : <DownloadIcon />}
-                    onClick={() => handleInstall(plugin)}
-                    disabled={installing === plugin.name}
-                  >
-                    {installing === plugin.name ? 'Installing...' : 'Install'}
-                  </Button>
+                  <Tooltip title="Copy CLI install command to clipboard">
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<DownloadIcon />}
+                      onClick={() => handleInstall(plugin)}
+                    >
+                      Install
+                    </Button>
+                  </Tooltip>
                   {plugin.repository && (
                     <IconButton
                       size="small"
@@ -581,15 +768,23 @@ export const PluginRegistryPage: React.FC = () => {
                     </IconButton>
                   )}
                 </CardActions>
-
-                {installing === plugin.name && (
-                  <LinearProgress variant="determinate" value={installProgress} />
-                )}
               </Card>
             </Grid>
           );
         })}
       </Grid>
+
+      {plugins.length < totalPlugins && (
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <Button
+            variant="outlined"
+            onClick={handleLoadMore}
+            disabled={pageLoading}
+          >
+            {pageLoading ? 'Loading…' : `Load more (${totalPlugins - plugins.length} remaining)`}
+          </Button>
+        </Box>
+      )}
 
       {/* Plugin Details Dialog */}
       <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
@@ -603,7 +798,7 @@ export const PluginRegistryPage: React.FC = () => {
                     by {selectedPlugin.author.name} • v{selectedPlugin.version}
                   </Typography>
                 </Box>
-                <Stack direction="row" spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center">
                   <Chip label={selectedPlugin.category} color="primary" />
                   <Chip label={selectedPlugin.language} icon={<CodeIcon />} />
                   <Chip
@@ -611,6 +806,19 @@ export const PluginRegistryPage: React.FC = () => {
                     icon={<SecurityIcon />}
                     color={selectedPlugin.securityScore >= 70 ? 'success' : 'warning'}
                   />
+                  {isAdmin && (
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color={(pluginBadges[selectedPlugin.name] || []).includes('verified') ? 'warning' : 'success'}
+                      disabled={verifyBusy}
+                      onClick={() => handleToggleVerify(selectedPlugin)}
+                    >
+                      {(pluginBadges[selectedPlugin.name] || []).includes('verified')
+                        ? 'Unverify'
+                        : 'Verify'}
+                    </Button>
+                  )}
                 </Stack>
               </Box>
             </DialogTitle>
@@ -695,6 +903,58 @@ export const PluginRegistryPage: React.FC = () => {
 
               {activeTab === 1 && (
                 <Box>
+                  {reviewStats && reviewStats.totalReviews > 0 && (
+                    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
+                        <Box>
+                          <Typography variant="h3" component="div">
+                            {reviewStats.averageRating.toFixed(1)}
+                          </Typography>
+                          <Rating
+                            value={reviewStats.averageRating}
+                            readOnly
+                            precision={0.1}
+                            size="small"
+                          />
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {reviewStats.totalReviews} review
+                            {reviewStats.totalReviews !== 1 ? 's' : ''}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ flexGrow: 1 }}>
+                          {[5, 4, 3, 2, 1].map((stars) => {
+                            const count = reviewStats.ratingDistribution?.[String(stars)] || 0;
+                            const pct = reviewStats.totalReviews
+                              ? (count / reviewStats.totalReviews) * 100
+                              : 0;
+                            return (
+                              <Box
+                                key={stars}
+                                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}
+                              >
+                                <Typography variant="caption" sx={{ width: 16 }}>
+                                  {stars}
+                                </Typography>
+                                <StarIcon fontSize="small" color="warning" />
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={pct}
+                                  sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
+                                />
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ width: 28, textAlign: 'right' }}
+                                >
+                                  {count}
+                                </Typography>
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      </Box>
+                    </Paper>
+                  )}
                   {reviews.length === 0 ? (
                     <Alert severity="info">No reviews yet. Be the first to review!</Alert>
                   ) : (
@@ -760,7 +1020,7 @@ export const PluginRegistryPage: React.FC = () => {
                     </List>
                   )}
                   <Box sx={{ mt: 2 }}>
-                    <Button variant="outlined" onClick={() => setReviewDialogOpen(true)}>
+                    <Button variant="outlined" onClick={openReviewDialog}>
                       Write a Review
                     </Button>
                   </Box>
@@ -822,34 +1082,52 @@ export const PluginRegistryPage: React.FC = () => {
               {activeTab === 3 && (
                 <Box>
                   <List>
-                    {selectedPlugin.versions.map((version) => (
-                      <ListItem
-                        key={version.version}
-                        secondaryAction={
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleInstall(selectedPlugin, version)}
-                            disabled={version.yanked}
-                          >
-                            {version.yanked ? 'Yanked' : 'Install'}
-                          </Button>
-                        }
-                      >
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                              <Typography variant="subtitle1">{version.version}</Typography>
-                              {version.version === selectedPlugin.version && (
-                                <Chip label="Latest" size="small" color="primary" />
+                    {selectedPlugin.versions.map((version) => {
+                      const isAuthor =
+                        !!currentUser?.username &&
+                        currentUser.username === selectedPlugin.author.name;
+                      return (
+                        <ListItem
+                          key={version.version}
+                          secondaryAction={
+                            <Stack direction="row" spacing={1}>
+                              {isAuthor && !version.yanked && (
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  disabled={yankingVersion === version.version}
+                                  onClick={() => handleYank(selectedPlugin, version.version)}
+                                >
+                                  {yankingVersion === version.version ? 'Yanking…' : 'Yank'}
+                                </Button>
                               )}
-                              {version.yanked && <Chip label="Yanked" size="small" color="error" />}
-                            </Box>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => handleInstall(selectedPlugin, version)}
+                                disabled={version.yanked}
+                              >
+                                {version.yanked ? 'Yanked' : 'Install'}
+                              </Button>
+                            </Stack>
                           }
-                          secondary={`Published: ${new Date(version.publishedAt).toLocaleDateString()}`}
-                        />
-                      </ListItem>
-                    ))}
+                        >
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                <Typography variant="subtitle1">{version.version}</Typography>
+                                {version.version === selectedPlugin.version && (
+                                  <Chip label="Latest" size="small" color="primary" />
+                                )}
+                                {version.yanked && <Chip label="Yanked" size="small" color="error" />}
+                              </Box>
+                            }
+                            secondary={`Published: ${new Date(version.publishedAt).toLocaleDateString()}`}
+                          />
+                        </ListItem>
+                      );
+                    })}
                   </List>
                 </Box>
               )}
@@ -871,6 +1149,90 @@ export const PluginRegistryPage: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Submit Review Dialog */}
+      <Dialog
+        open={reviewDialogOpen}
+        onClose={() => (!reviewSubmitting ? setReviewDialogOpen(false) : undefined)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Write a review{selectedPlugin ? ` for ${selectedPlugin.name}` : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                Rating
+              </Typography>
+              <Rating
+                value={reviewForm.rating}
+                onChange={(_, value) =>
+                  setReviewForm((prev) => ({ ...prev, rating: value || 0 }))
+                }
+              />
+            </Box>
+            <TextField
+              label="Title (optional)"
+              value={reviewForm.title}
+              onChange={(e) =>
+                setReviewForm((prev) => ({ ...prev, title: e.target.value.slice(0, 100) }))
+              }
+              fullWidth
+              inputProps={{ maxLength: 100 }}
+            />
+            <TextField
+              label="Comment"
+              value={reviewForm.comment}
+              onChange={(e) =>
+                setReviewForm((prev) => ({ ...prev, comment: e.target.value.slice(0, 5000) }))
+              }
+              multiline
+              minRows={4}
+              fullWidth
+              required
+              helperText={`${reviewForm.comment.length}/5000 · min 10 characters`}
+            />
+            {reviewError && <Alert severity="error">{reviewError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setReviewDialogOpen(false)}
+            disabled={reviewSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmitReview}
+            disabled={reviewSubmitting || reviewForm.comment.trim().length < 10}
+          >
+            {reviewSubmitting ? 'Submitting…' : 'Submit Review'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <PublishPluginModal
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        onSuccess={() => {
+          setPublishOpen(false);
+          setCopyFeedback('Plugin published — refreshing catalog…');
+          loadPlugins(0, false);
+          setPage(0);
+          setTimeout(() => setCopyFeedback(null), 4000);
+        }}
+      />
+
+      <Snackbar
+        open={Boolean(copyFeedback)}
+        autoHideDuration={4000}
+        onClose={() => setCopyFeedback(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        message={copyFeedback || ''}
+      />
     </Box>
   );
 };

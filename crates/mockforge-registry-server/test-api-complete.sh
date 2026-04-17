@@ -28,7 +28,7 @@ curl -s -X POST "$BASE_URL/api/v1/plugins/search" \
     "query": "auth",
     "sort": "downloads",
     "page": 0,
-    "per_page": 10
+    "perPage": 10
   }' | jq '.plugins[] | {name, version, downloads, rating}'
 echo -e "${GREEN}✓ Plugin search successful${NC}"
 
@@ -40,7 +40,7 @@ curl -s -X POST "$BASE_URL/api/v1/plugins/search" \
     "category": "datasource",
     "sort": "rating",
     "page": 0,
-    "per_page": 5
+    "perPage": 5
   }' | jq '.plugins[] | {name, category, rating}'
 echo -e "${GREEN}✓ Category search successful${NC}"
 
@@ -94,8 +94,8 @@ echo -e "${GREEN}✓ Admin login successful${NC}"
 
 # Test 9: Get Reviews
 echo -e "\n${BLUE}9. Get Plugin Reviews${NC}"
-curl -s "$BASE_URL/api/v1/plugins/auth-jwt/reviews?page=0&per_page=5" | jq '{
-  total, page, per_page,
+curl -s "$BASE_URL/api/v1/plugins/auth-jwt/reviews?page=0&perPage=5" | jq '{
+  total, page, perPage,
   stats: .stats,
   reviews: .reviews | length
 }'

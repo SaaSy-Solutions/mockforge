@@ -474,6 +474,7 @@ impl PluginInstaller {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RegistryVersionResponse {
     download_url: String,
     #[serde(default)]
@@ -481,12 +482,14 @@ struct RegistryVersionResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RegistryPluginResponse {
     version: String,
     versions: Vec<RegistryVersionResponseWithVersion>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RegistryVersionResponseWithVersion {
     version: String,
     download_url: String,

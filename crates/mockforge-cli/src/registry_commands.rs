@@ -292,6 +292,7 @@ async fn search_plugins(
     let search_query = SearchQuery {
         query,
         category: category_filter,
+        language: None,
         tags: tags_vec,
         sort: sort_order,
         page,

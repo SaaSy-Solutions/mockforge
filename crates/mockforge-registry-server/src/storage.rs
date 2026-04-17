@@ -307,6 +307,21 @@ impl PluginStorage {
         }
     }
 
+    /// Resolve the storage key for a plugin version using the same
+    /// sanitization rules as `upload_plugin`. Public so background workers can
+    /// fetch artifacts for scanning without duplicating the scheme.
+    pub fn plugin_object_key(plugin_name: &str, version: &str) -> Result<String> {
+        let safe_name = Self::sanitize_key_component(plugin_name);
+        let safe_version = Self::sanitize_key_component(version);
+        if safe_name.is_empty() {
+            anyhow::bail!("Plugin name cannot be empty after sanitization");
+        }
+        if safe_version.is_empty() {
+            anyhow::bail!("Version cannot be empty after sanitization");
+        }
+        Ok(format!("plugins/{}/{}.wasm", safe_name, safe_version))
+    }
+
     pub async fn download_plugin(&self, key: &str) -> Result<Vec<u8>> {
         match &self.backend {
             StorageBackend::S3 { client, bucket } => {

@@ -140,7 +140,7 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
       }
 
       // Submit to API
-      const response = await fetch('/api/v1/templates/publish', {
+      const response = await fetch('/api/v1/marketplace/templates/publish', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

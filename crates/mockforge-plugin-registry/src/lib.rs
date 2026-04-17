@@ -55,6 +55,7 @@ pub type Result<T> = std::result::Result<T, RegistryError>;
 
 /// Plugin registry entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegistryEntry {
     /// Plugin name
     pub name: String,
@@ -86,6 +87,14 @@ pub struct RegistryEntry {
     /// Total reviews
     pub reviews_count: u32,
 
+    /// Security score (0-100). Heuristic: verified+maintained plugins score higher.
+    #[serde(default)]
+    pub security_score: u8,
+
+    /// Source language of the plugin (rust/python/javascript/typescript/go/other).
+    #[serde(default)]
+    pub language: String,
+
     /// Repository URL
     pub repository: Option<String>,
 
@@ -104,6 +113,7 @@ pub struct RegistryEntry {
 
 /// Version-specific entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VersionEntry {
     /// Version string (semver)
     pub version: String,
@@ -154,12 +164,17 @@ pub enum PluginCategory {
 
 /// Search query
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchQuery {
     /// Search terms
     pub query: Option<String>,
 
     /// Filter by category
     pub category: Option<PluginCategory>,
+
+    /// Filter by source language (rust/python/javascript/typescript/go/other).
+    #[serde(default)]
+    pub language: Option<String>,
 
     /// Filter by tags
     pub tags: Vec<String>,
@@ -171,6 +186,7 @@ pub struct SearchQuery {
     pub page: usize,
 
     /// Results per page
+    #[serde(alias = "per_page")]
     pub per_page: usize,
 }
 
@@ -179,6 +195,7 @@ impl Default for SearchQuery {
         Self {
             query: None,
             category: None,
+            language: None,
             tags: vec![],
             sort: SortOrder::Relevance,
             page: 0,
@@ -200,6 +217,7 @@ pub enum SortOrder {
 
 /// Search results
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResults {
     pub plugins: Vec<RegistryEntry>,
     pub total: usize,
@@ -275,6 +293,8 @@ mod tests {
             downloads: 100,
             rating: 4.5,
             reviews_count: 10,
+            security_score: 0,
+            language: "rust".to_string(),
             repository: Some("https://github.com/test/plugin".to_string()),
             homepage: Some("https://plugin.example.com".to_string()),
             license: "MIT".to_string(),
@@ -542,6 +562,8 @@ mod tests {
             downloads: 0,
             rating: 0.0,
             reviews_count: 0,
+            security_score: 0,
+            language: "rust".to_string(),
             repository: None,
             homepage: None,
             license: "MIT".to_string(),
@@ -584,6 +606,7 @@ mod tests {
         let query = SearchQuery {
             query: Some("jwt".to_string()),
             category: Some(PluginCategory::Auth),
+            language: None,
             tags: vec!["security".to_string()],
             sort: SortOrder::Downloads,
             page: 1,

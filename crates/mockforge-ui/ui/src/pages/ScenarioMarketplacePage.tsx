@@ -44,6 +44,7 @@ import {
   Upload as UploadIcon,
 } from '@mui/icons-material';
 import { PublishScenarioModal } from '../components/marketplace/PublishScenarioModal';
+import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
 
 interface Scenario {
   name: string;
@@ -136,7 +137,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const loadScenarios = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/scenarios/search', {
+      const response = await fetch('/api/v1/marketplace/scenarios/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,7 +196,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
 
     // Load reviews
     try {
-      const response = await fetch(`/api/v1/scenarios/${scenario.name}/reviews?page=0&per_page=10`);
+      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenario.name)}/reviews?page=0&per_page=10`);
       if (response.ok) {
         const data = await response.json();
         setReviews(data.reviews || []);
@@ -208,7 +209,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const handleDownload = async (scenarioName: string, version?: string) => {
     try {
       const targetVersion = version || selectedScenario?.version || 'latest';
-      const response = await fetch(`/api/v1/scenarios/${scenarioName}/versions/${targetVersion}`);
+      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(targetVersion)}`);
 
       if (response.ok) {
         const data = await response.json();
@@ -223,6 +224,8 @@ export const ScenarioMarketplacePage: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      <MarketplaceTabs />
+
       {/* Header */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
         <Box>

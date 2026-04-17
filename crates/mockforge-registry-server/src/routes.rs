@@ -22,6 +22,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/plugins/{name}/versions/{version}", get(handlers::plugins::get_version))
         .route("/api/v1/plugins/{name}/reviews", get(handlers::reviews::get_reviews))
         .route("/api/v1/plugins/{name}/badges", get(handlers::admin::get_plugin_badges))
+        .route("/api/v1/plugins/{name}/security", get(handlers::plugins::get_plugin_security))
         .route("/api/v1/stats", get(handlers::stats::get_stats))
         .route("/api/v1/auth/register", post(handlers::auth::register))
         .route("/api/v1/auth/login", post(handlers::auth::login))
@@ -191,6 +192,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Marketplace: templates (authenticated)
         .route("/api/v1/marketplace/templates/publish", post(handlers::templates::publish_template))
         .route("/api/v1/marketplace/templates/{name}/{version}/reviews", post(handlers::template_reviews::submit_template_review))
+        .route("/api/v1/marketplace/templates/{name}/{version}/star", post(handlers::templates::toggle_template_star))
+        .route("/api/v1/marketplace/templates/{name}/{version}/star", get(handlers::templates::get_template_star_state))
         // Organization templates
         .route("/api/v1/organizations/{org_id}/templates", get(handlers::org_templates::list_templates))
         .route("/api/v1/organizations/{org_id}/templates", post(handlers::org_templates::create_template))

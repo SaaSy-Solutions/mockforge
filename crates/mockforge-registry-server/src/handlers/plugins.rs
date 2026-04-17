@@ -44,6 +44,18 @@ pub async fn search_plugins(
         PluginCategory::Other => "other",
     });
 
+    // Normalize language to lowercase before querying — UI sends display-case
+    // values but the column is canonically lowercase. Empty/whitespace is
+    // treated as "no filter".
+    let language_filter = query.language.as_deref().and_then(|l| {
+        let trimmed = l.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_ascii_lowercase())
+        }
+    });
+
     // Validate and limit pagination parameters
     let per_page = query.per_page.clamp(1, 100); // Max 100 items per page
     let page = query.page;
@@ -53,7 +65,15 @@ pub async fn search_plugins(
     // Search plugins
     let plugins = match state
         .store
-        .search_plugins(query.query.as_deref(), category_str, &query.tags, sort_by, limit, offset)
+        .search_plugins(
+            query.query.as_deref(),
+            category_str,
+            language_filter.as_deref(),
+            &query.tags,
+            sort_by,
+            limit,
+            offset,
+        )
         .await
     {
         Ok(plugins) => plugins,
@@ -113,6 +133,8 @@ pub async fn search_plugins(
                 }
             });
 
+        let security_score = derive_security_score(&plugin);
+        let language = plugin.language.clone();
         entries.push(RegistryEntry {
             name: plugin.name.clone(),
             description: plugin.description.clone(),
@@ -128,6 +150,8 @@ pub async fn search_plugins(
             downloads: plugin.downloads_total as u64,
             rating: plugin.rating_avg,
             reviews_count: plugin.rating_count as u32,
+            security_score,
+            language,
             repository: plugin.repository,
             homepage: plugin.homepage,
             license: plugin.license,
@@ -139,7 +163,12 @@ pub async fn search_plugins(
     // Count total matching results for pagination metadata
     let total = state
         .store
-        .count_search_plugins(query.query.as_deref(), category_str, &query.tags)
+        .count_search_plugins(
+            query.query.as_deref(),
+            category_str,
+            language_filter.as_deref(),
+            &query.tags,
+        )
         .await? as usize;
 
     let results = SearchResults {
@@ -207,6 +236,8 @@ pub async fn get_plugin(
         updated_at: chrono::Utc::now(),
     });
 
+    let security_score = derive_security_score(&plugin);
+    let language = plugin.language.clone();
     let entry = RegistryEntry {
         name: plugin.name.clone(),
         description: plugin.description.clone(),
@@ -222,6 +253,8 @@ pub async fn get_plugin(
         downloads: plugin.downloads_total as u64,
         rating: plugin.rating_avg.to_string().parse().unwrap_or(0.0),
         reviews_count: plugin.rating_count as u32,
+        security_score,
+        language,
         repository: plugin.repository,
         homepage: plugin.homepage,
         license: plugin.license,
@@ -284,12 +317,27 @@ pub struct PublishRequest {
     pub homepage: Option<String>,
     pub tags: Vec<String>,
     pub checksum: String,
+    #[serde(alias = "fileSize")]
     pub file_size: i64,
+    #[serde(alias = "wasmData")]
     pub wasm_data: String, // Base64 encoded WASM
     pub dependencies: Option<std::collections::HashMap<String, String>>,
+    /// Source language of the plugin (rust/python/javascript/typescript/go/other).
+    #[serde(default = "default_plugin_language")]
+    pub language: String,
+    /// Optional Software Bill of Materials (typically CycloneDX JSON).
+    /// Stored verbatim on the plugin version and fed to the vulnerability
+    /// scanner. Accepts either JSON object or `null`/omitted.
+    #[serde(default)]
+    pub sbom: Option<serde_json::Value>,
+}
+
+fn default_plugin_language() -> String {
+    "rust".to_string()
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PublishResponse {
     pub success: bool,
     pub upload_url: String,
@@ -328,6 +376,7 @@ pub async fn publish_plugin(
                 request.repository.as_deref(),
                 request.homepage.as_deref(),
                 author_id,
+                &request.language,
             )
             .await?
     };
@@ -379,6 +428,7 @@ pub async fn publish_plugin(
             &request.checksum,
             request.file_size,
             None,
+            request.sbom.as_ref(),
         )
         .await?;
 
@@ -391,6 +441,24 @@ pub async fn publish_plugin(
                 .await?;
         }
     }
+
+    // Queue the version for a security scan. The background worker
+    // (`workers::plugin_scanner`) drains these rows, re-downloads the
+    // artifact, and overwrites the result. Writing `"pending"` here rather
+    // than attempting an inline scan keeps publish latency predictable and
+    // lets us retry by just re-running the worker.
+    let pending_findings = serde_json::json!([
+        {
+            "severity": "info",
+            "category": "other",
+            "title": "Automated scan pending",
+            "description": "This plugin version is queued for automated security scanning. Results usually appear within a minute."
+        }
+    ]);
+    state
+        .store
+        .upsert_plugin_security_scan(version.id, "pending", 50, &pending_findings, None)
+        .await?;
 
     // Record audit event
     state
@@ -449,6 +517,139 @@ pub async fn yank_version(
         "success": true,
         "message": format!("Version {} of {} yanked successfully", version, name)
     })))
+}
+
+/// Heuristic security score for a plugin (0-100).
+///
+/// This is a placeholder until the `SecurityScanner` pipeline is wired to the
+/// publish flow and scan results are persisted. It rewards plugins that an
+/// admin has explicitly verified, plus modest signals from freshness and
+/// community traction.
+fn derive_security_score(plugin: &crate::models::Plugin) -> u8 {
+    let mut score: i32 = 50;
+    if plugin.verified_at.is_some() {
+        score += 35;
+    }
+    let ninety_days_ago = chrono::Utc::now() - chrono::Duration::days(90);
+    if plugin.updated_at > ninety_days_ago {
+        score += 5;
+    }
+    if plugin.rating_avg >= 4.0 && plugin.rating_count >= 5 {
+        score += 5;
+    }
+    score.clamp(0, 100) as u8
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityScanResponse {
+    pub status: String,
+    pub score: u8,
+    pub findings: Vec<SecurityFindingDto>,
+    pub scanned: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecurityFindingDto {
+    pub severity: String,
+    pub category: String,
+    pub title: String,
+    pub description: String,
+}
+
+pub async fn get_plugin_security(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> ApiResult<Json<SecurityScanResponse>> {
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
+
+    // Prefer persisted scan data when available; fall back to the heuristic
+    // score derived from verification + activity if nothing has been written
+    // yet (e.g. legacy rows from before the scan table existed).
+    if let Some(scan) = state.store.latest_security_scan_for_plugin(plugin.id).await? {
+        let status = match scan.status.as_str() {
+            "pass" | "warning" | "fail" | "pending" => scan.status.clone(),
+            _ => "pending".to_string(),
+        };
+        let findings: Vec<serde_json::Value> =
+            serde_json::from_value(scan.findings).unwrap_or_default();
+        let finding_dtos = findings
+            .into_iter()
+            .filter_map(|f| {
+                Some(SecurityFindingDto {
+                    severity: map_severity(f.get("severity")?.as_str()?).to_string(),
+                    category: map_finding_category(f.get("category")?.as_str()?).to_string(),
+                    title: f.get("title")?.as_str()?.to_string(),
+                    description: f.get("description")?.as_str()?.to_string(),
+                })
+            })
+            .collect();
+        let scanned = scan.status != "pending";
+        return Ok(Json(SecurityScanResponse {
+            status,
+            score: scan.score.clamp(0, 100) as u8,
+            findings: finding_dtos,
+            scanned,
+        }));
+    }
+
+    // Fallback for plugins without a persisted scan row.
+    let score = derive_security_score(&plugin);
+    let status = if score >= 70 {
+        "pass"
+    } else if score >= 50 {
+        "warning"
+    } else {
+        "fail"
+    };
+    let findings = if plugin.verified_at.is_some() {
+        Vec::new()
+    } else {
+        vec![SecurityFindingDto {
+            severity: "info".to_string(),
+            category: "other".to_string(),
+            title: "Automated scan pending".to_string(),
+            description:
+                "This plugin has not yet been processed by the security scanner. The score shown is a heuristic based on verification status and activity."
+                    .to_string(),
+        }]
+    };
+
+    Ok(Json(SecurityScanResponse {
+        status: status.to_string(),
+        score,
+        findings,
+        scanned: false,
+    }))
+}
+
+fn map_severity(s: &str) -> &'static str {
+    match s.to_ascii_lowercase().as_str() {
+        "critical" => "critical",
+        "high" => "high",
+        "medium" => "medium",
+        "low" => "low",
+        _ => "info",
+    }
+}
+
+fn map_finding_category(s: &str) -> &'static str {
+    match s.to_ascii_lowercase().as_str() {
+        "malware" => "malware",
+        "vulnerable_dependency" | "vulnerabledependency" => "vulnerable_dependency",
+        "insecure_coding" | "insecurecoding" => "insecure_coding",
+        "data_exfiltration" | "dataexfiltration" => "data_exfiltration",
+        "supply_chain" | "supplychain" => "supply_chain",
+        "licensing" => "licensing",
+        "configuration" => "configuration",
+        "obfuscation" => "obfuscation",
+        _ => "other",
+    }
 }
 
 fn map_category_from_string(cat: &str) -> PluginCategory {

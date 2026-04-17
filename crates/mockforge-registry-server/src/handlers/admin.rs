@@ -20,6 +20,7 @@ pub struct VerifyPluginRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VerifyPluginResponse {
     pub success: bool,
     pub plugin_name: String,
@@ -174,6 +175,7 @@ pub async fn get_plugin_badges(
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatsResponse {
     pub total_plugins: i64,
     pub total_downloads: i64,

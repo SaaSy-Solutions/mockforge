@@ -70,6 +70,7 @@ const en: Dictionary = {
   'tab.behavioralCloning': 'Behavioral Cloning',
   'tab.import': 'Import',
   'tab.templateMarketplace': 'Template Marketplace',
+  'tab.scenarioMarketplace': 'Scenario Marketplace',
   'tab.aiStudio': 'AI Studio',
   'tab.mockai': 'MockAI',
   'tab.mockaiOpenApiGenerator': 'MockAI OpenAPI Generator',

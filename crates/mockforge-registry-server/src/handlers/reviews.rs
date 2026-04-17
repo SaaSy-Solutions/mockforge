@@ -13,10 +13,11 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReviewQuery {
     #[serde(default = "default_page")]
     pub page: i64,
-    #[serde(default = "default_per_page")]
+    #[serde(default = "default_per_page", alias = "per_page")]
     pub per_page: i64,
 }
 
@@ -29,6 +30,7 @@ fn default_per_page() -> i64 {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReviewWithUser {
     pub id: String,
     pub plugin_id: String,
@@ -42,6 +44,7 @@ pub struct ReviewWithUser {
     pub created_at: String,
     pub updated_at: String,
     pub user: UserInfo,
+    pub user_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +54,7 @@ pub struct UserInfo {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReviewsResponse {
     pub reviews: Vec<ReviewWithUser>,
     pub total: i64,
@@ -60,6 +64,7 @@ pub struct ReviewsResponse {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReviewStats {
     pub average_rating: f64,
     pub total_reviews: i64,
@@ -108,8 +113,9 @@ pub async fn get_reviews(
             updated_at: review.updated_at.to_rfc3339(),
             user: UserInfo {
                 id: user.0,
-                username: user.1,
+                username: user.1.clone(),
             },
+            user_name: user.1,
         });
     }
 
@@ -141,6 +147,7 @@ pub struct SubmitReviewRequest {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubmitReviewResponse {
     pub success: bool,
     pub review_id: String,
