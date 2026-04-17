@@ -196,7 +196,7 @@ async fn test_plugin_marketplace_workflow() {
         .json(&json!({
             "query": plugin_name.clone(),
             "page": 0,
-            "per_page": 10
+            "perPage": 10
         }))
         .send()
         .await
@@ -318,7 +318,7 @@ async fn test_template_marketplace_workflow() {
         .json(&json!({
             "query": template_name.clone(),
             "page": 0,
-            "per_page": 10
+            "perPage": 10
         }))
         .send()
         .await
@@ -404,7 +404,7 @@ async fn test_scenario_marketplace_workflow() {
         .json(&json!({
             "query": scenario_name.clone(),
             "page": 0,
-            "per_page": 10
+            "perPage": 10
         }))
         .send()
         .await
@@ -544,4 +544,111 @@ async fn test_upload_validation_errors() {
 
     // Should fail validation
     assert!(!response.status().is_success(), "Should reject file that's too large");
+}
+
+/// Star a template, verify the count goes up, toggle off, verify it goes down,
+/// and verify that the star count exposed by the public search/get endpoints
+/// reflects the live row count (not a denormalized counter on `templates`).
+#[tokio::test]
+#[ignore] // Requires running registry server
+async fn test_template_star_flow() {
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let mut helper = MarketplaceTestHelper::new(base_url);
+
+    let timestamp = chrono::Utc::now().timestamp();
+    helper
+        .register_user(
+            &format!("staruser_{}", timestamp),
+            &format!("star_{}@example.com", timestamp),
+        )
+        .await
+        .expect("Failed to register user");
+    helper
+        .create_org(&format!("star-org-{}", timestamp))
+        .await
+        .expect("Failed to create organization");
+
+    // Publish a template via the marketplace path.
+    let package_data = MarketplaceTestHelper::create_test_package();
+    let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
+    let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
+    let template_name = format!("star-template-{}", timestamp);
+    let version = "1.0.0";
+
+    let publish_response = helper
+        .client
+        .post(format!("{}/api/v1/marketplace/templates/publish", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .header("X-Org-Id", helper.org_id.unwrap().to_string())
+        .json(&json!({
+            "name": template_name.clone(),
+            "slug": template_name.clone(),
+            "description": "Star-flow regression template",
+            "version": version,
+            "category": "chaos",
+            "tags": vec!["test"],
+            "content_json": json!({ "name": template_name, "version": version }),
+            "checksum": checksum,
+            "file_size": package_data.len() as i64,
+            "package": package_base64
+        }))
+        .send()
+        .await
+        .expect("Failed to publish template");
+    assert!(
+        publish_response.status().is_success(),
+        "Template publish failed: {:?}",
+        publish_response.text().await
+    );
+
+    let star_path = format!(
+        "{}/api/v1/marketplace/templates/{}/{}/star",
+        helper.base_url, template_name, version
+    );
+
+    // Toggle on.
+    let resp = helper
+        .client
+        .post(&star_path)
+        .header("Authorization", helper.auth_header().unwrap())
+        .send()
+        .await
+        .expect("Failed to star template");
+    assert!(resp.status().is_success(), "Star toggle on failed");
+    let body: serde_json::Value = resp.json().await.expect("parse toggle response");
+    assert_eq!(body["starred"], json!(true), "should report starred=true");
+    assert_eq!(body["stars"], json!(1), "should report stars=1");
+
+    // Toggle off.
+    let resp = helper
+        .client
+        .post(&star_path)
+        .header("Authorization", helper.auth_header().unwrap())
+        .send()
+        .await
+        .expect("Failed to unstar template");
+    assert!(resp.status().is_success(), "Star toggle off failed");
+    let body: serde_json::Value = resp.json().await.expect("parse toggle response");
+    assert_eq!(body["starred"], json!(false), "should report starred=false");
+    assert_eq!(body["stars"], json!(0), "should report stars=0");
+
+    // GET on the marketplace endpoint should reflect the live count, not a
+    // cached value from stats_json.
+    let get = helper
+        .client
+        .get(format!(
+            "{}/api/v1/marketplace/templates/{}/{}",
+            helper.base_url, template_name, version
+        ))
+        .send()
+        .await
+        .expect("Failed to get template");
+    assert!(get.status().is_success());
+    let got: serde_json::Value = get.json().await.expect("parse get response");
+    assert_eq!(got["stats"]["stars"], json!(0), "live stars should be 0");
+
+    // Anonymous POST to star endpoint must be rejected.
+    let anon = reqwest::Client::new().post(&star_path).send().await.expect("anonymous request");
+    assert_eq!(anon.status().as_u16(), 401, "anonymous star should be 401");
 }

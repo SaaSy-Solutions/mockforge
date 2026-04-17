@@ -28,7 +28,7 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
-use crate::models::plugin::{Plugin, PluginVersion};
+use crate::models::plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
@@ -776,10 +776,12 @@ pub trait RegistryStore: Send + Sync + 'static {
     // Marketplace plugins
     // ---------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     async fn search_plugins(
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
         sort_by: &str,
         limit: i64,
@@ -790,6 +792,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
     ) -> StoreResult<i64>;
 
@@ -808,6 +811,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         repository: Option<&str>,
         homepage: Option<&str>,
         author_id: Uuid,
+        language: &str,
     ) -> StoreResult<Plugin>;
 
     async fn list_plugin_versions(&self, plugin_id: Uuid) -> StoreResult<Vec<PluginVersion>>;
@@ -818,6 +822,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         version: &str,
     ) -> StoreResult<Option<PluginVersion>>;
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_plugin_version(
         &self,
         plugin_id: Uuid,
@@ -826,7 +831,16 @@ pub trait RegistryStore: Send + Sync + 'static {
         checksum: &str,
         file_size: i64,
         min_mockforge_version: Option<&str>,
+        sbom_json: Option<&serde_json::Value>,
     ) -> StoreResult<PluginVersion>;
+
+    /// Fetch the SBOM (CycloneDX JSON or similar) stored alongside a
+    /// plugin version at publish time. Returns `None` when the version
+    /// predates SBOM support or the publisher didn't include one.
+    async fn get_plugin_version_sbom(
+        &self,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<Option<serde_json::Value>>;
 
     async fn yank_plugin_version(&self, version_id: Uuid) -> StoreResult<()>;
 
@@ -841,6 +855,30 @@ pub trait RegistryStore: Send + Sync + 'static {
         plugin_name: &str,
         version_req: &str,
     ) -> StoreResult<()>;
+
+    // --- Plugin security scans ---
+
+    /// Upsert a security scan result for a specific plugin version. Each
+    /// version has at most one row (latest scan wins).
+    async fn upsert_plugin_security_scan(
+        &self,
+        plugin_version_id: Uuid,
+        status: &str,
+        score: i16,
+        findings: &serde_json::Value,
+        scanner_version: Option<&str>,
+    ) -> StoreResult<()>;
+
+    /// Fetch the latest security scan for a plugin's current version.
+    async fn latest_security_scan_for_plugin(
+        &self,
+        plugin_id: Uuid,
+    ) -> StoreResult<Option<PluginSecurityScan>>;
+
+    /// List up to `limit` pending security scans with enough context
+    /// (plugin name + version + declared file size) for a worker to
+    /// re-download the artifact and run checks.
+    async fn list_pending_security_scans(&self, limit: i64) -> StoreResult<Vec<PendingScanJob>>;
 
     // --- Plugin reviews ---
 
@@ -922,6 +960,29 @@ pub trait RegistryStore: Send + Sync + 'static {
         template_id: Uuid,
         reviewer_id: Uuid,
     ) -> StoreResult<Option<Uuid>>;
+
+    // --- Template stars ---
+
+    /// Toggle a template star for a user.
+    /// Returns `(now_starred, new_count)`.
+    async fn toggle_template_star(
+        &self,
+        template_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)>;
+
+    /// Whether `user_id` has starred `template_id`.
+    async fn is_template_starred_by(&self, template_id: Uuid, user_id: Uuid) -> StoreResult<bool>;
+
+    /// Live star count for a single template.
+    async fn count_template_stars(&self, template_id: Uuid) -> StoreResult<i64>;
+
+    /// Batch-fetch star counts for many templates in a single query.
+    /// Templates with zero stars are absent from the map — callers default to 0.
+    async fn count_template_stars_batch(
+        &self,
+        template_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>>;
 
     // --- Scenario reviews ---
 

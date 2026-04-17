@@ -23,7 +23,7 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
-use crate::models::plugin::{Plugin, PluginVersion};
+use crate::models::plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
@@ -36,6 +36,7 @@ use crate::models::suspicious_activity::{
 };
 use crate::models::template::{Template, TemplateCategory};
 use crate::models::template_review::TemplateReview;
+use crate::models::template_star::TemplateStar;
 use crate::models::user::User;
 use crate::models::verification_token::VerificationToken;
 use crate::models::waitlist::WaitlistSubscriber;
@@ -1110,12 +1111,13 @@ impl RegistryStore for PgRegistryStore {
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
         sort_by: &str,
         limit: i64,
         offset: i64,
     ) -> StoreResult<Vec<Plugin>> {
-        Plugin::search(&self.pool, query, category, tags, sort_by, limit, offset)
+        Plugin::search(&self.pool, query, category, language, tags, sort_by, limit, offset)
             .await
             .map_err(Into::into)
     }
@@ -1124,9 +1126,10 @@ impl RegistryStore for PgRegistryStore {
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
     ) -> StoreResult<i64> {
-        Plugin::count_search(&self.pool, query, category, tags)
+        Plugin::count_search(&self.pool, query, category, language, tags)
             .await
             .map_err(Into::into)
     }
@@ -1149,6 +1152,7 @@ impl RegistryStore for PgRegistryStore {
         repository: Option<&str>,
         homepage: Option<&str>,
         author_id: Uuid,
+        language: &str,
     ) -> StoreResult<Plugin> {
         Plugin::create(
             &self.pool,
@@ -1160,6 +1164,7 @@ impl RegistryStore for PgRegistryStore {
             repository,
             homepage,
             author_id,
+            language,
         )
         .await
         .map_err(Into::into)
@@ -1185,6 +1190,7 @@ impl RegistryStore for PgRegistryStore {
         checksum: &str,
         file_size: i64,
         min_mockforge_version: Option<&str>,
+        sbom_json: Option<&serde_json::Value>,
     ) -> StoreResult<PluginVersion> {
         PluginVersion::create(
             &self.pool,
@@ -1194,9 +1200,22 @@ impl RegistryStore for PgRegistryStore {
             checksum,
             file_size,
             min_mockforge_version,
+            sbom_json,
         )
         .await
         .map_err(Into::into)
+    }
+
+    async fn get_plugin_version_sbom(
+        &self,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<Option<serde_json::Value>> {
+        let row: Option<(Option<serde_json::Value>,)> =
+            sqlx::query_as("SELECT sbom_json FROM plugin_versions WHERE id = $1")
+                .bind(plugin_version_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.and_then(|(s,)| s))
     }
 
     async fn yank_plugin_version(&self, version_id: Uuid) -> StoreResult<()> {
@@ -1221,6 +1240,86 @@ impl RegistryStore for PgRegistryStore {
         PluginVersion::add_dependency(&self.pool, version_id, plugin_name, version_req)
             .await
             .map_err(Into::into)
+    }
+
+    // --- Plugin security scans ---
+
+    async fn upsert_plugin_security_scan(
+        &self,
+        plugin_version_id: Uuid,
+        status: &str,
+        score: i16,
+        findings: &serde_json::Value,
+        scanner_version: Option<&str>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO plugin_security_scans
+                (plugin_version_id, status, score, findings, scanner_version, scanned_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            ON CONFLICT (plugin_version_id) DO UPDATE
+                SET status = EXCLUDED.status,
+                    score = EXCLUDED.score,
+                    findings = EXCLUDED.findings,
+                    scanner_version = EXCLUDED.scanner_version,
+                    scanned_at = NOW()
+            "#,
+        )
+        .bind(plugin_version_id)
+        .bind(status)
+        .bind(score)
+        .bind(findings)
+        .bind(scanner_version)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn latest_security_scan_for_plugin(
+        &self,
+        plugin_id: Uuid,
+    ) -> StoreResult<Option<PluginSecurityScan>> {
+        sqlx::query_as::<_, PluginSecurityScan>(
+            r#"
+            SELECT s.*
+            FROM plugin_security_scans s
+            INNER JOIN plugin_versions v ON v.id = s.plugin_version_id
+            INNER JOIN plugins p ON p.id = v.plugin_id AND p.current_version = v.version
+            WHERE v.plugin_id = $1
+            ORDER BY s.scanned_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(plugin_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn list_pending_security_scans(&self, limit: i64) -> StoreResult<Vec<PendingScanJob>> {
+        // Oldest-first so a burst of publishes drains in order; joining up to
+        // `plugins` lets the worker rebuild the storage key without a second
+        // query per row.
+        sqlx::query_as::<_, PendingScanJob>(
+            r#"
+            SELECT
+                v.id AS plugin_version_id,
+                p.name AS plugin_name,
+                v.version AS version,
+                v.file_size AS file_size,
+                v.checksum AS checksum
+            FROM plugin_security_scans s
+            INNER JOIN plugin_versions v ON v.id = s.plugin_version_id
+            INNER JOIN plugins p ON p.id = v.plugin_id
+            WHERE s.status = 'pending'
+            ORDER BY s.scanned_at ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
     }
 
     // --- Plugin reviews ---
@@ -1387,6 +1486,37 @@ impl RegistryStore for PgRegistryStore {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|(id,)| id))
+    }
+
+    // --- Template stars ---
+
+    async fn toggle_template_star(
+        &self,
+        template_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)> {
+        TemplateStar::toggle(&self.pool, template_id, user_id).await.map_err(Into::into)
+    }
+
+    async fn is_template_starred_by(&self, template_id: Uuid, user_id: Uuid) -> StoreResult<bool> {
+        TemplateStar::is_starred_by(&self.pool, template_id, user_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_template_stars(&self, template_id: Uuid) -> StoreResult<i64> {
+        TemplateStar::count_for_template(&self.pool, template_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_template_stars_batch(
+        &self,
+        template_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>> {
+        TemplateStar::counts_for_templates(&self.pool, template_ids)
+            .await
+            .map_err(Into::into)
     }
 
     // --- Scenario reviews ---

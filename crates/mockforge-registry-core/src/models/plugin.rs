@@ -23,6 +23,8 @@ pub struct Plugin {
     pub verified_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub language: String,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -37,6 +39,12 @@ pub struct PluginVersion {
     pub yanked: bool,
     pub downloads: i32,
     pub published_at: DateTime<Utc>,
+    /// Optional Software Bill of Materials (typically CycloneDX JSON)
+    /// submitted at publish time. Used by the vulnerability-scan step of
+    /// the plugin security worker. Absent on versions published before
+    /// SBOM support shipped.
+    #[sqlx(default)]
+    pub sbom_json: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,13 +55,38 @@ pub struct PluginWithVersions {
     pub tags: Vec<String>,
 }
 
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct PluginSecurityScan {
+    pub id: Uuid,
+    pub plugin_version_id: Uuid,
+    pub status: String,
+    pub score: i16,
+    pub findings: serde_json::Value,
+    pub scanner_version: Option<String>,
+    pub scanned_at: DateTime<Utc>,
+}
+
+/// Context needed by the background scanner worker to re-download a plugin
+/// artifact and rewrite its scan row. `plugin_version_id` is the PK the worker
+/// upserts against; `plugin_name` + `version` reconstruct the storage key.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct PendingScanJob {
+    pub plugin_version_id: Uuid,
+    pub plugin_name: String,
+    pub version: String,
+    pub file_size: i64,
+    pub checksum: String,
+}
+
 #[cfg(feature = "postgres")]
 impl Plugin {
     /// Search plugins
+    #[allow(clippy::too_many_arguments)]
     pub async fn search(
         pool: &sqlx::PgPool,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
         sort_by: &str,
         limit: i64,
@@ -96,6 +129,12 @@ impl Plugin {
             conditions.push(format!("p.category = ${}", params_count));
         }
 
+        // Add language filter
+        if let Some(_lang) = language {
+            params_count += 1;
+            conditions.push(format!("p.language = ${}", params_count));
+        }
+
         if !conditions.is_empty() {
             sql.push_str(" AND ");
             sql.push_str(&conditions.join(" AND "));
@@ -125,6 +164,9 @@ impl Plugin {
         if let Some(cat) = category {
             query_builder = query_builder.bind(cat);
         }
+        if let Some(lang) = language {
+            query_builder = query_builder.bind(lang);
+        }
         query_builder = query_builder.bind(limit).bind(offset);
 
         query_builder.fetch_all(pool).await
@@ -135,6 +177,7 @@ impl Plugin {
         pool: &sqlx::PgPool,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
     ) -> sqlx::Result<i64> {
         let mut sql = String::from(
@@ -171,6 +214,11 @@ impl Plugin {
             conditions.push(format!("p.category = ${}", params_count));
         }
 
+        if let Some(_lang) = language {
+            params_count += 1;
+            conditions.push(format!("p.language = ${}", params_count));
+        }
+
         if !conditions.is_empty() {
             sql.push_str(" AND ");
             sql.push_str(&conditions.join(" AND "));
@@ -186,6 +234,9 @@ impl Plugin {
         }
         if let Some(cat) = category {
             query_builder = query_builder.bind(cat);
+        }
+        if let Some(lang) = language {
+            query_builder = query_builder.bind(lang);
         }
 
         query_builder.fetch_one(pool).await
@@ -228,14 +279,15 @@ impl Plugin {
         repository: Option<&str>,
         homepage: Option<&str>,
         author_id: Uuid,
+        language: &str,
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO plugins (
                 name, description, current_version, category, license,
-                repository, homepage, author_id
+                repository, homepage, author_id, language
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             "#,
         )
@@ -247,6 +299,7 @@ impl Plugin {
         .bind(repository)
         .bind(homepage)
         .bind(author_id)
+        .bind(language)
         .fetch_one(pool)
         .await
     }
@@ -289,6 +342,7 @@ impl PluginVersion {
     }
 
     /// Create new version
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         plugin_id: Uuid,
@@ -297,13 +351,15 @@ impl PluginVersion {
         checksum: &str,
         file_size: i64,
         min_mockforge_version: Option<&str>,
+        sbom_json: Option<&serde_json::Value>,
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO plugin_versions (
-                plugin_id, version, download_url, checksum, file_size, min_mockforge_version
+                plugin_id, version, download_url, checksum, file_size,
+                min_mockforge_version, sbom_json
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
             "#,
         )
@@ -313,6 +369,7 @@ impl PluginVersion {
         .bind(checksum)
         .bind(file_size)
         .bind(min_mockforge_version)
+        .bind(sbom_json)
         .fetch_one(pool)
         .await
     }

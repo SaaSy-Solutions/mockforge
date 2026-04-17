@@ -37,7 +37,7 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
-use crate::models::plugin::{Plugin, PluginVersion};
+use crate::models::plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
@@ -1528,6 +1528,7 @@ impl RegistryStore for SqliteRegistryStore {
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
         sort_by: &str,
         limit: i64,
@@ -1541,6 +1542,7 @@ impl RegistryStore for SqliteRegistryStore {
         &self,
         query: Option<&str>,
         category: Option<&str>,
+        language: Option<&str>,
         tags: &[String],
     ) -> StoreResult<i64> {
         Ok(0)
@@ -1551,9 +1553,23 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(None)
     }
 
-    #[allow(unused_variables)]
     async fn get_plugin_tags(&self, plugin_id: Uuid) -> StoreResult<Vec<String>> {
-        Ok(Vec::new())
+        use sqlx::Row;
+        let rows = sqlx::query(
+            r#"
+            SELECT t.name
+            FROM tags t
+            INNER JOIN plugin_tags pt ON pt.tag_id = t.id
+            WHERE pt.plugin_id = ?
+            ORDER BY t.name
+            "#,
+        )
+        .bind(plugin_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(|r| r.try_get::<String, _>("name").map_err(Into::into))
+            .collect()
     }
 
     #[allow(unused_variables)]
@@ -1567,6 +1583,7 @@ impl RegistryStore for SqliteRegistryStore {
         repository: Option<&str>,
         homepage: Option<&str>,
         author_id: Uuid,
+        language: &str,
     ) -> StoreResult<Plugin> {
         Err(StoreError::NotFound)
     }
@@ -1594,8 +1611,30 @@ impl RegistryStore for SqliteRegistryStore {
         checksum: &str,
         file_size: i64,
         min_mockforge_version: Option<&str>,
+        sbom_json: Option<&serde_json::Value>,
     ) -> StoreResult<PluginVersion> {
         Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn get_plugin_version_sbom(
+        &self,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<Option<serde_json::Value>> {
+        use sqlx::Row;
+        let row = sqlx::query("SELECT sbom_json FROM plugin_versions WHERE id = ?")
+            .bind(plugin_version_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        let Some(row) = row else { return Ok(None) };
+        let sbom_str: Option<String> = row.try_get("sbom_json")?;
+        Ok(match sbom_str {
+            Some(s) => Some(
+                serde_json::from_str(&s)
+                    .map_err(|e| StoreError::Hash(format!("bad sbom_json: {}", e)))?,
+            ),
+            None => None,
+        })
     }
 
     #[allow(unused_variables)]
@@ -1621,22 +1660,186 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(())
     }
 
-    #[allow(unused_variables)]
+    async fn upsert_plugin_security_scan(
+        &self,
+        plugin_version_id: Uuid,
+        status: &str,
+        score: i16,
+        findings: &serde_json::Value,
+        scanner_version: Option<&str>,
+    ) -> StoreResult<()> {
+        let findings_json = serde_json::to_string(findings)
+            .map_err(|e| StoreError::Hash(format!("encode findings: {}", e)))?;
+        let now = Utc::now().to_rfc3339();
+        let new_id = Uuid::new_v4().to_string();
+
+        // SQLite ON CONFLICT on the unique index (plugin_version_id) matches
+        // the Postgres upsert semantics: latest scan wins, other fields are
+        // overwritten, id stays stable after the first write.
+        sqlx::query(
+            r#"
+            INSERT INTO plugin_security_scans
+                (id, plugin_version_id, status, score, findings, scanner_version, scanned_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(plugin_version_id) DO UPDATE SET
+                status = excluded.status,
+                score = excluded.score,
+                findings = excluded.findings,
+                scanner_version = excluded.scanner_version,
+                scanned_at = excluded.scanned_at
+            "#,
+        )
+        .bind(new_id)
+        .bind(plugin_version_id.to_string())
+        .bind(status)
+        .bind(score as i64)
+        .bind(findings_json)
+        .bind(scanner_version)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn latest_security_scan_for_plugin(
+        &self,
+        plugin_id: Uuid,
+    ) -> StoreResult<Option<PluginSecurityScan>> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            r#"
+            SELECT s.id, s.plugin_version_id, s.status, s.score, s.findings,
+                   s.scanner_version, s.scanned_at
+            FROM plugin_security_scans s
+            INNER JOIN plugin_versions v ON v.id = s.plugin_version_id
+            INNER JOIN plugins p ON p.id = v.plugin_id AND p.current_version = v.version
+            WHERE v.plugin_id = ?
+            ORDER BY s.scanned_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(plugin_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = row else { return Ok(None) };
+
+        let id_str: String = row.try_get("id")?;
+        let version_id_str: String = row.try_get("plugin_version_id")?;
+        let findings_json: String = row.try_get("findings")?;
+        let scanned_at_str: String = row.try_get("scanned_at")?;
+        let score_i64: i64 = row.try_get("score")?;
+        let findings: serde_json::Value = serde_json::from_str(&findings_json)
+            .map_err(|e| StoreError::Hash(format!("bad findings json: {}", e)))?;
+
+        Ok(Some(PluginSecurityScan {
+            id: parse_uuid(&id_str)?,
+            plugin_version_id: parse_uuid(&version_id_str)?,
+            status: row.try_get("status")?,
+            score: score_i64 as i16,
+            findings,
+            scanner_version: row.try_get("scanner_version")?,
+            scanned_at: parse_dt(&scanned_at_str)?,
+        }))
+    }
+
+    async fn list_pending_security_scans(&self, limit: i64) -> StoreResult<Vec<PendingScanJob>> {
+        use sqlx::Row;
+        // Oldest pending scans first so a burst of publishes drains in
+        // order. Same shape as the Postgres query in `postgres.rs`.
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                v.id AS plugin_version_id,
+                p.name AS plugin_name,
+                v.version AS version,
+                v.file_size AS file_size,
+                v.checksum AS checksum
+            FROM plugin_security_scans s
+            INNER JOIN plugin_versions v ON v.id = s.plugin_version_id
+            INNER JOIN plugins p ON p.id = v.plugin_id
+            WHERE s.status = 'pending'
+            ORDER BY s.scanned_at ASC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut jobs = Vec::with_capacity(rows.len());
+        for row in rows {
+            let version_id_str: String = row.try_get("plugin_version_id")?;
+            jobs.push(PendingScanJob {
+                plugin_version_id: parse_uuid(&version_id_str)?,
+                plugin_name: row.try_get("plugin_name")?,
+                version: row.try_get("version")?,
+                file_size: row.try_get("file_size")?,
+                checksum: row.try_get("checksum")?,
+            });
+        }
+        Ok(jobs)
+    }
+
     async fn get_plugin_reviews(
         &self,
         plugin_id: Uuid,
         limit: i64,
         offset: i64,
     ) -> StoreResult<Vec<Review>> {
-        Ok(Vec::new())
+        use sqlx::Row;
+        let rows = sqlx::query(
+            r#"
+            SELECT id, plugin_id, version, user_id, rating, title, comment,
+                   helpful_count, unhelpful_count, verified,
+                   created_at, updated_at
+            FROM reviews
+            WHERE plugin_id = ?
+            ORDER BY helpful_count DESC, created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(plugin_id.to_string())
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_str: String = row.try_get("id")?;
+            let plugin_id_str: String = row.try_get("plugin_id")?;
+            let user_id_str: String = row.try_get("user_id")?;
+            let rating_i64: i64 = row.try_get("rating")?;
+            let helpful: i64 = row.try_get("helpful_count")?;
+            let unhelpful: i64 = row.try_get("unhelpful_count")?;
+            let created_at_str: String = row.try_get("created_at")?;
+            let updated_at_str: String = row.try_get("updated_at")?;
+            out.push(Review {
+                id: parse_uuid(&id_str)?,
+                plugin_id: parse_uuid(&plugin_id_str)?,
+                version: row.try_get("version")?,
+                user_id: parse_uuid(&user_id_str)?,
+                rating: rating_i64 as i16,
+                title: row.try_get("title")?,
+                comment: row.try_get("comment")?,
+                helpful_count: helpful as i32,
+                unhelpful_count: unhelpful as i32,
+                verified: row.try_get("verified")?,
+                created_at: parse_dt(&created_at_str)?,
+                updated_at: parse_dt(&updated_at_str)?,
+            });
+        }
+        Ok(out)
     }
 
-    #[allow(unused_variables)]
     async fn count_plugin_reviews(&self, plugin_id: Uuid) -> StoreResult<i64> {
-        Ok(0)
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM reviews WHERE plugin_id = ?")
+            .bind(plugin_id.to_string())
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count)
     }
 
-    #[allow(unused_variables)]
     async fn create_plugin_review(
         &self,
         plugin_id: Uuid,
@@ -1646,54 +1849,152 @@ impl RegistryStore for SqliteRegistryStore {
         title: Option<&str>,
         comment: &str,
     ) -> StoreResult<Review> {
-        Err(StoreError::NotFound)
+        let id = Uuid::new_v4();
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO reviews (
+                id, plugin_id, version, user_id, rating, title, comment,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(plugin_id.to_string())
+        .bind(version)
+        .bind(user_id.to_string())
+        .bind(rating as i64)
+        .bind(title)
+        .bind(comment)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(Review {
+            id,
+            plugin_id,
+            version: version.to_string(),
+            user_id,
+            rating,
+            title: title.map(str::to_string),
+            comment: comment.to_string(),
+            helpful_count: 0,
+            unhelpful_count: 0,
+            verified: false,
+            created_at: parse_dt(&now)?,
+            updated_at: parse_dt(&now)?,
+        })
     }
 
-    #[allow(unused_variables)]
     async fn get_plugin_review_stats(&self, plugin_id: Uuid) -> StoreResult<(f64, i64)> {
-        Ok((0.0, 0))
+        use sqlx::Row;
+        // COALESCE(AVG(...), 0) — SQLite returns NULL from AVG on empty sets.
+        let row = sqlx::query(
+            "SELECT COALESCE(AVG(rating), 0.0) AS avg, COUNT(*) AS cnt
+             FROM reviews WHERE plugin_id = ?",
+        )
+        .bind(plugin_id.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+        let avg: f64 = row.try_get("avg")?;
+        let cnt: i64 = row.try_get("cnt")?;
+        Ok((avg, cnt))
     }
 
-    #[allow(unused_variables)]
     async fn get_plugin_review_distribution(
         &self,
         plugin_id: Uuid,
     ) -> StoreResult<std::collections::HashMap<i16, i64>> {
-        Ok(std::collections::HashMap::new())
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT rating, COUNT(*) AS cnt FROM reviews
+             WHERE plugin_id = ? GROUP BY rating",
+        )
+        .bind(plugin_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        let mut out = std::collections::HashMap::new();
+        for row in rows {
+            let rating: i64 = row.try_get("rating")?;
+            let cnt: i64 = row.try_get("cnt")?;
+            out.insert(rating as i16, cnt);
+        }
+        Ok(out)
     }
 
-    #[allow(unused_variables)]
     async fn find_existing_plugin_review(
         &self,
         plugin_id: Uuid,
         user_id: Uuid,
     ) -> StoreResult<Option<Uuid>> {
-        Ok(None)
+        use sqlx::Row;
+        let row = sqlx::query("SELECT id FROM reviews WHERE plugin_id = ? AND user_id = ?")
+            .bind(plugin_id.to_string())
+            .bind(user_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => {
+                let id_str: String = r.try_get("id")?;
+                Ok(Some(parse_uuid(&id_str)?))
+            }
+            None => Ok(None),
+        }
     }
 
-    #[allow(unused_variables)]
     async fn update_plugin_rating_stats(
         &self,
         plugin_id: Uuid,
         avg: f64,
         count: i32,
     ) -> StoreResult<()> {
+        sqlx::query("UPDATE plugins SET rating_avg = ?, rating_count = ? WHERE id = ?")
+            .bind(avg)
+            .bind(count as i64)
+            .bind(plugin_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn increment_plugin_review_vote(
         &self,
         plugin_id: Uuid,
         review_id: Uuid,
         helpful: bool,
     ) -> StoreResult<()> {
+        // Column name is selected from a whitelist — no user input reaches
+        // the SQL string, so string interpolation here is safe.
+        let field = if helpful {
+            "helpful_count"
+        } else {
+            "unhelpful_count"
+        };
+        let sql = format!("UPDATE reviews SET {0} = {0} + 1 WHERE id = ? AND plugin_id = ?", field);
+        sqlx::query(&sql)
+            .bind(review_id.to_string())
+            .bind(plugin_id.to_string())
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn get_user_public_info(&self, user_id: Uuid) -> StoreResult<Option<(String, String)>> {
-        Ok(None)
+        use sqlx::Row;
+        let row = sqlx::query("SELECT id, username FROM users WHERE id = ?")
+            .bind(user_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => {
+                let id: String = r.try_get("id")?;
+                let username: String = r.try_get("username")?;
+                Ok(Some((id, username)))
+            }
+            None => Ok(None),
+        }
     }
 
     #[allow(unused_variables)]
@@ -1735,6 +2036,35 @@ impl RegistryStore for SqliteRegistryStore {
         reviewer_id: Uuid,
     ) -> StoreResult<Option<Uuid>> {
         Ok(None)
+    }
+
+    #[allow(unused_variables)]
+    async fn toggle_template_star(
+        &self,
+        template_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)> {
+        // SQLite backend does not power the public marketplace; templates live
+        // in the Postgres-backed cloud registry.
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn is_template_starred_by(&self, template_id: Uuid, user_id: Uuid) -> StoreResult<bool> {
+        Ok(false)
+    }
+
+    #[allow(unused_variables)]
+    async fn count_template_stars(&self, template_id: Uuid) -> StoreResult<i64> {
+        Ok(0)
+    }
+
+    #[allow(unused_variables)]
+    async fn count_template_stars_batch(
+        &self,
+        template_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>> {
+        Ok(std::collections::HashMap::new())
     }
 
     #[allow(unused_variables)]
@@ -1921,6 +2251,12 @@ mod tests {
             "token_revocations",
             "verification_tokens",
             "login_attempts",
+            "plugins",
+            "plugin_versions",
+            "plugin_security_scans",
+            "reviews",
+            "tags",
+            "plugin_tags",
         ] {
             let query = format!("SELECT COUNT(*) FROM {}", table);
             sqlx::query(&query)
@@ -1965,6 +2301,224 @@ mod tests {
         assert_eq!(funnel.signups, 0);
         assert_eq!(funnel.paid_subscribers, 0);
         assert!(funnel.time_to_convert_days.is_none());
+    }
+
+    /// End-to-end round-trip of the plugin review + tag surface on SQLite.
+    /// Seeds a plugin + author, attaches two tags, creates two reviews with
+    /// different ratings + helpful counts, then exercises each reader
+    /// (`get_plugin_reviews` ordering, `get_plugin_review_stats`,
+    /// `get_plugin_review_distribution`, `find_existing_plugin_review`, and
+    /// `increment_plugin_review_vote`). Mirrors what the registry search
+    /// handler actually does per request.
+    #[tokio::test]
+    async fn test_plugin_reviews_and_tags_roundtrip() {
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        let author_id = Uuid::new_v4();
+        let reviewer_id = Uuid::new_v4();
+        for (uid, uname, email) in [
+            (author_id, "alice-reviews", "alice-r@example.com"),
+            (reviewer_id, "bob-reviews", "bob-r@example.com"),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+                   VALUES (?, ?, ?, 'x', datetime('now'), datetime('now'))"#,
+            )
+            .bind(uid.to_string())
+            .bind(uname)
+            .bind(email)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+
+        let plugin_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO plugins (id, name, description, current_version, category, license, author_id)
+               VALUES (?, 'reviewed-plugin', 'demo', '1.0.0', 'other', 'MIT', ?)"#,
+        )
+        .bind(plugin_id.to_string())
+        .bind(author_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        for tag in ["auth", "security"] {
+            sqlx::query("INSERT OR IGNORE INTO tags (name) VALUES (?)")
+                .bind(tag)
+                .execute(pool)
+                .await
+                .unwrap();
+            let (tag_id,): (i64,) = sqlx::query_as("SELECT id FROM tags WHERE name = ?")
+                .bind(tag)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+            sqlx::query("INSERT INTO plugin_tags (plugin_id, tag_id) VALUES (?, ?)")
+                .bind(plugin_id.to_string())
+                .bind(tag_id)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+
+        let tags = store.get_plugin_tags(plugin_id).await.unwrap();
+        assert_eq!(tags, vec!["auth".to_string(), "security".to_string()]);
+
+        assert_eq!(store.count_plugin_reviews(plugin_id).await.unwrap(), 0);
+        let (avg, cnt) = store.get_plugin_review_stats(plugin_id).await.unwrap();
+        assert_eq!(cnt, 0);
+        assert_eq!(avg, 0.0);
+        assert!(store
+            .find_existing_plugin_review(plugin_id, reviewer_id)
+            .await
+            .unwrap()
+            .is_none());
+
+        let r1 = store
+            .create_plugin_review(
+                plugin_id,
+                reviewer_id,
+                "1.0.0",
+                5,
+                Some("love it"),
+                "great plugin, works well",
+            )
+            .await
+            .unwrap();
+        let r2 = store
+            .create_plugin_review(
+                plugin_id,
+                author_id,
+                "1.0.0",
+                3,
+                None,
+                "self-review from the author for test coverage",
+            )
+            .await
+            .unwrap();
+
+        store.increment_plugin_review_vote(plugin_id, r1.id, true).await.unwrap();
+        store.increment_plugin_review_vote(plugin_id, r1.id, true).await.unwrap();
+
+        assert_eq!(store.count_plugin_reviews(plugin_id).await.unwrap(), 2);
+        let (avg, cnt) = store.get_plugin_review_stats(plugin_id).await.unwrap();
+        assert_eq!(cnt, 2);
+        assert!((avg - 4.0).abs() < 1e-6, "expected avg 4.0, got {}", avg);
+
+        let dist = store.get_plugin_review_distribution(plugin_id).await.unwrap();
+        assert_eq!(dist.get(&5), Some(&1));
+        assert_eq!(dist.get(&3), Some(&1));
+        assert_eq!(dist.get(&4), None);
+
+        let existing = store
+            .find_existing_plugin_review(plugin_id, reviewer_id)
+            .await
+            .unwrap()
+            .expect("reviewer's review is visible");
+        assert_eq!(existing, r1.id);
+
+        let listed = store.get_plugin_reviews(plugin_id, 10, 0).await.unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].id, r1.id);
+        assert_eq!(listed[0].rating, 5);
+        assert_eq!(listed[0].helpful_count, 2);
+        assert_eq!(listed[1].id, r2.id);
+        assert_eq!(listed[1].rating, 3);
+
+        store.update_plugin_rating_stats(plugin_id, avg, cnt as i32).await.unwrap();
+        let (stored_avg, stored_cnt): (f64, i64) =
+            sqlx::query_as("SELECT rating_avg, rating_count FROM plugins WHERE id = ?")
+                .bind(plugin_id.to_string())
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        assert!((stored_avg - 4.0).abs() < 1e-6);
+        assert_eq!(stored_cnt, 2);
+
+        let pi = store.get_user_public_info(reviewer_id).await.unwrap().expect("reviewer exists");
+        assert_eq!(pi.1, "bob-reviews");
+    }
+
+    /// End-to-end round-trip of the plugin security scan surface on SQLite:
+    /// seed a plugin + version, enqueue a `"pending"` scan, drain it via
+    /// `list_pending_security_scans`, upsert a `"pass"` verdict, and read it
+    /// back via `latest_security_scan_for_plugin`. Mirrors the shape of the
+    /// Postgres-backed worker flow.
+    #[tokio::test]
+    async fn test_plugin_security_scan_roundtrip() {
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        // Seed a user/author.
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+               VALUES (?, 'author', 'author@example.com', 'x', datetime('now'), datetime('now'))"#,
+        )
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let plugin_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO plugins (id, name, description, current_version, category, license, author_id)
+               VALUES (?, 'demo-plugin', 'demo', '1.0.0', 'other', 'MIT', ?)"#,
+        )
+        .bind(plugin_id.to_string())
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let version_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO plugin_versions (id, plugin_id, version, download_url, checksum, file_size)
+               VALUES (?, ?, '1.0.0', 'https://example.invalid/1.wasm', 'deadbeef', 42)"#,
+        )
+        .bind(version_id.to_string())
+        .bind(plugin_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // Enqueue as pending, drain via the worker query, confirm the row we
+        // get back carries all the context the scanner needs.
+        let pending = serde_json::json!([{ "severity": "info", "title": "queued" }]);
+        store
+            .upsert_plugin_security_scan(version_id, "pending", 50, &pending, None)
+            .await
+            .unwrap();
+
+        let jobs = store.list_pending_security_scans(10).await.unwrap();
+        assert_eq!(jobs.len(), 1);
+        let job = &jobs[0];
+        assert_eq!(job.plugin_version_id, version_id);
+        assert_eq!(job.plugin_name, "demo-plugin");
+        assert_eq!(job.version, "1.0.0");
+        assert_eq!(job.file_size, 42);
+        assert_eq!(job.checksum, "deadbeef");
+
+        // Overwrite with a verdict and confirm the next poll sees nothing.
+        let verdict = serde_json::json!([]);
+        store
+            .upsert_plugin_security_scan(version_id, "pass", 95, &verdict, Some("test-1.0"))
+            .await
+            .unwrap();
+        assert!(store.list_pending_security_scans(10).await.unwrap().is_empty());
+
+        // Latest lookup should surface the pass row, and scanner_version must
+        // have been updated by the upsert (not left at the earlier NULL).
+        let latest = store
+            .latest_security_scan_for_plugin(plugin_id)
+            .await
+            .unwrap()
+            .expect("scan row present");
+        assert_eq!(latest.status, "pass");
+        assert_eq!(latest.score, 95);
+        assert_eq!(latest.scanner_version.as_deref(), Some("test-1.0"));
     }
 
     #[tokio::test]

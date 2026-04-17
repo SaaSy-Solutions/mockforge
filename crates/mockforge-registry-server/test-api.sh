@@ -27,7 +27,7 @@ curl -s -X POST "$BASE_URL/api/v1/plugins/search" \
     "query": "auth",
     "sort": "downloads",
     "page": 0,
-    "per_page": 10
+    "perPage": 10
   }' | jq '.plugins[] | {name, version, downloads, rating}'
 echo -e "${GREEN}✓ Plugin search successful${NC}"
 
@@ -76,7 +76,7 @@ curl -s -X POST "$BASE_URL/api/v1/plugins/search" \
   -d '{
     "category": "datasource",
     "page": 0,
-    "per_page": 5
+    "perPage": 5
   }' | jq '.plugins[] | {name, category, description}'
 echo -e "${GREEN}✓ Category search successful${NC}"
 
@@ -87,7 +87,7 @@ curl -s -X POST "$BASE_URL/api/v1/plugins/search" \
   -d '{
     "sort": "rating",
     "page": 0,
-    "per_page": 5
+    "perPage": 5
   }' | jq '.plugins[] | {name, rating, downloads}'
 echo -e "${GREEN}✓ Rating sort successful${NC}"
 

@@ -104,6 +104,8 @@ mod tests {
             downloads,
             rating,
             reviews_count: 0,
+            security_score: 0,
+            language: "rust".to_string(),
             repository: None,
             homepage: None,
             license: "MIT".to_string(),

@@ -101,6 +101,9 @@ base64 = { version = "0.21", features = ["default"] }
 sha2 = "0.10"
 sha1 = "0.10" # For TOTP (totp-lite 2.0 requires explicit hash types)
 
+# WASM artifact validation for the plugin security scanner worker.
+wasmparser = "0.239"
+
 # Validation
 validator = { version = "0.20", features = ["derive"] }
 
@@ -140,6 +143,10 @@ oauth2 = { version = "4.4", features = ["reqwest"], optional = true }
 
 # Stripe payments (feature: `stripe`)
 async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"], optional = true }
+
+# Tempfile handling for the scanner worker (writes artifacts to disk before
+# handing the path to the scanner subprocess).
+tempfile = "3"
 
 [dev-dependencies]
 tokio-test = "0.4"

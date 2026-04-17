@@ -70,6 +70,11 @@ pub async fn search_templates(
         )
         .await? as usize;
 
+    // Live star counts for this page (stats_json.stars is not the source of
+    // truth — see `template_stars` table and models::TemplateStar docs).
+    let page_ids: Vec<uuid::Uuid> = templates.iter().map(|t| t.id).collect();
+    let star_counts = state.store.count_template_stars_batch(&page_ids).await?;
+
     // Convert to response format
     let mut entries = Vec::new();
     for template in templates {
@@ -98,6 +103,17 @@ pub async fn search_templates(
         let compatibility = template.compatibility_json.clone();
         let category = template.category();
         let template_name = template.name.clone();
+        let live_stars = star_counts.get(&template.id).copied().unwrap_or(0);
+
+        let mut stats_out =
+            serde_json::from_value::<TemplateStats>(stats).unwrap_or(TemplateStats {
+                downloads: 0,
+                stars: 0,
+                forks: 0,
+                rating: 0.0,
+                rating_count: 0,
+            });
+        stats_out.stars = live_stars as u64;
 
         entries.push(TemplateRegistryEntry {
             id: template.id.to_string(),
@@ -125,13 +141,7 @@ pub async fn search_templates(
                     protocols: vec![],
                 }
             }),
-            stats: serde_json::from_value(stats).unwrap_or(TemplateStats {
-                downloads: 0,
-                stars: 0,
-                forks: 0,
-                rating: 0.0,
-                rating_count: 0,
-            }),
+            stats: stats_out,
             created_at: template.created_at.to_rfc3339(),
             updated_at: template.updated_at.to_rfc3339(),
             published: template.published,
@@ -182,6 +192,16 @@ pub async fn get_template(
     let compatibility = template.compatibility_json.clone();
     let category = template.category();
     let template_name = template.name.clone();
+    let live_stars = state.store.count_template_stars(template.id).await?;
+
+    let mut stats_out = serde_json::from_value::<TemplateStats>(stats).unwrap_or(TemplateStats {
+        downloads: 0,
+        stars: 0,
+        forks: 0,
+        rating: 0.0,
+        rating_count: 0,
+    });
+    stats_out.stars = live_stars as u64;
 
     // Record metrics
     metrics.record_download_success();
@@ -212,13 +232,7 @@ pub async fn get_template(
                 protocols: vec![],
             }
         }),
-        stats: serde_json::from_value(stats).unwrap_or(TemplateStats {
-            downloads: 0,
-            stars: 0,
-            forks: 0,
-            rating: 0.0,
-            rating_count: 0,
-        }),
+        stats: stats_out,
         created_at: template.created_at.to_rfc3339(),
         updated_at: template.updated_at.to_rfc3339(),
         published: template.published,
@@ -399,7 +413,57 @@ pub async fn publish_template(
     }))
 }
 
+/// Toggle a star for (current user, template@version).
+/// Returns the new star state and updated count.
+pub async fn toggle_template_star(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((name, version)): Path<(String, String)>,
+) -> ApiResult<Json<StarToggleResponse>> {
+    let template = state
+        .store
+        .find_template_by_name_version(&name, &version)
+        .await?
+        .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
+
+    let (starred, stars) = state.store.toggle_template_star(template.id, user_id).await?;
+
+    Ok(Json(StarToggleResponse { starred, stars }))
+}
+
+/// Whether the current user has starred (name@version).
+pub async fn get_template_star_state(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((name, version)): Path<(String, String)>,
+) -> ApiResult<Json<StarStateResponse>> {
+    let template = state
+        .store
+        .find_template_by_name_version(&name, &version)
+        .await?
+        .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
+
+    let starred = state.store.is_template_starred_by(template.id, user_id).await?;
+    let stars = state.store.count_template_stars(template.id).await?;
+
+    Ok(Json(StarStateResponse { starred, stars }))
+}
+
 // Request/Response types
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StarToggleResponse {
+    pub starred: bool,
+    pub stars: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StarStateResponse {
+    pub starred: bool,
+    pub stars: i64,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct TemplateSearchQuery {
