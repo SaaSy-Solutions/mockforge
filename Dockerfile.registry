@@ -38,8 +38,16 @@ RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
     echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json && \
     echo '' > crates/mockforge-ui/ui/dist/sw.js
 
-# Build only the registry server
-RUN cargo build --release --bin mockforge-registry-server
+# Build the registry server AND the plugin scanner subprocess in one pass
+# so both land in the same /app/target/release. The scanner is gated behind
+# a feature flag because it pulls in wasmtime — the registry server binary
+# itself stays lean, and the worker invokes the scanner over a subprocess
+# boundary (see crates/mockforge-registry-server/src/workers/plugin_scanner.rs).
+RUN cargo build --release --bin mockforge-registry-server && \
+    cargo build --release \
+        --package mockforge-plugin-loader \
+        --features scanner-bin \
+        --bin mockforge-plugin-scanner
 
 # Stage 2: Runtime
 FROM debian:trixie-slim
@@ -55,6 +63,11 @@ RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
 WORKDIR /app
 
 COPY --from=builder /app/target/release/mockforge-registry-server /usr/local/bin/mockforge-registry-server
+# Ship the scanner on PATH. The worker auto-detects
+# `mockforge-plugin-scanner` and falls back to in-process static analysis
+# if it's missing, so installing it here enables the dynamic wasmtime
+# instantiation check + process-level isolation.
+COPY --from=builder /app/target/release/mockforge-plugin-scanner /usr/local/bin/mockforge-plugin-scanner
 
 RUN mkdir -p data logs && chown -R mockforge:mockforge /app
 

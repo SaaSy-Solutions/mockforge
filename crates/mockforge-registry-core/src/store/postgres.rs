@@ -9,11 +9,14 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use super::parse_modified_str;
+
 use super::{
     AdminAnalyticsSnapshot, ConversionFunnelSnapshot, OrgSettingRow, ProjectRow, RegistryStore,
     StoreResult, SubscriptionRow, UserSettingRow,
 };
 use crate::models::api_token::{ApiToken, TokenScope};
+use crate::models::attestation::UserPublicKey;
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
 use crate::models::cloud_service::CloudService;
@@ -23,6 +26,7 @@ use crate::models::federation::Federation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
+use crate::models::osv::{OsvImportRecord, OsvMatch};
 use crate::models::plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
@@ -1320,6 +1324,195 @@ impl RegistryStore for PgRegistryStore {
         .fetch_all(&self.pool)
         .await
         .map_err(Into::into)
+    }
+
+    async fn find_osv_matches(
+        &self,
+        ecosystem: &str,
+        package_name: &str,
+        version: &str,
+    ) -> StoreResult<Vec<OsvMatch>> {
+        // Lookup keyed on lowercase ecosystem since we canonicalize on import.
+        // The version match here is intentionally coarse: we pull every row for
+        // the `(ecosystem, package_name)` pair and filter in Rust against the
+        // stored `affected_versions` ranges. That keeps the SQL simple and
+        // lets us evolve the matcher (semver-aware, introduced/fixed bounds)
+        // without another migration.
+        let eco = ecosystem.to_ascii_lowercase();
+        let name = package_name.to_ascii_lowercase();
+        let rows: Vec<(String, String, String, serde_json::Value)> = sqlx::query_as(
+            r#"
+            SELECT advisory_id, severity, summary, affected_versions
+            FROM osv_vulnerabilities
+            WHERE ecosystem = $1 AND LOWER(package_name) = $2
+            "#,
+        )
+        .bind(&eco)
+        .bind(&name)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut hits = Vec::new();
+        for (advisory_id, severity, summary, affected) in rows {
+            if crate::store::version_affected_in_ecosystem(&affected, version, ecosystem) {
+                hits.push(OsvMatch {
+                    advisory_id,
+                    severity,
+                    summary,
+                });
+            }
+        }
+        Ok(hits)
+    }
+
+    async fn upsert_osv_advisory(&self, record: &OsvImportRecord) -> StoreResult<usize> {
+        let severity = record.severity_bucket().to_string();
+        let summary = record.human_summary();
+        let modified = parse_modified_str(record.modified.as_deref());
+        let extra = serde_json::to_value(record).ok();
+
+        let mut imported = 0usize;
+        // OSV advisories often cover multiple packages; expand to one row
+        // per `(ecosystem, package_name)` so the lookup query hits by
+        // index instead of a JSON scan.
+        for affected in &record.affected {
+            let ecosystem = affected.package.ecosystem.to_ascii_lowercase();
+            let package_name = affected.package.name.clone();
+            let affected_json = serde_json::json!({
+                "ranges": affected.ranges,
+                "versions": affected.versions,
+            });
+
+            sqlx::query(
+                r#"
+                INSERT INTO osv_vulnerabilities
+                    (advisory_id, ecosystem, package_name, severity,
+                     summary, affected_versions, extra_json, modified_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (advisory_id, ecosystem, package_name)
+                DO UPDATE SET
+                    severity = EXCLUDED.severity,
+                    summary = EXCLUDED.summary,
+                    affected_versions = EXCLUDED.affected_versions,
+                    extra_json = EXCLUDED.extra_json,
+                    modified_at = EXCLUDED.modified_at,
+                    imported_at = NOW()
+                "#,
+            )
+            .bind(&record.id)
+            .bind(&ecosystem)
+            .bind(&package_name)
+            .bind(&severity)
+            .bind(&summary)
+            .bind(&affected_json)
+            .bind(&extra)
+            .bind(modified)
+            .execute(&self.pool)
+            .await?;
+            imported += 1;
+        }
+        Ok(imported)
+    }
+
+    async fn count_osv_advisories(&self) -> StoreResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM osv_vulnerabilities")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count)
+    }
+
+    async fn list_user_public_keys(&self, user_id: Uuid) -> StoreResult<Vec<UserPublicKey>> {
+        sqlx::query_as::<_, UserPublicKey>(
+            r#"
+            SELECT id, user_id, algorithm, public_key_b64, label,
+                   created_at, revoked_at
+            FROM user_public_keys
+            WHERE user_id = $1 AND revoked_at IS NULL
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn create_user_public_key(
+        &self,
+        user_id: Uuid,
+        algorithm: &str,
+        public_key_b64: &str,
+        label: &str,
+    ) -> StoreResult<UserPublicKey> {
+        sqlx::query_as::<_, UserPublicKey>(
+            r#"
+            INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, user_id, algorithm, public_key_b64, label,
+                      created_at, revoked_at
+            "#,
+        )
+        .bind(user_id)
+        .bind(algorithm)
+        .bind(public_key_b64)
+        .bind(label)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn revoke_user_public_key(&self, user_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
+        // Scoped to the requesting user so one account can't revoke
+        // another's key via id guessing. `revoked_at IS NULL` guards
+        // against idempotent re-revocation.
+        let res = sqlx::query(
+            r#"
+            UPDATE user_public_keys
+            SET revoked_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(key_id)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
+    }
+
+    async fn record_plugin_version_attestation(
+        &self,
+        plugin_version_id: Uuid,
+        key_id: Option<Uuid>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE plugin_versions
+            SET sbom_signed_key_id = $1,
+                sbom_signed_at = CASE WHEN $1 IS NULL THEN NULL ELSE NOW() END
+            WHERE id = $2
+            "#,
+        )
+        .bind(key_id)
+        .bind(plugin_version_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_plugin_version_attestation(
+        &self,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<Option<(Uuid, DateTime<Utc>)>> {
+        let row: Option<(Option<Uuid>, Option<DateTime<Utc>>)> = sqlx::query_as(
+            "SELECT sbom_signed_key_id, sbom_signed_at FROM plugin_versions WHERE id = $1",
+        )
+        .bind(plugin_version_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.and_then(|(k, t)| match (k, t) {
+            (Some(key), Some(ts)) => Some((key, ts)),
+            _ => None,
+        }))
     }
 
     // --- Plugin reviews ---

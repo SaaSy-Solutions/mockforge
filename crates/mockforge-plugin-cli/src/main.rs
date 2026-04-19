@@ -111,6 +111,163 @@ enum Commands {
         #[arg(short, long)]
         path: Option<PathBuf>,
     },
+
+    /// Publish a packaged plugin to a registry.
+    ///
+    /// Uploads the `.zip` package produced by `package`. With
+    /// `--sign --key-file <path> --sbom <path>` the CLI signs
+    /// `SHA-256(artifact_checksum_bytes || canonical(sbom))` with your
+    /// Ed25519 key and attaches the SBOM + signature to the upload so
+    /// the registry can verify the publisher attestation.
+    Publish {
+        /// Project directory or a `.zip` package path. Defaults to cwd.
+        #[arg(short, long)]
+        path: Option<PathBuf>,
+
+        /// Registry URL (default: https://registry.mockforge.dev).
+        #[arg(
+            long,
+            env = "MOCKFORGE_REGISTRY_URL",
+            default_value = "https://registry.mockforge.dev"
+        )]
+        registry: String,
+
+        /// Bearer token.
+        #[arg(long, env = "MOCKFORGE_REGISTRY_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+
+        /// Validate + describe the upload without actually sending it.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+
+        /// Sign the SBOM before upload. Requires `--key-file` and
+        /// `--sbom`.
+        #[arg(
+            long,
+            default_value_t = false,
+            requires = "key_file",
+            requires = "sbom"
+        )]
+        sign: bool,
+
+        /// PKCS#8 PEM Ed25519 private key used to sign the SBOM.
+        #[arg(long)]
+        key_file: Option<PathBuf>,
+
+        /// SBOM JSON file (typically CycloneDX). Sent to the registry
+        /// verbatim alongside the detached signature.
+        #[arg(long)]
+        sbom: Option<PathBuf>,
+    },
+
+    /// Manage SBOM attestation keys.
+    ///
+    /// Most actions hit the registry's `/api/v1/users/me/public-keys`
+    /// REST surface and require a registry URL (`--registry` or
+    /// `MOCKFORGE_REGISTRY_URL`) and bearer token (`--token` or
+    /// `MOCKFORGE_REGISTRY_TOKEN`). The `gen` action is purely local
+    /// and does not contact the registry.
+    Key {
+        #[command(subcommand)]
+        action: KeyAction,
+
+        /// Registry URL (e.g. https://registry.mockforge.dev).
+        #[arg(long, env = "MOCKFORGE_REGISTRY_URL")]
+        registry: Option<String>,
+
+        /// Bearer token for the registry API.
+        #[arg(long, env = "MOCKFORGE_REGISTRY_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum KeyAction {
+    /// List active attestation keys on the current account.
+    List,
+
+    /// Register an Ed25519 public key.
+    Add {
+        /// Human-readable label ("laptop", "ci-2026", …).
+        #[arg(long)]
+        label: String,
+
+        /// Path to the public-key file (raw base64, PEM SPKI, or a JWK
+        /// JSON blob with an `x` field).
+        #[arg(long, conflicts_with = "public_key")]
+        file: Option<PathBuf>,
+
+        /// Public key as a base64 string (standard or URL-safe).
+        #[arg(long)]
+        public_key: Option<String>,
+    },
+
+    /// Soft-revoke a key by its id.
+    Revoke {
+        /// UUID of the key to revoke (see `key list`).
+        id: String,
+    },
+
+    /// Generate a fresh Ed25519 keypair locally.
+    ///
+    /// The private key is written to `--out` (default
+    /// `mockforge_publisher_key.pem`) as PKCS#8 PEM with 0600
+    /// permissions on Unix; the public half is printed to stdout as
+    /// base64 so it can be pasted into `key add --public-key`. The
+    /// private material never leaves the local machine.
+    Gen {
+        /// Where to write the private key. Defaults to
+        /// ./mockforge_publisher_key.pem in the current directory.
+        #[arg(long)]
+        out: Option<PathBuf>,
+
+        /// Overwrite the output file if it already exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
+    /// Rotate publisher keys: generate + register a new key, then
+    /// (optionally) revoke the old one.
+    ///
+    /// The new key is registered *before* the old one is revoked so
+    /// the account is never momentarily keyless.
+    Rotate {
+        /// Where to write the new private key.
+        #[arg(long)]
+        out: PathBuf,
+
+        /// Human-readable label for the new key.
+        #[arg(long)]
+        label: String,
+
+        /// Revoke this key id after the new key registers.
+        #[arg(long)]
+        revoke: Option<String>,
+
+        /// Overwrite `--out` if it already exists.
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+
+    /// Produce a detached Ed25519 signature over an SBOM + artifact
+    /// checksum, ready to submit alongside a publish request.
+    ///
+    /// Signs `SHA-256(hex_decode(checksum) || canonicalize(sbom))` and
+    /// prints the base64 signature to stdout.
+    Sign {
+        /// PKCS#8 PEM private key produced by `key gen` or
+        /// `openssl genpkey -algorithm ed25519`.
+        #[arg(long)]
+        key_file: PathBuf,
+
+        /// Hex SHA-256 of the WASM artifact the SBOM describes.
+        #[arg(long)]
+        checksum: String,
+
+        /// Path to the SBOM JSON file (typically CycloneDX).
+        #[arg(long)]
+        sbom: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -174,6 +331,106 @@ async fn main() -> anyhow::Result<()> {
         Commands::Clean { path } => {
             commands::clean::clean_artifacts(path.as_deref()).await?;
             println!("{}", "✅ Build artifacts cleaned!".green().bold());
+        }
+
+        Commands::Publish {
+            path,
+            registry,
+            token,
+            dry_run,
+            sign,
+            key_file,
+            sbom,
+        } => {
+            // `requires` on the `sign` flag guarantees key_file + sbom
+            // are present when sign is true; we build SignOptions only
+            // in that case so unsigned publishes don't read files they
+            // don't need.
+            let sign_opts = if sign {
+                commands::publish::SignOptions {
+                    key_file,
+                    sbom_path: sbom,
+                }
+            } else {
+                commands::publish::SignOptions::default()
+            };
+            commands::publish::publish_plugin(
+                path.as_deref(),
+                &registry,
+                token.as_deref(),
+                dry_run,
+                sign_opts,
+            )
+            .await?;
+        }
+
+        Commands::Key {
+            action,
+            registry,
+            token,
+        } => {
+            // Shared helper — most actions need registry + token, but
+            // `gen` is purely local, so we defer the "required" check
+            // until we know which action was requested.
+            let require_creds = || -> anyhow::Result<(String, String)> {
+                let registry = registry.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--registry (or MOCKFORGE_REGISTRY_URL) is required for this action"
+                    )
+                })?;
+                let token = token.clone().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--token (or MOCKFORGE_REGISTRY_TOKEN) is required for this action"
+                    )
+                })?;
+                Ok((registry, token))
+            };
+
+            match action {
+                KeyAction::List => {
+                    let (reg, tok) = require_creds()?;
+                    commands::key::list_keys(&reg, &tok).await?;
+                }
+                KeyAction::Add {
+                    label,
+                    file,
+                    public_key,
+                } => {
+                    let (reg, tok) = require_creds()?;
+                    commands::key::add_key(
+                        &reg,
+                        &tok,
+                        &label,
+                        file.as_deref(),
+                        public_key.as_deref(),
+                    )
+                    .await?;
+                }
+                KeyAction::Revoke { id } => {
+                    let (reg, tok) = require_creds()?;
+                    commands::key::revoke_key(&reg, &tok, &id).await?;
+                }
+                KeyAction::Gen { out, force } => {
+                    commands::key::generate_key_cli(out, force).await?;
+                }
+                KeyAction::Rotate {
+                    out,
+                    label,
+                    revoke,
+                    force,
+                } => {
+                    let (reg, tok) = require_creds()?;
+                    commands::key::rotate_key(&reg, &tok, &out, force, &label, revoke.as_deref())
+                        .await?;
+                }
+                KeyAction::Sign {
+                    key_file,
+                    checksum,
+                    sbom,
+                } => {
+                    commands::key::sign_sbom(&key_file, &checksum, &sbom).await?;
+                }
+            }
         }
     }
 

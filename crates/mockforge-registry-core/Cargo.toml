@@ -61,10 +61,34 @@ rust_decimal = "1.33"
 # Crypto / hashing
 sha2 = "0.10"
 hex = "0.4"
+# Ed25519 verification for publisher SBOM attestations.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+# RFC 8785 (JCS) canonical JSON for the SBOM attestation verifier, so
+# "the same" SBOM produced by different JSON libraries signs to the
+# same bytes. Pulled from the workspace so the CLI signer and this
+# verifier can't drift apart — see `[workspace.dependencies]` in the
+# repo root Cargo.toml.
+serde_jcs = { workspace = true }
+
+# Precise SEMVER-range matching against the OSV advisory cache.
+semver = "1.0"
 
 # Validation
 validator = { version = "0.20", features = ["derive"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+
+# Canonical PEP 440 implementation. Used as an oracle in the OSV
+# normalizer conformance test: we feed pep440_rs the same pairs we
+# feed our normalizer and assert they agree on ordering. Keeps our
+# PyPI rewrite honest without us needing to re-implement the spec.
+pep440_rs = "0.7"
+
+# Property-based fuzzing for the JCS canonicalization layer. We
+# generate arbitrary JSON values and assert `canonicalize` is
+# idempotent and re-canonicalizes to identical bytes — catches silent
+# regressions in the serde_jcs dependency or in our pipeline around it.
+proptest = "1.5"
 tempfile = "3"

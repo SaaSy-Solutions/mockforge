@@ -330,6 +330,15 @@ pub struct PublishRequest {
     /// scanner. Accepts either JSON object or `null`/omitted.
     #[serde(default)]
     pub sbom: Option<serde_json::Value>,
+
+    /// Optional detached Ed25519 signature over
+    /// `SHA-256(artifact_checksum_bytes || canonical(sbom))` produced by
+    /// one of the publisher's registered public keys. When supplied and
+    /// valid, the verifying key id is recorded on the plugin version so
+    /// the scanner can surface a "verified publisher attestation"
+    /// finding. When supplied but invalid, publish is rejected.
+    #[serde(default, alias = "sbomSignature")]
+    pub sbom_signature: Option<String>,
 }
 
 fn default_plugin_language() -> String {
@@ -439,6 +448,57 @@ pub async fn publish_plugin(
                 .store
                 .add_plugin_version_dependency(version.id, &dep_name, &dep_version)
                 .await?;
+        }
+    }
+
+    // If the publisher submitted an SBOM + signature, verify against
+    // their registered Ed25519 keys *before* writing the scan row. We
+    // reject invalid signatures here (not silently) so a malicious or
+    // badly-signed publish doesn't end up masquerading as "just unsigned."
+    if let (Some(sbom_json), Some(signature)) =
+        (request.sbom.as_ref(), request.sbom_signature.as_deref())
+    {
+        use mockforge_registry_core::models::attestation::{
+            verify_sbom_attestation, SbomAttestationInput, SbomVerifyOutcome,
+        };
+
+        let keys = state.store.list_user_public_keys(author_id).await?;
+        // Canonicalize via RFC 8785 (JCS) — the CLI signs the same form,
+        // so publishers using different JSON libraries produce
+        // byte-identical inputs to the verifier. Without this step, two
+        // "equivalent" SBOMs differing only in key order or whitespace
+        // would reject.
+        let canonical = serde_jcs::to_vec(sbom_json)
+            .map_err(|e| ApiError::InvalidRequest(format!("canonicalizing SBOM: {}", e)))?;
+        let outcome = verify_sbom_attestation(
+            &keys,
+            &SbomAttestationInput {
+                artifact_checksum: &request.checksum,
+                sbom_canonical: &canonical,
+                signature_b64: signature,
+            },
+        );
+        match outcome {
+            SbomVerifyOutcome::Verified { key_id } => {
+                state.store.record_plugin_version_attestation(version.id, Some(key_id)).await?;
+            }
+            SbomVerifyOutcome::NoKeys => {
+                return Err(ApiError::InvalidRequest(
+                    "sbom_signature supplied but no public keys are registered on this account"
+                        .to_string(),
+                ));
+            }
+            SbomVerifyOutcome::Invalid => {
+                return Err(ApiError::InvalidRequest(
+                    "sbom_signature did not verify against any registered key".to_string(),
+                ));
+            }
+            SbomVerifyOutcome::Malformed(reason) => {
+                return Err(ApiError::InvalidRequest(format!(
+                    "sbom_signature is malformed: {}",
+                    reason
+                )));
+            }
         }
     }
 

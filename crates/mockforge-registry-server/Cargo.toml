@@ -104,6 +104,20 @@ sha1 = "0.10" # For TOTP (totp-lite 2.0 requires explicit hash types)
 # WASM artifact validation for the plugin security scanner worker.
 wasmparser = "0.239"
 
+# Ed25519 helpers for the publisher-key management handler (length check
+# + public_key bytes constant). Actual verification lives in the core crate.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
+# Canonical JSON (RFC 8785) for SBOM signature verification at publish
+# time. Sourced from `[workspace.dependencies]` so every JCS consumer
+# in the workspace locks onto the same version — bytes have to be
+# byte-identical across sign and verify or signatures silently reject.
+serde_jcs = { workspace = true }
+
+# OSV bulk-dump support for the osv_sync worker: per-ecosystem advisory
+# zips from https://osv.dev/data.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
 # Validation
 validator = { version = "0.20", features = ["derive"] }
 
