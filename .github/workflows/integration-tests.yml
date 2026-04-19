@@ -67,7 +67,7 @@ jobs:
       # their own infra gaps. Run these locally when testing a specific
       # integration. The non-ignored suite is the real CI coverage.
       - name: Run integration tests (non-ignored)
-        run: cargo test --package mockforge-integration-tests --test '*' --nocapture
+        run: cargo test --package mockforge-integration-tests --test '*' -- --nocapture
 
       - name: Upload test artifacts
         if: always()
