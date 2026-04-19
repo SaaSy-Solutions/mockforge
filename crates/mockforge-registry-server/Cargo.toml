@@ -146,8 +146,13 @@ mockforge-observability = { version = "0.3.70", path = "../mockforge-observabili
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }
 
-# HTTP client for Fly.io API
-reqwest = { version = "0.12", features = ["json"] }
+# HTTP client for Fly.io API. `stream` is also used by the OSV sync
+# worker so it can spool 100+ MB ecosystem dumps to a tempfile on disk
+# instead of buffering the whole body in memory.
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# `futures::StreamExt` adapters for the streaming download path.
+futures-util = "0.3"
 
 # SMTP email sending (feature: `email`)
 lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"], optional = true }

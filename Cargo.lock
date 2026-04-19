@@ -8693,6 +8693,7 @@ dependencies = [
  "data-encoding",
  "dotenvy",
  "ed25519-dalek",
+ "futures-util",
  "governor 0.6.3",
  "hex",
  "jsonwebtoken",

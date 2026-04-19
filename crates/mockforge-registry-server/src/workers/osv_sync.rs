@@ -138,20 +138,212 @@ async fn run_once(state: &AppState, source: &OsvSource) -> anyhow::Result<()> {
         }
         OsvSource::HttpUrls(urls) => {
             // Fetch each URL sequentially. Going parallel would cut wall
-            // time but each dump is hundreds of MB and we run on a small
-            // machine; sequential keeps memory bounded and avoids bursting
-            // the outbound pipe. One URL failing doesn't stop the others —
-            // we log and continue so a temporarily-broken ecosystem
-            // doesn't cost us coverage on the rest.
+            // time but each dump can be 100+ MB and we run on a small
+            // machine; sequential + streaming (see import_from_http_streaming)
+            // keeps peak memory bounded to ~a dozen MB regardless of
+            // ecosystem size. One URL failing doesn't stop the others.
             for url in urls {
-                match load_from_http(url).await {
-                    Ok(records) => import_records(state, records, url).await,
-                    Err(e) => error!("OSV sync: fetch from {} failed: {}", url, e),
+                if let Err(e) = import_from_http_streaming(state, url).await {
+                    error!("OSV sync [{}]: {}", url, e);
                 }
             }
             Ok(())
         }
     }
+}
+
+/// How many parsed records to batch before flushing to the store.
+/// Tuned to keep peak memory in the low tens of MB. Each record is small
+/// (most are <2 KB serialized), so 500 ≈ ~1 MB plus the zip entry buffer.
+const UPSERT_BATCH: usize = 500;
+
+/// Depth of the mpsc channel between the blocking zip reader and the
+/// async upsert loop. Four in-flight batches is enough to overlap
+/// parsing with DB round-trips without letting the reader run far ahead
+/// of the writer.
+const BATCH_CHANNEL_DEPTH: usize = 4;
+
+/// Stream-import one OSV HTTP source into the store.
+///
+/// The old `Vec<OsvImportRecord>`-returning `load_from_http` spiked peak
+/// memory to several hundred MB for ecosystems the size of PyPI or npm:
+/// the response body was buffered into `bytes::Bytes`, then the entire
+/// decompressed + parsed record set was materialized at once, and only
+/// after that did the upsert loop get a chance to free memory. On a 512
+/// MB machine that landed us in OOM-killer territory every sync cycle.
+///
+/// This function does it incrementally:
+///
+/// 1. Spool the HTTP response body to a `tempfile::NamedTempFile` via
+///    `bytes_stream()`, so the zip bytes never all live in RAM.
+/// 2. Open the tempfile with `zip::ZipArchive::new(File)`. The zip
+///    crate uses Read+Seek and only decompresses the current entry, so
+///    the archive's peak resident footprint is roughly one entry's
+///    decompressed JSON (tens of KB for an OSV advisory).
+/// 3. A blocking task iterates entries, parses records, and sends
+///    batches of `UPSERT_BATCH` down an mpsc channel.
+/// 4. The async side receives batches and upserts them one record at a
+///    time. Channel backpressure naturally paces the reader: four
+///    in-flight batches ≈ 2 MB of records, enough to keep parsing and
+///    DB I/O overlapping without running the reader off ahead.
+async fn import_from_http_streaming(state: &AppState, url: &str) -> anyhow::Result<()> {
+    use futures_util::StreamExt;
+    use std::io::Write;
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(600))
+        .build()?;
+    let resp = client.get(url).send().await?.error_for_status()?;
+
+    // Detection order for zip vs JSON is the same as before but we have
+    // to commit to it before seeing the body (we're streaming to disk,
+    // not buffering), so URL + Content-Type have to carry it. The zip
+    // magic sniff happens after we've written the first chunk.
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let url_hint = url.to_ascii_lowercase().ends_with(".zip");
+    let ct_hint = content_type.contains("zip") || content_type.contains("octet-stream");
+
+    // Stream the body to disk.
+    let tmp = tokio::task::spawn_blocking(tempfile::NamedTempFile::new).await??;
+    let tmp_path = tmp.path().to_path_buf();
+    let mut file = tokio::fs::File::from_std(tmp.reopen()?);
+    let mut stream = resp.bytes_stream();
+    let mut first_four: [u8; 4] = [0; 4];
+    let mut first_seen = 0usize;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        if first_seen < 4 {
+            let take = (4 - first_seen).min(chunk.len());
+            first_four[first_seen..first_seen + take].copy_from_slice(&chunk[..take]);
+            first_seen += take;
+        }
+        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk).await?;
+    }
+    tokio::io::AsyncWriteExt::flush(&mut file).await?;
+    drop(file); // Close the handle so the blocking reader can open it exclusively.
+
+    let is_zip = url_hint || ct_hint || (first_seen == 4 && has_zip_magic(&first_four));
+
+    if is_zip {
+        stream_zip_file_to_store(state, &tmp_path, url).await?;
+    } else {
+        // JSON path: small feeds only (single record or array). Re-read
+        // the tempfile — it's bounded by the feed size and in practice
+        // tiny compared to the zip dumps.
+        let bytes = tokio::task::spawn_blocking({
+            let p = tmp_path.clone();
+            move || std::fs::read(p)
+        })
+        .await??;
+        let body: serde_json::Value = serde_json::from_slice(&bytes)?;
+        let records: Vec<OsvImportRecord> = match body {
+            serde_json::Value::Array(_) => serde_json::from_value(body)?,
+            serde_json::Value::Object(_) => vec![serde_json::from_value(body)?],
+            _ => anyhow::bail!("OSV feed returned unexpected JSON root type"),
+        };
+        import_records(state, records, url).await;
+    }
+
+    // Tempfile drops here, removing it from disk. Writing above went
+    // through `reopen()` so the `NamedTempFile`'s own handle is still
+    // the owner of the underlying delete-on-drop.
+    drop(tmp);
+    // Explicit shadowed-variable hint so `_` isn't necessary; suppress
+    // the unused-let warning that can fire when this is the last use.
+    std::io::sink().write_all(&[]).ok();
+    Ok(())
+}
+
+/// Run the zip reader on a blocking thread, send parsed records over
+/// an mpsc channel in batches, upsert batches on the async side.
+async fn stream_zip_file_to_store(
+    state: &AppState,
+    zip_path: &std::path::Path,
+    source_label: &str,
+) -> anyhow::Result<()> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<OsvImportRecord>>(BATCH_CHANNEL_DEPTH);
+
+    let path_for_task = zip_path.to_path_buf();
+    let reader_task = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(&path_for_task)?)?;
+        let mut batch: Vec<OsvImportRecord> = Vec::with_capacity(UPSERT_BATCH);
+        let mut entry_skipped = 0usize;
+
+        for i in 0..archive.len() {
+            let mut entry = match archive.by_index(i) {
+                Ok(e) => e,
+                Err(_) => {
+                    entry_skipped += 1;
+                    continue;
+                }
+            };
+            if !entry.is_file() {
+                continue;
+            }
+            let name = entry.name().to_string();
+            if !name.to_ascii_lowercase().ends_with(".json") {
+                continue;
+            }
+            let mut buf = Vec::with_capacity(entry.size() as usize);
+            if std::io::Read::read_to_end(&mut entry, &mut buf).is_err() {
+                entry_skipped += 1;
+                continue;
+            }
+            // One-record-per-file is the OSV dump convention, but some
+            // mirrors pack arrays. Try both shapes.
+            match serde_json::from_slice::<OsvImportRecord>(&buf) {
+                Ok(rec) => batch.push(rec),
+                Err(_) => match serde_json::from_slice::<Vec<OsvImportRecord>>(&buf) {
+                    Ok(recs) => batch.extend(recs),
+                    Err(_) => {
+                        entry_skipped += 1;
+                        continue;
+                    }
+                },
+            }
+
+            if batch.len() >= UPSERT_BATCH {
+                let out = std::mem::replace(&mut batch, Vec::with_capacity(UPSERT_BATCH));
+                // Consumer gone means the whole import was cancelled —
+                // stop gracefully instead of blocking forever.
+                if tx.blocking_send(out).is_err() {
+                    return Ok(entry_skipped);
+                }
+            }
+        }
+        if !batch.is_empty() {
+            let _ = tx.blocking_send(batch);
+        }
+        Ok(entry_skipped)
+    });
+
+    let mut inserted = 0usize;
+    let mut upsert_skipped = 0usize;
+    while let Some(batch) = rx.recv().await {
+        for rec in batch {
+            match state.store.upsert_osv_advisory(&rec).await {
+                Ok(n) => inserted += n,
+                Err(e) => {
+                    upsert_skipped += 1;
+                    warn!("OSV sync [{}]: skipping {}: {}", source_label, rec.id, e);
+                }
+            }
+        }
+    }
+
+    let entry_skipped = reader_task.await??;
+
+    info!(
+        "OSV sync [{}]: imported {} (advisory, package) pair(s); skipped {} entries, {} upserts",
+        source_label, inserted, entry_skipped, upsert_skipped
+    );
+    Ok(())
 }
 
 /// Shared body for the local-path and HTTP code paths. Logs per-source so
@@ -243,74 +435,21 @@ fn parse_file(path: &std::path::Path) -> anyhow::Result<Vec<OsvImportRecord>> {
     Ok(vec![single])
 }
 
-async fn load_from_http(url: &str) -> anyhow::Result<Vec<OsvImportRecord>> {
-    // Short timeout — we run every 6 hours, we can fail fast and retry.
-    // The download timeout stays large (10 minutes) because OSV's
-    // ecosystem zips are hundreds of MB.
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(600))
-        .build()?;
-    let resp = client.get(url).send().await?.error_for_status()?;
-
-    // OSV's official bulk-dump URLs (https://osv-vulnerabilities.storage.googleapis.com/<eco>/all.zip)
-    // serve a zip archive with one JSON advisory per entry. Single-record
-    // and array JSON payloads are still supported for custom feeds.
-    //
-    // Detection order (each step is a fallback for the previous failing):
-    //   1. URL suffix — most deterministic signal when present.
-    //   2. Content-Type header — covers the happy path for osv.dev.
-    //   3. Zip magic bytes (`PK\x03\x04`) sniffed from the payload
-    //      itself. Robust even if upstream ever serves the dump with a
-    //      generic `application/octet-stream` or a stale `text/plain`
-    //      content-type.
-    let content_type = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let url_hint = url.to_ascii_lowercase().ends_with(".zip");
-    let ct_hint = content_type.contains("zip") || content_type.contains("octet-stream");
-
-    let bytes = resp.bytes().await?;
-
-    if url_hint || ct_hint || has_zip_magic(&bytes) {
-        return parse_bulk_zip(bytes.to_vec()).await;
-    }
-
-    // JSON path (single or array).
-    let body: serde_json::Value = serde_json::from_slice(&bytes)?;
-    let records: Vec<OsvImportRecord> = match body {
-        serde_json::Value::Array(_) => serde_json::from_value(body)?,
-        serde_json::Value::Object(_) => {
-            vec![serde_json::from_value(body)?]
-        }
-        _ => anyhow::bail!("OSV feed returned unexpected JSON root type"),
-    };
-    Ok(records)
-}
-
 /// Zip files — including the OSV.dev ecosystem dumps — start with the
 /// local file header magic `0x50 0x4b 0x03 0x04` ("PK\x03\x04"). We sniff
-/// this as a last-resort detection when URL and Content-Type don't
-/// identify the payload, so a transport-layer hiccup (wrong
-/// content-type, missing suffix) doesn't silently corrupt our import.
+/// this on the first downloaded chunk as a last-resort detection when
+/// URL and Content-Type don't identify the payload, so a transport-layer
+/// hiccup (wrong content-type, missing suffix) doesn't silently corrupt
+/// our import.
 fn has_zip_magic(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && &bytes[..4] == b"PK\x03\x04"
 }
 
-/// Unzip an OSV bulk dump in memory and parse every `*.json` entry.
-/// Malformed entries are logged and skipped — a single corrupt advisory
-/// shouldn't halt the import of the rest.
-///
-/// Runs on a blocking pool because `zip` reads synchronously. OSV dumps
-/// are CPU-bound to decompress and we don't want to tie up the async
-/// runtime thread for the duration.
-async fn parse_bulk_zip(bytes: Vec<u8>) -> anyhow::Result<Vec<OsvImportRecord>> {
-    tokio::task::spawn_blocking(move || parse_bulk_zip_sync(&bytes)).await?
-}
-
+/// In-memory zip parser retained as a unit-test helper so the record-
+/// parsing logic is covered without standing up a tempfile +
+/// tokio runtime. Production uses `stream_zip_file_to_store` which
+/// reads the same format off disk one entry at a time.
+#[cfg(test)]
 fn parse_bulk_zip_sync(bytes: &[u8]) -> anyhow::Result<Vec<OsvImportRecord>> {
     use std::io::{Cursor, Read};
 
