@@ -1,0 +1,198 @@
+name: JCS Canonicalization Fuzz
+
+# Extended corpus run for the JCS (RFC 8785) canonicalization proptests
+# in `mockforge-registry-core`. The `cargo test` suite only runs the
+# proptest default of 256 cases per test on every PR. Here we crank
+# `PROPTEST_CASES` up and run nightly so regressions in `serde_jcs` or
+# in the SBOM signing pipeline surface early — signatures only reject
+# at publish time, so a silent canonicalization drift would ship before
+# anyone noticed.
+
+on:
+  schedule:
+    # 03:00 UTC — offset from the generic `fuzz.yml` run at 02:00 so
+    # they don't contend for the shared runner pool.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: 'PROPTEST_CASES per test function'
+        required: false
+        default: '10000'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  jcs-fuzz:
+    name: JCS Fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # `contents: write` lets the regression-corpus step push a branch.
+    # `pull-requests: write` lets peter-evans/create-pull-request open
+    # the PR. `issues: write` lets the fallback step open a tracking
+    # issue. These are scoped to this job only — other jobs in the
+    # workflow inherit the default read-only permissions.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      CARGO_INCREMENTAL: "0"
+      # workflow_dispatch input flows through `env:` — never directly
+      # into a `run:` script — so it can't be used for shell injection.
+      PROPTEST_CASES: ${{ github.event.inputs.cases || '10000' }}
+      # Extra shrinking headroom — with 10k cases, a failure's
+      # minimized counter-example is more useful than bailing early.
+      PROPTEST_MAX_SHRINK_ITERS: "10000"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: jcs-fuzz
+
+      - name: Run JCS fuzz proptests
+        id: fuzz
+        run: |
+          cargo test \
+            -p mockforge-registry-core \
+            --lib \
+            models::attestation::jcs_fuzz:: \
+            -- \
+            --nocapture \
+            --test-threads=1
+
+      - name: Upload proptest regression seeds on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: jcs-fuzz-proptest-regressions
+          # `proptest` writes shrunken counter-examples to
+          # `proptest-regressions/` next to the source file. Capturing
+          # them as an artifact is the belt — the auto-PR step below is
+          # the braces. If the PR step fails (e.g. a repo rule blocks
+          # the bot branch) the maintainer can still pull the seeds
+          # from the artifact.
+          path: crates/mockforge-registry-core/**/proptest-regressions/**
+          if-no-files-found: ignore
+
+      # Scope the auto-commit surface to *only* proptest regression
+      # seed files, so a compromised or misbehaving workflow can't
+      # silently modify source code. `git add` is restricted to the
+      # exact glob, and we fail the step (not the whole workflow) if
+      # nothing showed up — this both skips the PR when the failure
+      # was a non-proptest panic and records a log line so a
+      # maintainer sees why no PR was opened.
+      - name: Detect new regression seeds
+        id: seeds
+        if: failure()
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          mapfile -t seed_files < <(
+            git ls-files --others --modified --exclude-standard \
+              -- 'crates/mockforge-registry-core/**/proptest-regressions/**'
+          )
+          if [ "${#seed_files[@]}" -eq 0 ]; then
+            echo "No new proptest-regressions files detected; skipping auto-PR."
+            echo "has_seeds=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Found ${#seed_files[@]} seed file(s):"
+          printf '  %s\n' "${seed_files[@]}"
+          echo "has_seeds=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open PR with new regression seeds
+        id: open_pr
+        if: failure() && steps.seeds.outputs.has_seeds == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # `GITHUB_TOKEN` is the default; listed explicitly so it is
+          # clear we are intentionally using the job-scoped token and
+          # not a PAT. By design, PRs opened with `GITHUB_TOKEN` do
+          # not trigger other workflows — which is exactly what we
+          # want here (the seed-commit PR should just get code-review,
+          # not kick off another JCS fuzz run).
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Restrict the commit to the seed file glob so nothing
+          # else from a dirty workspace can sneak in.
+          add-paths: |
+            crates/mockforge-registry-core/**/proptest-regressions/**
+          branch: auto/jcs-fuzz-regressions
+          delete-branch: true
+          base: main
+          commit-message: |
+            test(registry-core): add JCS fuzz regression seeds
+
+            Auto-generated from the nightly JCS canonicalization fuzz
+            run (.github/workflows/jcs-fuzz.yml). The attached seeds
+            reproduce a failing case; merging this PR grows the
+            permanent regression corpus so the same case is retried
+            on every future `cargo test` invocation.
+          title: 'test(registry-core): grow JCS fuzz regression corpus'
+          body: |
+            Automated PR from the nightly JCS fuzz workflow. It
+            contains one or more new files under
+            `crates/mockforge-registry-core/**/proptest-regressions/`
+            — these are proptest seed files that reproduce a
+            counter-example discovered during the extended nightly
+            run.
+
+            **Before merging**:
+            1. Check the linked workflow run to see the panic message.
+            2. Open a fix PR that lands *before* this one so the
+               corpus grows only once the underlying bug is patched —
+               otherwise `cargo test` will start failing on every
+               contributor's local machine.
+            3. Merge this PR to lock the regression into CI.
+
+            If the failure was transient (e.g. a flaky OS-level
+            resource), close this PR — proptest will just re-discover
+            the case on the next run if it's real.
+          labels: |
+            fuzzing
+            registry
+            auto
+          draft: true
+
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          # `PR_URL` is the output of peter-evans/create-pull-request.
+          # It's only set when the auto-PR step ran and succeeded, so
+          # we have to defensively default it before interpolating.
+          PR_URL: ${{ steps.open_pr.outputs.pull-request-url }}
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const cases = process.env.PROPTEST_CASES || '10000';
+            const prUrl = process.env.PR_URL || '';
+            const prLine = prUrl
+              ? `**Seed corpus PR:** ${prUrl}\n\n`
+              : '';
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `JCS canonicalization fuzz failed (${cases} cases)`,
+              body:
+                `The nightly JCS proptest sweep failed. A counter-example ` +
+                `(plus the proptest seed file needed to reproduce it) is ` +
+                `attached to the workflow run as an artifact.\n\n` +
+                `**Workflow Run:** ${runUrl}\n\n` +
+                prLine +
+                `Reproduce locally with:\n\n` +
+                '```\n' +
+                `PROPTEST_CASES=${cases} cargo test -p mockforge-registry-core \\\n` +
+                `  --lib models::attestation::jcs_fuzz::\n` +
+                '```\n',
+              labels: ['bug', 'fuzzing', 'security', 'registry']
+            });

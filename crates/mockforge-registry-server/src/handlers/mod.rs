@@ -20,6 +20,7 @@ pub mod organizations;
 pub mod password_reset;
 pub mod pillar_analytics;
 pub mod plugins;
+pub mod public_keys;
 pub mod reviews;
 pub mod scenario_promotions;
 pub mod sso;

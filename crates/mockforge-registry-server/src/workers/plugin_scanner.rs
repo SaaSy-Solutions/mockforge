@@ -141,15 +141,46 @@ async fn run_once(state: &AppState) -> anyhow::Result<()> {
 
     for job in jobs {
         let plugin_version_id = job.plugin_version_id;
+        let declared_checksum = job.checksum.clone();
         match scan_one(&state.storage, &job).await {
             Ok(mut result) => {
                 // Cross-reference any SBOM the publisher submitted against
                 // the vulnerability list before we persist the result, so
                 // findings from both static + dependency analysis land in
-                // one row.
+                // one row. Before trusting package names, verify the SBOM
+                // is bound to *this* artifact by checksum — otherwise a
+                // publisher could submit a clean SBOM for a dirty WASM.
                 if let Ok(Some(sbom)) = state.store.get_plugin_version_sbom(plugin_version_id).await
                 {
-                    apply_sbom_findings(&mut result, &sbom);
+                    let trust = verify_sbom_binding(&sbom, &declared_checksum);
+                    record_sbom_binding(&mut result, &trust);
+
+                    // Surface publisher attestation when one is recorded.
+                    // This is strictly additive — a missing attestation
+                    // doesn't downgrade the score; a *present* one just
+                    // earns a positive finding, which the UI can display
+                    // distinctly from the generic "SBOM bound" case.
+                    if let Ok(Some((key_id, signed_at))) =
+                        state.store.get_plugin_version_attestation(plugin_version_id).await
+                    {
+                        append_finding(
+                            &mut result,
+                            json!({
+                                "severity": "info",
+                                "category": "supply_chain",
+                                "title": "Verified publisher attestation",
+                                "description": format!(
+                                    "SBOM was signed by a public key ({}) registered to the publishing account on {}. The account vouches for the dependency list.",
+                                    key_id,
+                                    signed_at.to_rfc3339()
+                                )
+                            }),
+                        );
+                    }
+
+                    if matches!(trust, SbomBinding::Bound) {
+                        apply_sbom_findings_async(&*state.store, &mut result, &sbom).await;
+                    }
                 }
                 if let Err(e) = state
                     .store
@@ -789,6 +820,246 @@ const KNOWN_VULNERABLE_PACKAGES: &[(&str, &str, &str, &str, &str)] = &[
     ),
 ];
 
+/// Is the SBOM the publisher submitted actually about the artifact we just
+/// scanned? CycloneDX 1.4+ lets a document declare its primary component
+/// under `metadata.component.hashes` (array of `{ alg, content }`); we
+/// check there first, then fall back to any top-level `components[i]` whose
+/// `purl` or `name` matches the plugin name.
+///
+/// Outcomes:
+///   * [`SbomBinding::Bound`] — a `SHA-256` hash in the SBOM matches the
+///     artifact's declared checksum. Findings from this SBOM are trusted.
+///   * [`SbomBinding::Unsigned`] — no digest was declared. We surface an
+///     info-level finding and *skip* vulnerability scanning — better to
+///     say nothing than to accept unverified claims.
+///   * [`SbomBinding::Mismatch { declared }`] — the SBOM claims a
+///     different artifact than the one we're looking at. Critical finding,
+///     vuln scan skipped.
+#[derive(Debug)]
+enum SbomBinding {
+    Bound,
+    Unsigned,
+    Mismatch { declared: String },
+}
+
+fn verify_sbom_binding(sbom: &JsonValue, expected_checksum: &str) -> SbomBinding {
+    let expected = expected_checksum.to_ascii_lowercase();
+
+    // Collect every SHA-256 digest visible in the document, anywhere a
+    // CycloneDX-style `hashes` array might appear.
+    let mut declared: Vec<String> = Vec::new();
+    collect_sha256_hashes(sbom, &mut declared);
+
+    if declared.is_empty() {
+        return SbomBinding::Unsigned;
+    }
+
+    for d in &declared {
+        if d.eq_ignore_ascii_case(&expected) {
+            return SbomBinding::Bound;
+        }
+    }
+
+    // Declared at least one digest but none matched — actively lying, not
+    // just missing.
+    SbomBinding::Mismatch {
+        declared: declared.into_iter().next().unwrap_or_default(),
+    }
+}
+
+/// Walk the SBOM JSON looking for `hashes` arrays shaped like
+/// `[{ "alg": "SHA-256", "content": "..." }]`. Lowercase the contents so
+/// the caller compares case-insensitively.
+fn collect_sha256_hashes(node: &JsonValue, out: &mut Vec<String>) {
+    match node {
+        JsonValue::Object(map) => {
+            if let Some(JsonValue::Array(hashes)) = map.get("hashes") {
+                for h in hashes {
+                    let alg =
+                        h.get("alg").and_then(|v| v.as_str()).unwrap_or("").to_ascii_lowercase();
+                    let content = h.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                    if (alg == "sha-256" || alg == "sha256") && !content.is_empty() {
+                        out.push(content.to_ascii_lowercase());
+                    }
+                }
+            }
+            for v in map.values() {
+                collect_sha256_hashes(v, out);
+            }
+        }
+        JsonValue::Array(arr) => {
+            for v in arr {
+                collect_sha256_hashes(v, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn record_sbom_binding(outcome: &mut ScanOutcome, binding: &SbomBinding) {
+    match binding {
+        SbomBinding::Bound => {
+            append_finding(
+                outcome,
+                json!({
+                    "severity": "info",
+                    "category": "supply_chain",
+                    "title": "SBOM bound to artifact",
+                    "description": "SBOM contains a SHA-256 digest matching the published WASM. Dependency findings below are derived from this verified SBOM."
+                }),
+            );
+        }
+        SbomBinding::Unsigned => {
+            append_finding(
+                outcome,
+                json!({
+                    "severity": "medium",
+                    "category": "supply_chain",
+                    "title": "SBOM not bound to artifact",
+                    "description": "SBOM did not declare a SHA-256 hash for the artifact. Without a hash there's no way to prove this SBOM describes the WASM being published — dependency scanning was skipped. Add a `hashes: [{alg: \"SHA-256\", content: \"...\"}]` entry to metadata.component or the matching components[] row."
+                }),
+            );
+            // Unbound SBOM is a supply-chain weakness, but not fatal.
+            let current = outcome.score as i32;
+            let new = (current - 5).clamp(0, 100);
+            outcome.score = new as i16;
+        }
+        SbomBinding::Mismatch { declared } => {
+            append_finding(
+                outcome,
+                json!({
+                    "severity": "critical",
+                    "category": "supply_chain",
+                    "title": "SBOM claims a different artifact",
+                    "description": format!(
+                        "SBOM declared SHA-256 `{}`, but the published artifact hashes to a different value. The SBOM is not about this WASM — dependency scanning was skipped and the artifact is marked fail.",
+                        declared
+                    )
+                }),
+            );
+            // Very strong signal of supply-chain tampering.
+            let current = outcome.score as i32;
+            let new = (current - 60).clamp(0, 100);
+            outcome.score = new as i16;
+            outcome.status = if new >= 70 {
+                outcome.status.clone()
+            } else if new >= 40 {
+                "warning".to_string()
+            } else {
+                "fail".to_string()
+            };
+        }
+    }
+}
+
+/// DB-backed variant of `apply_sbom_findings`. Walks the SBOM components
+/// and looks each up in the `osv_vulnerabilities` cache. Falls back to the
+/// hardcoded list only when the cache is empty (fresh install before the
+/// first OSV sync has run) — in steady state we want real advisories.
+async fn apply_sbom_findings_async(
+    store: &dyn crate::store::RegistryStore,
+    outcome: &mut ScanOutcome,
+    sbom: &JsonValue,
+) {
+    let cache_empty = store.count_osv_advisories().await.unwrap_or(0) == 0;
+    if cache_empty {
+        // Bootstrap path: no live data yet, keep the hardcoded list
+        // active so the scanner isn't silent on fresh installs.
+        apply_sbom_findings(outcome, sbom);
+        append_finding(
+            outcome,
+            json!({
+                "severity": "info",
+                "category": "other",
+                "title": "Using seed vulnerability list",
+                "description": "OSV advisory cache is empty — the scanner fell back to the built-in seed list. Run the osv_sync worker to populate the cache."
+            }),
+        );
+        return;
+    }
+
+    let components = match sbom.get("components").and_then(|c| c.as_array()) {
+        Some(c) => c,
+        None => {
+            append_finding(
+                outcome,
+                json!({
+                    "severity": "info",
+                    "category": "other",
+                    "title": "SBOM has no 'components' array",
+                    "description": "Expected CycloneDX-shaped SBOM with a top-level 'components' array. Vulnerability check skipped."
+                }),
+            );
+            return;
+        }
+    };
+
+    let mut checked = 0usize;
+    let mut score_delta: i32 = 0;
+    for comp in components {
+        let Some((ecosystem, name, version)) = parse_component(comp) else {
+            continue;
+        };
+        checked += 1;
+
+        let matches = match store.find_osv_matches(&ecosystem, &name, &version).await {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("osv lookup failed for {}:{}@{}: {}", ecosystem, name, version, e);
+                continue;
+            }
+        };
+
+        for m in matches {
+            let penalty: i32 = match m.severity.as_str() {
+                "critical" => 40,
+                "high" => 20,
+                "medium" => 8,
+                _ => 3,
+            };
+            score_delta = score_delta.saturating_add(penalty);
+            append_finding(
+                outcome,
+                json!({
+                    "severity": m.severity,
+                    "category": "vulnerable_dependency",
+                    "title": format!(
+                        "{}: {}:{}@{}",
+                        m.advisory_id, ecosystem, name, version
+                    ),
+                    "description": m.summary,
+                }),
+            );
+        }
+    }
+
+    append_finding(
+        outcome,
+        json!({
+            "severity": "info",
+            "category": "other",
+            "title": "SBOM scanned against OSV cache",
+            "description": format!(
+                "Checked {} component(s) against the live OSV advisory cache.",
+                checked
+            )
+        }),
+    );
+
+    if score_delta > 0 {
+        let current = outcome.score as i32;
+        let new = (current - score_delta).clamp(0, 100);
+        outcome.score = new as i16;
+        outcome.status = if new >= 70 {
+            outcome.status.clone()
+        } else if new >= 40 {
+            "warning".to_string()
+        } else {
+            "fail".to_string()
+        };
+    }
+}
+
 /// Parse the SBOM, scan its components against the hardcoded vulnerability
 /// list, and append findings (+ decrement the score) on `outcome` in place.
 ///
@@ -1091,5 +1362,108 @@ mod tests {
         assert!(findings
             .iter()
             .any(|f| f["title"].as_str().unwrap().contains("no 'components'")));
+    }
+
+    #[test]
+    fn sbom_binding_bound_when_digest_matches() {
+        let sbom = serde_json::json!({
+            "metadata": {
+                "component": {
+                    "name": "my-plugin",
+                    "hashes": [
+                        { "alg": "SHA-256", "content": "DEADbeef" }
+                    ]
+                }
+            }
+        });
+        let binding = verify_sbom_binding(&sbom, "deadbeef");
+        assert!(matches!(binding, SbomBinding::Bound));
+    }
+
+    #[test]
+    fn sbom_binding_unsigned_when_no_digest() {
+        let sbom = serde_json::json!({
+            "components": [
+                { "purl": "pkg:npm/leftpad@1.0.0" }
+            ]
+        });
+        let binding = verify_sbom_binding(&sbom, "deadbeef");
+        assert!(matches!(binding, SbomBinding::Unsigned));
+    }
+
+    #[test]
+    fn sbom_binding_mismatch_when_digest_disagrees() {
+        let sbom = serde_json::json!({
+            "metadata": {
+                "component": {
+                    "hashes": [
+                        { "alg": "SHA-256", "content": "aaaa1111" }
+                    ]
+                }
+            }
+        });
+        let binding = verify_sbom_binding(&sbom, "bbbb2222");
+        match binding {
+            SbomBinding::Mismatch { declared } => {
+                assert_eq!(declared, "aaaa1111");
+            }
+            other => panic!("expected Mismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn sbom_binding_walks_component_hashes_too() {
+        // Some CycloneDX exporters put hashes on components[] instead of
+        // metadata.component. Both should be consulted.
+        let sbom = serde_json::json!({
+            "components": [
+                {
+                    "name": "my-plugin",
+                    "hashes": [
+                        { "alg": "sha-256", "content": "CAFEBABE" }
+                    ]
+                }
+            ]
+        });
+        let binding = verify_sbom_binding(&sbom, "cafebabe");
+        assert!(matches!(binding, SbomBinding::Bound));
+    }
+
+    #[test]
+    fn record_binding_mismatch_downgrades_outcome() {
+        let mut outcome = clean_outcome();
+        record_sbom_binding(
+            &mut outcome,
+            &SbomBinding::Mismatch {
+                declared: "aaaa1111".to_string(),
+            },
+        );
+        // 100 - 60 = 40 → warning threshold.
+        assert_eq!(outcome.score, 40);
+        assert_eq!(outcome.status, "warning");
+
+        // A second artifact that was already warning-grade before the
+        // mismatch should drop straight into fail.
+        let mut warn_outcome = ScanOutcome {
+            status: "warning".to_string(),
+            score: 60,
+            findings: JsonValue::Array(vec![]),
+        };
+        record_sbom_binding(
+            &mut warn_outcome,
+            &SbomBinding::Mismatch {
+                declared: "aaaa1111".to_string(),
+            },
+        );
+        assert_eq!(warn_outcome.score, 0);
+        assert_eq!(warn_outcome.status, "fail");
+    }
+
+    #[test]
+    fn record_binding_unsigned_keeps_pass_with_minor_penalty() {
+        let mut outcome = clean_outcome();
+        record_sbom_binding(&mut outcome, &SbomBinding::Unsigned);
+        assert_eq!(outcome.status, "pass");
+        assert_eq!(outcome.score, 95);
     }
 }

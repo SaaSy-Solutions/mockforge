@@ -145,6 +145,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
 toml = "0.8"
+# RFC 8785 (JCS) canonical JSON. Single-sourced here so the CLI signer
+# and the registry server verifier can never drift out of lock-step —
+# silent signature mismatches are the worst possible failure mode for
+# this feature.
+serde_jcs = "0.1"
 
 # Route matching
 matchit = "0.8"

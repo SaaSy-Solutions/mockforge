@@ -19,7 +19,26 @@ path = "src/main.rs"
 
 [dependencies]
 # CLI framework
-clap = { version = "4", features = ["derive"] }
+# `env` feature lets the new `key` subcommand read the registry URL and
+# token from env vars for scripting.
+clap = { version = "4", features = ["derive", "env"] }
+
+# Registry key-management HTTP client.
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "multipart"], default-features = false }
+base64 = "0.21"
+uuid = { version = "1", features = ["v4"] }
+
+# Ed25519 key generation + signing for the `key gen` and
+# `publish --sign` commands. We use the library's own PKCS#8 encoder
+# so generated keys load cleanly into `openssl`, `ssh-keygen`, and any
+# other tool that reads PKCS#8.
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "rand_core", "pkcs8", "pem"] }
+rand = { workspace = true }
+
+# RFC 8785 (JCS) canonical JSON. Pulled from the workspace so the CLI
+# signer and registry server verifier always agree on which version is
+# canonical — see `[workspace.dependencies]` in the repo root Cargo.toml.
+serde_jcs = { workspace = true }
 
 # Template engine
 handlebars = "6.2"
@@ -41,6 +60,7 @@ glob = "0.3"
 # Compression and archives
 zip = "2.2"
 sha2 = "0.10"
+hex = "0.4"
 
 # Process execution
 tokio = { workspace = true, features = ["process", "macros"] }

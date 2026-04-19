@@ -1,6 +1,7 @@
 //! Database models
 
 pub mod api_token;
+pub mod attestation;
 pub mod audit_log;
 pub mod cloud_fixture;
 pub mod cloud_service;
@@ -12,6 +13,7 @@ pub mod login_attempt;
 pub mod mock_environment;
 pub mod org_template;
 pub mod organization;
+pub mod osv;
 pub mod plugin;
 pub mod project;
 pub mod review;
@@ -33,6 +35,9 @@ pub mod waitlist;
 pub use verification_token::VerificationToken;
 
 pub use api_token::{ApiToken, TokenScope};
+pub use attestation::{
+    verify_sbom_attestation, SbomAttestationInput, SbomVerifyOutcome, UserPublicKey,
+};
 #[cfg(feature = "postgres")]
 pub use audit_log::record_audit_event;
 pub use audit_log::AuditEventType;
@@ -41,6 +46,7 @@ pub use federation::Federation;
 pub use hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 pub use org_template::OrgTemplate;
 pub use organization::{OrgMember, OrgRole, Organization, Plan};
+pub use osv::{OsvAdvisory, OsvAffected, OsvImportRecord, OsvMatch, OsvPackage, OsvSeverity};
 pub use plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 pub use review::Review;
 pub use saml_assertion::SAMLAssertionId;

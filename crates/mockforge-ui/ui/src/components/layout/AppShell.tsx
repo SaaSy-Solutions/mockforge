@@ -178,6 +178,7 @@ const navSections = [
       { id: 'organization', labelKey: 'tab.organization', icon: Users },
       { id: 'billing', labelKey: 'tab.billing', icon: CreditCard },
       { id: 'api-tokens', labelKey: 'tab.apiTokens', icon: Key },
+      { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
       { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
       { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
@@ -203,6 +204,7 @@ const cloudNavItemIds = new Set([
   'organization',
   'billing',
   'api-tokens',
+  'publisher-keys',
   'byok',
   'usage',
 ]);

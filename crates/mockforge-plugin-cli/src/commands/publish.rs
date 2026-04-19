@@ -5,12 +5,26 @@ use anyhow::{Context, Result};
 use colored::*;
 use std::path::{Path, PathBuf};
 
+/// Options controlling SBOM attestation during publish. When `key_file`
+/// and `sbom_path` are both supplied the command canonicalizes the SBOM,
+/// computes a detached Ed25519 signature against
+/// `SHA-256(hex_decode(checksum) || canonical(sbom))`, and attaches both
+/// the SBOM and the signature to the upload. The registry verifies the
+/// signature against the publisher's registered public keys (see
+/// `mockforge-plugin key add`).
+#[derive(Debug, Default, Clone)]
+pub struct SignOptions {
+    pub key_file: Option<PathBuf>,
+    pub sbom_path: Option<PathBuf>,
+}
+
 /// Publish a plugin package to the registry.
 pub async fn publish_plugin(
     path: Option<&Path>,
     registry: &str,
     token: Option<&str>,
     dry_run: bool,
+    sign: SignOptions,
 ) -> Result<()> {
     // Determine project directory or package path
     let project_path = if let Some(p) = path {
@@ -61,8 +75,22 @@ pub async fn publish_plugin(
         "Authentication token is required. Provide --token or set MOCKFORGE_REGISTRY_TOKEN",
     )?;
 
-    // Upload the package
-    upload_package(&package_path, &plugin_id, &plugin_version, registry, auth_token).await?;
+    // Compute SBOM attestation if the publisher asked for it. We do
+    // this *before* the upload so a signing failure doesn't waste
+    // bandwidth uploading an un-attestable artifact.
+    let attestation = build_sbom_attestation(&package_path, &sign)?;
+
+    // Upload the package (with optional SBOM + signature attached as
+    // multipart fields the server picks up).
+    upload_package(
+        &package_path,
+        &plugin_id,
+        &plugin_version,
+        registry,
+        auth_token,
+        attestation.as_ref(),
+    )
+    .await?;
 
     println!();
     println!(
@@ -178,6 +206,55 @@ fn validate_package(package_path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Optional attestation block computed locally before upload. The
+/// `sbom_canonical_bytes` are the exact bytes the signature covers — we
+/// send them verbatim so server-side canonicalization doesn't have to
+/// match ours byte-for-byte.
+#[derive(Debug)]
+struct SbomAttestation {
+    sbom_canonical_bytes: Vec<u8>,
+    signature_b64: String,
+}
+
+/// Build the SBOM attestation payload from the publisher's
+/// `SignOptions`. Returns `None` when the publisher didn't ask for
+/// signing, `Err` when they did but something's wrong with the inputs
+/// (missing file, malformed key, etc.) so the surprise happens before
+/// the upload rather than after.
+fn build_sbom_attestation(
+    package_path: &Path,
+    sign: &SignOptions,
+) -> Result<Option<SbomAttestation>> {
+    use base64::Engine;
+    use sha2::{Digest, Sha256};
+
+    let (key_file, sbom_path) = match (&sign.key_file, &sign.sbom_path) {
+        (Some(k), Some(s)) => (k, s),
+        (None, None) => return Ok(None),
+        (None, Some(_)) => anyhow::bail!("--sbom supplied without --key-file"),
+        (Some(_), None) => anyhow::bail!("--key-file supplied without --sbom"),
+    };
+
+    // Compute the artifact checksum the signature must commit to. The
+    // server recomputes this server-side and rejects mismatches, so we
+    // need to match exactly.
+    let wasm_bytes = std::fs::read(package_path)
+        .with_context(|| format!("reading package for signing: {}", package_path.display()))?;
+    let checksum_bytes: [u8; 32] = Sha256::digest(&wasm_bytes).into();
+    let checksum_hex: String = checksum_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+
+    let sbom_canonical = crate::commands::key::read_and_canonicalize_sbom(sbom_path)?;
+    let signing = crate::commands::key::load_signing_key(key_file)?;
+    let message = crate::commands::key::attestation_message(&checksum_hex, &sbom_canonical)?;
+    let sig = ed25519_dalek::Signer::sign(&signing, &message);
+
+    println!("{}  signed SBOM attestation.", "  ✓".green());
+    Ok(Some(SbomAttestation {
+        sbom_canonical_bytes: sbom_canonical,
+        signature_b64: base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()),
+    }))
+}
+
 /// Upload the package to the registry.
 async fn upload_package(
     package_path: &Path,
@@ -185,6 +262,7 @@ async fn upload_package(
     plugin_version: &str,
     registry: &str,
     token: &str,
+    attestation: Option<&SbomAttestation>,
 ) -> Result<()> {
     let file_bytes = std::fs::read(package_path)
         .with_context(|| format!("Failed to read package: {}", package_path.display()))?;
@@ -204,10 +282,20 @@ async fn upload_package(
         .file_name(file_name)
         .mime_str("application/zip")?;
 
-    let form = reqwest::multipart::Form::new()
+    let mut form = reqwest::multipart::Form::new()
         .text("name", plugin_id.to_string())
         .text("version", plugin_version.to_string())
         .part("package", part);
+
+    // Attach the attestation as two extra multipart fields. The server
+    // treats them as optional and picks them up when present — older
+    // registry builds that don't yet understand the fields ignore them.
+    if let Some(att) = attestation {
+        let sbom_part = reqwest::multipart::Part::bytes(att.sbom_canonical_bytes.clone())
+            .file_name("sbom.json".to_string())
+            .mime_str("application/json")?;
+        form = form.part("sbom", sbom_part).text("sbom_signature", att.signature_b64.clone());
+    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -424,9 +512,14 @@ mod tests {
         create_test_project(temp_dir.path(), "dry-run-plugin", "1.0.0");
         create_test_package(temp_dir.path(), "dry-run-plugin", "1.0.0");
 
-        let result =
-            publish_plugin(Some(temp_dir.path()), "https://registry.mockforge.dev", None, true)
-                .await;
+        let result = publish_plugin(
+            Some(temp_dir.path()),
+            "https://registry.mockforge.dev",
+            None,
+            true,
+            SignOptions::default(),
+        )
+        .await;
         assert!(result.is_ok());
     }
 
@@ -436,9 +529,14 @@ mod tests {
         create_test_project(temp_dir.path(), "no-token-plugin", "1.0.0");
         create_test_package(temp_dir.path(), "no-token-plugin", "1.0.0");
 
-        let result =
-            publish_plugin(Some(temp_dir.path()), "https://registry.mockforge.dev", None, false)
-                .await;
+        let result = publish_plugin(
+            Some(temp_dir.path()),
+            "https://registry.mockforge.dev",
+            None,
+            false,
+            SignOptions::default(),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Authentication token is required"));
     }
@@ -454,10 +552,130 @@ mod tests {
             "https://registry.mockforge.dev",
             Some(""),
             false,
+            SignOptions::default(),
         )
         .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Authentication token is required"));
+    }
+
+    #[tokio::test]
+    async fn test_publish_plugin_sign_requires_both_args() {
+        let temp_dir = TempDir::new().unwrap();
+        create_test_project(temp_dir.path(), "half-sign-plugin", "1.0.0");
+        let pkg = create_test_package(temp_dir.path(), "half-sign-plugin", "1.0.0");
+
+        // --key-file without --sbom.
+        let err = build_sbom_attestation(
+            &pkg,
+            &SignOptions {
+                key_file: Some(PathBuf::from("k.pem")),
+                sbom_path: None,
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("--key-file supplied without --sbom"));
+
+        // --sbom without --key-file.
+        let err = build_sbom_attestation(
+            &pkg,
+            &SignOptions {
+                key_file: None,
+                sbom_path: Some(PathBuf::from("s.json")),
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("--sbom supplied without --key-file"));
+
+        // Neither flag → no attestation, no error.
+        let none = build_sbom_attestation(&pkg, &SignOptions::default()).unwrap();
+        assert!(none.is_none());
+    }
+
+    /// JCS makes the signature portable across JSON libraries: two
+    /// SBOMs that differ only in key order / whitespace must produce
+    /// the same canonical bytes and therefore the same signature.
+    #[tokio::test]
+    async fn test_sbom_canonicalization_is_jcs() {
+        use crate::commands::key;
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Two SBOMs with identical semantics but different formatting.
+        let a = tmp.path().join("a.json");
+        let b = tmp.path().join("b.json");
+        std::fs::write(&a, br#"{"components":[{"name":"foo","version":"1.0"}]}"#).unwrap();
+        // Same content, reordered keys, pretty-printed whitespace.
+        std::fs::write(
+            &b,
+            br#"{
+    "components": [
+        {
+            "version": "1.0",
+            "name": "foo"
+        }
+    ]
+}"#,
+        )
+        .unwrap();
+
+        let bytes_a = key::read_and_canonicalize_sbom(&a).unwrap();
+        let bytes_b = key::read_and_canonicalize_sbom(&b).unwrap();
+        assert_eq!(bytes_a, bytes_b, "JCS must normalize both inputs to the same bytes");
+
+        // Signatures over both inputs with the same key must also match,
+        // proving the property flows through the signer.
+        let key_path = tmp.path().join("k.pem");
+        key::generate_key(&key_path, false).await.unwrap();
+        let signing = key::load_signing_key(&key_path).unwrap();
+        let checksum = "aa".repeat(32);
+        let msg_a = key::attestation_message(&checksum, &bytes_a).unwrap();
+        let msg_b = key::attestation_message(&checksum, &bytes_b).unwrap();
+        assert_eq!(msg_a, msg_b);
+        let sig_a = ed25519_dalek::Signer::sign(&signing, &msg_a);
+        let sig_b = ed25519_dalek::Signer::sign(&signing, &msg_b);
+        assert_eq!(sig_a.to_bytes(), sig_b.to_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_publish_plugin_sign_end_to_end() {
+        use crate::commands::key;
+        let temp_dir = TempDir::new().unwrap();
+        create_test_project(temp_dir.path(), "signed-plugin", "1.0.0");
+        let pkg = create_test_package(temp_dir.path(), "signed-plugin", "1.0.0");
+
+        // Generate a keypair, write a tiny SBOM, build the attestation,
+        // and confirm the signature round-trips back to the verifying
+        // key that just signed it.
+        let key_path = temp_dir.path().join("signer.pem");
+        key::generate_key(&key_path, false).await.unwrap();
+
+        let sbom_path = temp_dir.path().join("sbom.json");
+        std::fs::write(&sbom_path, br#"{"components":[]}"#).unwrap();
+
+        let att = build_sbom_attestation(
+            &pkg,
+            &SignOptions {
+                key_file: Some(key_path.clone()),
+                sbom_path: Some(sbom_path.clone()),
+            },
+        )
+        .unwrap()
+        .expect("signing asked for");
+
+        // Reconstruct the verifier side and check the signature really
+        // covers SHA-256(wasm_checksum || sbom_canonical).
+        use base64::Engine;
+        use sha2::{Digest, Sha256};
+        let signing = key::load_signing_key(&key_path).unwrap();
+        let checksum_bytes: [u8; 32] = Sha256::digest(std::fs::read(&pkg).unwrap()).into();
+        let checksum_hex: String = checksum_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+        let msg = key::attestation_message(&checksum_hex, &att.sbom_canonical_bytes).unwrap();
+        let sig_bytes =
+            base64::engine::general_purpose::STANDARD.decode(&att.signature_b64).unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        ed25519_dalek::Verifier::verify(&signing.verifying_key(), &msg, &sig).unwrap();
     }
 
     #[tokio::test]
@@ -470,6 +688,7 @@ mod tests {
             "https://registry.mockforge.dev",
             Some("test-token"),
             false,
+            SignOptions::default(),
         )
         .await;
         assert!(result.is_err());
@@ -481,8 +700,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let package_path = create_test_package(temp_dir.path(), "zip-plugin", "2.0.0");
 
-        let result =
-            publish_plugin(Some(&package_path), "https://registry.mockforge.dev", None, true).await;
+        let result = publish_plugin(
+            Some(&package_path),
+            "https://registry.mockforge.dev",
+            None,
+            true,
+            SignOptions::default(),
+        )
+        .await;
         assert!(result.is_ok());
     }
 }

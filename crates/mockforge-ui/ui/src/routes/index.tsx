@@ -11,6 +11,7 @@ import { StatusPage } from '../pages/StatusPage';
 import { OrganizationPage } from '../pages/OrganizationPage';
 import { BillingPage } from '../pages/BillingPage';
 import { ApiTokensPage } from '../pages/ApiTokensPage';
+import PublisherKeysPage from '../pages/PublisherKeysPage';
 import { UsageDashboardPage } from '../pages/UsageDashboardPage';
 import { TimeTravelPage } from '../pages/TimeTravelPage';
 import { ProxyInspectorPage } from '../pages/ProxyInspectorPage';
@@ -203,6 +204,7 @@ export const routes: RouteConfig[] = [
   { path: '/organization', element: <OrganizationPage /> },
   { path: '/billing', element: <BillingPage /> },
   { path: '/api-tokens', element: <ApiTokensPage /> },
+  { path: '/publisher-keys', element: <PublisherKeysPage /> },
   { path: '/byok', element: <BYOKConfigPage /> },
   { path: '/usage', element: <UsageDashboardPage /> },
 

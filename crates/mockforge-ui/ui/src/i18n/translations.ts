@@ -84,6 +84,7 @@ const en: Dictionary = {
   'tab.organization': 'Organization',
   'tab.billing': 'Billing',
   'tab.apiTokens': 'API Tokens',
+  'tab.publisherKeys': 'Publisher Keys',
   'tab.byok': 'BYOK Keys',
   'tab.usage': 'Plan & Usage',
   'tab.userManagement': 'User Management',

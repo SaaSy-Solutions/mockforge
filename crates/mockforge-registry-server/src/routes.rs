@@ -71,6 +71,19 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Auth info routes
         .route("/api/v1/auth/verify", get(handlers::auth::verify_token))
         .route("/api/v1/auth/me", get(handlers::auth::me))
+        // Publisher Ed25519 public keys (SBOM attestation).
+        .route(
+            "/api/v1/users/me/public-keys",
+            get(handlers::public_keys::list_my_public_keys),
+        )
+        .route(
+            "/api/v1/users/me/public-keys",
+            post(handlers::public_keys::create_my_public_key),
+        )
+        .route(
+            "/api/v1/users/me/public-keys/{id}",
+            delete(handlers::public_keys::revoke_my_public_key),
+        )
         // 2FA routes
         .route("/api/v1/auth/2fa/setup", get(handlers::two_factor::setup_2fa))
         .route("/api/v1/auth/2fa/verify-setup", post(handlers::two_factor::verify_2fa_setup_with_secret))
