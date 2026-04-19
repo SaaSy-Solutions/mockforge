@@ -45,23 +45,24 @@ impl Database {
         // rather refuse to boot and have someone repair the `_sqlx_migrations`
         // table than crash-loop a worker that depends on a table that never
         // got created.
-        let result = sqlx::migrate!("./migrations")
-            .run(&self.pool)
-            .await
-            .map_err(|e| -> anyhow::Error {
-                if e.to_string().contains("previously applied but is missing") {
-                    tracing::error!(
-                        "sqlx refused to migrate: the DB's `_sqlx_migrations` table has an \
+        let result =
+            sqlx::migrate!("./migrations")
+                .run(&self.pool)
+                .await
+                .map_err(|e| -> anyhow::Error {
+                    if e.to_string().contains("previously applied but is missing") {
+                        tracing::error!(
+                            "sqlx refused to migrate: the DB's `_sqlx_migrations` table has an \
                          applied row whose matching file is missing from the repo. This \
                          blocks ALL subsequent migrations from running. To fix, either \
                          restore the missing file or remove the orphaned tracking row \
                          manually (psql: `DELETE FROM _sqlx_migrations WHERE version = …`). \
                          Full error: {:?}",
-                        e
-                    );
-                }
-                e.into()
-            });
+                            e
+                        );
+                    }
+                    e.into()
+                });
 
         // Release the advisory lock regardless of migration outcome
         if let Err(unlock_err) = sqlx::query("SELECT pg_advisory_unlock($1)")

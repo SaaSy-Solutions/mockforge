@@ -6,8 +6,15 @@
 //! | Env var                        | Meaning                                              |
 //! |--------------------------------|------------------------------------------------------|
 //! | `MOCKFORGE_OSV_SEED_PATH`      | Path to a local file or directory of OSV JSON blobs. |
-//! | `MOCKFORGE_OSV_FEED_URL`       | Single HTTP(S) URL returning a JSON array of OSV records. |
-//! | (neither)                      | Worker runs but does nothing — logs a hint and sleeps.    |
+//! | `MOCKFORGE_OSV_ECOSYSTEMS`     | Comma-separated OSV ecosystem names (`PyPI,npm,Go,crates.io,RubyGems`). Expands to the canonical bulk-dump URLs. |
+//! | `MOCKFORGE_OSV_FEED_URL`       | HTTP(S) URL, or comma-separated list, of pre-built OSV feeds. Used when you already have a custom proxy/CDN or need an ecosystem the canonical list doesn't cover. |
+//! | (none)                         | Worker runs but does nothing — logs a hint and sleeps.    |
+//!
+//! `MOCKFORGE_OSV_ECOSYSTEMS` is the recommended production knob: it's
+//! ergonomic (you name the ecosystems, we construct the URLs), keeps the
+//! config surface small, and lets the operator add npm/Go coverage by
+//! editing one secret. `MOCKFORGE_OSV_FEED_URL` stays as an escape hatch
+//! for custom feeds.
 //!
 //! The file path mode is the supported production channel: in air-gapped
 //! or cost-constrained deploys, ops downloads the OSV bulk dumps out of
@@ -46,10 +53,15 @@ pub fn start_osv_sync_worker(state: AppState) {
         OsvSource::LocalPath(p) => {
             info!("OSV sync worker will read from local path: {}", p)
         }
-        OsvSource::HttpUrl(u) => info!("OSV sync worker will fetch from: {}", u),
+        OsvSource::HttpUrls(urls) => {
+            info!("OSV sync worker will fetch from {} URL(s):", urls.len());
+            for u in urls {
+                info!("  - {}", u);
+            }
+        }
         OsvSource::Disabled => info!(
-            "OSV sync worker started but disabled — set MOCKFORGE_OSV_SEED_PATH or \
-             MOCKFORGE_OSV_FEED_URL to enable"
+            "OSV sync worker started but disabled — set MOCKFORGE_OSV_SEED_PATH, \
+             MOCKFORGE_OSV_ECOSYSTEMS, or MOCKFORGE_OSV_FEED_URL to enable"
         ),
     }
 
@@ -68,9 +80,14 @@ pub fn start_osv_sync_worker(state: AppState) {
 #[derive(Debug, Clone)]
 enum OsvSource {
     LocalPath(String),
-    HttpUrl(String),
+    HttpUrls(Vec<String>),
     Disabled,
 }
+
+/// Canonical base URL for OSV.dev's per-ecosystem bulk dumps. Exposed as a
+/// `const` rather than hard-coded into `resolve_source` so the conformance
+/// test can format expected URLs the same way production does.
+const OSV_BULK_BASE: &str = "https://osv-vulnerabilities.storage.googleapis.com";
 
 fn resolve_source() -> OsvSource {
     if let Ok(path) = std::env::var("MOCKFORGE_OSV_SEED_PATH") {
@@ -78,24 +95,72 @@ fn resolve_source() -> OsvSource {
             return OsvSource::LocalPath(path);
         }
     }
-    if let Ok(url) = std::env::var("MOCKFORGE_OSV_FEED_URL") {
-        if !url.trim().is_empty() {
-            return OsvSource::HttpUrl(url);
+
+    // Ecosystem list beats raw feed URL when both are set — it's the
+    // friendlier knob and lets operators add coverage without thinking
+    // about the URL template.
+    if let Ok(raw) = std::env::var("MOCKFORGE_OSV_ECOSYSTEMS") {
+        let urls = ecosystems_to_urls(&raw);
+        if !urls.is_empty() {
+            return OsvSource::HttpUrls(urls);
+        }
+    }
+
+    if let Ok(raw) = std::env::var("MOCKFORGE_OSV_FEED_URL") {
+        let urls: Vec<String> =
+            raw.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        if !urls.is_empty() {
+            return OsvSource::HttpUrls(urls);
         }
     }
     OsvSource::Disabled
 }
 
-async fn run_once(state: &AppState, source: &OsvSource) -> anyhow::Result<()> {
-    let records = match source {
-        OsvSource::Disabled => return Ok(()),
-        OsvSource::LocalPath(p) => load_from_local_path(p).await?,
-        OsvSource::HttpUrl(u) => load_from_http(u).await?,
-    };
+/// Expand a comma-separated ecosystem list (e.g. `"PyPI, npm, Go"`) into
+/// the canonical OSV.dev bulk-dump URLs. Whitespace is tolerated so the
+/// operator can format the secret for readability; we preserve case
+/// because OSV's bucket is case-sensitive (`PyPI/` works, `pypi/` 404s).
+fn ecosystems_to_urls(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|eco| format!("{}/{}/all.zip", OSV_BULK_BASE, eco))
+        .collect()
+}
 
+async fn run_once(state: &AppState, source: &OsvSource) -> anyhow::Result<()> {
+    match source {
+        OsvSource::Disabled => Ok(()),
+        OsvSource::LocalPath(p) => {
+            let records = load_from_local_path(p).await?;
+            import_records(state, records, "local path").await;
+            Ok(())
+        }
+        OsvSource::HttpUrls(urls) => {
+            // Fetch each URL sequentially. Going parallel would cut wall
+            // time but each dump is hundreds of MB and we run on a small
+            // machine; sequential keeps memory bounded and avoids bursting
+            // the outbound pipe. One URL failing doesn't stop the others —
+            // we log and continue so a temporarily-broken ecosystem
+            // doesn't cost us coverage on the rest.
+            for url in urls {
+                match load_from_http(url).await {
+                    Ok(records) => import_records(state, records, url).await,
+                    Err(e) => error!("OSV sync: fetch from {} failed: {}", url, e),
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Shared body for the local-path and HTTP code paths. Logs per-source so
+/// multi-ecosystem runs show which feed contributed what, otherwise a
+/// thousand-record import is indistinguishable from a stuck loop.
+async fn import_records(state: &AppState, records: Vec<OsvImportRecord>, source_label: &str) {
     if records.is_empty() {
-        info!("OSV sync: source returned no records");
-        return Ok(());
+        info!("OSV sync [{}]: no records", source_label);
+        return;
     }
 
     let mut inserted = 0usize;
@@ -105,15 +170,14 @@ async fn run_once(state: &AppState, source: &OsvSource) -> anyhow::Result<()> {
             Ok(n) => inserted += n,
             Err(e) => {
                 skipped += 1;
-                warn!("OSV sync: skipping {}: {}", rec.id, e);
+                warn!("OSV sync [{}]: skipping {}: {}", source_label, rec.id, e);
             }
         }
     }
     info!(
-        "OSV sync: imported {} (advisory, package) pair(s), skipped {}",
-        inserted, skipped
+        "OSV sync [{}]: imported {} (advisory, package) pair(s), skipped {}",
+        source_label, inserted, skipped
     );
-    Ok(())
 }
 
 /// Read advisory records from a local file or directory.
@@ -408,6 +472,33 @@ mod tests {
         let out = parse_bulk_zip_sync(&zip_bytes).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, "GHSA-test");
+    }
+
+    #[test]
+    fn ecosystems_to_urls_expands_comma_list() {
+        assert_eq!(
+            ecosystems_to_urls("PyPI,npm,Go"),
+            vec![
+                format!("{}/PyPI/all.zip", OSV_BULK_BASE),
+                format!("{}/npm/all.zip", OSV_BULK_BASE),
+                format!("{}/Go/all.zip", OSV_BULK_BASE),
+            ]
+        );
+        // Whitespace around names is tolerated.
+        assert_eq!(
+            ecosystems_to_urls("  PyPI  , npm "),
+            vec![
+                format!("{}/PyPI/all.zip", OSV_BULK_BASE),
+                format!("{}/npm/all.zip", OSV_BULK_BASE),
+            ]
+        );
+        // Case is preserved — `pypi` would 404 on the real bucket.
+        let out = ecosystems_to_urls("PyPI");
+        assert!(out[0].contains("/PyPI/"), "got {}", out[0]);
+        // Empty / whitespace-only input produces no URLs so the caller
+        // knows to fall through to the next source.
+        assert!(ecosystems_to_urls("").is_empty());
+        assert!(ecosystems_to_urls(" , , ").is_empty());
     }
 
     #[test]

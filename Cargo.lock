@@ -3388,6 +3388,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cvss"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7fb220d3ce1b565af39cee5b89e47fd8dd1dab162900ee4363c8ee4169ee8a2"
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8642,6 +8648,7 @@ dependencies = [
  "base64 0.21.7",
  "bcrypt",
  "chrono",
+ "cvss",
  "data-encoding",
  "ed25519-dalek",
  "hex",
