@@ -1,13 +1,14 @@
 name: API Contract Validation
 
+# DISABLED — 2026-04-19: Was failing 100% of the last 89 runs and consuming
+# ~1,663 GHA minutes/mo on broken automation. Manual dispatch only until the
+# underlying failures are fixed. Restore the original triggers once green.
+#
+# Original triggers (restore when fixed):
+#   pull_request: { branches: [main, develop], paths: [examples/**, examples/openapi-demo.json] }
+#   push:         { branches: [main] }
 on:
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'examples/**'
-      - 'examples/openapi-demo.json'
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   validate-contracts:

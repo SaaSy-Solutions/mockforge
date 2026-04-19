@@ -1,22 +1,14 @@
 name: Load Testing & Performance Regression
 
+# DISABLED — 2026-04-19: Was failing 100% of the last 128 runs and consuming
+# ~2,608 GHA minutes/mo on broken automation. Manual dispatch only until the
+# underlying failures are fixed. Restore the original triggers once green.
+#
+# Original triggers (restore when fixed):
+#   pull_request: { branches: [main, develop], paths: [crates/**, tests/load/**, Cargo.toml, .github/workflows/load-testing.yml] }
+#   push:         { branches: [main],          paths: [crates/**, tests/load/**, Cargo.toml] }
+#   schedule:     - cron: '0 2 * * *'   # nightly extended load tests
 on:
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'crates/**'
-      - 'tests/load/**'
-      - 'Cargo.toml'
-      - '.github/workflows/load-testing.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'crates/**'
-      - 'tests/load/**'
-      - 'Cargo.toml'
-  schedule:
-    # Run extended load tests nightly
-    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       test_type:

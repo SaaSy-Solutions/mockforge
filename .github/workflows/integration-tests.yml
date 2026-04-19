@@ -1,20 +1,13 @@
 name: Integration Tests
 
+# DISABLED — 2026-04-19: Was failing 100% of the last 97 runs and consuming
+# ~1,971 GHA minutes/mo on broken automation. Manual dispatch only until the
+# underlying failures are fixed. Restore the original triggers once green.
+#
+# Original triggers (restore when fixed):
+#   push:         { branches: [main, develop], paths: [crates/**, Cargo.toml, Cargo.lock, .github/workflows/integration-tests.yml] }
+#   pull_request: { branches: [main, develop], paths: [crates/**, Cargo.toml, Cargo.lock, .github/workflows/integration-tests.yml] }
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/integration-tests.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
 
 env:
