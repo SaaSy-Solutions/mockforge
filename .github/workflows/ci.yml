@@ -28,7 +28,7 @@ env:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     continue-on-error: ${{ matrix.rust == 'nightly' }}
     env:
       CARGO_INCREMENTAL: "0"
@@ -111,7 +111,7 @@ jobs:
 
   ui-test:
     name: UI Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout code
@@ -196,7 +196,7 @@ jobs:
 
   warning-gate:
     name: Incremental Warning Gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: "2G"
@@ -243,7 +243,7 @@ jobs:
 
   warning-ratchet-preview:
     name: Warning Ratchet Preview
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: "0"
@@ -291,7 +291,7 @@ jobs:
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
@@ -322,7 +322,7 @@ jobs:
 
   coverage:
     name: Code Coverage
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
@@ -351,7 +351,7 @@ jobs:
 
   msrv:
     name: Minimum Supported Rust Version
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: "2G"
@@ -402,7 +402,7 @@ jobs:
 
   typos:
     name: Spell Check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
@@ -412,7 +412,7 @@ jobs:
 
   changelog-validation:
     name: Changelog Validation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event_name == 'pull_request'
     steps:
     - name: Checkout repository
@@ -565,7 +565,7 @@ jobs:
 
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     needs: build-binaries
     if: startsWith(github.ref, 'refs/tags/')
     permissions:

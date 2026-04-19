@@ -29,7 +29,7 @@ env:
 jobs:
   build-and-push:
     name: Build and Push Docker Image
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     # Skip drafts to avoid burning minutes on in-progress PRs
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     permissions:
@@ -133,10 +133,17 @@ jobs:
         run: |
           cosign sign --yes "${IMAGE_REF}@${IMAGE_DIGEST}"
 
+      # Self-hosted runner keeps its disk between jobs, so prune old
+      # Docker artifacts every run to keep storage from growing forever.
+      # Keeps Buildx cache (that's gated by cache-to=type=gha).
+      - name: Prune Docker artifacts older than 7 days
+        if: always()
+        run: docker system prune -af --filter "until=168h" || true
+
   scan-and-analyze:
     name: Security Scan and Analysis
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event_name != 'pull_request'
     permissions:
       security-events: write
@@ -161,7 +168,7 @@ jobs:
   update-deployment:
     name: Update Kubernetes Deployment
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: write
