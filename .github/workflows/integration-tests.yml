@@ -1,13 +1,20 @@
 name: Integration Tests
 
-# DISABLED — 2026-04-19: Was failing 100% of the last 97 runs and consuming
-# ~1,971 GHA minutes/mo on broken automation. Manual dispatch only until the
-# underlying failures are fixed. Restore the original triggers once green.
-#
-# Original triggers (restore when fixed):
-#   push:         { branches: [main, develop], paths: [crates/**, Cargo.toml, Cargo.lock, .github/workflows/integration-tests.yml] }
-#   pull_request: { branches: [main, develop], paths: [crates/**, Cargo.toml, Cargo.lock, .github/workflows/integration-tests.yml] }
 on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/integration-tests.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
 
 env:
@@ -48,19 +55,26 @@ jobs:
             exit 1
           fi
 
-      - name: Run integration tests
-        env:
-          # Integration tests need to find the mockforge binary
-          PATH: ${{ github.workspace }}/target/release:$PATH
-        run: |
-          # Run integration tests (including ignored ones)
-          # Tests use #[ignore] because they require the binary, but we'll run them in CI
-          cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
+      # GHA does not expand $PATH inside an `env:` value (it's a literal
+      # string), so the previous `env: PATH: ...:$PATH` was wiping cargo
+      # and everything else from PATH. Use GITHUB_PATH, which the runner
+      # evaluates per-step, to prepend safely. Some ignored tests shell
+      # out to `mockforge` so keep the binary discoverable on PATH.
+      - name: Prepend target/release to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
 
+      # We intentionally do NOT pass `--ignored` here. The ~50 ignored
+      # tests across this crate split into categories that CI is not set
+      # up to run: they require a separately-running server, external
+      # language toolchains (Node/Python/Go/Java/.NET), real credentials
+      # for OpenAI (MockAI tests), or are timing-sensitive or long-running.
+      # The earlier `--ignored` run failed 97 consecutive times — two
+      # mockai_integration tests exited first with "OpenAI API key not
+      # found" and cargo fail-fast bailed before the rest could surface
+      # their own infra gaps. Run these locally when testing a specific
+      # integration. The non-ignored suite is the real CI coverage.
       - name: Run integration tests (non-ignored)
-        run: |
-          # Run any non-ignored integration tests
-          cargo test --package mockforge-integration-tests --test '*' --nocapture
+        run: cargo test --package mockforge-integration-tests --test '*' -- --nocapture
 
       - name: Upload test artifacts
         if: always()
@@ -102,9 +116,12 @@ jobs:
         run: |
           cargo build --release --bin mockforge --features all-protocols
 
+      # See note on the integration-tests job: env: PATH doesn't expand
+      # $PATH. GITHUB_PATH is the supported way to prepend to PATH.
+      - name: Prepend target/release to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
       - name: Run E2E tests
-        env:
-          PATH: ${{ github.workspace }}/target/release:$PATH
         run: |
           cargo test --package mockforge-integration-tests --release -- e2e::protocols::http_e2e_tests
           cargo test --package mockforge-integration-tests --release -- e2e::protocols::websocket_e2e_tests
