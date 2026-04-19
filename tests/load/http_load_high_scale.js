@@ -49,21 +49,21 @@ const scenarios = [
         weight: 10, // 10% of requests
     },
     {
-        name: 'GET /api/users',
+        name: 'GET /users',
         method: 'GET',
-        path: '/api/users',
+        path: '/users',
         weight: 30, // 30% of requests
     },
     {
-        name: 'GET /api/users/:id',
+        name: 'GET /users/:id',
         method: 'GET',
-        path: '/api/users/123',
+        path: '/users/123',
         weight: 25, // 25% of requests
     },
     {
-        name: 'POST /api/users',
+        name: 'POST /users',
         method: 'POST',
-        path: '/api/users',
+        path: '/users',
         // Body is a factory so __VU / __ITER evaluate inside a VU context
         // (at request time) rather than at module load. k6 0.50+ removed the
         // module-scope fallback, which is what the 128 consecutive failures
@@ -75,9 +75,9 @@ const scenarios = [
         weight: 20, // 20% of requests
     },
     {
-        name: 'PUT /api/users/:id',
+        name: 'PUT /users/:id',
         method: 'PUT',
-        path: '/api/users/123',
+        path: '/users/123',
         body: JSON.stringify({
             name: 'Updated User',
             email: 'updated@example.com',
@@ -85,9 +85,9 @@ const scenarios = [
         weight: 10, // 10% of requests
     },
     {
-        name: 'DELETE /api/users/:id',
+        name: 'DELETE /users/:id',
         method: 'DELETE',
-        path: '/api/users/123',
+        path: '/users/123',
         weight: 5, // 5% of requests
     },
 ];

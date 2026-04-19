@@ -50,12 +50,12 @@ export default function () {
 }
 
 function simpleGetRequest() {
-  const res = http.get(`${BASE_URL}/api/users`);
+  const res = http.get(`${BASE_URL}/users`);
 
   const success = check(res, {
-    'GET /api/users status is 200': (r) => r.status === 200,
-    'GET /api/users response time < 500ms': (r) => r.timings.duration < 500,
-    'GET /api/users has content': (r) => r.body.length > 0,
+    'GET /users status is 200': (r) => r.status === 200,
+    'GET /users response time < 500ms': (r) => r.timings.duration < 500,
+    'GET /users has content': (r) => r.body.length > 0,
   });
 
   errorRate.add(!success);
@@ -76,12 +76,12 @@ function postRequestWithJson() {
     },
   };
 
-  const res = http.post(`${BASE_URL}/api/users`, payload, params);
+  const res = http.post(`${BASE_URL}/users`, payload, params);
 
   const success = check(res, {
-    'POST /api/users status is 200 or 201': (r) => r.status === 200 || r.status === 201,
-    'POST /api/users response time < 1000ms': (r) => r.timings.duration < 1000,
-    'POST /api/users returns user': (r) => {
+    'POST /users status is 200 or 201': (r) => r.status === 200 || r.status === 201,
+    'POST /users response time < 1000ms': (r) => r.timings.duration < 1000,
+    'POST /users returns user': (r) => {
       try {
         const body = JSON.parse(r.body);
         return body.name !== undefined;
@@ -97,11 +97,11 @@ function postRequestWithJson() {
 }
 
 function requestWithParams() {
-  const res = http.get(`${BASE_URL}/api/users?limit=10&offset=0&sort=name`);
+  const res = http.get(`${BASE_URL}/users?limit=10&offset=0&sort=name`);
 
   const success = check(res, {
-    'GET /api/users with params status is 200': (r) => r.status === 200,
-    'GET /api/users with params response time < 500ms': (r) => r.timings.duration < 500,
+    'GET /users with params status is 200': (r) => r.status === 200,
+    'GET /users with params response time < 500ms': (r) => r.timings.duration < 500,
   });
 
   errorRate.add(!success);
@@ -117,11 +117,16 @@ function requestWithHeaders() {
     },
   };
 
-  const res = http.get(`${BASE_URL}/api/protected`, params);
+  // user-management-api.json doesn't define an auth endpoint, so we
+  // reuse /posts (a real endpoint) to exercise the auth-header + custom
+  // header code path. mockforge ignores the Bearer token since the spec
+  // doesn't declare security; we're measuring that the runtime handles
+  // extra headers cleanly, not the auth policy.
+  const res = http.get(`${BASE_URL}/posts`, params);
 
   const success = check(res, {
-    'GET /api/protected status is 200': (r) => r.status === 200,
-    'GET /api/protected response time < 500ms': (r) => r.timings.duration < 500,
+    'GET /posts (auth header) status is 200': (r) => r.status === 200,
+    'GET /posts (auth header) response time < 500ms': (r) => r.timings.duration < 500,
   });
 
   errorRate.add(!success);
@@ -130,10 +135,12 @@ function requestWithHeaders() {
 }
 
 function multipleEndpoints() {
+  // user-management-api.json has /comments (list), not /comments/{id} —
+  // so this batch tests /users/{id}, /posts/{id}, and /comments list.
   const responses = http.batch([
-    ['GET', `${BASE_URL}/api/users/1`, null, {}],
-    ['GET', `${BASE_URL}/api/posts/1`, null, {}],
-    ['GET', `${BASE_URL}/api/comments/1`, null, {}],
+    ['GET', `${BASE_URL}/users/1`, null, {}],
+    ['GET', `${BASE_URL}/posts/1`, null, {}],
+    ['GET', `${BASE_URL}/comments`, null, {}],
   ]);
 
   responses.forEach((res, index) => {
