@@ -31,7 +31,7 @@ env:
 jobs:
   build:
     name: Build Test Binary
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     outputs:
       binary_path: ${{ steps.build.outputs.binary_path }}
 
@@ -63,7 +63,7 @@ jobs:
   network-partition:
     name: Network Partition Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'network-partition' || github.event.inputs.scenario == ''
 
     steps:
@@ -125,7 +125,7 @@ jobs:
   high-latency:
     name: High Latency Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'high-latency' || github.event.inputs.scenario == ''
 
     steps:
@@ -183,7 +183,7 @@ jobs:
   packet-loss:
     name: Packet Loss Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'packet-loss' || github.event.inputs.scenario == ''
 
     steps:
@@ -237,7 +237,7 @@ jobs:
   resource-exhaustion:
     name: Resource Exhaustion Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'resource-exhaustion' || github.event.inputs.scenario == ''
 
     steps:
@@ -315,7 +315,7 @@ jobs:
   connection-storm:
     name: Connection Storm Test
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'connection-storm' || github.event.inputs.scenario == ''
 
     steps:
@@ -383,7 +383,7 @@ jobs:
   summary:
     name: Chaos Test Summary
     needs: [network-partition, high-latency, packet-loss, resource-exhaustion, connection-storm]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: always()
 
     steps:
