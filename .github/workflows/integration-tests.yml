@@ -51,19 +51,23 @@ jobs:
       # GHA does not expand $PATH inside an `env:` value (it's a literal
       # string), so the previous `env: PATH: ...:$PATH` was wiping cargo
       # and everything else from PATH. Use GITHUB_PATH, which the runner
-      # evaluates per-step, to prepend safely.
+      # evaluates per-step, to prepend safely. Some ignored tests shell
+      # out to `mockforge` so keep the binary discoverable on PATH.
       - name: Prepend target/release to PATH
         run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
 
-      - name: Run integration tests
-        run: |
-          # Run integration tests (including ignored ones).
-          # Tests use #[ignore] because they require the binary, but we run them in CI.
-          cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
-
+      # We intentionally do NOT pass `--ignored` here. The ~50 ignored
+      # tests across this crate split into categories that CI is not set
+      # up to run: they require a separately-running server, external
+      # language toolchains (Node/Python/Go/Java/.NET), real credentials
+      # for OpenAI (MockAI tests), or are timing-sensitive or long-running.
+      # The earlier `--ignored` run failed 97 consecutive times — two
+      # mockai_integration tests exited first with "OpenAI API key not
+      # found" and cargo fail-fast bailed before the rest could surface
+      # their own infra gaps. Run these locally when testing a specific
+      # integration. The non-ignored suite is the real CI coverage.
       - name: Run integration tests (non-ignored)
-        run: |
-          cargo test --package mockforge-integration-tests --test '*' --nocapture
+        run: cargo test --package mockforge-integration-tests --test '*' --nocapture
 
       - name: Upload test artifacts
         if: always()
