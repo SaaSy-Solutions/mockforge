@@ -1,10 +1,29 @@
 name: Load Testing & Performance Regression
 
-# DISABLED — 2026-04-19: Was failing 100% of the last 128 runs and consuming
-# ~2,608 GHA minutes/mo on broken automation. Manual dispatch only until the
-# underlying failures are fixed. Restore the original triggers once green.
+# DISABLED — 2026-04-19: Manual dispatch only. Two plumbing bugs fixed
+# in this PR; one remaining script-vs-spec mismatch is a product-level
+# decision, so the auto-triggers stay off until someone picks a side.
 #
-# Original triggers (restore when fixed):
+# Fixed in this PR:
+#   * http_load_high_scale.js — k6 0.50+ ReferenceError: __ITER is not
+#     defined (scenarios array referenced __VU/__ITER at module load).
+#   * http_load.js — BASE_URL defaulted to :8080, workflow runs mockforge
+#     on :3000; every request was ECONNREFUSED.
+#
+# Still outstanding (not a CI plumbing bug — don't "fix" this blindly):
+#   The k6 scripts probe /api/users, /api/posts/1, /api/comments/1,
+#   /api/protected, etc., but examples/openapi-demo.json (the spec fed
+#   to mockforge by the workflow) defines only /ping and /users.
+#   Every request hits 404 -> http_req_failed = 100% -> threshold trips.
+#   Two ways to unstick:
+#     (a) simplify http_load.js / http_load_high_scale.js to only use
+#         paths in openapi-demo.json (/ping, /users).
+#     (b) switch the workflow to examples/user-management-api.json
+#         (which has /users, /users/{id}, /posts, /posts/{id}, /comments)
+#         and strip the /api/ prefix from the scripts.
+#   Pick one, align, then restore the triggers below.
+#
+# Original triggers (restore after the path-alignment decision):
 #   pull_request: { branches: [main, develop], paths: [crates/**, tests/load/**, Cargo.toml, .github/workflows/load-testing.yml] }
 #   push:         { branches: [main],          paths: [crates/**, tests/load/**, Cargo.toml] }
 #   schedule:     - cron: '0 2 * * *'   # nightly extended load tests
