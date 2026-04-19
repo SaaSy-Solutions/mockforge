@@ -1,33 +1,22 @@
 name: Load Testing & Performance Regression
 
-# DISABLED — 2026-04-19: Manual dispatch only. Two plumbing bugs fixed
-# in this PR; one remaining script-vs-spec mismatch is a product-level
-# decision, so the auto-triggers stay off until someone picks a side.
-#
-# Fixed in this PR:
-#   * http_load_high_scale.js — k6 0.50+ ReferenceError: __ITER is not
-#     defined (scenarios array referenced __VU/__ITER at module load).
-#   * http_load.js — BASE_URL defaulted to :8080, workflow runs mockforge
-#     on :3000; every request was ECONNREFUSED.
-#
-# Still outstanding (not a CI plumbing bug — don't "fix" this blindly):
-#   The k6 scripts probe /api/users, /api/posts/1, /api/comments/1,
-#   /api/protected, etc., but examples/openapi-demo.json (the spec fed
-#   to mockforge by the workflow) defines only /ping and /users.
-#   Every request hits 404 -> http_req_failed = 100% -> threshold trips.
-#   Two ways to unstick:
-#     (a) simplify http_load.js / http_load_high_scale.js to only use
-#         paths in openapi-demo.json (/ping, /users).
-#     (b) switch the workflow to examples/user-management-api.json
-#         (which has /users, /users/{id}, /posts, /posts/{id}, /comments)
-#         and strip the /api/ prefix from the scripts.
-#   Pick one, align, then restore the triggers below.
-#
-# Original triggers (restore after the path-alignment decision):
-#   pull_request: { branches: [main, develop], paths: [crates/**, tests/load/**, Cargo.toml, .github/workflows/load-testing.yml] }
-#   push:         { branches: [main],          paths: [crates/**, tests/load/**, Cargo.toml] }
-#   schedule:     - cron: '0 2 * * *'   # nightly extended load tests
 on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'crates/**'
+      - 'tests/load/**'
+      - 'Cargo.toml'
+      - '.github/workflows/load-testing.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'tests/load/**'
+      - 'Cargo.toml'
+  schedule:
+    # Run extended load tests nightly
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       test_type:
@@ -43,7 +32,7 @@ on:
 jobs:
   standard-load-test:
     name: Standard Load Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'standard')
@@ -71,7 +60,7 @@ jobs:
 
       - name: Start MockForge server
         run: |
-          ./target/release/mockforge serve --spec examples/openapi-demo.json --http-port 3000 --admin &
+          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin &
           sleep 5
           curl -f http://localhost:3000/health || exit 1
 
@@ -94,7 +83,7 @@ jobs:
 
   extended-load-test:
     name: Extended Load Test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 60
     if: |
       github.event_name == 'schedule' ||
@@ -124,7 +113,7 @@ jobs:
 
       - name: Start MockForge server
         run: |
-          ./target/release/mockforge serve --spec examples/openapi-demo.json --http-port 3000 --admin &
+          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin &
           sleep 5
           curl -f http://localhost:3000/health || exit 1
 
@@ -151,7 +140,7 @@ jobs:
 
   performance-benchmarks:
     name: Performance Benchmarks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: |
       github.event_name == 'pull_request' ||
       github.ref == 'refs/heads/main' ||

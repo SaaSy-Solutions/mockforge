@@ -17,7 +17,7 @@ on:
 jobs:
   validate-manifests:
     name: Validate Kubernetes Manifests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout repository
@@ -52,7 +52,7 @@ jobs:
 
   lint-helm-charts:
     name: Lint Helm Charts
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout repository
@@ -91,7 +91,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout repository
@@ -126,7 +126,7 @@ jobs:
 
   test-in-kind:
     name: Test in KinD Cluster
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout repository
@@ -190,7 +190,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     needs: test-in-kind
 
     steps:
@@ -273,7 +273,7 @@ jobs:
 
   chaos-tests:
     name: Chaos Engineering Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -363,7 +363,7 @@ jobs:
 
   cost-estimation:
     name: Cost Estimation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: github.event_name == 'workflow_dispatch'  # Only run on manual trigger
 
     steps:

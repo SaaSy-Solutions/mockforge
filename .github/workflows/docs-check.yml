@@ -22,7 +22,7 @@ permissions:
 jobs:
   docs:
     name: Verify mdBook Docs
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
 
     steps:
       - name: Checkout repository

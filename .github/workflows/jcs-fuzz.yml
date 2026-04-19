@@ -27,7 +27,7 @@ env:
 jobs:
   jcs-fuzz:
     name: JCS Fuzz
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 30
     # `contents: write` lets the regression-corpus step push a branch.
     # `pull-requests: write` lets peter-evans/create-pull-request open

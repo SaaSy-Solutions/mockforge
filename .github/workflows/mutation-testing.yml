@@ -22,7 +22,7 @@ env:
 jobs:
   mutation-test:
     name: Mutation Testing
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 180
 
     strategy:
@@ -108,7 +108,7 @@ jobs:
   aggregate-results:
     name: Aggregate Mutation Results
     needs: mutation-test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     if: always()
 
     steps:
