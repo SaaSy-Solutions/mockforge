@@ -1,5 +1,5 @@
 # MockForge Development Makefile
-.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace warning-gate warning-gate-preview
+.PHONY: help build test clean doc fmt clippy audit release install-deps setup sync-git sync-dropbox sync-selective sync-dry-run load-test load-test-high-scale load-test-http load-test-websocket load-test-grpc load-test-marketplace warning-gate warning-gate-preview deploy-ui deploy-ui-preview
 
 # Default target
 help: ## Show this help message
@@ -307,3 +307,25 @@ sqlx-prepare: ## Regenerate SQLx query cache for mockforge-collab
 
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks
+
+# Cloudflare Pages deploy (mockforge-admin-ui)
+# Requires: CLOUDFLARE_API_TOKEN in env (auto-loaded from ~/.zshenv)
+deploy-ui: ## Build & deploy admin UI to Cloudflare Pages (production)
+	@echo "Building mockforge-admin-ui..."
+	@cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && pnpm build
+	@echo "Deploying to Cloudflare Pages (main branch = production)..."
+	@cd crates/mockforge-ui/ui && CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
+		pnpm dlx wrangler@latest pages deploy dist \
+			--project-name=mockforge-admin-ui \
+			--branch=main \
+			--commit-dirty=true
+
+deploy-ui-preview: ## Build & deploy admin UI as a preview (uses current git branch)
+	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+		echo "Deploying preview on branch: $$BRANCH"; \
+		cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && pnpm build && \
+		CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
+			pnpm dlx wrangler@latest pages deploy dist \
+				--project-name=mockforge-admin-ui \
+				--branch="$$BRANCH" \
+				--commit-dirty=true
