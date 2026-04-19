@@ -4103,6 +4103,7 @@ mod tests {
                 kind: "CVSS_V3".to_string(),
                 score: "9.8".to_string(),
             }],
+            database_specific: None,
         };
 
         // Advisory B: all-versions match via introduced=0 range.
@@ -4123,6 +4124,7 @@ mod tests {
                 versions: vec![],
             }],
             severity: vec![],
+            database_specific: None,
         };
 
         assert_eq!(store.upsert_osv_advisory(&advisory_a).await.unwrap(), 1);

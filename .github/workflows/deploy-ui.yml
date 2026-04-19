@@ -1,0 +1,101 @@
+name: Deploy Admin UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/mockforge-ui/ui/**'
+      - '.github/workflows/deploy-ui.yml'
+  pull_request:
+    paths:
+      - 'crates/mockforge-ui/ui/**'
+      - '.github/workflows/deploy-ui.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: Build & deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    # Skip PRs from forks (can't access secrets)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    defaults:
+      run:
+        working-directory: crates/mockforge-ui/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: crates/mockforge-ui/ui/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          # Quote attacker-controllable values as env vars to prevent shell injection.
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+        run: |
+          pnpm dlx wrangler@latest pages deploy dist \
+            --project-name=mockforge-admin-ui \
+            --branch="$BRANCH" \
+            --commit-hash="$COMMIT_SHA" \
+            --commit-message="$COMMIT_MSG" \
+            2>&1 | tee deploy.log
+          URL=$(grep -oE 'https://[a-z0-9-]+\.mockforge-admin-ui\.pages\.dev' deploy.log | tail -1)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const url = process.env.PREVIEW_URL;
+            const marker = '<!-- cf-pages-preview -->';
+            const body = `${marker}\n🚀 **Admin UI preview**: ${url}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

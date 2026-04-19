@@ -74,6 +74,11 @@ serde_jcs = { workspace = true }
 # Precise SEMVER-range matching against the OSV advisory cache.
 semver = "1.0"
 
+# CVSS v3/v4 vector-string parsing. OSV advisories store severity as
+# full vectors like `CVSS:3.1/AV:N/AC:L/...` rather than plain numbers,
+# so we need a parser to compute the base score and bucket it.
+cvss = "2"
+
 # Validation
 validator = { version = "0.20", features = ["derive"] }
 
