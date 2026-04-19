@@ -48,18 +48,21 @@ jobs:
             exit 1
           fi
 
+      # GHA does not expand $PATH inside an `env:` value (it's a literal
+      # string), so the previous `env: PATH: ...:$PATH` was wiping cargo
+      # and everything else from PATH. Use GITHUB_PATH, which the runner
+      # evaluates per-step, to prepend safely.
+      - name: Prepend target/release to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
       - name: Run integration tests
-        env:
-          # Integration tests need to find the mockforge binary
-          PATH: ${{ github.workspace }}/target/release:$PATH
         run: |
-          # Run integration tests (including ignored ones)
-          # Tests use #[ignore] because they require the binary, but we'll run them in CI
+          # Run integration tests (including ignored ones).
+          # Tests use #[ignore] because they require the binary, but we run them in CI.
           cargo test --package mockforge-integration-tests --test '*' -- --ignored --nocapture
 
       - name: Run integration tests (non-ignored)
         run: |
-          # Run any non-ignored integration tests
           cargo test --package mockforge-integration-tests --test '*' --nocapture
 
       - name: Upload test artifacts
@@ -102,9 +105,12 @@ jobs:
         run: |
           cargo build --release --bin mockforge --features all-protocols
 
+      # See note on the integration-tests job: env: PATH doesn't expand
+      # $PATH. GITHUB_PATH is the supported way to prepend to PATH.
+      - name: Prepend target/release to PATH
+        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
+
       - name: Run E2E tests
-        env:
-          PATH: ${{ github.workspace }}/target/release:$PATH
         run: |
           cargo test --package mockforge-integration-tests --release -- e2e::protocols::http_e2e_tests
           cargo test --package mockforge-integration-tests --release -- e2e::protocols::websocket_e2e_tests

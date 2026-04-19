@@ -64,7 +64,11 @@ const scenarios = [
         name: 'POST /api/users',
         method: 'POST',
         path: '/api/users',
-        body: JSON.stringify({
+        // Body is a factory so __VU / __ITER evaluate inside a VU context
+        // (at request time) rather than at module load. k6 0.50+ removed the
+        // module-scope fallback, which is what the 128 consecutive failures
+        // were hitting as ReferenceError: __ITER is not defined.
+        body: () => JSON.stringify({
             name: 'Test User',
             email: `test-${__VU}-${__ITER}@example.com`,
         }),
@@ -115,12 +119,16 @@ export default function () {
 
     let response;
 
+    // Resolve body now — some scenarios define it as a factory so __VU /
+    // __ITER get evaluated in the VU context instead of at module load.
+    const body = typeof scenario.body === 'function' ? scenario.body() : scenario.body;
+
     if (scenario.method === 'GET') {
         response = http.get(`${BASE_URL}${scenario.path}`, params);
     } else if (scenario.method === 'POST') {
-        response = http.post(`${BASE_URL}${scenario.path}`, scenario.body, params);
+        response = http.post(`${BASE_URL}${scenario.path}`, body, params);
     } else if (scenario.method === 'PUT') {
-        response = http.put(`${BASE_URL}${scenario.path}`, scenario.body, params);
+        response = http.put(`${BASE_URL}${scenario.path}`, body, params);
     } else if (scenario.method === 'DELETE') {
         response = http.del(`${BASE_URL}${scenario.path}`, null, params);
     }
