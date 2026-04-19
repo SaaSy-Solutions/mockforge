@@ -37,25 +37,31 @@ impl Database {
             .await?;
         tracing::info!("Advisory lock acquired, running migrations...");
 
-        // Run migrations - ignore "previously applied but missing" errors for manually applied migrations
-        let result = match sqlx::migrate!("./migrations").run(&self.pool).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                // If migration was manually applied (e.g., timestamp fix), log warning but continue
+        // Run migrations. Any error aborts boot — `sqlx::migrate!().run()` bails
+        // on the *first* inconsistency without applying subsequent pending
+        // migrations, so historically-permissive "warn and continue" handling
+        // silently skipped everything past the gap and left the DB multiple
+        // versions behind without surfacing a single error to operators. We'd
+        // rather refuse to boot and have someone repair the `_sqlx_migrations`
+        // table than crash-loop a worker that depends on a table that never
+        // got created.
+        let result = sqlx::migrate!("./migrations")
+            .run(&self.pool)
+            .await
+            .map_err(|e| -> anyhow::Error {
                 if e.to_string().contains("previously applied but is missing") {
-                    tracing::warn!(
-                        "Migration tracking issue (manually applied migration): {:?}",
+                    tracing::error!(
+                        "sqlx refused to migrate: the DB's `_sqlx_migrations` table has an \
+                         applied row whose matching file is missing from the repo. This \
+                         blocks ALL subsequent migrations from running. To fix, either \
+                         restore the missing file or remove the orphaned tracking row \
+                         manually (psql: `DELETE FROM _sqlx_migrations WHERE version = …`). \
+                         Full error: {:?}",
                         e
                     );
-                    tracing::info!(
-                        "Continuing despite migration tracking issue - database is up to date"
-                    );
-                    Ok(())
-                } else {
-                    Err(e.into())
                 }
-            }
-        };
+                e.into()
+            });
 
         // Release the advisory lock regardless of migration outcome
         if let Err(unlock_err) = sqlx::query("SELECT pg_advisory_unlock($1)")
