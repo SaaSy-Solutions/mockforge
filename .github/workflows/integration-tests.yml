@@ -130,8 +130,14 @@ jobs:
       # found" and cargo fail-fast bailed before the rest could surface
       # their own infra gaps. Run these locally when testing a specific
       # integration. The non-ignored suite is the real CI coverage.
+      #
+      # `--skip protocols::` excludes the e2e protocol tests from THIS
+      # step — they spawn real mockforge processes that race on ports
+      # under parallel test execution (find_available_port TOCTOU).
+      # The dedicated `e2e-tests` job below runs them with
+      # --test-threads=1.
       - name: Run integration tests (non-ignored)
-        run: cargo test --package mockforge-integration-tests --test '*' -- --nocapture
+        run: cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip protocols::
 
       - name: Upload test artifacts
         if: always()
