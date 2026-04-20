@@ -15,6 +15,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   REGRESSION_THRESHOLD: 5.0
+  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
+  # sibling runners). See integration-tests.yml for the full rationale.
+  CARGO_HOME: ${{ runner.temp }}/.cargo
+  CARGO_BUILD_JOBS: "4"
 
 jobs:
   benchmark:

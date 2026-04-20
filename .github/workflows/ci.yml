@@ -16,6 +16,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
+  # sibling runners). See integration-tests.yml for the full rationale.
+  CARGO_HOME: ${{ runner.temp }}/.cargo
+  CARGO_BUILD_JOBS: "4"
   # Reality level for mock testing (1-5, default: 3)
   # 1 = Static Stubs, 2 = Light Simulation, 3 = Moderate Realism,
   # 4 = High Realism, 5 = Production Chaos
