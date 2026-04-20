@@ -137,7 +137,8 @@ jobs:
       # The dedicated `e2e-tests` job below runs them with
       # --test-threads=1.
       - name: Run integration tests (non-ignored)
-        run: cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip protocols::
+        run: |
+          cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip 'protocols::'
 
       - name: Upload test artifacts
         if: always()
