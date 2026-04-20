@@ -89,6 +89,15 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: [self-hosted, linux, x64, rust]
+    # Serialize after integration-tests. Both jobs build the workspace
+    # in release mode and share the self-hosted runner's target/ and
+    # ~/.cargo dirs. When they ran in parallel the rustc process could
+    # vanish mid-compile (one job's cache restore / cargo-cache action
+    # stepping on the other's toolchain), producing "No such file or
+    # directory" on an rlib rustc had just launched. `needs:` forces a
+    # happens-before ordering and also lets E2E reuse what Integration
+    # Tests just built.
+    needs: integration-tests
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
 
     steps:
