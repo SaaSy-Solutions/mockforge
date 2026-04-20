@@ -25,7 +25,11 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, linux, x64, rust]
-    timeout-minutes: 30
+    # 30 min was tight even on a warm target/. After the target/ size
+    # guard wipes at >30GB, cold rebuilds take ~25 min plus test time,
+    # which overran the prior limit. 60 min leaves headroom for the
+    # occasional cold run without holding the runner hostage.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
