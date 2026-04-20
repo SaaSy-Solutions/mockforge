@@ -609,6 +609,19 @@ impl ScenarioInstaller {
 
         info!("Downloading version {} ({} bytes)", target_version, version_entry.size);
 
+        // Cloud pillar: marketplace_download event for scenario installs.
+        mockforge_core::pillar_tracking::record_cloud_usage(
+            None,
+            None,
+            "marketplace_download",
+            serde_json::json!({
+                "source": "scenario_registry",
+                "scenario": name,
+                "version": target_version,
+            }),
+        )
+        .await;
+
         // Download package
         let package_data = registry
             .download(&version_entry.download_url, Some(&version_entry.checksum))

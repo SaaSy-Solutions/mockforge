@@ -131,6 +131,19 @@ don't include it in the response."#;
             ))
         })?;
 
+        // Record the voice-command event so the AI pillar dashboard reflects usage.
+        crate::pillar_tracking::record_ai_usage(
+            None,
+            None,
+            "voice_command",
+            serde_json::json!({
+                "kind": "parse_command",
+                "api_type": parsed.api_type,
+                "endpoints": parsed.endpoints.len(),
+            }),
+        )
+        .await;
+
         Ok(parsed)
     }
 

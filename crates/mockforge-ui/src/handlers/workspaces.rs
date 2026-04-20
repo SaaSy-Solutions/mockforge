@@ -184,6 +184,19 @@ pub async fn create_workspace(
                     };
 
                     tracing::info!("Created workspace: {}", request.id);
+
+                    // Cloud pillar: workspace_creation event.
+                    mockforge_core::pillar_tracking::record_cloud_usage(
+                        Some(request.id.clone()),
+                        None,
+                        "workspace_creation",
+                        serde_json::json!({
+                            "workspace_id": request.id,
+                            "collaborative": 1,
+                        }),
+                    )
+                    .await;
+
                     Ok(Json(ApiResponse::success(item)))
                 }
                 Err(e) => {

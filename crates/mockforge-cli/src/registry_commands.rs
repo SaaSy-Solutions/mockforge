@@ -416,6 +416,18 @@ async fn install_from_registry(plugin_spec: &str, force: bool) -> Result<()> {
 
     println!("{} Downloading version {}...", "↓".green(), target_version);
 
+    // Cloud pillar: marketplace_download event.
+    mockforge_core::pillar_tracking::record_cloud_usage(
+        None,
+        None,
+        "marketplace_download",
+        serde_json::json!({
+            "source": "plugin_registry",
+            "version": target_version,
+        }),
+    )
+    .await;
+
     // Download plugin
     let data = client.download(&version_entry.download_url).await?;
 

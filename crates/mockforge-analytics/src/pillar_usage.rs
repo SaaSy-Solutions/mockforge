@@ -472,7 +472,7 @@ impl AnalyticsDatabase {
         let chaos_enabled_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'chaos_injection'
@@ -490,7 +490,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'reality'
                 AND metric_name = 'chaos_injection'
@@ -665,7 +665,7 @@ impl AnalyticsDatabase {
         let drift_budget_configured_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.endpoint'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.endpoint'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'drift_budget_configured'
@@ -682,7 +682,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.endpoint'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.endpoint'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'drift_budget_configured'
@@ -745,7 +745,7 @@ impl AnalyticsDatabase {
         let contract_sync_cycles = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.sync_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.sync_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'contract_sync'
@@ -762,7 +762,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.sync_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.sync_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'contracts'
                 AND metric_name = 'contract_sync'
@@ -803,7 +803,7 @@ impl AnalyticsDatabase {
         let sdk_installations = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.sdk_type'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.sdk_type'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'sdk_installation'
@@ -820,7 +820,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.sdk_type'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.sdk_type'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'sdk_installation'
@@ -881,7 +881,7 @@ impl AnalyticsDatabase {
         let playground_sessions = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.session_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.session_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'playground_session'
@@ -898,7 +898,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.session_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.session_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'devx'
                 AND metric_name = 'playground_session'
@@ -976,7 +976,7 @@ impl AnalyticsDatabase {
         let shared_scenarios_count = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'scenario_shared'
@@ -993,7 +993,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.scenario_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.scenario_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'scenario_shared'
@@ -1054,7 +1054,7 @@ impl AnalyticsDatabase {
         let org_templates_used = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.template_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.template_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'template_use'
@@ -1071,7 +1071,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.template_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.template_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'template_use'
@@ -1093,7 +1093,7 @@ impl AnalyticsDatabase {
         let collaborative_workspaces = if let Some(ws_id) = workspace_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.workspace_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.workspace_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'workspace_creation'
@@ -1111,7 +1111,7 @@ impl AnalyticsDatabase {
         } else if let Some(org) = org_id {
             sqlx::query_scalar::<_, i64>(
                 r"
-                SELECT COUNT(DISTINCT json_extract(metadata, '$.workspace_id'))
+                SELECT COUNT(DISTINCT json_extract(metric_value, '$.workspace_id'))
                 FROM pillar_usage_events
                 WHERE pillar = 'cloud'
                 AND metric_name = 'workspace_creation'

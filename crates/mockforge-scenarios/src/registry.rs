@@ -419,6 +419,18 @@ impl ScenarioRegistry {
             ScenarioError::Network(format!("Failed to parse publish response: {}", e))
         })?;
 
+        // Cloud pillar: scenario_shared event.
+        mockforge_core::pillar_tracking::record_cloud_usage(
+            None,
+            None,
+            "scenario_shared",
+            serde_json::json!({
+                "scenario_id": result.name.clone(),
+                "version": result.version.clone(),
+            }),
+        )
+        .await;
+
         Ok(result)
     }
 

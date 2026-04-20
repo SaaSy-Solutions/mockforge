@@ -120,6 +120,8 @@ let policy = EnvironmentPermissionPolicy::new(
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/reality` - Reality details
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/contracts` - Contracts details
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/ai` - AI details
+- `GET /api/v2/analytics/pillars/workspace/{workspace_id}/summary` - Ranked pillar usage summary
+- `GET /api/v2/analytics/pillars/org/{org_id}/summary` - Org-level ranked pillar usage
 
 **UI Components:**
 - PillarAnalyticsDashboard - Main dashboard

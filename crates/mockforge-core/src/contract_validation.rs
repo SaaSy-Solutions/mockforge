@@ -193,6 +193,16 @@ impl ContractValidator {
     ) -> ValidationResult {
         let mut result = ValidationResult::new();
 
+        // Record the active validation mode for the Contracts pillar dashboard.
+        let mode = if self.strict_mode { "enforce" } else { "warn" };
+        crate::pillar_tracking::record_contracts_usage(
+            None,
+            None,
+            "validation_mode",
+            serde_json::json!({ "mode": mode }),
+        )
+        .await;
+
         for (path, path_item_ref) in &spec.spec.paths.paths {
             if let openapiv3::ReferenceOr::Item(path_item) = path_item_ref {
                 let operations = vec![

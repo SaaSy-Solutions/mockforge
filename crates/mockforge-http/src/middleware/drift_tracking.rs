@@ -143,6 +143,25 @@ pub async fn drift_tracking_middleware_with_extensions(
                 )
                 .await;
 
+                // If this endpoint has a drift budget configured, record that so
+                // the Contracts pillar dashboard can count distinct budgeted endpoints.
+                let endpoint_key = format!("{} {}", method, path);
+                let budget_config = state.drift_engine.config();
+                if budget_config.enabled
+                    && (budget_config.per_endpoint_budgets.contains_key(&endpoint_key)
+                        || budget_config.default_budget.is_some())
+                {
+                    mockforge_core::pillar_tracking::record_contracts_usage(
+                        None,
+                        None,
+                        "drift_budget_configured",
+                        serde_json::json!({
+                            "endpoint": endpoint_key,
+                        }),
+                    )
+                    .await;
+                }
+
                 // Create incident if budget is exceeded or breaking changes detected
                 if drift_result.should_create_incident {
                     let incident_type = if drift_result.breaking_changes > 0 {

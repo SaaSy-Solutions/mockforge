@@ -357,6 +357,10 @@ GET /api/v2/analytics/pillars/workspace/{workspace_id}/contracts
 
 # Get detailed AI pillar metrics
 GET /api/v2/analytics/pillars/workspace/{workspace_id}/ai
+
+# Get ranked pillar usage summary (most/least used pillars)
+GET /api/v2/analytics/pillars/workspace/{workspace_id}/summary
+GET /api/v2/analytics/pillars/org/{org_id}/summary
 ```
 
 ## Governance Guide for Larger Organizations
@@ -510,6 +514,8 @@ CREATE TABLE environment_permission_policies (
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/reality` - Reality pillar details
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/contracts` - Contracts pillar details
 - `GET /api/v2/analytics/pillars/workspace/{workspace_id}/ai` - AI pillar details
+- `GET /api/v2/analytics/pillars/workspace/{workspace_id}/summary` - Ranked pillar usage (most/least used)
+- `GET /api/v2/analytics/pillars/org/{org_id}/summary` - Org-level ranked pillar usage
 
 ## Best Practices
 

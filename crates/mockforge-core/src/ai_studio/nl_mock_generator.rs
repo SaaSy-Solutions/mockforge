@@ -150,6 +150,19 @@ impl MockGenerator {
             None
         };
 
+        // Record AI pillar usage (ai_generation type=mock)
+        crate::pillar_tracking::record_ai_usage(
+            _workspace_id.map(String::from),
+            None,
+            "ai_generation",
+            serde_json::json!({
+                "type": "mock",
+                "endpoints": parsed.endpoints.len(),
+                "models": parsed.models.len(),
+            }),
+        )
+        .await;
+
         Ok(MockGenerationResult {
             spec: Some(spec_json),
             message: format!(
@@ -190,6 +203,24 @@ impl MockGenerator {
 
         // Convert spec to JSON for response
         let spec_json = serde_json::to_value(&spec.spec)?;
+
+        // Record AI pillar usage. Merge counts as ai_refinement; new generation as ai_generation.
+        let metric_name = if existing_spec.is_some() {
+            "ai_refinement"
+        } else {
+            "ai_generation"
+        };
+        crate::pillar_tracking::record_ai_usage(
+            None,
+            None,
+            metric_name,
+            serde_json::json!({
+                "type": "mock",
+                "endpoints": parsed.endpoints.len(),
+                "models": parsed.models.len(),
+            }),
+        )
+        .await;
 
         Ok(MockGenerationResult {
             spec: Some(spec_json),
