@@ -2,8 +2,8 @@
 //!
 //! Shared utilities for end-to-end testing across protocols and SDKs
 
-use mockforge_test::{MockForgeServer, ServerConfig};
 use mockforge_core::ServerConfig as CoreServerConfig;
+use mockforge_test::{MockForgeServer, ServerConfig};
 use std::time::Duration;
 
 /// Test server configuration for E2E tests
@@ -32,19 +32,24 @@ impl E2ETestServer {
             config.admin_port = Some(0); // Auto-assign admin port
         }
 
-        let server = MockForgeServer::builder()
+        let mut builder = MockForgeServer::builder()
             .http_port(config.http_port)
             .admin_port(config.admin_port.unwrap_or(0))
-            .ws_port(config.ws_port)
-            .grpc_port(config.grpc_port)
             .enable_admin(true)
-            .health_timeout(Duration::from_secs(30))
-            .build()
-            .await?;
+            .health_timeout(Duration::from_secs(30));
+        if let Some(ws_port) = config.ws_port {
+            builder = builder.ws_port(ws_port);
+        }
+        if let Some(grpc_port) = config.grpc_port {
+            builder = builder.grpc_port(grpc_port);
+        }
+        let server = builder.build().await?;
 
-        // Admin port defaults to 9080 if not specified, or we can try to detect it
-        // For now, use default admin port
-        let admin_port = config.admin_port.unwrap_or(9080);
+        // The management API mounts on the HTTP server, so admin-targeted
+        // callers should use http_port. We expose the real admin-UI port
+        // (auto-assigned when the caller passed 0) so UI-specific tests can
+        // reach it directly.
+        let admin_port = server.admin_port().unwrap_or_else(|| server.http_port());
 
         Ok(Self {
             http_port: server.http_port(),
@@ -147,12 +152,7 @@ pub async fn assert_json_response<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
 ) -> Result<T, Box<dyn std::error::Error>> {
     assert!(response.headers().get("content-type").is_some());
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let content_type = response.headers().get("content-type").unwrap().to_str().unwrap();
     assert!(
         content_type.contains("application/json"),
         "Expected JSON response, got {}",

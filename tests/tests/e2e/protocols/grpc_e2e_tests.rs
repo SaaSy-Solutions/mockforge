@@ -5,7 +5,7 @@
 //! Note: These tests require gRPC server to be running and may need
 //! actual proto definitions for full testing.
 
-use mockforge_test::{MockForgeServer, ServerConfig};
+use mockforge_test::MockForgeServer;
 use std::time::Duration;
 
 #[tokio::test]

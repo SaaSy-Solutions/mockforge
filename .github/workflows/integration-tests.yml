@@ -122,10 +122,20 @@ jobs:
         run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
 
       - name: Run E2E tests
+        # Target the `e2e` integration-test binary (tests/tests/e2e.rs) and
+        # filter to each protocol module. The prior form
+        # `... -- e2e::protocols::<foo>` ran against every test binary and
+        # filtered by a `e2e::`-prefixed path that doesn't exist (the test
+        # paths inside the e2e binary are `protocols::<foo>::...`), so every
+        # binary filtered to 0 and the job reported vacuously green.
+        #
+        # `--test-threads=1` because `mockforge-test::find_available_port`
+        # has a pre-existing TOCTOU race: parallel tests all see port 31000
+        # as free and then race to bind it. Serial execution side-steps it.
         run: |
-          cargo test --package mockforge-integration-tests --release -- e2e::protocols::http_e2e_tests
-          cargo test --package mockforge-integration-tests --release -- e2e::protocols::websocket_e2e_tests
-          cargo test --package mockforge-integration-tests --release -- e2e::protocols::grpc_e2e_tests
+          cargo test --package mockforge-integration-tests --release --test e2e -- --test-threads=1 protocols::http_e2e_tests
+          cargo test --package mockforge-integration-tests --release --test e2e -- --test-threads=1 protocols::websocket_e2e_tests
+          cargo test --package mockforge-integration-tests --release --test e2e -- --test-threads=1 protocols::grpc_e2e_tests
 
       - name: Upload test results
         uses: actions/upload-artifact@v5

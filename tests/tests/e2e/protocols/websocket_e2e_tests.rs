@@ -2,10 +2,10 @@
 //!
 //! End-to-end tests for WebSocket protocol functionality
 
-use mockforge_test::{MockForgeServer, ServerConfig};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
 use futures_util::{SinkExt, StreamExt};
+use mockforge_test::MockForgeServer;
 use std::time::Duration;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 #[tokio::test]
 async fn test_websocket_connection() {
@@ -19,13 +19,11 @@ async fn test_websocket_connection() {
         .await
         .expect("Failed to start test server");
 
-    let ws_port = server.ws_port().expect("WebSocket port not assigned");
+    let _ws_port = server.ws_port().expect("WebSocket port not assigned");
     let ws_url = server.ws_url().expect("WebSocket URL not available");
 
     // Connect to WebSocket
-    let (mut ws_stream, _) = connect_async(&ws_url)
-        .await
-        .expect("Failed to connect to WebSocket");
+    let (mut ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
 
     // Send a ping message
     ws_stream
@@ -42,7 +40,11 @@ async fn test_websocket_connection() {
 
     match response {
         Message::Text(text) => {
-            assert!(text.contains("pong") || text.contains("ping"), "Expected pong response, got: {}", text);
+            assert!(
+                text.contains("pong") || text.contains("ping"),
+                "Expected pong response, got: {}",
+                text
+            );
         }
         _ => panic!("Expected text message, got: {:?}", response),
     }
@@ -67,9 +69,7 @@ async fn test_websocket_multiple_connections() {
     // Connect multiple clients
     let mut clients = Vec::new();
     for _ in 0..3 {
-        let (ws_stream, _) = connect_async(&ws_url)
-            .await
-            .expect("Failed to connect to WebSocket");
+        let (ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
         clients.push(ws_stream);
     }
 
@@ -102,9 +102,7 @@ async fn test_websocket_binary_message() {
     let ws_url = server.ws_url().expect("WebSocket URL not available");
 
     // Connect to WebSocket
-    let (mut ws_stream, _) = connect_async(&ws_url)
-        .await
-        .expect("Failed to connect to WebSocket");
+    let (mut ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
 
     // Send binary message
     let binary_data = b"test binary data";
@@ -113,8 +111,11 @@ async fn test_websocket_binary_message() {
         .await
         .expect("Failed to send binary message");
 
-    // Connection should remain open
-    assert!(!ws_stream.is_closed());
+    // If we can still send a second message without error, the connection is open.
+    ws_stream
+        .send(Message::Text("after-binary".to_string()))
+        .await
+        .expect("Connection should remain open after binary send");
 
     server.stop().expect("Failed to stop server");
 }

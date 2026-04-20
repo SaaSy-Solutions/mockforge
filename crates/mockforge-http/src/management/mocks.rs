@@ -36,7 +36,7 @@ pub(crate) async fn get_mock(
 pub(crate) async fn create_mock(
     State(state): State<ManagementState>,
     Json(mut mock): Json<MockConfig>,
-) -> Result<Json<MockConfig>, StatusCode> {
+) -> Result<(StatusCode, Json<MockConfig>), StatusCode> {
     let mut mocks = state.mocks.write().await;
 
     // Generate ID if not provided
@@ -68,7 +68,7 @@ pub(crate) async fn create_mock(
         let _ = tx.send(crate::management_ws::MockEvent::mock_created(mock.clone()));
     }
 
-    Ok(Json(mock))
+    Ok((StatusCode::CREATED, Json(mock)))
 }
 
 /// Update an existing mock

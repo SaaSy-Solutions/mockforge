@@ -181,20 +181,21 @@ fn find_mockforge_binary(config: &ServerConfig) -> Result<PathBuf> {
 /// Look for a freshly-built `mockforge` binary under the workspace's
 /// `target/{debug,release}` directory, preferring debug. Returns `None`
 /// when neither candidate exists.
+///
+/// Resolution order for the target dir:
+/// 1. `CARGO_TARGET_DIR` env var
+/// 2. Walk up from `CARGO_MANIFEST_DIR` looking for a `target/` sibling
+///    (set by cargo when the test runs under `cargo test`)
+/// 3. Walk up from `std::env::current_exe()` — this lets us locate the
+///    workspace target even when the test binary is invoked directly
+///    (e.g. by a debugger), so we don't silently fall through to a
+///    stale `mockforge` on `$PATH` whose schema may differ from the
+///    workspace.
 fn workspace_target_binary() -> Option<PathBuf> {
-    let target_dir = std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from).or_else(|| {
-        // CARGO_MANIFEST_DIR points at the *test* crate; walk up until
-        // we find a Cargo.toml that owns a `target/` sibling.
-        let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from)?;
-        let mut dir: &std::path::Path = &manifest_dir;
-        loop {
-            let candidate = dir.join("target");
-            if candidate.is_dir() {
-                return Some(candidate);
-            }
-            dir = dir.parent()?;
-        }
-    })?;
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .or_else(target_dir_from_manifest)
+        .or_else(target_dir_from_current_exe)?;
 
     let debug = target_dir.join("debug").join("mockforge");
     if debug.exists() {
@@ -205,6 +206,29 @@ fn workspace_target_binary() -> Option<PathBuf> {
         return Some(release);
     }
     None
+}
+
+fn target_dir_from_manifest() -> Option<PathBuf> {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from)?;
+    let mut dir: &std::path::Path = &manifest_dir;
+    loop {
+        let candidate = dir.join("target");
+        if candidate.is_dir() {
+            return Some(candidate);
+        }
+        dir = dir.parent()?;
+    }
+}
+
+fn target_dir_from_current_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let mut dir = exe.parent()?;
+    loop {
+        if dir.file_name() == Some(std::ffi::OsStr::new("target")) {
+            return Some(dir.to_path_buf());
+        }
+        dir = dir.parent()?;
+    }
 }
 
 /// Check if a port is available
