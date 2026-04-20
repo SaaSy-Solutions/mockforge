@@ -20,6 +20,18 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Cap cargo parallelism. The self-hosted runner is 8 vCPU shared with
+  # 7 other runners; unrestricted `-j` was producing flakes like
+  # "could not parse/generate dep info" (file disappearing mid-compile,
+  # consistent with rustc being killed under CPU/memory pressure
+  # without triggering the OOM-killer log).
+  CARGO_BUILD_JOBS: "4"
+
+# Cancel older still-running pushes to the same ref; a follow-up commit
+# shouldn't keep paying for a build we're about to supersede.
+concurrency:
+  group: integration-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   integration-tests:
@@ -58,7 +70,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build MockForge binary (needed for integration tests)
-        run: cargo build --bin mockforge --release --features all-protocols
+        # Retry once on transient "No such file or directory" / SIGKILL
+        # style failures from rustc under resource contention on the
+        # shared self-hosted runner. Incremental artifacts from the first
+        # attempt let the retry pick up where it left off cheaply.
+        run: |
+          cargo build --bin mockforge --release --features all-protocols \
+            || (echo "::warning::first build failed, retrying once" \
+                && cargo build --bin mockforge --release --features all-protocols)
 
       - name: Verify binary exists
         run: |
@@ -133,7 +152,11 @@ jobs:
       # to 100%.
       - name: Build MockForge
         # Should be a cache hit from integration-tests; re-run is cheap.
-        run: cargo build --release --bin mockforge --features all-protocols
+        # Same retry guard as the integration-tests build step.
+        run: |
+          cargo build --release --bin mockforge --features all-protocols \
+            || (echo "::warning::first build failed, retrying once" \
+                && cargo build --release --bin mockforge --features all-protocols)
 
       # See note on the integration-tests job: env: PATH doesn't expand
       # $PATH. GITHUB_PATH is the supported way to prepend to PATH.
