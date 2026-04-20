@@ -34,6 +34,12 @@ env:
   # `runner.temp`, which is only valid at job level) gives a per-run
   # path that's fresh, disposable, and untouched by siblings.
   CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
+  # Force rustup to use stable regardless of whatever a sibling repo
+  # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
+  # installs stable but does not change the default; RUSTUP_TOOLCHAIN
+  # overrides the default per invocation, so stale 1.88.0 pins no
+  # longer leak into mockforge builds.
+  RUSTUP_TOOLCHAIN: stable
 
 # Cancel older still-running pushes to the same ref; a follow-up commit
 # shouldn't keep paying for a build we're about to supersede.
