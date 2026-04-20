@@ -7,11 +7,13 @@
 use mockforge_core::{
     contract_validation::{ContractValidator, ValidationResult},
     openapi::OpenApiSpec,
+    pillar_tracking::record_contracts_usage,
     Error, Result,
 };
 use mockforge_workspace::git_watch::{GitWatchConfig, GitWatchService};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// Handle the contract-sync command
 #[allow(clippy::too_many_arguments)]
@@ -107,6 +109,22 @@ pub async fn handle_contract_sync(
             }
         }
     }
+
+    // Record a contract-sync event so the Contracts pillar dashboard reflects usage.
+    let sync_id = Uuid::new_v4().to_string();
+    record_contracts_usage(
+        None,
+        None,
+        "contract_sync",
+        serde_json::json!({
+            "sync_id": sync_id,
+            "spec_count": spec_files.len(),
+            "errors": overall_result.errors.len(),
+            "breaking_changes": overall_result.breaking_changes.len(),
+            "passed": overall_result.passed,
+        }),
+    )
+    .await;
 
     // Exit with appropriate code
     if overall_result.passed {

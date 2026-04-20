@@ -2105,6 +2105,36 @@ enum Commands {
     },
 }
 
+/// Return a short name for the top-level CLI subcommand used for pillar analytics.
+fn cli_command_name(cmd: &Commands) -> &'static str {
+    match cmd {
+        Commands::Serve(_) => "serve",
+        #[cfg(feature = "smtp")]
+        Commands::Smtp { .. } => "smtp",
+        #[cfg(feature = "mqtt")]
+        Commands::Mqtt { .. } => "mqtt",
+        #[cfg(feature = "ftp")]
+        Commands::Ftp { .. } => "ftp",
+        #[cfg(feature = "kafka")]
+        Commands::Kafka { .. } => "kafka",
+        #[cfg(feature = "amqp")]
+        Commands::Amqp { .. } => "amqp",
+        Commands::Data { .. } => "data",
+        Commands::Admin { .. } => "admin",
+        Commands::Sync { .. } => "sync",
+        Commands::Quick { .. } => "quick",
+        Commands::Completions { .. } => "completions",
+        Commands::Init { .. } => "init",
+        Commands::Wizard => "wizard",
+        Commands::ValidateFixtures { .. } => "validate-fixtures",
+        Commands::Generate { .. } => "generate",
+        Commands::Schema { .. } => "schema",
+        Commands::DevSetup { .. } => "dev-setup",
+        Commands::Config { .. } => "config",
+        _ => "other",
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
@@ -2124,6 +2154,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         eprintln!("Failed to initialize logging: {}", e);
         std::process::exit(1);
     }
+
+    // Record the invoked CLI subcommand for the DevX pillar dashboard.
+    let command_name = cli_command_name(&cli.command);
+    mockforge_core::pillar_tracking::record_devx_usage(
+        None,
+        None,
+        "cli_command",
+        serde_json::json!({ "command": command_name }),
+    )
+    .await;
 
     match cli.command {
         Commands::Serve(args) => {

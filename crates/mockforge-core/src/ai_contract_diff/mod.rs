@@ -165,6 +165,20 @@ impl ContractDiffAnalyzer {
         // Recalculate overall confidence with recommendations and corrections
         result.confidence = ConfidenceScorer::calculate_overall_confidence(&result.mismatches);
 
+        // Record AI pillar usage (ai_generation type=contract_diff) so the dashboard reflects contract-diff activity.
+        crate::pillar_tracking::record_ai_usage(
+            None,
+            None,
+            "ai_generation",
+            serde_json::json!({
+                "type": "contract_diff",
+                "mismatches": result.mismatches.len(),
+                "recommendations": result.recommendations.len(),
+                "corrections": result.corrections.len(),
+            }),
+        )
+        .await;
+
         Ok(result)
     }
 

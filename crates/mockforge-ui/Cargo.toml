@@ -32,6 +32,7 @@ serde_yaml = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { version = "0.1", features = ["time"] }
 futures-util = "0.3"
+async-trait = { workspace = true }
 tracing = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }

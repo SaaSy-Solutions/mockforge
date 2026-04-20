@@ -11,9 +11,10 @@
 
 import React, { useState } from 'react';
 import { Card } from '../ui/Card';
-import { usePillarMetrics } from '@/hooks/usePillarAnalytics';
+import { usePillarMetrics, usePillarUsageSummary } from '@/hooks/usePillarAnalytics';
 import { PillarOverviewCards } from './PillarOverviewCards';
 import { PillarUsageChart } from './PillarUsageChart';
+import { PillarRankingsCard } from './PillarRankingsCard';
 import { RealityPillarDetails } from './RealityPillarDetails';
 import { ContractsPillarDetails } from './ContractsPillarDetails';
 import { TimeRangeSelector } from './TimeRangeSelector';
@@ -36,6 +37,12 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
   };
 
   const { data: metrics, isLoading, error } = usePillarMetrics(
+    workspaceId,
+    orgId,
+    query
+  );
+
+  const { data: rankings, isLoading: rankingsLoading } = usePillarUsageSummary(
     workspaceId,
     orgId,
     query
@@ -75,13 +82,17 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
       {/* Overview Cards */}
       <PillarOverviewCards data={metrics} isLoading={isLoading} />
 
-      {/* Pillar Usage Chart */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          Pillar Usage Distribution
-        </h2>
-        <PillarUsageChart data={metrics} isLoading={isLoading} />
-      </Card>
+      {/* Rankings and Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <PillarRankingsCard data={rankings} isLoading={rankingsLoading} />
+
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+            Pillar Usage Distribution
+          </h2>
+          <PillarUsageChart data={metrics} isLoading={isLoading} />
+        </Card>
+      </div>
 
       {/* Detailed Pillar Views */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -117,6 +128,9 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Playground sessions: {metrics.devx.playground_sessions}
             </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              CLI commands: {metrics.devx.cli_commands}
+            </p>
           </Card>
         )}
 
@@ -134,6 +148,9 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Org templates used: {metrics.cloud.org_templates_used}
             </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Collaborative workspaces: {metrics.cloud.collaborative_workspaces}
+            </p>
           </Card>
         )}
 
@@ -144,6 +161,9 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               AI-generated mocks: {metrics.ai.ai_generated_mocks}
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              AI contract diffs: {metrics.ai.ai_contract_diffs}
             </p>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Voice commands: {metrics.ai.voice_commands}

@@ -10,10 +10,8 @@ import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 import { Card } from '@/components/ui/Card';
 
 export const PillarAnalyticsPage: React.FC = () => {
-  const { currentWorkspace } = useWorkspaceStore();
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
-    currentWorkspace?.id
-  );
+  const { activeWorkspace } = useWorkspaceStore();
+  const [selectedWorkspaceId] = useState<string | undefined>(activeWorkspace?.id);
 
   return (
     <div className="space-y-6 p-6">

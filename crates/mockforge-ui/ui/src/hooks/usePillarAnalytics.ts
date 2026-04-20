@@ -126,3 +126,58 @@ export const usePillarMetrics = (
     staleTime: 30000, // 30 seconds
   });
 };
+
+export interface PillarRanking {
+  pillar: string;
+  usage: number;
+  percentage: number;
+  is_most_used: boolean;
+  is_least_used: boolean;
+}
+
+export interface PillarUsageSummary {
+  time_range: string;
+  rankings: PillarRanking[];
+  total_usage: number;
+}
+
+/**
+ * Fetch the ranked pillar usage summary (most/least used pillars)
+ */
+export const usePillarUsageSummary = (
+  workspaceId: string | undefined,
+  orgId: string | undefined,
+  query: PillarMetricsQuery
+) => {
+  return useQuery<PillarUsageSummary>({
+    queryKey: ['pillar-usage-summary', workspaceId, orgId, query.time_range],
+    queryFn: async () => {
+      let url: string;
+      if (workspaceId) {
+        url = `${API_BASE_URL}/workspace/${workspaceId}/summary`;
+      } else if (orgId) {
+        url = `${API_BASE_URL}/org/${orgId}/summary`;
+      } else {
+        throw new Error('Either workspaceId or orgId must be provided');
+      }
+
+      const params = new URLSearchParams();
+      const duration = query.time_range
+        ? timeRangeToDuration(query.time_range)
+        : 3600;
+      params.append('duration', duration.toString());
+
+      const response = await axios.get<{ success: boolean; data: PillarUsageSummary }>(
+        `${url}?${params.toString()}`
+      );
+
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+
+      throw new Error('Failed to fetch pillar usage summary');
+    },
+    enabled: !!(workspaceId || orgId),
+    staleTime: 30000,
+  });
+};

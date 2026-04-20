@@ -7,6 +7,7 @@
 pub mod audit;
 pub mod auth;
 pub mod handlers;
+pub mod pillar_tracking_init;
 pub mod rbac;
 #[cfg(feature = "registry-admin")]
 pub mod registry_admin;

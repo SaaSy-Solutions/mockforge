@@ -448,6 +448,11 @@ pub fn create_admin_router(
                     if let Err(e) = analytics_db.run_migrations().await {
                         tracing::warn!("Failed to run analytics database migrations: {}. Coverage metrics routes may not work correctly.", e);
                     } else {
+                        // Wire the pillar-tracking recorder into the same database so emitters
+                        // across the workspace persist events that the pillar dashboard reads back.
+                        let db_for_pillars = Arc::new(analytics_db.clone());
+                        crate::pillar_tracking_init::init_pillar_tracking(db_for_pillars).await;
+
                         let _ = coverage_db_clone.set(analytics_db);
                         tracing::info!("Analytics database initialized for coverage metrics");
                     }
@@ -463,6 +468,7 @@ pub fn create_admin_router(
 
         // Add routes directly to main router to avoid state type conflicts
         use crate::handlers::coverage_metrics;
+        use crate::handlers::pillar_analytics::{self, PillarAnalyticsState};
         router = router
             .route("/api/v2/analytics/scenarios/usage", get(coverage_metrics::get_scenario_usage))
             .route("/api/v2/analytics/personas/ci-hits", get(coverage_metrics::get_persona_ci_hits))
@@ -478,21 +484,42 @@ pub fn create_admin_router(
                 "/api/v2/analytics/drift/percentage",
                 get(coverage_metrics::get_drift_percentage),
             )
-            .layer(axum::extract::Extension(coverage_state));
+            // Pillar usage analytics (shares the same AnalyticsDatabase OnceCell)
+            .route(
+                "/api/v2/analytics/pillars/workspace/{workspace_id}",
+                get(pillar_analytics::get_workspace_pillar_metrics),
+            )
+            .route(
+                "/api/v2/analytics/pillars/workspace/{workspace_id}/reality",
+                get(pillar_analytics::get_reality_pillar_details),
+            )
+            .route(
+                "/api/v2/analytics/pillars/workspace/{workspace_id}/contracts",
+                get(pillar_analytics::get_contracts_pillar_details),
+            )
+            .route(
+                "/api/v2/analytics/pillars/workspace/{workspace_id}/ai",
+                get(pillar_analytics::get_ai_pillar_details),
+            )
+            .route(
+                "/api/v2/analytics/pillars/workspace/{workspace_id}/summary",
+                get(pillar_analytics::get_workspace_pillar_usage_summary),
+            )
+            .route(
+                "/api/v2/analytics/pillars/org/{org_id}",
+                get(pillar_analytics::get_org_pillar_metrics),
+            )
+            .route(
+                "/api/v2/analytics/pillars/org/{org_id}/summary",
+                get(pillar_analytics::get_org_pillar_usage_summary),
+            )
+            .layer(axum::extract::Extension(coverage_state.clone()))
+            .layer(axum::extract::Extension(PillarAnalyticsState::new(coverage_state.db.clone())));
 
         tracing::info!(
-            "Coverage metrics routes mounted at /api/v2/analytics (database initializing)"
+            "Coverage + pillar analytics routes mounted at /api/v2/analytics (database initializing)"
         );
     }
-
-    // Pillar analytics routes
-    // Note: These routes require an analytics database to be configured.
-    // The handlers will return appropriate errors if the database is not available.
-    // To enable analytics database:
-    // 1. Initialize analytics database connection from config
-    // 2. Add database connection to handler state (e.g., AnalyticsState)
-    // 3. Pass state to analytics route handlers
-    // For now, routes are defined but handlers will return errors if database is not configured
 
     // Add workspace router with WorkspaceState
     {
