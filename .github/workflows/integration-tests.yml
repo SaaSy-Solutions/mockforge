@@ -26,16 +26,14 @@ env:
   # consistent with rustc being killed under CPU/memory pressure
   # without triggering the OOM-killer log).
   CARGO_BUILD_JOBS: "4"
-  # Isolate cargo state away from `/home/actions/.cargo` (shared by 7
-  # sibling runners on this box). When saas-platform / apiary / aca
-  # runners kick off `cargo install ...`, they churn that shared
-  # registry and lock files mid-build, which has surfaced as the same
-  # "(never executed) No such file or directory" flakes. A per-job
-  # `$RUNNER_TEMP/.cargo` is fresh, disposable, and untouched by
-  # siblings. Slightly slower first build (registry re-downloads) but
-  # deterministic thereafter. `Swatinem/rust-cache@v2` picks up
-  # CARGO_HOME automatically for its cache paths.
-  CARGO_HOME: ${{ runner.temp }}/.cargo
+  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
+  # sibling runners). When saas-platform / apiary / aca runners run
+  # `cargo install ...`, they churn the shared registry and lock files,
+  # which surfaces in mockforge jobs as "(never executed) No such file
+  # or directory" rustc spawn failures. `github.run_id` (not
+  # `runner.temp`, which is only valid at job level) gives a per-run
+  # path that's fresh, disposable, and untouched by siblings.
+  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
 
 # Cancel older still-running pushes to the same ref; a follow-up commit
 # shouldn't keep paying for a build we're about to supersede.
