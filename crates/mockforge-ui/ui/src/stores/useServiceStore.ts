@@ -395,6 +395,13 @@ export const useServiceStore = create<ServiceStore>((set, get) => ({
     try {
       const updated = await cloudServicesApi.update(serviceId, patch);
       const mapped = mapCloudService(updated);
+      // If the workspace assignment changed, the active workspaceFilter may
+      // no longer include this service — refetch so the list reflects the
+      // server-scoped view. Otherwise patch the in-memory service.
+      if (patch.workspace_id !== undefined && get().workspaceFilter !== null) {
+        await get().fetchServices();
+        return;
+      }
       set((state) => {
         const services = state.services.map((service) =>
           service.id === serviceId ? mapped : service

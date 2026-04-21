@@ -89,3 +89,8 @@ class CloudServicesApiService {
 }
 
 export { CloudServicesApiService };
+
+/** Shared singleton. Co-located with the class so stores can import it
+ *  directly without risking a barrel-import cycle. The barrel
+ *  (`services/api/index.ts`) re-exports this same instance. */
+export const cloudServicesApi = new CloudServicesApiService();
