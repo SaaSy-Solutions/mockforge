@@ -61,6 +61,9 @@ const resetStore = async () => {
     result.current.setServices([]);
     result.current.clearError();
     result.current.clearMutationError();
+    // `workspaceFilter` persists across tests because Zustand stores are
+    // module-scoped. Reset it directly so each test starts with no filter.
+    useServiceStore.setState({ workspaceFilter: null });
   });
 };
 
@@ -252,6 +255,38 @@ describe('useServiceStore (cloud)', () => {
 
     const [, patch] = updateMock.mock.calls[0];
     expect(patch).not.toHaveProperty('workspace_id');
+  });
+
+  it('refetches after workspace reassign so filtered view is not stale', async () => {
+    // Regression: before the fix, updateServiceDetails patched the in-memory
+    // service but never refetched. The UI kept showing a service that the
+    // server had already moved to a different workspace.
+    const initial = cloudService({ id: 'svc-a', workspace_id: 'ws-1' });
+    const afterUnassign = cloudService({ id: 'svc-a', workspace_id: null });
+
+    // First fetch (from setWorkspaceFilter): scoped to ws-1, returns the svc.
+    // Second fetch (triggered by updateServiceDetails): scoped to ws-1, empty.
+    listMock
+      .mockResolvedValueOnce([initial])
+      .mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useServiceStore());
+    await act(async () => {
+      await result.current.setWorkspaceFilter('ws-1');
+    });
+    expect(result.current.services).toHaveLength(1);
+
+    updateMock.mockResolvedValueOnce(afterUnassign);
+    await act(async () => {
+      await result.current.updateServiceDetails('svc-a', { workspace_id: null });
+    });
+
+    // Two list() calls total — one from setWorkspaceFilter, one from the
+    // refetch triggered by the workspace reassign.
+    expect(listMock).toHaveBeenCalledTimes(2);
+    expect(listMock).toHaveBeenLastCalledWith({ workspaceId: 'ws-1' });
+    // And the filtered view reflects the server's post-move state.
+    expect(result.current.services).toHaveLength(0);
   });
 
   it('updateService optimistically applies then reconciles with server response', async () => {
