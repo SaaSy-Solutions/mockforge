@@ -2,11 +2,11 @@ import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { ServiceInfo, RouteInfo } from '../types';
 import { authenticatedFetch } from '../utils/apiClient';
-import {
-  cloudServicesApi,
-  type CloudService,
-  type CloudServiceCreatePayload,
-  type CloudServiceUpdatePayload,
+import { cloudServicesApi } from '../services/api';
+import type {
+  CloudService,
+  CloudServiceCreatePayload,
+  CloudServiceUpdatePayload,
 } from '../services/api/cloudServices';
 
 const isCloud = !!import.meta.env.VITE_API_BASE_URL;
