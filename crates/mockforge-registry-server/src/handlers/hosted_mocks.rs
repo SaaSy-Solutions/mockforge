@@ -799,6 +799,160 @@ pub async fn redeploy_deployment(
     })))
 }
 
+fn deployment_app_name(deployment: &HostedMock) -> String {
+    format!(
+        "mockforge-{}-{}",
+        deployment
+            .org_id
+            .to_string()
+            .replace('-', "")
+            .chars()
+            .take(8)
+            .collect::<String>(),
+        deployment.slug
+    )
+}
+
+/// Stop a running hosted mock deployment.
+///
+/// Gracefully stops the Fly.io machine (without deleting it) and marks
+/// the deployment as `stopped`. Only active deployments can be stopped.
+pub async fn stop_deployment(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<Json<DeploymentResponse>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
+        .await?;
+
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
+    }
+
+    let status = deployment.status();
+    if !matches!(status, DeploymentStatus::Active) {
+        return Err(ApiError::InvalidRequest(format!(
+            "Cannot stop a deployment with status '{}'. Must be 'active'.",
+            status
+        )));
+    }
+
+    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
+        let flyio_client = FlyioClient::new(flyio_token);
+        let app_name = deployment_app_name(&deployment);
+        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
+
+        if let Some(machine_id) = machine_id {
+            flyio_client.stop_machine(&app_name, machine_id).await.map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to stop machine: {}", e))
+            })?;
+        } else {
+            warn!(
+                "No Fly.io machine ID found for deployment {}; marking as stopped anyway",
+                deployment_id
+            );
+        }
+    }
+
+    state
+        .store
+        .update_hosted_mock_status(deployment_id, DeploymentStatus::Stopped, None)
+        .await?;
+
+    DeploymentLog::create(pool, deployment_id, "info", "Deployment stopped", None)
+        .await
+        .ok();
+
+    let updated = state.store.find_hosted_mock_by_id(deployment_id).await?.ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
+    })?;
+
+    Ok(Json(DeploymentResponse::from(updated)))
+}
+
+/// Start a stopped hosted mock deployment.
+pub async fn start_deployment(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<Json<DeploymentResponse>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
+        .await?;
+
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
+    }
+
+    let status = deployment.status();
+    if !matches!(status, DeploymentStatus::Stopped) {
+        return Err(ApiError::InvalidRequest(format!(
+            "Cannot start a deployment with status '{}'. Must be 'stopped'.",
+            status
+        )));
+    }
+
+    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
+        let flyio_client = FlyioClient::new(flyio_token);
+        let app_name = deployment_app_name(&deployment);
+        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
+
+        if let Some(machine_id) = machine_id {
+            flyio_client.start_machine(&app_name, machine_id).await.map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to start machine: {}", e))
+            })?;
+        } else {
+            return Err(ApiError::InvalidRequest(
+                "No Fly.io machine ID found in deployment metadata; cannot start".to_string(),
+            ));
+        }
+    }
+
+    state
+        .store
+        .update_hosted_mock_status(deployment_id, DeploymentStatus::Active, None)
+        .await?;
+
+    DeploymentLog::create(pool, deployment_id, "info", "Deployment started", None)
+        .await
+        .ok();
+
+    let updated = state.store.find_hosted_mock_by_id(deployment_id).await?.ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
+    })?;
+
+    Ok(Json(DeploymentResponse::from(updated)))
+}
+
 /// Get deployment logs
 pub async fn get_deployment_logs(
     State(state): State<AppState>,
@@ -991,6 +1145,8 @@ pub struct DeploymentResponse {
     pub status: String,
     pub deployment_url: Option<String>,
     pub openapi_spec_url: Option<String>,
+    pub region: String,
+    pub instance_type: String,
     pub health_status: String,
     pub error_message: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -1011,6 +1167,8 @@ impl From<HostedMock> for DeploymentResponse {
             status,
             deployment_url: mock.deployment_url,
             openapi_spec_url: mock.openapi_spec_url,
+            region: mock.region,
+            instance_type: mock.instance_type,
             health_status,
             error_message: mock.error_message,
             created_at: mock.created_at,

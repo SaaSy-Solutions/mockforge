@@ -281,6 +281,135 @@ test.describe('Hosted Mocks — Deployed Site', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // 4b. New UI Controls (spec upload, region, project picker, custom domain,
+  //     redeploy/stop/start row actions)
+  // ---------------------------------------------------------------------------
+  test.describe('New UI Controls', () => {
+    test('Deploy dialog should show Project (optional) selector', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(
+        dialog.getByRole('combobox', { name: /Project \(optional\)/ }),
+      ).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('Deploy dialog should show Region selector with a default value', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      const region = dialog.getByRole('combobox', { name: 'Region' });
+      await expect(region).toBeVisible();
+      // Default is "iad" — the Select renders the full "Label (code)" string
+      await expect(region).toContainText('iad');
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('Region selector should offer multiple Fly.io regions', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('combobox', { name: 'Region' }).click();
+      await page.waitForTimeout(300);
+
+      // Menu renders as a listbox outside the dialog
+      const listbox = page.getByRole('listbox');
+      await expect(listbox.getByRole('option', { name: /iad/ })).toBeVisible();
+      await expect(listbox.getByRole('option', { name: /lhr/ })).toBeVisible();
+      await expect(listbox.getByRole('option', { name: /nrt/ })).toBeVisible();
+
+      // Close the menu without changing the selection
+      await page.keyboard.press('Escape');
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('Deploy dialog should show a Spec Upload button', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('button', { name: 'Upload' })).toBeVisible();
+      await expect(
+        dialog.getByText('Paste a URL or upload a JSON/YAML spec'),
+      ).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('Deploy dialog should still show existing fields alongside new ones', async ({ page }) => {
+      await mainContent(page).getByRole('button', { name: 'Deploy Mock' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeVisible();
+      await expect(dialog.getByRole('textbox', { name: 'Slug' })).toBeVisible();
+      await expect(dialog.getByRole('textbox', { name: 'Description' })).toBeVisible();
+      await expect(
+        dialog.getByRole('textbox', { name: 'OpenAPI Spec URL (optional)' }),
+      ).toBeVisible();
+      await expect(
+        dialog.getByRole('textbox', { name: 'Configuration (JSON)' }),
+      ).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+    });
+
+    test('Custom domain form renders when a deployment exists (skip if none)', async ({ page }) => {
+      const main = mainContent(page);
+      // Find a View Details button — one per row. Skip if the org has none.
+      const viewButtons = main.getByRole('button', { name: /View Details/i });
+      const hasRow = await viewButtons.first().isVisible({ timeout: 3000 }).catch(() => false);
+      test.skip(!hasRow, 'No deployments in this org — custom domain UI only renders in details.');
+
+      await viewButtons.first().click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByRole('heading', { name: 'Custom Domain' })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /Set Domain/ })).toBeVisible();
+      await expect(
+        dialog.getByText(/The registry wildcard TLS cert terminates traffic/),
+      ).toBeVisible();
+
+      // Set Domain should be disabled for an empty input
+      await expect(dialog.getByRole('button', { name: /Set Domain/ })).toBeDisabled();
+
+      await dialog.getByRole('button', { name: 'Close' }).click();
+    });
+
+    test('Row actions include Redeploy/Stop/Start when applicable (skip if none)', async ({ page }) => {
+      const main = mainContent(page);
+      const firstDataRow = main.getByRole('row').nth(1);
+      const hasRow = await firstDataRow.isVisible({ timeout: 3000 }).catch(() => false);
+      test.skip(!hasRow, 'No deployments — lifecycle buttons only render per-row.');
+
+      // Status cell is column 2 (0-indexed). Read it so we know which
+      // lifecycle buttons must be present.
+      const firstRowStatus = (await firstDataRow.locator('td').nth(1).textContent()) ?? '';
+
+      if (/active/i.test(firstRowStatus)) {
+        // Redeploy + Stop buttons expose their labels via the MUI Tooltip's
+        // `aria-label`. Scope to the first row so we don't pick up matches
+        // from other rows.
+        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
+        await expect(firstDataRow.getByLabel('Stop')).toBeVisible();
+      } else if (/stopped/i.test(firstRowStatus)) {
+        await expect(firstDataRow.getByLabel('Start')).toBeVisible();
+      } else if (/failed/i.test(firstRowStatus)) {
+        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
+      }
+      // If pending/deploying/deleting, no lifecycle buttons are expected
+      // yet — the test simply passes without additional assertions.
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // 5. Deploy Lifecycle CRUD Flow
   // ---------------------------------------------------------------------------
   test.describe('Deploy Lifecycle Flow', () => {

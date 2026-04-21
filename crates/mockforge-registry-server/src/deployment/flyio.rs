@@ -247,6 +247,52 @@ impl FlyioClient {
         Ok(machine)
     }
 
+    /// Stop a running machine (graceful shutdown, keeps the machine around
+    /// so it can be restarted later without recreating its config).
+    pub async fn stop_machine(&self, app_name: &str, machine_id: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}/machines/{}/stop", self.base_url, app_name, machine_id);
+
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .context("Failed to stop Fly.io machine")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Failed to stop Fly.io machine: {} - {}", status, error_text);
+        }
+
+        Ok(())
+    }
+
+    /// Start a stopped machine.
+    pub async fn start_machine(&self, app_name: &str, machine_id: &str) -> Result<()> {
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}/machines/{}/start", self.base_url, app_name, machine_id);
+
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .send()
+            .await
+            .context("Failed to start Fly.io machine")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Failed to start Fly.io machine: {} - {}", status, error_text);
+        }
+
+        Ok(())
+    }
+
     /// Delete a machine
     pub async fn delete_machine(&self, app_name: &str, machine_id: &str) -> Result<()> {
         let client = reqwest::Client::new();

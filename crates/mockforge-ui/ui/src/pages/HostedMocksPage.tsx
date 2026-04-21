@@ -39,6 +39,10 @@ import {
   Divider,
   Tooltip,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -53,7 +57,26 @@ import {
   Visibility as ViewIcon,
   Code as CodeIcon,
   Assessment as AssessmentIcon,
+  Replay as ReplayIcon,
+  Language as LanguageIcon,
+  UploadFile as UploadFileIcon,
+  PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material';
+
+const FLY_REGIONS: { code: string; label: string }[] = [
+  { code: 'iad', label: 'Ashburn, Virginia (US East)' },
+  { code: 'ord', label: 'Chicago, Illinois (US Central)' },
+  { code: 'sjc', label: 'San Jose, California (US West)' },
+  { code: 'sea', label: 'Seattle, Washington (US West)' },
+  { code: 'lhr', label: 'London, United Kingdom' },
+  { code: 'fra', label: 'Frankfurt, Germany' },
+  { code: 'ams', label: 'Amsterdam, Netherlands' },
+  { code: 'cdg', label: 'Paris, France' },
+  { code: 'nrt', label: 'Tokyo, Japan' },
+  { code: 'sin', label: 'Singapore' },
+  { code: 'syd', label: 'Sydney, Australia' },
+  { code: 'gru', label: 'São Paulo, Brazil' },
+];
 
 interface Deployment {
   id: string;
@@ -65,6 +88,8 @@ interface Deployment {
   status: 'pending' | 'deploying' | 'active' | 'stopped' | 'failed' | 'deleting';
   deployment_url?: string;
   openapi_spec_url?: string;
+  region?: string;
+  instance_type?: string;
   health_status: 'healthy' | 'unhealthy' | 'unknown';
   error_message?: string;
   created_at: string;
@@ -87,6 +112,12 @@ interface DeploymentMetrics {
   egress_bytes: number;
   avg_response_time_ms: number;
   period_start: string;
+}
+
+interface ProjectOption {
+  id: string;
+  name: string;
+  slug: string;
 }
 
 export const HostedMocksPage: React.FC = () => {
@@ -123,8 +154,17 @@ export const HostedMocksPage: React.FC = () => {
     description: '',
     config_json: '{}',
     openapi_spec_url: '',
+    region: 'iad',
+    project_id: '',
   });
   const [creating, setCreating] = useState(false);
+  const [uploadingSpec, setUploadingSpec] = useState(false);
+  const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [lifecycleId, setLifecycleId] = useState<string | null>(null);
+  const [customDomain, setCustomDomain] = useState('');
+  const [settingDomain, setSettingDomain] = useState(false);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [projectsLoadError, setProjectsLoadError] = useState<string | null>(null);
 
   // Real-time stream for the selected hosted mock deployment
   const streamEnabled = detailsOpen && selectedDeployment?.status === 'active';
@@ -137,7 +177,41 @@ export const HostedMocksPage: React.FC = () => {
 
   useEffect(() => {
     loadDeployments();
+    loadProjects();
   }, []);
+
+  const loadProjects = async () => {
+    setProjectsLoadError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const response = await fetch('/api/v1/projects', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        // Non-fatal: project_id is optional
+        setProjectsLoadError(`Failed to load projects (HTTP ${response.status})`);
+        return;
+      }
+
+      const data = await response.json();
+      setProjects(
+        Array.isArray(data)
+          ? data.map((p: { id: string; name: string; slug: string }) => ({
+              id: p.id,
+              name: p.name,
+              slug: p.slug,
+            }))
+          : [],
+      );
+    } catch {
+      setProjectsLoadError('Failed to load projects');
+    }
+  };
 
   // Auto-refresh deployments while any are pending/deploying.
   useEffect(() => {
@@ -208,6 +282,8 @@ export const HostedMocksPage: React.FC = () => {
         description: formData.description || undefined,
         config_json: configJson,
         openapi_spec_url: formData.openapi_spec_url || undefined,
+        region: formData.region || undefined,
+        project_id: formData.project_id || undefined,
       };
 
       const response = await fetch('/api/v1/hosted-mocks', {
@@ -242,6 +318,8 @@ export const HostedMocksPage: React.FC = () => {
         description: '',
         config_json: '{}',
         openapi_spec_url: '',
+        region: 'iad',
+        project_id: '',
       });
       loadDeployments();
     } catch (err) {
@@ -279,12 +357,191 @@ export const HostedMocksPage: React.FC = () => {
     }
   };
 
+  const handleUploadSpec = async (file: File) => {
+    setUploadingSpec(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const body = new FormData();
+      body.append('file', file);
+
+      const response = await fetch('/api/v1/hosted-mocks/specs/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `Spec upload failed (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      if (typeof data?.url === 'string') {
+        setFormData((prev) => ({ ...prev, openapi_spec_url: data.url }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload spec');
+    } finally {
+      setUploadingSpec(false);
+    }
+  };
+
+  const handleLifecycleAction = async (
+    id: string,
+    action: 'stop' | 'start',
+  ) => {
+    const label = action === 'stop' ? 'Stop' : 'Start';
+    const confirmMsg =
+      action === 'stop'
+        ? 'Stop this mock service? Requests will be refused until it is started again.'
+        : 'Start this mock service?';
+    if (!confirm(confirmMsg)) return;
+
+    setLifecycleId(id);
+    setError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `${label} failed` }));
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `${label} failed (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+
+      loadDeployments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} deployment`);
+    } finally {
+      setLifecycleId(null);
+    }
+  };
+
+  const handleRedeployDeployment = async (id: string) => {
+    if (!confirm('Redeploy this mock service? Active traffic may be briefly interrupted.')) {
+      return;
+    }
+    setRedeployingId(id);
+    setError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/redeploy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Redeploy failed' }));
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `Redeploy failed (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+
+      loadDeployments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to redeploy');
+    } finally {
+      setRedeployingId(null);
+    }
+  };
+
+  const handleSetDomain = async () => {
+    if (!selectedDeployment || !customDomain.trim()) return;
+    setSettingDomain(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `/api/v1/hosted-mocks/${selectedDeployment.id}/set-domain`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ domain: customDomain.trim() }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Set domain failed' }));
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `Set domain failed (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      if (typeof data?.deployment_url === 'string') {
+        setSelectedDeployment({ ...selectedDeployment, deployment_url: data.deployment_url });
+      }
+      setCustomDomain('');
+      loadDeployments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set custom domain');
+    } finally {
+      setSettingDomain(false);
+    }
+  };
+
   const handleViewDetails = async (deployment: Deployment) => {
     setSelectedDeployment(deployment);
     setDetailsOpen(true);
     setDetailsTab(0);
     setLogs([]);
     setMetrics(null);
+    setCustomDomain('');
 
     // Load logs and metrics
     await Promise.all([
@@ -503,6 +760,58 @@ export const HostedMocksPage: React.FC = () => {
                           <ViewIcon />
                         </IconButton>
                       </Tooltip>
+                      {(deployment.status === 'active' || deployment.status === 'failed') && (
+                        <Tooltip title="Redeploy">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleRedeployDeployment(deployment.id)}
+                              disabled={redeployingId === deployment.id}
+                            >
+                              {redeployingId === deployment.id ? (
+                                <CircularProgress size={18} />
+                              ) : (
+                                <ReplayIcon />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                      {deployment.status === 'active' && (
+                        <Tooltip title="Stop">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleLifecycleAction(deployment.id, 'stop')}
+                              disabled={lifecycleId === deployment.id}
+                            >
+                              {lifecycleId === deployment.id ? (
+                                <CircularProgress size={18} />
+                              ) : (
+                                <StopIcon />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                      {deployment.status === 'stopped' && (
+                        <Tooltip title="Start">
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="success"
+                              onClick={() => handleLifecycleAction(deployment.id, 'start')}
+                              disabled={lifecycleId === deployment.id}
+                            >
+                              {lifecycleId === deployment.id ? (
+                                <CircularProgress size={18} />
+                              ) : (
+                                <PlayArrowIcon />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Delete">
                         <IconButton
                           size="small"
@@ -571,13 +880,82 @@ export const HostedMocksPage: React.FC = () => {
               placeholder="Description of the mock service"
             />
 
-            <TextField
-              label="OpenAPI Spec URL (optional)"
-              fullWidth
-              value={formData.openapi_spec_url}
-              onChange={(e) => setFormData({ ...formData, openapi_spec_url: e.target.value })}
-              placeholder="https://example.com/openapi.json"
-            />
+            <FormControl fullWidth>
+              <InputLabel id="hosted-mock-project-label">Project (optional)</InputLabel>
+              <Select
+                labelId="hosted-mock-project-label"
+                label="Project (optional)"
+                value={formData.project_id}
+                onChange={(e) =>
+                  setFormData({ ...formData, project_id: e.target.value as string })
+                }
+                displayEmpty
+              >
+                <MenuItem value="">
+                  <em>No project</em>
+                </MenuItem>
+                {projects.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name}
+                    {p.slug ? ` (${p.slug})` : ''}
+                  </MenuItem>
+                ))}
+              </Select>
+              {projectsLoadError && (
+                <Typography variant="caption" color="warning.main" sx={{ mt: 0.5 }}>
+                  {projectsLoadError}
+                </Typography>
+              )}
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel id="hosted-mock-region-label">Region</InputLabel>
+              <Select
+                labelId="hosted-mock-region-label"
+                label="Region"
+                value={formData.region}
+                onChange={(e) => setFormData({ ...formData, region: e.target.value as string })}
+              >
+                {FLY_REGIONS.map((r) => (
+                  <MenuItem key={r.code} value={r.code}>
+                    {r.label} ({r.code})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                label="OpenAPI Spec URL (optional)"
+                fullWidth
+                value={formData.openapi_spec_url}
+                onChange={(e) => setFormData({ ...formData, openapi_spec_url: e.target.value })}
+                placeholder="https://example.com/openapi.json"
+                helperText="Paste a URL or upload a JSON/YAML spec"
+              />
+              <Button
+                variant="outlined"
+                component="label"
+                startIcon={uploadingSpec ? <CircularProgress size={16} /> : <UploadFileIcon />}
+                disabled={uploadingSpec}
+                sx={{ whiteSpace: 'nowrap', mt: 1 }}
+              >
+                {uploadingSpec ? 'Uploading…' : 'Upload'}
+                <input
+                  type="file"
+                  accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleUploadSpec(file);
+                    }
+                    // Reset so selecting the same file again still fires onChange
+                    e.target.value = '';
+                  }}
+                />
+              </Button>
+            </Box>
 
             <TextField
               label="Configuration (JSON)"
@@ -682,6 +1060,34 @@ export const HostedMocksPage: React.FC = () => {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="caption" color="text.secondary">
+                        OpenAPI Spec
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.openapi_spec_url ? (
+                          <Button
+                            size="small"
+                            startIcon={<OpenInNewIcon />}
+                            href={selectedDeployment.openapi_spec_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            View spec
+                          </Button>
+                        ) : (
+                          'Not provided'
+                        )}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="caption" color="text.secondary">
+                        Region
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.region || 'Unknown'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="caption" color="text.secondary">
                         Created
                       </Typography>
                       <Typography variant="body2">
@@ -705,6 +1111,37 @@ export const HostedMocksPage: React.FC = () => {
                       </Typography>
                     </Grid>
                   </Grid>
+
+                  <Divider sx={{ my: 3 }} />
+
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Custom Domain
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      Map this deployment to <strong>{selectedDeployment.slug}.&lt;your-domain&gt;</strong>.
+                      The registry wildcard TLS cert terminates traffic and proxies to the deployment.
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <TextField
+                        size="small"
+                        fullWidth
+                        placeholder="mocks.example.com"
+                        value={customDomain}
+                        onChange={(e) => setCustomDomain(e.target.value)}
+                        disabled={settingDomain}
+                      />
+                      <Button
+                        variant="contained"
+                        startIcon={settingDomain ? <CircularProgress size={16} /> : <LanguageIcon />}
+                        onClick={handleSetDomain}
+                        disabled={settingDomain || !customDomain.trim()}
+                        sx={{ whiteSpace: 'nowrap' }}
+                      >
+                        {settingDomain ? 'Applying…' : 'Set Domain'}
+                      </Button>
+                    </Box>
+                  </Box>
                 </Box>
               )}
 
