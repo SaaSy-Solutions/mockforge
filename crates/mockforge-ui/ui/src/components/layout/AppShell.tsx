@@ -64,6 +64,7 @@ import {
   Lock as LockIcon,
 } from 'lucide-react';
 import { GlobalConnectionStatus } from './ConnectionStatus';
+import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -187,7 +188,7 @@ const navSections = [
 ];
 
 // Cloud mode: only show functional nav items when running on the cloud app
-const isCloudMode = !!import.meta.env.VITE_API_BASE_URL;
+const isCloudMode = detectCloudMode();
 
 const cloudNavItemIds = new Set([
   'dashboard',

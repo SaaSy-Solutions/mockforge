@@ -2,15 +2,12 @@
 // Intercepts all fetch requests to add Authorization header
 
 import { useAuthStore } from '../stores/useAuthStore';
+import { isCloudMode } from './cloudMode';
 
 // Store the original fetch function
 const originalFetch = globalThis.fetch;
 
-// Detect cloud mode (same logic as authApi.ts)
-const isCloud = (() => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL;
-  return !!apiBase && apiBase !== '';
-})();
+const isCloud = isCloudMode();
 
 // In cloud mode, /__mockforge/ endpoints don't exist on the registry server.
 // The main API services (dashboard, workspaces, services, fixtures, federation)

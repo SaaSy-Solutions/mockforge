@@ -42,8 +42,9 @@ import {
   DialogClose,
 } from '../components/ui/Dialog';
 import { toast } from 'sonner';
+import { isCloudMode } from '../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 
 interface FixtureFormState {
   name: string;

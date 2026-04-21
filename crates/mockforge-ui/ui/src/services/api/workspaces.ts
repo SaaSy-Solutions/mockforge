@@ -36,8 +36,9 @@ import {
   type WorkspaceSummary,
 } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation } from './client';
+import { isCloudMode } from '../../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 const WORKSPACE_API_BASE = isCloud ? '/api/v1/workspaces' : '/__mockforge/workspaces';
 
 class WorkspacesApiMixin {

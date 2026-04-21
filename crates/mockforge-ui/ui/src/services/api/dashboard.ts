@@ -4,8 +4,9 @@
 import type { DashboardData, HealthCheck } from '../../types';
 import { DashboardResponseSchema } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation } from './client';
+import { isCloudMode } from '../../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 
 class DashboardApiService {
   async getDashboard(): Promise<DashboardData> {
