@@ -80,7 +80,7 @@ The following table lists the configurable parameters of the MockForge chart and
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `replicaCount` | Number of MockForge replicas | `3` |
-| `image.repository` | MockForge image repository | `mockforge/mockforge` |
+| `image.repository` | MockForge image repository | `ghcr.io/saasy-solutions/mockforge` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `image.tag` | Image tag (defaults to chart appVersion) | `latest` |
 | `imagePullSecrets` | Docker registry secret names | `[]` |
