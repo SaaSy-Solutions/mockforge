@@ -180,3 +180,153 @@ export const useRouteRequest = () => {
     },
   });
 };
+
+// -----------------------------------------------------------------------------
+// Federation-wide scenario activations
+// -----------------------------------------------------------------------------
+
+export interface ServiceScenarioOverride {
+  reality_level?: 'real' | 'mock_v3' | 'blended' | 'chaos_driven';
+  chaos_level?: number;
+  failure_rate?: number;
+  latency_ms?: number;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PerServiceActivationState {
+  service_name: string;
+  workspace_id: string;
+  status: 'pending' | 'applied' | 'failed';
+  error?: string | null;
+  last_observed_at?: string | null;
+}
+
+export interface FederationScenarioActivation {
+  id: string;
+  federation_id: string;
+  scenario_id?: string | null;
+  scenario_name: string;
+  manifest_snapshot: unknown;
+  service_overrides: Record<string, ServiceScenarioOverride>;
+  status: 'active' | 'deactivated' | 'failed';
+  per_service_state: PerServiceActivationState[];
+  activated_by: string;
+  activated_at: string;
+  deactivated_at?: string | null;
+}
+
+export interface ActivateScenarioRequest {
+  scenario_id?: string;
+  scenario_name?: string;
+  manifest: unknown;
+  service_overrides?: Record<string, ServiceScenarioOverride>;
+}
+
+// Fetch the active scenario (if any) for a federation
+export const useActiveFederationScenario = (
+  federationId: string
+): UseQueryResult<FederationScenarioActivation | null, Error> => {
+  return useQuery<FederationScenarioActivation | null, Error>({
+    queryKey: ['federation-active-scenario', federationId],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          apiErrorMessage(response, errorData, 'Failed to fetch active scenario')
+        );
+      }
+      return response.json();
+    },
+    enabled: !!federationId,
+    refetchInterval: 10000,
+  });
+};
+
+// Activate a scenario on a federation
+export const useActivateFederationScenario = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    FederationScenarioActivation,
+    Error,
+    { federationId: string; request: ActivateScenarioRequest }
+  >({
+    mutationFn: async ({ federationId, request }) => {
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/activate`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to activate scenario'));
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['federation-active-scenario', variables.federationId],
+      });
+    },
+  });
+};
+
+// -----------------------------------------------------------------------------
+// Org-scoped scenarios (for the activation picker)
+// -----------------------------------------------------------------------------
+
+export interface OrgScenarioEntry {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  current_version: string;
+  category: string;
+  tags: string[];
+  manifest_json: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+// List scenarios owned by the caller's org — powers the picker dropdown.
+export const useOrgScenarios = (): UseQueryResult<OrgScenarioEntry[], Error> => {
+  return useQuery<OrgScenarioEntry[], Error>({
+    queryKey: ['org-scenarios'],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/scenarios`, { headers: authHeaders() });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch scenarios'));
+      }
+      return response.json();
+    },
+  });
+};
+
+// Deactivate the active scenario on a federation
+export const useDeactivateFederationScenario = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<FederationScenarioActivation, Error, { federationId: string }>({
+    mutationFn: async ({ federationId }) => {
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to deactivate scenario'));
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['federation-active-scenario', variables.federationId],
+      });
+    },
+  });
+};

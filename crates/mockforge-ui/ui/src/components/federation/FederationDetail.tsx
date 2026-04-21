@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { useFederation, useRouteRequest, Federation } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
+import { ActiveScenarioPanel } from './ActiveScenarioPanel';
 import { ArrowLeft, Edit, Network, Play, CheckCircle } from 'lucide-react';
 
 export interface FederationDetailProps {
@@ -204,6 +205,9 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           </div>
         )}
       </Card>
+
+      {/* Active Scenario */}
+      <ActiveScenarioPanel federation={currentFederation} />
 
       {/* Test Routing */}
       <Card className="p-6">

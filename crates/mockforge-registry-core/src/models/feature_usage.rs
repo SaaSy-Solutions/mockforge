@@ -31,6 +31,8 @@ pub enum FeatureType {
     FederationCreate,
     FederationUpdate,
     FederationDelete,
+    FederationScenarioActivate,
+    FederationScenarioDeactivate,
     WorkspaceCreate,
     WorkspaceUpdate,
     WorkspaceDelete,

@@ -23,6 +23,7 @@ use crate::models::cloud_service::CloudService;
 use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::{FeatureType, FeatureUsage};
 use crate::models::federation::Federation;
+use crate::models::federation_scenario_activation::FederationScenarioActivation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
@@ -590,6 +591,118 @@ impl RegistryStore for PgRegistryStore {
         Federation::delete(&self.pool, id).await.map_err(Into::into)
     }
 
+    async fn create_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+        scenario_id: Option<Uuid>,
+        scenario_name: &str,
+        manifest_snapshot: &serde_json::Value,
+        service_overrides: &serde_json::Value,
+        per_service_state: &serde_json::Value,
+        activated_by: Uuid,
+    ) -> StoreResult<FederationScenarioActivation> {
+        sqlx::query_as::<_, FederationScenarioActivation>(
+            r#"
+            INSERT INTO federation_scenario_activations (
+                federation_id, scenario_id, scenario_name,
+                manifest_snapshot, service_overrides, per_service_state,
+                activated_by
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            "#,
+        )
+        .bind(federation_id)
+        .bind(scenario_id)
+        .bind(scenario_name)
+        .bind(manifest_snapshot)
+        .bind(service_overrides)
+        .bind(per_service_state)
+        .bind(activated_by)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_active_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        sqlx::query_as::<_, FederationScenarioActivation>(
+            r#"
+            SELECT * FROM federation_scenario_activations
+            WHERE federation_id = $1 AND status = 'active'
+            "#,
+        )
+        .bind(federation_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn deactivate_federation_scenario_activation(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        sqlx::query_as::<_, FederationScenarioActivation>(
+            r#"
+            UPDATE federation_scenario_activations
+            SET status = 'deactivated', deactivated_at = NOW()
+            WHERE id = $1 AND status = 'active'
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn update_federation_scenario_per_service_state(
+        &self,
+        id: Uuid,
+        per_service_state: &serde_json::Value,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        sqlx::query_as::<_, FederationScenarioActivation>(
+            r#"
+            UPDATE federation_scenario_activations
+            SET per_service_state = $2
+            WHERE id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(per_service_state)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn find_active_federation_scenarios_for_workspace(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<FederationScenarioActivation>> {
+        // JSONB `@>` is a containment check — matches when the services array
+        // contains an object whose `workspace_id` equals the target. Indexable
+        // via a GIN index on `federations.services` (not currently present,
+        // can be added if poll latency becomes an issue).
+        sqlx::query_as::<_, FederationScenarioActivation>(
+            r#"
+            SELECT a.*
+            FROM federation_scenario_activations a
+            JOIN federations f ON f.id = a.federation_id
+            WHERE a.status = 'active'
+              AND f.services @> jsonb_build_array(
+                      jsonb_build_object('workspace_id', $1::text)
+                  )
+            "#,
+        )
+        .bind(workspace_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
     async fn list_unresolved_suspicious_activities(
         &self,
         org_id: Option<Uuid>,
@@ -1112,6 +1225,10 @@ impl RegistryStore for PgRegistryStore {
 
     async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>> {
         Scenario::find_by_name(&self.pool, name).await.map_err(Into::into)
+    }
+
+    async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>> {
+        Scenario::find_by_id(&self.pool, id).await.map_err(Into::into)
     }
 
     async fn list_scenarios_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>> {

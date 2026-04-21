@@ -8721,9 +8721,11 @@ dependencies = [
  "mockforge-analytics",
  "mockforge-collab",
  "mockforge-core",
+ "mockforge-federation",
  "mockforge-observability",
  "mockforge-plugin-registry",
  "mockforge-registry-core",
+ "mockforge-scenarios",
  "oauth2",
  "prometheus",
  "qrcode",
@@ -8803,6 +8805,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-data",
  "mockforge-openapi",
+ "mockforge-scenarios",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -8819,6 +8822,7 @@ name = "mockforge-scenarios"
 version = "0.3.116"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "dirs 5.0.1",
  "flate2",

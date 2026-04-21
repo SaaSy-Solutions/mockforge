@@ -50,6 +50,8 @@ pub enum AuditEventType {
     FederationCreated,
     FederationUpdated,
     FederationDeleted,
+    FederationScenarioActivated,
+    FederationScenarioDeactivated,
     // Workspaces
     WorkspaceCreated,
     WorkspaceUpdated,

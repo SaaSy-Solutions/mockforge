@@ -185,6 +185,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/workspaces/{id}", get(handlers::cloud_workspaces::get_workspace))
         .route("/api/v1/workspaces/{id}", patch(handlers::cloud_workspaces::update_workspace))
         .route("/api/v1/workspaces/{id}", delete(handlers::cloud_workspaces::delete_workspace))
+        .route(
+            "/api/v1/workspaces/{id}/active-scenarios",
+            get(handlers::federations::get_workspace_active_scenarios),
+        )
         // Service routes
         .route("/api/v1/services", get(handlers::cloud_services::list_services))
         .route("/api/v1/services", post(handlers::cloud_services::create_service))
@@ -203,6 +207,29 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/federation/{id}", get(handlers::federations::get_federation))
         .route("/api/v1/federation/{id}", patch(handlers::federations::update_federation))
         .route("/api/v1/federation/{id}", delete(handlers::federations::delete_federation))
+        .route(
+            "/api/v1/federation/{id}/route",
+            post(handlers::federations::route_federation_request),
+        )
+        .route(
+            "/api/v1/federation/{id}/scenarios/activate",
+            post(handlers::federations::activate_federation_scenario),
+        )
+        .route(
+            "/api/v1/federation/{id}/scenarios/active",
+            get(handlers::federations::get_active_federation_scenario),
+        )
+        .route(
+            "/api/v1/federation/{id}/scenarios/active",
+            delete(handlers::federations::deactivate_federation_scenario),
+        )
+        .route(
+            "/api/v1/federation/{id}/scenarios/active/report",
+            post(handlers::federations::report_federation_scenario_state),
+        )
+        // Org-scoped scenarios (authenticated) — backs the federation picker
+        .route("/api/v1/scenarios", get(handlers::scenarios::list_org_scenarios))
+        .route("/api/v1/scenarios/{id}", get(handlers::scenarios::get_org_scenario_by_id))
         // Marketplace: scenarios (authenticated)
         .route("/api/v1/marketplace/scenarios/publish", post(handlers::scenarios::publish_scenario))
         .route("/api/v1/marketplace/scenarios/{name}/reviews", post(handlers::scenario_reviews::submit_scenario_review))

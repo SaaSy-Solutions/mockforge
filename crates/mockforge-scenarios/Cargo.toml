@@ -23,6 +23,7 @@ serde_yaml.workspace = true
 
 # Async runtime
 tokio = { workspace = true, features = ["fs", "rt-multi-thread"] }
+async-trait = { workspace = true }
 
 # Error handling
 anyhow.workspace = true
