@@ -143,7 +143,7 @@ export function SupportPage() {
                 FAQ →
               </button>
               <a
-                href="https://discord.gg/mockforge"
+                href="https://discord.gg/vk22xwxug3"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline text-sm"
@@ -308,7 +308,7 @@ export function SupportPage() {
                 Join our Discord server to chat with other users, get real-time help, and share your projects.
               </p>
               <a
-                href="https://discord.gg/mockforge"
+                href="https://discord.gg/vk22xwxug3"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline font-medium"

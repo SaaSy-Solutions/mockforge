@@ -430,7 +430,7 @@ Invalid token: Token verification failed
 For issues or questions:
 - [GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)
 - [GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)
-- [Discord](https://discord.gg/2FxXqKpa)
+- [Discord](https://discord.gg/vk22xwxug3)
 
 ---
 

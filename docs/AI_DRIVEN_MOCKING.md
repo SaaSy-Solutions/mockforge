@@ -763,4 +763,4 @@ prompt: |
 - Explore [Advanced Examples](./examples/ai-driven/)
 - Read [API Reference](./api/ai-features.md)
 - Check [Performance Guide](./performance.md)
-- Join [Community Discord](https://discord.gg/mockforge)
+- Join [Community Discord](https://discord.gg/vk22xwxug3)

@@ -346,4 +346,4 @@ MIT OR Apache-2.0
 
 - GitHub Issues: [Report bugs](https://github.com/mockforge/mockforge/issues)
 - GitHub Discussions: [Ask questions](https://github.com/mockforge/mockforge/discussions)
-- Discord: [Join community](https://discord.gg/mockforge)
+- Discord: [Join community](https://discord.gg/vk22xwxug3)
