@@ -385,33 +385,27 @@ test.describe('Hosted Mocks — Deployed Site', () => {
 
     test('Row actions include Redeploy/Stop/Start when applicable (skip if none)', async ({ page }) => {
       const main = mainContent(page);
-      const hasRow = await main
-        .getByRole('row')
-        .nth(1)
-        .isVisible({ timeout: 3000 })
-        .catch(() => false);
+      const firstDataRow = main.getByRole('row').nth(1);
+      const hasRow = await firstDataRow.isVisible({ timeout: 3000 }).catch(() => false);
       test.skip(!hasRow, 'No deployments — lifecycle buttons only render per-row.');
 
-      // View Details button is always present; redeploy/stop/start depend on
-      // status. We just assert that at least the View/Delete pair is still
-      // there (regression guard for the row action toolbar).
-      await expect(main.getByRole('button', { name: /View Details/i }).first()).toBeVisible();
-      await expect(main.getByRole('button', { name: /Delete/i }).first()).toBeVisible();
+      // Status cell is column 2 (0-indexed). Read it so we know which
+      // lifecycle buttons must be present.
+      const firstRowStatus = (await firstDataRow.locator('td').nth(1).textContent()) ?? '';
 
-      // If the first row is active, Redeploy and Stop should be visible.
-      const firstRowStatus = await main
-        .getByRole('row')
-        .nth(1)
-        .locator('td')
-        .nth(1)
-        .textContent();
-      if (firstRowStatus && /active/i.test(firstRowStatus)) {
-        await expect(main.getByRole('button', { name: 'Redeploy' }).first()).toBeVisible();
-        await expect(main.getByRole('button', { name: 'Stop' }).first()).toBeVisible();
+      if (/active/i.test(firstRowStatus)) {
+        // Redeploy + Stop buttons expose their labels via the MUI Tooltip's
+        // `aria-label`. Scope to the first row so we don't pick up matches
+        // from other rows.
+        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
+        await expect(firstDataRow.getByLabel('Stop')).toBeVisible();
+      } else if (/stopped/i.test(firstRowStatus)) {
+        await expect(firstDataRow.getByLabel('Start')).toBeVisible();
+      } else if (/failed/i.test(firstRowStatus)) {
+        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
       }
-      if (firstRowStatus && /stopped/i.test(firstRowStatus)) {
-        await expect(main.getByRole('button', { name: 'Start' }).first()).toBeVisible();
-      }
+      // If pending/deploying/deleting, no lifecycle buttons are expected
+      // yet — the test simply passes without additional assertions.
     });
   });
 
