@@ -6,8 +6,9 @@
 import type { FixtureInfo } from '../../types';
 import { FixturesResponseSchema } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation, authenticatedFetch } from './client';
+import { isCloudMode } from '../../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 const CLOUD_BASE = '/api/v1/fixtures';
 const LOCAL_BASE = '/__mockforge/fixtures';
 const FIXTURE_API_BASE = isCloud ? CLOUD_BASE : LOCAL_BASE;

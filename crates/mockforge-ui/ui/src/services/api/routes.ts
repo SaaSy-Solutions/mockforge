@@ -3,8 +3,9 @@
  */
 import type { RouteInfo } from '../../types';
 import { fetchJson } from './client';
+import { isCloudMode } from '../../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 const ROUTES_API_BASE = isCloud ? '/api/v1/services' : '/__mockforge/routes';
 
 class RoutesApiService {

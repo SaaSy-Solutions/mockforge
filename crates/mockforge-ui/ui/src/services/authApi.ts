@@ -4,6 +4,7 @@
 
 import type { User } from '../types';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { isCloudMode } from '../utils/cloudMode';
 
 export interface LoginResponse {
   token: string;
@@ -23,12 +24,6 @@ interface LocalApiResponse<T> {
   error: string | null;
   timestamp: string;
 }
-
-// Detect cloud mode: VITE_API_BASE_URL is set in .env.production
-const isCloudMode = (): boolean => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL;
-  return !!apiBase && apiBase !== '';
-};
 
 class AuthApiService {
   private cloud = isCloudMode();

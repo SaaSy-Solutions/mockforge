@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Never commit a real .env.production — it flips the bundle into cloud mode
+# and breaks the OSS / docker-compose login flow. Cloud builds should copy
+# the sibling .env.production.example locally or set these vars in CI.
+.env.production
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

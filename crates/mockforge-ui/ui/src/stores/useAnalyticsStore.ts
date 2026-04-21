@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isCloudMode } from '../utils/cloudMode';
 
 // Types matching the backend API responses
 export interface SummaryMetrics {
@@ -81,7 +82,7 @@ export interface AnalyticsStore {
 }
 
 const BASE_URL = '__mockforge/analytics';
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 
 export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
   // Initial state
