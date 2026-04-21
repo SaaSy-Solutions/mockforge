@@ -113,7 +113,7 @@ jobs:
 
     steps:
       - name: Download all mutation results
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           pattern: mutation-results-*
           path: results
