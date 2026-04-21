@@ -1,6 +1,8 @@
-import { logger } from '@/utils/logger';
 import React, { useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { ServiceToggleCard } from './ServiceToggleCard';
+import { NewServiceDialog } from './NewServiceDialog';
+import { EditServiceDialog } from './EditServiceDialog';
 import { Button } from '../ui/button';
 import type { ServiceInfo } from '../../types';
 import { useServiceStore } from '../../stores/useServiceStore';
@@ -8,18 +10,20 @@ import { Badge } from '../ui/Badge';
 
 interface ServicesPanelProps {
   services: ServiceInfo[];
-  onUpdateService: (serviceId: string, updates: Partial<ServiceInfo>) => void;
-  onToggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void;
+  onUpdateService: (serviceId: string, updates: Partial<ServiceInfo>) => void | Promise<void>;
+  onToggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void | Promise<void>;
 }
 
 export function ServicesPanel({ services, onUpdateService, onToggleRoute }: ServicesPanelProps) {
   const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const { filteredRoutes } = useServiceStore();
+  const { filteredRoutes, isCloud, removeService, mutationError, clearMutationError } = useServiceStore();
   const [showAllMatches, setShowAllMatches] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 20;
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<ServiceInfo | null>(null);
 
   // Get all unique tags from services
   const allTags = Array.from(
@@ -39,7 +43,7 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
   });
 
   const handleToggleService = (serviceId: string, enabled: boolean) => {
-    onUpdateService(serviceId, { enabled });
+    void onUpdateService(serviceId, { enabled });
   };
 
   const handleToggleExpanded = (serviceId: string) => {
@@ -54,13 +58,13 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
 
   const handleBulkEnable = () => {
     filteredServices.forEach(service => {
-      onUpdateService(service.id, { enabled: true });
+      void onUpdateService(service.id, { enabled: true });
     });
   };
 
   const handleBulkDisable = () => {
     filteredServices.forEach(service => {
-      onUpdateService(service.id, { enabled: false });
+      void onUpdateService(service.id, { enabled: false });
     });
   };
 
@@ -72,6 +76,14 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
       newTags.add(tag);
     }
     setSelectedTags(newTags);
+  };
+
+  const handleDeleteService = (service: ServiceInfo) => {
+    const ok = typeof window === 'undefined'
+      ? true
+      : window.confirm(`Delete service "${service.name}"? This cannot be undone.`);
+    if (!ok) return;
+    void removeService(service.id);
   };
 
   const enabledServices = filteredServices.filter(s => s.enabled).length;
@@ -114,8 +126,27 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
           <Button variant="outline" size="sm" onClick={handleBulkDisable}>
             Disable All
           </Button>
+          {isCloud && (
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="flex items-center gap-1">
+              <Plus className="h-4 w-4" />
+              Add Service
+            </Button>
+          )}
         </div>
       </div>
+
+      {mutationError && (
+        <div className="flex items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">
+          <span role="alert">{mutationError}</span>
+          <button
+            type="button"
+            className="text-xs underline"
+            onClick={() => clearMutationError()}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="space-y-4">
@@ -164,6 +195,9 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
               onToggleRoute={onToggleRoute}
               expanded={expandedServices.has(service.id)}
               onToggleExpanded={handleToggleExpanded}
+              showManagementActions={isCloud}
+              onEditService={() => setEditTarget(service)}
+              onDeleteService={() => handleDeleteService(service)}
             />
           ))
         )}
@@ -201,6 +235,19 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
             </div>
           </div>
         </div>
+      )}
+
+      {isCloud && (
+        <>
+          <NewServiceDialog open={createOpen} onOpenChange={setCreateOpen} />
+          <EditServiceDialog
+            open={editTarget !== null}
+            onOpenChange={(next) => {
+              if (!next) setEditTarget(null);
+            }}
+            service={editTarget}
+          />
+        </>
       )}
     </div>
   );

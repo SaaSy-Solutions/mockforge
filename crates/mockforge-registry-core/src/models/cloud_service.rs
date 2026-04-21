@@ -23,9 +23,11 @@ pub struct CloudService {
 
 #[cfg(feature = "postgres")]
 impl CloudService {
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
         org_id: Uuid,
+        workspace_id: Option<Uuid>,
         created_by: Uuid,
         name: &str,
         description: &str,
@@ -33,12 +35,13 @@ impl CloudService {
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
-            INSERT INTO services (org_id, name, description, base_url, created_by)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO services (org_id, workspace_id, name, description, base_url, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
             "#,
         )
         .bind(org_id)
+        .bind(workspace_id)
         .bind(name)
         .bind(description)
         .bind(base_url)
@@ -63,6 +66,26 @@ impl CloudService {
         .await
     }
 
+    pub async fn find_by_workspace(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM services \
+             WHERE org_id = $1 AND workspace_id = $2 \
+             ORDER BY created_at DESC",
+        )
+        .bind(org_id)
+        .bind(workspace_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Update a service. The `workspace_id` argument is tri-state so callers
+    /// can distinguish "don't change this column" from "explicitly clear it":
+    /// `None` leaves the column alone, `Some(None)` writes SQL NULL
+    /// (unassigns), and `Some(Some(id))` assigns to workspace `id`.
     #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &sqlx::PgPool,
@@ -73,7 +96,10 @@ impl CloudService {
         enabled: Option<bool>,
         tags: Option<&serde_json::Value>,
         routes: Option<&serde_json::Value>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> sqlx::Result<Option<Self>> {
+        let update_workspace = workspace_id.is_some();
+        let workspace_value = workspace_id.flatten();
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE services
@@ -84,6 +110,7 @@ impl CloudService {
                 enabled = COALESCE($5, enabled),
                 tags = COALESCE($6, tags),
                 routes = COALESCE($7, routes),
+                workspace_id = CASE WHEN $9 THEN $8 ELSE workspace_id END,
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -96,6 +123,8 @@ impl CloudService {
         .bind(enabled)
         .bind(tags)
         .bind(routes)
+        .bind(workspace_value)
+        .bind(update_workspace)
         .fetch_optional(pool)
         .await
     }
