@@ -145,8 +145,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/redeploy", post(handlers::hosted_mocks::redeploy_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/set-domain", post(handlers::hosted_mocks::set_domain))
+        .route("/api/v1/hosted-mocks/{deployment_id}/stop", post(handlers::hosted_mocks::stop_deployment))
+        .route("/api/v1/hosted-mocks/{deployment_id}/start", post(handlers::hosted_mocks::start_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/logs", get(handlers::hosted_mocks::get_deployment_logs))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
+        // Projects list (for UI pickers)
+        .route("/api/v1/projects", get(handlers::projects::list_projects))
         // API token management routes
         .route("/api/v1/tokens", post(handlers::tokens::create_token))
         .route("/api/v1/tokens", get(handlers::tokens::list_tokens))
