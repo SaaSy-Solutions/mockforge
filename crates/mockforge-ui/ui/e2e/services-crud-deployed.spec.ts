@@ -33,12 +33,12 @@ async function gotoServices(page: Page) {
 }
 
 async function waitForServicesToLoad(page: Page) {
-  // Either a service row, the empty-state card, or the Add Service button
-  // should appear within a reasonable window.
-  await Promise.race([
-    mainContent(page).getByRole('button', { name: /Add Service/i }).waitFor({ timeout: 15_000 }),
-    mainContent(page).getByRole('heading', { name: 'No Services' }).waitFor({ timeout: 15_000 }),
-  ]);
+  // Wait for the "Loading" card to go away (fetchServices resolves).
+  // The deployed registry is rate-limited, so retries can be slow — give
+  // this a generous window.
+  await mainContent(page)
+    .getByRole('heading', { name: 'Loading', exact: true })
+    .waitFor({ state: 'hidden', timeout: 45_000 });
 }
 
 async function deleteServiceIfPresent(page: Page, name: string) {
@@ -84,17 +84,16 @@ test.describe('Services CRUD — Deployed Site', () => {
       // Pick the first non-"All" option.
       const [, firstWorkspace] = options;
       await select.selectOption({ label: firstWorkspace });
-      // Either a scoped list renders or the empty-state text flips to the
-      // workspace-scoped copy; both are valid outcomes.
-      const scopedEmpty = mainContent(page).getByText(
-        /No services in this workspace yet/i
+      // Either the panel shows service cards or its empty-criteria message.
+      const panelEmpty = mainContent(page).getByText(
+        /No services found matching your criteria/i
       );
       const anyServiceHeading = mainContent(page)
         .locator('div.rounded-lg.border.bg-card h3')
         .first();
       await Promise.race([
-        scopedEmpty.waitFor({ timeout: 10_000 }),
-        anyServiceHeading.waitFor({ timeout: 10_000 }),
+        panelEmpty.waitFor({ timeout: 15_000 }),
+        anyServiceHeading.waitFor({ timeout: 15_000 }),
       ]);
       await select.selectOption({ label: 'All workspaces' });
     });

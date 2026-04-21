@@ -135,15 +135,16 @@ export function ServicesPage() {
     );
   }
 
-  if (!hasServices) {
-    const workspaceScopeMessage = workspaceFilter
-      ? 'No services in this workspace yet. Create one, or switch to another workspace above.'
-      : 'No services configured. Add a service to get started.';
+  if (!hasServices && !isCloud) {
+    // In self-hosted mode there's no "create service" control, so render
+    // a static empty-state card.
     return (
       <div className="space-y-8">
         {header('Manage services and routes. Use global search to quickly filter routes.')}
         <Card title="No Services" icon={<Search className="h-4 w-4" />}>
-          <div className="text-sm text-gray-600 dark:text-gray-400">{workspaceScopeMessage}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            No services configured. Add a service to get started.
+          </div>
         </Card>
       </div>
     );
