@@ -708,6 +708,8 @@ impl RegistryStore for PgRegistryStore {
         path: &str,
         method: &str,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
+        tags: Option<&serde_json::Value>,
     ) -> StoreResult<CloudFixture> {
         CloudFixture::create(
             &self.pool,
@@ -718,6 +720,8 @@ impl RegistryStore for PgRegistryStore {
             path,
             method,
             content,
+            protocol,
+            tags,
         )
         .await
         .map_err(Into::into)

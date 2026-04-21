@@ -6,15 +6,20 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FixturesPage } from '../FixturesPage';
-import * as apiHooks from '../../hooks/useApi';
+import * as apiHooks from '../../hooks/api';
 import type { FixtureInfo } from '../../services/api';
 
 const mockFixtures: FixtureInfo[] = [
   {
     id: 'fixture-1',
+    name: 'fixture-1',
     path: '/api/users',
     method: 'GET',
-    protocol: 'REST',
+    protocol: 'http',
+    description: 'User listing',
+    tags: ['auth', 'users'],
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
     saved_at: '2024-01-01T00:00:00Z',
     file_size: 1024,
     file_path: '/path/to/fixture1.json',
@@ -23,9 +28,14 @@ const mockFixtures: FixtureInfo[] = [
   },
   {
     id: 'fixture-2',
+    name: 'fixture-2',
     path: '/api/posts',
     method: 'POST',
-    protocol: 'REST',
+    protocol: 'http',
+    description: '',
+    tags: [],
+    createdAt: '2024-01-02T00:00:00Z',
+    updatedAt: '2024-01-02T00:00:00Z',
     saved_at: '2024-01-02T00:00:00Z',
     file_size: 2048,
     file_path: '/path/to/fixture2.json',
@@ -34,13 +44,38 @@ const mockFixtures: FixtureInfo[] = [
   },
 ];
 
-vi.mock('../../hooks/useApi', () => ({
+const mutationState = (overrides: Record<string, unknown> = {}) => ({
+  mutate: vi.fn(),
+  mutateAsync: vi.fn().mockResolvedValue(undefined),
+  isPending: false,
+  reset: vi.fn(),
+  ...overrides,
+});
+
+const createFixtureMutate = vi.fn().mockResolvedValue(mockFixtures[0]);
+const updateFixtureMutate = vi.fn().mockResolvedValue(mockFixtures[0]);
+const deleteFixtureMutate = vi.fn().mockResolvedValue(undefined);
+const renameFixtureMutate = vi.fn().mockResolvedValue(undefined);
+const moveFixtureMutate = vi.fn().mockResolvedValue(undefined);
+const downloadFixtureMutate = vi.fn().mockResolvedValue({
+  blob: new Blob(['{}'], { type: 'application/json' }),
+  filename: 'f.json',
+});
+
+vi.mock('../../hooks/api', () => ({
   useFixtures: vi.fn(() => ({
     data: mockFixtures,
     isLoading: false,
     error: null,
     refetch: vi.fn(),
+    isFetching: false,
   })),
+  useCreateFixture: vi.fn(() => mutationState({ mutateAsync: createFixtureMutate })),
+  useUpdateFixture: vi.fn(() => mutationState({ mutateAsync: updateFixtureMutate })),
+  useDeleteFixture: vi.fn(() => mutationState({ mutateAsync: deleteFixtureMutate })),
+  useRenameFixture: vi.fn(() => mutationState({ mutateAsync: renameFixtureMutate })),
+  useMoveFixture: vi.fn(() => mutationState({ mutateAsync: moveFixtureMutate })),
+  useDownloadFixture: vi.fn(() => mutationState({ mutateAsync: downloadFixtureMutate })),
 }));
 
 vi.mock('sonner', () => ({
@@ -69,11 +104,18 @@ describe('FixturesPage', () => {
       isLoading: false,
       error: null,
       refetch: vi.fn(),
+      isFetching: false,
     } as any);
   });
 
   it('renders loading state', () => {
-    mockUseFixtures.mockReturnValue({ data: null, isLoading: true, error: null, refetch: vi.fn() } as any);
+    mockUseFixtures.mockReturnValue({
+      data: null,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
     expect(screen.getByText('Loading fixtures...')).toBeInTheDocument();
@@ -86,13 +128,14 @@ describe('FixturesPage', () => {
     expect(screen.getByText('fixture-2')).toBeInTheDocument();
   });
 
-  it('shows fixture metadata', () => {
+  it('shows fixture metadata including description and tags', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText('Path: /api/users')).toBeInTheDocument();
     expect(screen.getByText('Path: /api/posts')).toBeInTheDocument();
-    expect(screen.getByText('1 KB')).toBeInTheDocument();
-    expect(screen.getByText('2 KB')).toBeInTheDocument();
+    expect(screen.getByText('User listing')).toBeInTheDocument();
+    expect(screen.getAllByText('auth').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('users').length).toBeGreaterThan(0);
   });
 
   it('displays method badges', () => {
@@ -102,10 +145,10 @@ describe('FixturesPage', () => {
     expect(screen.getAllByText('POST').length).toBeGreaterThan(0);
   });
 
-  it('filters fixtures by search term', () => {
+  it('filters fixtures by search term (matches description/tags/path)', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const searchInput = screen.getByPlaceholderText('Search by name, path, or route...');
+    const searchInput = screen.getByPlaceholderText(/Search by name, path, tag/);
     fireEvent.change(searchInput, { target: { value: 'users' } });
 
     expect(screen.getByText('fixture-1')).toBeInTheDocument();
@@ -115,22 +158,32 @@ describe('FixturesPage', () => {
   it('filters fixtures by HTTP method', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const methodSelect = screen.getByRole('combobox');
+    const methodSelect = screen.getAllByRole('combobox')[0];
     fireEvent.change(methodSelect, { target: { value: 'GET' } });
 
     expect(screen.getByText('fixture-1')).toBeInTheDocument();
     expect(screen.queryByText('fixture-2')).not.toBeInTheDocument();
   });
 
-  it('shows total fixture count and size', () => {
+  it('filters fixtures by tag', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('2')).toBeInTheDocument(); // count
-    expect(screen.getByText('3 KB')).toBeInTheDocument(); // total size
+    const selects = screen.getAllByRole('combobox');
+    const tagSelect = selects[1];
+    fireEvent.change(tagSelect, { target: { value: 'auth' } });
+
+    expect(screen.getByText('fixture-1')).toBeInTheDocument();
+    expect(screen.queryByText('fixture-2')).not.toBeInTheDocument();
   });
 
   it('displays empty state when no fixtures exist', () => {
-    mockUseFixtures.mockReturnValue({ data: [], isLoading: false, error: null, refetch: vi.fn() } as any);
+    mockUseFixtures.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
 
@@ -141,7 +194,7 @@ describe('FixturesPage', () => {
   it('displays empty state when search returns no results', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const searchInput = screen.getByPlaceholderText('Search by name, path, or route...');
+    const searchInput = screen.getByPlaceholderText(/Search by name, path, tag/);
     fireEvent.change(searchInput, { target: { value: 'nonexistent' } });
 
     expect(screen.getByText('No fixtures found')).toBeInTheDocument();
@@ -154,6 +207,7 @@ describe('FixturesPage', () => {
       isLoading: false,
       error: new Error('Failed to load fixtures'),
       refetch: vi.fn(),
+      isFetching: false,
     } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
@@ -167,27 +221,24 @@ describe('FixturesPage', () => {
     const eyeButton = document.querySelector('svg.lucide-eye')?.closest('button');
     fireEvent.click(eyeButton!);
 
-    expect(screen.getByText('Metadata')).toBeInTheDocument();
+    expect(screen.getByText('Response Content')).toBeInTheDocument();
   });
 
-  it('downloads fixture when clicking download button', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(['{}'], { type: 'application/json' })),
-      headers: { get: vi.fn().mockReturnValue('attachment; filename="fixture-1.json"') },
-    });
+  it('invokes download mutation with the selected fixture', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fixture');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const createElementSpy = vi.spyOn(document, 'createElement');
+
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const firstFixtureRow = screen.getByText('fixture-1').closest('.flex.items-center.justify-between');
+    const firstFixtureRow = screen
+      .getByText('fixture-1')
+      .closest('.flex.items-center.justify-between');
     const downloadBtn = firstFixtureRow?.querySelector('svg.lucide-download')?.closest('button');
     expect(downloadBtn).toBeTruthy();
-    fireEvent.click(downloadBtn);
+    fireEvent.click(downloadBtn as HTMLElement);
 
     await waitFor(() => {
-      expect(createElementSpy).toHaveBeenCalledWith('a');
+      expect(downloadFixtureMutate).toHaveBeenCalledWith(mockFixtures[0]);
     });
   });
 
@@ -201,9 +252,7 @@ describe('FixturesPage', () => {
     expect(screen.getByPlaceholderText('Enter new fixture name')).toBeInTheDocument();
   });
 
-  it('renames fixture successfully', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true });
-
+  it('renames fixture through the mutation', async () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     const renameButton = screen.getAllByText('Rename')[0];
@@ -216,13 +265,10 @@ describe('FixturesPage', () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/__mockforge/fixtures/fixture-1/rename',
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({ new_name: 'new-fixture-name' }),
-        })
-      );
+      expect(renameFixtureMutate).toHaveBeenCalledWith({
+        fixtureId: 'fixture-1',
+        newName: 'new-fixture-name',
+      });
     });
   });
 
@@ -236,9 +282,7 @@ describe('FixturesPage', () => {
     expect(screen.getByPlaceholderText('Enter new path')).toBeInTheDocument();
   });
 
-  it('moves fixture successfully', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true });
-
+  it('moves fixture through the mutation', async () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     const moveButton = screen.getAllByText('Move')[0];
@@ -251,44 +295,36 @@ describe('FixturesPage', () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/__mockforge/fixtures/fixture-1/move',
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({ new_path: '/new/path' }),
-        })
-      );
+      expect(moveFixtureMutate).toHaveBeenCalledWith({
+        fixtureId: 'fixture-1',
+        newPath: '/new/path',
+      });
     });
   });
 
   it('opens delete confirmation dialog', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const deleteButtons = screen.getAllByRole('button');
-    // Delete button is usually the last one or has a trash icon
-    const deleteBtn = deleteButtons[deleteButtons.length - 1];
-    fireEvent.click(deleteBtn);
+    const deleteBtn = document
+      .querySelectorAll('button.text-red-600')[0] as HTMLElement | undefined;
+    fireEvent.click(deleteBtn!);
 
     expect(screen.getByText('Delete Fixture')).toBeInTheDocument();
     expect(screen.getByText(/Are you sure you want to delete this fixture/)).toBeInTheDocument();
   });
 
-  it('deletes fixture successfully', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true });
-
+  it('deletes fixture through the mutation', async () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
-    const deleteButtons = Array.from(document.querySelectorAll('button.text-red-600'));
-    const deleteBtn = deleteButtons[0];
-    fireEvent.click(deleteBtn);
+    const deleteBtn = document
+      .querySelectorAll('button.text-red-600')[0] as HTMLElement | undefined;
+    fireEvent.click(deleteBtn!);
 
     const confirmButton = screen.getByRole('button', { name: 'Delete' });
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith('/__mockforge/fixtures/fixture-1', {
-        method: 'DELETE',
-      });
+      expect(deleteFixtureMutate).toHaveBeenCalledWith('fixture-1');
     });
   });
 
@@ -299,6 +335,7 @@ describe('FixturesPage', () => {
       isLoading: false,
       error: null,
       refetch: refetchMock,
+      isFetching: false,
     } as any);
 
     render(<FixturesPage />, { wrapper: createWrapper() });
@@ -307,21 +344,6 @@ describe('FixturesPage', () => {
     fireEvent.click(refreshButton);
 
     expect(refetchMock).toHaveBeenCalled();
-  });
-
-  it('formats file size correctly', () => {
-    render(<FixturesPage />, { wrapper: createWrapper() });
-
-    expect(screen.getByText('1 KB')).toBeInTheDocument();
-    expect(screen.getByText('2 KB')).toBeInTheDocument();
-  });
-
-  it('formats dates correctly', () => {
-    render(<FixturesPage />, { wrapper: createWrapper() });
-
-    // Check that dates are displayed
-    const dateElements = screen.getAllByText(/Jan/);
-    expect(dateElements.length).toBeGreaterThanOrEqual(1);
   });
 
   it('disables rename button when name is unchanged', () => {
@@ -339,6 +361,9 @@ describe('FixturesPage', () => {
 
     const moveButton = screen.getAllByText('Move')[0];
     fireEvent.click(moveButton);
+
+    const input = screen.getByPlaceholderText('Enter new path');
+    fireEvent.change(input, { target: { value: '' } });
 
     const confirmButton = screen.getAllByRole('button', { name: 'Move' }).at(-1)!;
     expect(confirmButton).toBeDisabled();

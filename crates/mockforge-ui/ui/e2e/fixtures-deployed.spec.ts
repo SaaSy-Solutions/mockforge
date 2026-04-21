@@ -133,18 +133,19 @@ test.describe('Fixtures — Deployed Site', () => {
 
     test('should display the search input', async ({ page }) => {
       await expect(
-        mainContent(page).getByPlaceholder('Search by name, path, or route...')
+        mainContent(page).getByPlaceholder(/Search by name, path, tag/)
       ).toBeVisible();
     });
 
     test('should display the HTTP Method filter dropdown', async ({ page }) => {
       const main = mainContent(page);
       await expect(main.getByText('HTTP Method')).toBeVisible();
-      await expect(main.getByRole('combobox')).toBeVisible();
+      // The filters row has several <select>s (method, tag). Just grab the first.
+      await expect(main.getByRole('combobox').first()).toBeVisible();
     });
 
     test('should have all HTTP methods in the dropdown', async ({ page }) => {
-      const dropdown = mainContent(page).getByRole('combobox');
+      const dropdown = mainContent(page).getByRole('combobox').first();
       await expect(dropdown).toBeVisible();
 
       // Check the options exist
@@ -160,13 +161,14 @@ test.describe('Fixtures — Deployed Site', () => {
     });
 
     test('should display the summary section', async ({ page }) => {
+      // Summary block on cloud only shows the fixture count (no "Total Size"
+      // because file_size isn't part of the cloud response).
       const main = mainContent(page);
       await expect(main.getByText('Summary')).toBeVisible();
-      await expect(main.getByText('Total Size')).toBeVisible();
     });
 
     test('should allow typing in the search input', async ({ page }) => {
-      const searchInput = mainContent(page).getByPlaceholder('Search by name, path, or route...');
+      const searchInput = mainContent(page).getByPlaceholder(/Search by name, path, tag/);
       await searchInput.fill('/api/users');
       await page.waitForTimeout(300);
       await expect(searchInput).toHaveValue('/api/users');
@@ -177,7 +179,7 @@ test.describe('Fixtures — Deployed Site', () => {
     });
 
     test('should allow changing the HTTP method filter', async ({ page }) => {
-      const dropdown = mainContent(page).getByRole('combobox');
+      const dropdown = mainContent(page).getByRole('combobox').first();
 
       await dropdown.selectOption('GET');
       await page.waitForTimeout(300);
@@ -487,9 +489,9 @@ test.describe('Fixtures — Deployed Site', () => {
         // Rate limited — page is in error state, skip form control checks
         return;
       }
-      await expect(main.getByPlaceholder('Search by name, path, or route...')).toBeVisible();
+      await expect(main.getByPlaceholder(/Search by name, path, tag/)).toBeVisible();
       await expect(main.getByText('HTTP Method', { exact: true })).toBeVisible();
-      await expect(main.getByRole('combobox')).toBeVisible();
+      await expect(main.getByRole('combobox').first()).toBeVisible();
     });
   });
 
@@ -535,6 +537,144 @@ test.describe('Fixtures — Deployed Site', () => {
         .catch(() => false);
 
       expect(hasErrorBoundary).toBeFalsy();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. Cloud-specific additions: tag filter, edit dialog, richer create/view
+  //    These cover the wiring added in commit 2a1c2bb7. Write-flows stay skipped
+  //    because the deployed backend is rate-limited; we only assert that the UI
+  //    is wired up and the dialogs render the fields the backend accepts.
+  // ---------------------------------------------------------------------------
+  test.describe('Cloud UI — Tag Filter, Edit Dialog, Richer Forms', () => {
+    test('should display the Tag filter dropdown', async ({ page }) => {
+      const main = mainContent(page);
+      await expect(main.getByText('Tag', { exact: true })).toBeVisible();
+      const tagSelect = main.locator('select').nth(1);
+      await expect(tagSelect).toBeVisible();
+      // "All Tags" is always present even when no tags exist
+      const options = await tagSelect.locator('option').allTextContents();
+      expect(options).toContain('All Tags');
+    });
+
+    test('Create dialog exposes Protocol, Tags, and Response Content', async ({ page }) => {
+      const main = mainContent(page);
+      const hasButton = await main
+        .getByRole('button', { name: 'New Fixture' })
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
+      test.skip(!hasButton, 'New Fixture button unavailable (likely rate limited)');
+
+      await main.getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByText('Create New Fixture')).toBeVisible();
+
+      // New fields wired up for cloud
+      await expect(dialog.getByText('Protocol', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('Tags', { exact: true })).toBeVisible();
+      await expect(
+        dialog.getByPlaceholder(/comma-separated/)
+      ).toBeVisible();
+      await expect(dialog.getByText('Response Content (JSON)')).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.waitForTimeout(300);
+    });
+
+    test('Create dialog validates JSON content before submit', async ({ page }) => {
+      const main = mainContent(page);
+      const hasButton = await main
+        .getByRole('button', { name: 'New Fixture' })
+        .isVisible({ timeout: 5000 })
+        .catch(() => false);
+      test.skip(!hasButton, 'New Fixture button unavailable (likely rate limited)');
+
+      await main.getByRole('button', { name: 'New Fixture' }).click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await dialog.getByPlaceholder('e.g., Get Users Response').fill('Invalid JSON Fixture');
+      // The content editor is the textarea in the dialog
+      await dialog.locator('textarea').fill('{not valid json');
+
+      // Button must still be enabled (name is present), clicking should surface
+      // the validation error inline rather than POSTing.
+      await dialog.getByRole('button', { name: 'Create Fixture' }).click();
+      await page.waitForTimeout(300);
+
+      await expect(dialog.getByText(/Invalid JSON/)).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.waitForTimeout(300);
+    });
+
+    test('Edit button is present on fixture rows (cloud)', async ({ page }) => {
+      const main = mainContent(page);
+      const hasEmpty = await main
+        .getByRole('heading', { name: 'No fixtures found' })
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
+      test.skip(hasEmpty, 'No fixtures to assert Edit button against');
+
+      // The list row has an "Edit" button (cloud-only). It sits alongside
+      // Rename / Move so we expect at least one Edit button in main.
+      const editButtons = main.getByRole('button', { name: 'Edit', exact: true });
+      await expect(editButtons.first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('Edit dialog opens with name/method/path/description/tags/content', async ({ page }) => {
+      const main = mainContent(page);
+      const hasEmpty = await main
+        .getByRole('heading', { name: 'No fixtures found' })
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
+      test.skip(hasEmpty, 'No fixtures available to open the Edit dialog');
+
+      await main.getByRole('button', { name: 'Edit', exact: true }).first().click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByText('Edit Fixture')).toBeVisible();
+      await expect(dialog.getByText('Name', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('HTTP Method')).toBeVisible();
+      await expect(dialog.getByText('Path', { exact: true })).toBeVisible();
+      await expect(dialog.getByText('Description', { exact: true })).toBeVisible();
+      await expect(dialog.getByText(/Tags \(comma-separated\)/)).toBeVisible();
+      await expect(dialog.getByText('Response Content (JSON)')).toBeVisible();
+      // The Save button has the name "Save Changes" and must be enabled when
+      // name is non-empty (pre-filled from the fixture).
+      await expect(dialog.getByRole('button', { name: /Save Changes/ })).toBeEnabled();
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click();
+      await page.waitForTimeout(300);
+    });
+
+    test('Viewer dialog surfaces Response Content heading', async ({ page }) => {
+      const main = mainContent(page);
+      const hasEmpty = await main
+        .getByRole('heading', { name: 'No fixtures found' })
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
+      test.skip(hasEmpty, 'No fixtures to view');
+
+      // The eye icon is an outline <button> with only an svg child; it sits
+      // next to Download and Delete. Find it by clicking the first button
+      // containing an svg with class "lucide-eye".
+      const eyeButton = main.locator('button:has(svg.lucide-eye)').first();
+      await expect(eyeButton).toBeVisible({ timeout: 5000 });
+      await eyeButton.click();
+      await page.waitForTimeout(500);
+
+      const dialog = page.getByRole('dialog');
+      await expect(dialog.getByText('Response Content')).toBeVisible();
+      // Method/Protocol/Updated metadata row
+      await expect(dialog.getByText(/^Method:/)).toBeVisible();
+      await expect(dialog.getByText(/^Protocol:/)).toBeVisible();
+
+      await dialog.getByRole('button', { name: 'Close' }).click();
+      await page.waitForTimeout(300);
     });
   });
 });
