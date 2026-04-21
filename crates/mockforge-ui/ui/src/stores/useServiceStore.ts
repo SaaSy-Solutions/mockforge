@@ -2,20 +2,38 @@ import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { ServiceInfo, RouteInfo } from '../types';
 import { authenticatedFetch } from '../utils/apiClient';
+import {
+  cloudServicesApi,
+  type CloudService,
+  type CloudServiceCreatePayload,
+  type CloudServiceUpdatePayload,
+} from '../services/api/cloudServices';
+
+const isCloud = !!import.meta.env.VITE_API_BASE_URL;
 
 interface ServiceStore {
   services: ServiceInfo[];
   filteredRoutes: RouteInfo[];
   isLoading: boolean;
   error: string | null;
+  isCloud: boolean;
+  mutationError: string | null;
+  workspaceFilter: string | null;
   setServices: (services: ServiceInfo[]) => void;
-  updateService: (serviceId: string, updates: Partial<ServiceInfo>) => void;
-  toggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void;
+  updateService: (serviceId: string, updates: Partial<ServiceInfo>) => Promise<void>;
+  updateServiceDetails: (
+    serviceId: string,
+    details: { name?: string; description?: string; base_url?: string; tags?: string[]; workspace_id?: string | null }
+  ) => Promise<void>;
+  toggleRoute: (serviceId: string, routeId: string, enabled: boolean) => Promise<void>;
   addService: (service: ServiceInfo) => void;
-  removeService: (serviceId: string) => void;
+  createService: (payload: CloudServiceCreatePayload) => Promise<ServiceInfo>;
+  removeService: (serviceId: string) => Promise<void>;
   setGlobalSearch: (query: string | undefined) => void;
-  fetchServices: () => Promise<void>;
+  setWorkspaceFilter: (workspaceId: string | null) => Promise<void>;
+  fetchServices: (options?: { workspaceId?: string | null }) => Promise<void>;
   clearError: () => void;
+  clearMutationError: () => void;
 }
 
 // Mock data for development
@@ -168,19 +186,87 @@ const filterRoutes = (services: ServiceInfo[], query?: string): RouteInfo[] => {
 };
 
 const SHOULD_USE_MOCK_FALLBACK =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_DATA === 'true';
+  !isCloud && (import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK_DATA === 'true');
 
-export const useServiceStore = create<ServiceStore>((set, _get) => ({
+const routeKey = (route: Pick<RouteInfo, 'method' | 'path'>): string =>
+  route.method ? `${route.method}-${route.path}` : route.path;
+
+const coerceRoutes = (value: unknown): RouteInfo[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const r = raw as Record<string, unknown>;
+      const path = typeof r.path === 'string' ? r.path : '';
+      if (!path) return null;
+      const method = typeof r.method === 'string' ? r.method : 'ANY';
+      return {
+        id: typeof r.id === 'string' ? r.id : `${method}-${path}`,
+        method,
+        path,
+        statusCode: typeof r.status_code === 'number' ? r.status_code : 200,
+        priority: typeof r.priority === 'number' ? r.priority : 1,
+        has_fixtures: typeof r.has_fixtures === 'boolean' ? r.has_fixtures : false,
+        request_count: typeof r.request_count === 'number' ? r.request_count : 0,
+        error_count: typeof r.error_count === 'number' ? r.error_count : 0,
+        latency_ms: typeof r.latency_ms === 'number' ? r.latency_ms : 0,
+        enabled: r.enabled !== false,
+        tags: Array.isArray(r.tags) ? (r.tags.filter((t) => typeof t === 'string') as string[]) : [],
+      } as RouteInfo;
+    })
+    .filter((r): r is RouteInfo => r !== null);
+};
+
+const coerceTags = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((t): t is string => typeof t === 'string');
+};
+
+const mapCloudService = (svc: CloudService): ServiceInfo => {
+  const routes = coerceRoutes(svc.routes).map((r) => ({ ...r, service_id: svc.id }));
+  return {
+    id: svc.id,
+    name: svc.name,
+    description: svc.description || undefined,
+    baseUrl: svc.base_url || '',
+    enabled: svc.enabled,
+    tags: coerceTags(svc.tags),
+    routes,
+    createdAt: svc.created_at,
+    updatedAt: svc.updated_at,
+    workspace_id: svc.workspace_id ?? null,
+  };
+};
+
+export const useServiceStore = create<ServiceStore>((set, get) => ({
   services: SHOULD_USE_MOCK_FALLBACK ? mockServices : [],
   filteredRoutes: SHOULD_USE_MOCK_FALLBACK ? filterRoutes(mockServices) : [],
   isLoading: false,
   error: null,
+  isCloud,
+  mutationError: null,
+  workspaceFilter: null,
 
   setServices: (services) => set({ services, filteredRoutes: filterRoutes(services) }),
 
-  fetchServices: async () => {
+  setWorkspaceFilter: async (workspaceId) => {
+    set({ workspaceFilter: workspaceId });
+    await get().fetchServices({ workspaceId });
+  },
+
+  fetchServices: async (options) => {
     set({ isLoading: true, error: null });
     try {
+      if (isCloud) {
+        const workspaceId = options?.workspaceId ?? get().workspaceFilter ?? undefined;
+        const cloudServices = await cloudServicesApi.list(
+          workspaceId ? { workspaceId } : undefined
+        );
+        const services = cloudServices.map(mapCloudService);
+        set({ services, filteredRoutes: filterRoutes(services), isLoading: false });
+        return;
+      }
+
       const response = await authenticatedFetch('/__mockforge/routes');
       if (!response.ok) {
         throw new Error(`Failed to fetch routes: ${response.statusText}`);
@@ -239,7 +325,6 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch services';
       logger.error('Failed to fetch services', error);
-      // Fall back to mock data on error only for development.
       if (SHOULD_USE_MOCK_FALLBACK) {
         set({
           services: mockServices,
@@ -254,38 +339,167 @@ export const useServiceStore = create<ServiceStore>((set, _get) => ({
   },
 
   clearError: () => set({ error: null }),
+  clearMutationError: () => set({ mutationError: null }),
 
-  updateService: (serviceId, updates) => set((state) => ({
-    services: state.services.map(service =>
-      service.id === serviceId
-        ? { ...service, ...updates }
-        : service
-    ),
-  })),
+  updateService: async (serviceId, updates) => {
+    // Optimistic local update first
+    set((state) => ({
+      services: state.services.map((service) =>
+        service.id === serviceId ? { ...service, ...updates } : service
+      ),
+    }));
 
-  toggleRoute: (serviceId, routeId, enabled) => set((state) => ({
-    services: state.services.map(service =>
+    if (!isCloud) return;
+
+    try {
+      const patch: CloudServiceUpdatePayload = {};
+      if (typeof updates.enabled === 'boolean') patch.enabled = updates.enabled;
+      if (typeof updates.name === 'string') patch.name = updates.name;
+      if (typeof updates.description === 'string') patch.description = updates.description;
+      if (typeof updates.baseUrl === 'string') patch.base_url = updates.baseUrl;
+      if (Array.isArray(updates.tags)) patch.tags = updates.tags;
+      if (Object.keys(patch).length === 0) return;
+
+      const updated = await cloudServicesApi.update(serviceId, patch);
+      const mapped = mapCloudService(updated);
+      set((state) => ({
+        services: state.services.map((service) =>
+          service.id === serviceId ? mapped : service
+        ),
+        filteredRoutes: filterRoutes(
+          state.services.map((service) => (service.id === serviceId ? mapped : service))
+        ),
+      }));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update service';
+      logger.error('Failed to persist service update', error);
+      set({ mutationError: msg });
+      // Re-fetch to restore server-authoritative state after a failed optimistic write
+      void get().fetchServices();
+    }
+  },
+
+  updateServiceDetails: async (serviceId, details) => {
+    if (!isCloud) {
+      set({ mutationError: 'Editing service details requires cloud mode.' });
+      return;
+    }
+    const patch: CloudServiceUpdatePayload = {};
+    if (typeof details.name === 'string') patch.name = details.name;
+    if (typeof details.description === 'string') patch.description = details.description;
+    if (typeof details.base_url === 'string') patch.base_url = details.base_url;
+    if (Array.isArray(details.tags)) patch.tags = details.tags;
+    if (details.workspace_id !== undefined) patch.workspace_id = details.workspace_id;
+    if (Object.keys(patch).length === 0) return;
+
+    try {
+      const updated = await cloudServicesApi.update(serviceId, patch);
+      const mapped = mapCloudService(updated);
+      set((state) => {
+        const services = state.services.map((service) =>
+          service.id === serviceId ? mapped : service
+        );
+        return { services, filteredRoutes: filterRoutes(services) };
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update service';
+      logger.error('Failed to update service details', error);
+      set({ mutationError: msg });
+      throw error;
+    }
+  },
+
+  toggleRoute: async (serviceId, routeId, enabled) => {
+    const previous = get().services;
+    const nextServices = previous.map((service) =>
       service.id === serviceId
         ? {
             ...service,
-            routes: service.routes.map(route => {
-              const id = route.method ? `${route.method}-${route.path}` : route.path;
+            routes: service.routes.map((route) => {
+              const id = routeKey(route);
               return id === routeId ? { ...route, enabled } : route;
             }),
           }
         : service
-    ),
-  })),
+    );
+    set({ services: nextServices, filteredRoutes: filterRoutes(nextServices) });
 
-  addService: (service) => set((state) => ({
-    services: [...state.services, service],
-    filteredRoutes: filterRoutes([...state.services, service]),
-  })),
+    if (!isCloud) return;
 
-  removeService: (serviceId) => set((state) => ({
-    services: state.services.filter(service => service.id !== serviceId),
-    filteredRoutes: filterRoutes(state.services.filter(service => service.id !== serviceId)),
-  })),
+    const target = nextServices.find((s) => s.id === serviceId);
+    if (!target) return;
+
+    try {
+      // Persist the full routes array — CloudService.routes is stored as JSON.
+      const routesPayload = target.routes.map((r) => ({
+        id: r.id,
+        method: r.method,
+        path: r.path,
+        enabled: r.enabled !== false,
+        status_code: r.statusCode,
+        priority: r.priority,
+        has_fixtures: r.has_fixtures,
+        tags: r.tags ?? [],
+      }));
+      const updated = await cloudServicesApi.update(serviceId, { routes: routesPayload });
+      const mapped = mapCloudService(updated);
+      set((state) => {
+        const services = state.services.map((service) =>
+          service.id === serviceId ? mapped : service
+        );
+        return { services, filteredRoutes: filterRoutes(services) };
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update route';
+      logger.error('Failed to persist route toggle', error);
+      set({ mutationError: msg, services: previous, filteredRoutes: filterRoutes(previous) });
+    }
+  },
+
+  addService: (service) => set((state) => {
+    const services = [...state.services, service];
+    return { services, filteredRoutes: filterRoutes(services) };
+  }),
+
+  createService: async (payload) => {
+    if (!isCloud) {
+      throw new Error('Creating services requires cloud mode.');
+    }
+    try {
+      const created = await cloudServicesApi.create(payload);
+      const mapped = mapCloudService(created);
+      set((state) => {
+        const services = [...state.services, mapped];
+        return { services, filteredRoutes: filterRoutes(services) };
+      });
+      return mapped;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to create service';
+      logger.error('Failed to create service', error);
+      set({ mutationError: msg });
+      throw error;
+    }
+  },
+
+  removeService: async (serviceId) => {
+    const previous = get().services;
+    // Optimistic removal
+    set((state) => {
+      const services = state.services.filter((service) => service.id !== serviceId);
+      return { services, filteredRoutes: filterRoutes(services) };
+    });
+
+    if (!isCloud) return;
+
+    try {
+      await cloudServicesApi.remove(serviceId);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to delete service';
+      logger.error('Failed to delete service', error);
+      set({ mutationError: msg, services: previous, filteredRoutes: filterRoutes(previous) });
+      throw error;
+    }
+  },
 
   setGlobalSearch: (query) => set((state) => ({
     filteredRoutes: filterRoutes(state.services, query),

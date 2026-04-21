@@ -394,6 +394,7 @@ export interface ServiceInfo {
   tags?: string[];
   createdAt: string;
   updatedAt: string;
+  workspace_id?: string | null;
 }
 
 export interface RouteInfo {

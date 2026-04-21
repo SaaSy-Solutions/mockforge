@@ -1389,6 +1389,7 @@ impl RegistryStore for SqliteRegistryStore {
     async fn create_cloud_service(
         &self,
         org_id: Uuid,
+        workspace_id: Option<Uuid>,
         created_by: Uuid,
         name: &str,
         description: &str,
@@ -1408,6 +1409,15 @@ impl RegistryStore for SqliteRegistryStore {
     }
 
     #[allow(unused_variables)]
+    async fn list_cloud_services_by_workspace(
+        &self,
+        org_id: Uuid,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<CloudService>> {
+        Ok(Vec::new())
+    }
+
+    #[allow(unused_variables)]
     async fn update_cloud_service(
         &self,
         id: Uuid,
@@ -1417,6 +1427,7 @@ impl RegistryStore for SqliteRegistryStore {
         enabled: Option<bool>,
         tags: Option<&serde_json::Value>,
         routes: Option<&serde_json::Value>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudService>> {
         Ok(None)
     }

@@ -1,12 +1,24 @@
 //! Service CRUD handlers for cloud mode
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Json,
 };
-use serde::Deserialize;
+use serde::{de::Deserializer, Deserialize};
 use uuid::Uuid;
+
+/// Custom deserializer that distinguishes a missing field from an explicit
+/// `null`. Used so PATCH bodies can express "unassign this relation" with
+/// `{"workspace_id": null}` while an absent key still means "leave unchanged".
+fn deserialize_optional_nullable_uuid<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<Uuid>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Option::<Uuid>::deserialize(deserializer).map(Some)
+}
 
 use crate::{
     error::{ApiError, ApiResult},
@@ -15,16 +27,49 @@ use crate::{
     AppState,
 };
 
+async fn ensure_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
+    let workspace = state
+        .store
+        .find_cloud_workspace_by_id(workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    if workspace.org_id != org_id {
+        return Err(ApiError::InvalidRequest(
+            "Workspace does not belong to this organization".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ListServicesQuery {
+    #[serde(default)]
+    pub workspace_id: Option<Uuid>,
+}
+
 pub async fn list_services(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
+    Query(params): Query<ListServicesQuery>,
 ) -> ApiResult<Json<Vec<CloudService>>> {
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let services = state.store.list_cloud_services_by_org(org_ctx.org_id).await?;
+    let services = if let Some(workspace_id) = params.workspace_id {
+        ensure_workspace_in_org(&state, org_ctx.org_id, workspace_id).await?;
+        state
+            .store
+            .list_cloud_services_by_workspace(org_ctx.org_id, workspace_id)
+            .await?
+    } else {
+        state.store.list_cloud_services_by_org(org_ctx.org_id).await?
+    };
 
     Ok(Json(services))
 }
@@ -61,6 +106,8 @@ pub struct CreateServiceRequest {
     pub description: String,
     #[serde(default)]
     pub base_url: String,
+    #[serde(default)]
+    pub workspace_id: Option<Uuid>,
 }
 
 pub async fn create_service(
@@ -77,10 +124,15 @@ pub async fn create_service(
         return Err(ApiError::InvalidRequest("Service name is required".to_string()));
     }
 
+    if let Some(workspace_id) = request.workspace_id {
+        ensure_workspace_in_org(&state, org_ctx.org_id, workspace_id).await?;
+    }
+
     let service = state
         .store
         .create_cloud_service(
             org_ctx.org_id,
+            request.workspace_id,
             user_id,
             request.name.trim(),
             &request.description,
@@ -129,6 +181,11 @@ pub struct UpdateServiceRequest {
     pub enabled: Option<bool>,
     pub tags: Option<serde_json::Value>,
     pub routes: Option<serde_json::Value>,
+    /// Tri-state: `None` = field absent (leave unchanged);
+    /// `Some(None)` = explicit `null` (unassign from workspace);
+    /// `Some(Some(id))` = assign to workspace `id`.
+    #[serde(default, deserialize_with = "deserialize_optional_nullable_uuid")]
+    pub workspace_id: Option<Option<Uuid>>,
 }
 
 pub async fn update_service(
@@ -154,6 +211,12 @@ pub async fn update_service(
         ));
     }
 
+    // Only validate ownership when the caller is reassigning to a specific
+    // workspace — explicit `null` (unassign) needs no validation.
+    if let Some(Some(workspace_id)) = request.workspace_id {
+        ensure_workspace_in_org(&state, org_ctx.org_id, workspace_id).await?;
+    }
+
     let service = state
         .store
         .update_cloud_service(
@@ -164,6 +227,7 @@ pub async fn update_service(
             request.enabled,
             request.tags.as_ref(),
             request.routes.as_ref(),
+            request.workspace_id,
         )
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Service not found".to_string()))?;

@@ -662,14 +662,23 @@ impl RegistryStore for PgRegistryStore {
     async fn create_cloud_service(
         &self,
         org_id: Uuid,
+        workspace_id: Option<Uuid>,
         created_by: Uuid,
         name: &str,
         description: &str,
         base_url: &str,
     ) -> StoreResult<CloudService> {
-        CloudService::create(&self.pool, org_id, created_by, name, description, base_url)
-            .await
-            .map_err(Into::into)
+        CloudService::create(
+            &self.pool,
+            org_id,
+            workspace_id,
+            created_by,
+            name,
+            description,
+            base_url,
+        )
+        .await
+        .map_err(Into::into)
     }
 
     async fn find_cloud_service_by_id(&self, id: Uuid) -> StoreResult<Option<CloudService>> {
@@ -678,6 +687,16 @@ impl RegistryStore for PgRegistryStore {
 
     async fn list_cloud_services_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudService>> {
         CloudService::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn list_cloud_services_by_workspace(
+        &self,
+        org_id: Uuid,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<CloudService>> {
+        CloudService::find_by_workspace(&self.pool, org_id, workspace_id)
+            .await
+            .map_err(Into::into)
     }
 
     async fn update_cloud_service(
@@ -689,10 +708,21 @@ impl RegistryStore for PgRegistryStore {
         enabled: Option<bool>,
         tags: Option<&serde_json::Value>,
         routes: Option<&serde_json::Value>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudService>> {
-        CloudService::update(&self.pool, id, name, description, base_url, enabled, tags, routes)
-            .await
-            .map_err(Into::into)
+        CloudService::update(
+            &self.pool,
+            id,
+            name,
+            description,
+            base_url,
+            enabled,
+            tags,
+            routes,
+            workspace_id,
+        )
+        .await
+        .map_err(Into::into)
     }
 
     async fn delete_cloud_service(&self, id: Uuid) -> StoreResult<()> {

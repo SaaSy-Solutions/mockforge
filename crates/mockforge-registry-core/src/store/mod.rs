@@ -1131,9 +1131,11 @@ pub trait RegistryStore: Send + Sync + 'static {
     // Cloud services
     // ---------------------------------------------------------------------
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_cloud_service(
         &self,
         org_id: Uuid,
+        workspace_id: Option<Uuid>,
         created_by: Uuid,
         name: &str,
         description: &str,
@@ -1144,6 +1146,15 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     async fn list_cloud_services_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudService>>;
 
+    async fn list_cloud_services_by_workspace(
+        &self,
+        org_id: Uuid,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<CloudService>>;
+
+    /// Update a cloud service. The `workspace_id` parameter is tri-state:
+    /// `None` = leave the column untouched, `Some(None)` = unassign (write
+    /// SQL NULL), `Some(Some(id))` = assign to workspace `id`.
     #[allow(clippy::too_many_arguments)]
     async fn update_cloud_service(
         &self,
@@ -1154,6 +1165,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         enabled: Option<bool>,
         tags: Option<&serde_json::Value>,
         routes: Option<&serde_json::Value>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudService>>;
 
     async fn delete_cloud_service(&self, id: Uuid) -> StoreResult<()>;
