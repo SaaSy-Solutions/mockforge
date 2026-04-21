@@ -853,5 +853,5 @@ kubectl set resources deployment mockforge -n mockforge --limits=memory=1Gi
 For issues or questions:
 - GitHub Issues: https://github.com/SaaSy-Solutions/mockforge/issues
 - GitHub Discussions: https://github.com/SaaSy-Solutions/mockforge/discussions
-- Discord: https://discord.gg/2FxXqKpa
+- Discord: https://discord.gg/vk22xwxug3
 - Documentation: https://docs.mockforge.dev

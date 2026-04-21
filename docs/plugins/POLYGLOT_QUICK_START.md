@@ -469,7 +469,7 @@ mockforge plugin test my-as-plugin
 
 - 💬 [GitHub Discussions](https://github.com/mockforge/mockforge/discussions)
 - 🐛 [Report Issues](https://github.com/mockforge/mockforge/issues)
-- 💬 [Discord Community](https://discord.gg/mockforge)
+- 💬 [Discord Community](https://discord.gg/vk22xwxug3)
 
 ## Troubleshooting
 
