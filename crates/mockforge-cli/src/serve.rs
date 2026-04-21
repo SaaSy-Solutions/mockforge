@@ -616,6 +616,25 @@ pub(crate) fn initialize_opentelemetry_tracing(
 pub async fn handle_serve(
     serve_args: ServeArgs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Opt-in federation scenario poller. If the four env vars
+    // (MOCKFORGE_FEDERATION_POLL_URL / WORKSPACE_ID / POLL_TOKEN /
+    // POLL_INTERVAL_SECS) aren't set this is a no-op; otherwise a tokio
+    // task runs for the lifetime of the serve process, observing federation
+    // scenario overrides applied to this workspace. The logging applicator
+    // emits tracing events but does not mutate chaos/latency actuators —
+    // embedders who want real application can replace `LoggingApplicator`
+    // with their own `ScenarioApplicator` implementation.
+    #[cfg(feature = "scenarios")]
+    let _federation_scenario_poller = match mockforge_scenarios::spawn_federation_scenario_poller(
+        mockforge_scenarios::LoggingApplicator,
+    ) {
+        Ok(handle) => handle,
+        Err(err) => {
+            tracing::warn!(error = %err, "Federation scenario poller disabled due to config error");
+            None
+        }
+    };
+
     // Auto-discover config file if not provided
     let effective_config_path = if serve_args.config_path.is_some() {
         serve_args.config_path.clone()

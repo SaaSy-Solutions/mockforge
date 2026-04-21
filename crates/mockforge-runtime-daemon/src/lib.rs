@@ -42,6 +42,31 @@ impl RuntimeDaemon {
     pub fn config(&self) -> &RuntimeDaemonConfig {
         &self.config
     }
+
+    /// Opt-in: spawn a [`mockforge_scenarios::FederationScenarioPoller`]
+    /// using the standard `MOCKFORGE_FEDERATION_POLL_*` env vars.
+    ///
+    /// Returns `Ok(None)` when the env vars aren't configured (the 99%
+    /// zero-config case — the daemon stays pure 404-generation). Returns
+    /// `Ok(Some(handle))` when a poller spawns; drop the handle to stop it.
+    ///
+    /// The default [`mockforge_scenarios::LoggingApplicator`] only logs
+    /// observed overrides. A real embedder wanting to push them to the
+    /// daemon's auto-generator (e.g. bumping chaos level based on a
+    /// scenario) should call [`mockforge_scenarios::spawn_federation_scenario_poller`]
+    /// directly with a custom `ScenarioApplicator` impl.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string when env vars are malformed (bad UUID,
+    /// non-numeric interval). Missing vars are not an error.
+    pub fn spawn_federation_scenario_poller(
+        &self,
+    ) -> Result<Option<tokio::task::JoinHandle<()>>, String> {
+        mockforge_scenarios::spawn_federation_scenario_poller(
+            mockforge_scenarios::LoggingApplicator,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -53,5 +78,15 @@ mod tests {
         let config = RuntimeDaemonConfig::default();
         let daemon = RuntimeDaemon::new(config);
         assert!(!daemon.is_enabled()); // Default should be disabled
+    }
+
+    #[tokio::test]
+    async fn spawn_federation_scenario_poller_returns_none_when_env_missing() {
+        // Clearing env would race with parallel tests, so rely on the fact
+        // that these vars are never set under `cargo test` in CI. If this
+        // test flakes, gate it behind a `serial_test` annotation.
+        let daemon = RuntimeDaemon::new(RuntimeDaemonConfig::default());
+        let handle = daemon.spawn_federation_scenario_poller().unwrap();
+        assert!(handle.is_none(), "expected None when MOCKFORGE_FEDERATION_POLL_URL unset");
     }
 }

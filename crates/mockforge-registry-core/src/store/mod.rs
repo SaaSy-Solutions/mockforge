@@ -26,6 +26,7 @@ use crate::models::cloud_service::CloudService;
 use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::FeatureType;
 use crate::models::federation::Federation;
+use crate::models::federation_scenario_activation::FederationScenarioActivation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
@@ -1081,6 +1082,54 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     async fn delete_federation(&self, id: Uuid) -> StoreResult<()>;
 
+    // ---------------------------------------------------------------------
+    // Federation scenario activations
+    // ---------------------------------------------------------------------
+
+    /// Record a new active scenario for a federation. The caller is
+    /// responsible for ensuring no other scenario is currently active — the
+    /// database enforces this invariant with a partial unique index.
+    #[allow(clippy::too_many_arguments)]
+    async fn create_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+        scenario_id: Option<Uuid>,
+        scenario_name: &str,
+        manifest_snapshot: &serde_json::Value,
+        service_overrides: &serde_json::Value,
+        per_service_state: &serde_json::Value,
+        activated_by: Uuid,
+    ) -> StoreResult<FederationScenarioActivation>;
+
+    /// Return the currently active scenario activation for a federation, if
+    /// any. Deactivated/failed rows are excluded.
+    async fn find_active_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>>;
+
+    /// Mark an activation as deactivated, setting `deactivated_at = now()`.
+    async fn deactivate_federation_scenario_activation(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>>;
+
+    /// Overwrite the `per_service_state` JSON for an activation — the runtime
+    /// uses this to flip services from `pending` → `applied` as they observe
+    /// the overrides.
+    async fn update_federation_scenario_per_service_state(
+        &self,
+        id: Uuid,
+        per_service_state: &serde_json::Value,
+    ) -> StoreResult<Option<FederationScenarioActivation>>;
+
+    /// Active activations whose federation's services list the given
+    /// workspace. This backs the runtime-side polling endpoint.
+    async fn find_active_federation_scenarios_for_workspace(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<FederationScenarioActivation>>;
+
     /// List unresolved suspicious activities with optional filters.
     async fn list_unresolved_suspicious_activities(
         &self,
@@ -1413,6 +1462,10 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<Scenario>;
 
     async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>>;
+
+    /// Look up a scenario by UUID, regardless of org scoping. Callers that
+    /// care about org access control must check `scenario.org_id` themselves.
+    async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>>;
 
     async fn list_scenarios_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>>;
 
