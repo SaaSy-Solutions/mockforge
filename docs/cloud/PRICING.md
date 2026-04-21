@@ -375,7 +375,7 @@ Not sure which plan is right for you? We're here to help:
 
 - **Email**: support@mockforge.dev
 - **Schedule a call**: [book a demo](https://calendly.com/mockforge)
-- **Chat**: Join our [Discord community](https://discord.gg/mockforge)
+- **Chat**: Join our [Discord community](https://discord.gg/vk22xwxug3)
 
 ---
 

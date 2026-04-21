@@ -836,7 +836,7 @@ To get your plugin featured on the marketplace homepage:
 ## Support
 
 - **Documentation**: https://docs.mockforge.dev/plugins
-- **Discord**: https://discord.gg/mockforge
+- **Discord**: https://discord.gg/vk22xwxug3
 - **GitHub Discussions**: https://github.com/SaaSy-Solutions/mockforge/discussions
 \`\`\`
 
