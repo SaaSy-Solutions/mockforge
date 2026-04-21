@@ -1172,6 +1172,8 @@ pub trait RegistryStore: Send + Sync + 'static {
         path: &str,
         method: &str,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
+        tags: Option<&serde_json::Value>,
     ) -> StoreResult<CloudFixture>;
 
     async fn find_cloud_fixture_by_id(&self, id: Uuid) -> StoreResult<Option<CloudFixture>>;
