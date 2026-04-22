@@ -515,13 +515,16 @@ make docker-build && make docker-run
 # Build the image
 docker build -t mockforge .
 
-# Run with examples
+# Run with examples (pass the spec path via MOCKFORGE_OPENAPI_SPEC_URL,
+# which accepts both URLs and local paths inside the container)
 docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -v $(pwd)/examples:/app/examples:ro \
   -e MOCKFORGE_ADMIN_ENABLED=true \
-  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  -e MOCKFORGE_OPENAPI_SPEC_URL=/app/examples/openapi-demo.json \
   mockforge
 ```
+
+> Note: `make docker-compose-up` uses the bundled `docker-compose.yml`, which maps HTTP/WS to host ports **8000** and **8001** (not 3000/3001) to avoid collisions with locally-running dev servers. Admin UI (9080) and gRPC (50051) are pass-through.
 
 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
 
@@ -1615,30 +1618,33 @@ MockForge includes comprehensive performance benchmarks using Criterion.rs to me
 
 ### Benchmark Categories
 
-**Template Rendering**
-- Simple variable substitution: `{{name}}`
-- Complex nested templates: `{{user.address.city}}`
-- Array iteration: `{{#each items}}`
+**Template Rendering** (`mockforge-core/benches/core_benchmarks.rs`)
+- Simple variable substitution (e.g. `{{uuid}}`)
+- Complex multi-variable templates
+- Array iteration
 
 **JSON Schema Validation**
 - Simple schema validation (single object)
 - Complex nested schema validation
-- Large array validation (100+ items)
 
 **OpenAPI Spec Parsing**
-- Small specs (1-5 paths)
-- Medium specs (10-50 paths)
-- Large specs (100+ paths with complex schemas)
+- Small specs (1 path)
+- Medium specs (10 paths)
+- Large specs (100 paths, in memory profile)
 
 **Data Generation**
 - Single record generation
-- Bulk data generation (1000+ records)
-- RAG-powered synthetic data
+
+**Encryption**
+- AES-256-GCM round-trip
+- ChaCha20-Poly1305 round-trip
 
 **Memory Profiling**
-- Large OpenAPI spec parsing (100+ paths)
+- Large OpenAPI spec parsing (100 paths)
 - Deep template rendering (nested structures)
-- Bulk data validation
+- Large array validation (100 items)
+
+**Protocol brokers** (`mockforge-kafka`, `mockforge-mqtt`, `mockforge-amqp`, `mockforge-smtp`, `mockforge-ftp`) each ship their own Criterion bench files.
 
 ### Running Benchmarks
 
@@ -1658,19 +1664,22 @@ cargo bench -- --save-baseline main
 
 ### Benchmark Results
 
-Typical performance metrics on modern hardware (AMD Ryzen 9 / Intel i9):
+Representative headline numbers (see [`docs/PERFORMANCE_BENCHMARKS.md`](docs/PERFORMANCE_BENCHMARKS.md) for the full, up-to-date table):
 
-| Operation | Throughput | Latency |
-|-----------|------------|---------|
-| Simple template rendering | ~500K ops/sec | ~2 µs |
-| Complex template rendering | ~100K ops/sec | ~10 µs |
-| JSON schema validation (simple) | ~1M ops/sec | ~1 µs |
-| JSON schema validation (complex) | ~200K ops/sec | ~5 µs |
-| OpenAPI spec parsing (small) | ~10K ops/sec | ~100 µs |
-| OpenAPI spec parsing (large) | ~500 ops/sec | ~2 ms |
-| Data generation (single record) | ~50K ops/sec | ~20 µs |
+| Operation | Mean time |
+|-----------|-----------|
+| `json_validation/simple` | 105 ns |
+| `template_rendering/arrays` | 345 ns |
+| `template_rendering/complex` | 405 ns |
+| `data_generation/generate_single_record` | 748 ns |
+| `template_rendering/simple` (with UUID) | 941 ns |
+| `encryption/aes256_gcm` (round-trip) | 1.09 µs |
+| `encryption/chacha20_poly1305` (round-trip) | 4.2 µs |
+| `openapi_parsing/small_spec` (1 path) | 24 µs |
+| `openapi_parsing/medium_spec` (10 paths) | 172 µs |
+| `memory/large_spec_parsing` (100 paths) | 7.16 ms |
 
-*Note: Results vary based on hardware, spec complexity, and system load. Run benchmarks on your target hardware for accurate metrics.*
+*Numbers are from the criterion suite on a reference machine (last refreshed December 2025). Run `cargo bench` on your target hardware for environment-specific results.*
 
 ### Continuous Performance Monitoring
 
@@ -1682,6 +1691,23 @@ Benchmarks are run automatically in CI/CD:
 View the latest benchmark results in our [GitHub Actions](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/benchmarks.yml).
 
 📊 **For detailed performance characteristics and current benchmark results, see [Performance Benchmarks Documentation](docs/PERFORMANCE_BENCHMARKS.md).**
+
+### Load Testing with k6
+
+In addition to criterion micro-benchmarks, the `mockforge-bench` crate generates and runs [k6](https://k6.io) load-test scripts directly from an OpenAPI spec, so you can stress a real target (your mock, a staging service, or production) without hand-writing scripts.
+
+```bash
+# Generate a k6 script from an OpenAPI spec
+mockforge generate-tests --format k6 --spec api.yaml --output load-test.js
+
+# Or generate + run against a target in one step
+mockforge bench --spec api.yaml --target http://localhost:3000 --duration 5m --vus 100
+
+# Built-in scenarios: baseline, spike, soak, stress
+mockforge bench --spec api.yaml --target http://localhost:3000 --scenario spike
+```
+
+Features include data-driven payloads (via k6 `SharedArray`), parameter overrides, CRUD-flow generation with dependency chaining, OWASP-style security fuzzing, and WAFBench integration. See `crates/mockforge-bench/` for the full generator and `mockforge bench --help` for every flag.
 
 ## 📚 Documentation
 
@@ -1710,7 +1736,7 @@ View the latest benchmark results in our [GitHub Actions](https://github.com/Saa
 | **Validation too strict** | `mockforge serve --validation warn` |
 | **Admin UI not loading** | `mockforge serve --admin --admin-port 9080` |
 | **Docker port conflicts** | `docker run -p 3001:3000 mockforge` |
-| **Docker permission issues** | `sudo chown -R 1000:1000 fixtures/` (Linux) |
+| **Docker permission issues** | Find the in-container UID: `docker run --rm mockforge id -u` → `sudo chown -R <uid>:<uid> fixtures/` (the image uses a `mockforge` system user, not UID 1000) |
 
 See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/troubleshooting.html) for detailed solutions.
 

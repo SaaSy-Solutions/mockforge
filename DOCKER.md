@@ -86,7 +86,7 @@ export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_LATENCY_ENABLED=true
 
 # File paths
-export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+export MOCKFORGE_OPENAPI_SPEC_URL=examples/openapi-demo.json
 export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
 ```
 
@@ -109,7 +109,7 @@ volumes:
 ```bash
 # Start with OpenAPI spec
 docker run -p 3000:3000 \
-  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  -e MOCKFORGE_OPENAPI_SPEC_URL=examples/openapi-demo.json \
   -e MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true \
   mockforge
 
@@ -132,7 +132,7 @@ docker run -p 3001:3001 \
 # Start all services
 docker run -p 3000:3000 -p 3001:3001 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
-  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  -e MOCKFORGE_OPENAPI_SPEC_URL=examples/openapi-demo.json \
   -e MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
   mockforge
 
@@ -151,7 +151,7 @@ services:
     environment:
       - MOCKFORGE_LOG_LEVEL=debug
       - MOCKFORGE_LATENCY_ENABLED=false
-      - MOCKFORGE_HTTP_OPENAPI_SPEC=examples/custom-api.json
+      - MOCKFORGE_OPENAPI_SPEC_URL=examples/custom-api.json
     volumes:
       - ./my-examples:/app/examples:ro
       - ./my-config.yaml:/app/config.yaml:ro
