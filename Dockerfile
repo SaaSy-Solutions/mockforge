@@ -1,4 +1,22 @@
 # Multi-stage Docker build for MockForge
+# Stage 0: Build the React Admin UI bundle so the Rust build can embed real assets
+FROM node:22-slim AS ui-builder
+
+WORKDIR /ui
+
+# pnpm via Corepack — pnpm-lock.yaml is the source of truth for the UI workspace
+RUN corepack enable
+
+# Install deps first for layer caching. Skip the Playwright browser download —
+# the image only needs Vite/TS build tooling, not the e2e runner.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+COPY crates/mockforge-ui/ui/package.json crates/mockforge-ui/ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy UI source and build the production bundle (outputs to /ui/dist)
+COPY crates/mockforge-ui/ui/ ./
+RUN pnpm build
+
 # Stage 1: Build the Rust application
 # Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
 FROM rust:1.90-slim AS builder
@@ -34,23 +52,12 @@ COPY examples/ ./examples/
 COPY proto/ ./proto/
 COPY config.example.yaml ./
 
-# Create placeholder UI files if they don't exist (UI build requires Node.js which we don't install in Docker)
-RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
-    if [ ! -f crates/mockforge-ui/ui/dist/index.html ]; then \
-      echo '<!DOCTYPE html><html><head><title>MockForge Admin</title></head><body><h1>MockForge Admin UI</h1><p>UI build required. Run: cd crates/mockforge-ui && bash build_ui.sh</p></body></html>' > crates/mockforge-ui/ui/dist/index.html; \
-    fi && \
-    if [ ! -f crates/mockforge-ui/ui/dist/assets/index.css ]; then \
-      echo '/* MockForge Admin UI CSS - build required */' > crates/mockforge-ui/ui/dist/assets/index.css; \
-    fi && \
-    if [ ! -f crates/mockforge-ui/ui/dist/assets/index.js ]; then \
-      echo '// MockForge Admin UI JS - build required' > crates/mockforge-ui/ui/dist/assets/index.js; \
-    fi && \
-    if [ ! -f crates/mockforge-ui/ui/dist/pwa-manifest.json ]; then \
-      echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json; \
-    fi && \
-    if [ ! -f crates/mockforge-ui/ui/dist/sw.js ]; then \
-      echo '// Service Worker placeholder' > crates/mockforge-ui/ui/dist/sw.js; \
-    fi
+# Drop the real UI bundle from the ui-builder stage into the expected path so
+# build.rs embeds it via include_str!. Also remove build_ui.sh — build.rs
+# invokes it during cargo build, but Node isn't installed here and dist/ is
+# already built. build.rs only runs the script `if ui_build_script.exists()`.
+COPY --from=ui-builder /ui/dist/ crates/mockforge-ui/ui/dist/
+RUN rm -f crates/mockforge-ui/build_ui.sh
 
 # Build the application in release mode
 RUN cargo build --release --bin mockforge

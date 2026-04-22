@@ -33,6 +33,12 @@ lcov.info
 *.jpg
 *.jpeg
 *.gif
+# …but UI public assets must reach the build context — Vite copies them into
+# dist/ and build.rs embeds the icons via include_bytes!
+!crates/mockforge-ui/ui/public/*.png
+!crates/mockforge-ui/ui/public/*.jpg
+!crates/mockforge-ui/ui/public/*.jpeg
+!crates/mockforge-ui/ui/public/*.gif
 
 # Local configuration (use mounted volumes instead)
 config.yaml
