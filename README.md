@@ -130,8 +130,7 @@ For detailed use case examples and code samples, see [Ecosystem & Use Cases Guid
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
 
-- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures)
-- ⚠️ **Planned for v1.1**: Admin UI role-based authentication (frontend UI components are built, backend JWT/OAuth integration pending)
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), JWT-based authentication with Admin/Editor/Viewer roles
 
 All commands, options, and features documented in each protocol section (HTTP, gRPC, WebSocket, GraphQL, Plugins, Data Generation) have been verified to work as described.
 
@@ -285,7 +284,7 @@ MockForge comes with comprehensive examples to get you started quickly:
 make run-example
 
 # Or use the configuration file
-cargo run -p mockforge-cli -- serve --config demo-config.yaml
+cargo run -p mockforge-cli -- serve --config config.example.yaml
 
 # Or run manually with environment variables
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
@@ -624,7 +623,7 @@ cargo run -p mockforge-cli -- data template user --rows 50 --output users.json
 cargo run -p mockforge-cli -- admin --port 9080
 
 # Start workspace synchronization daemon
-cargo run -p mockforge-cli -- sync start --directory ./workspace-sync
+cargo run -p mockforge-cli -- sync --workspace-dir ./workspace-sync
 
 # Access Admin Interface
 
@@ -1292,7 +1291,7 @@ The Admin UI provides:
 - **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
 
-> **Note**: Role-based authentication (Admin/Viewer access control) is planned for v1.1. The frontend UI components are ready, but backend JWT/OAuth authentication is not yet implemented in v1.0. The Admin UI is currently accessible without authentication.
+> **Note**: JWT-based role-based access control (Admin, Editor, Viewer) is implemented end-to-end. In development mode the Admin UI allows unauthenticated access by default for convenience; enable auth enforcement by disabling the dev bypass via environment variables (see `crates/mockforge-ui/src/rbac.rs`).
 
 ### Embedded Admin Mode
 
@@ -1471,24 +1470,37 @@ make book
 
 ### Project Structure
 
+MockForge is a Cargo workspace of 50+ crates. The table below highlights the most commonly touched crates — run `ls crates/` for the full list, or see [CLAUDE.md](CLAUDE.md) for a categorized inventory (foundation, protocol, plugin, observability, user-facing, infrastructure).
+
 ```text
 mockforge/
-├── crates/                     # Workspace crates
+├── crates/                     # Workspace crates (50+)
 │   ├── mockforge-cli/          # Command-line interface
 │   ├── mockforge-core/         # Shared logic (routing, validation, latency, proxy)
 │   ├── mockforge-http/         # HTTP mocking library
 │   ├── mockforge-ws/           # WebSocket mocking library
-│   ├── mockforge-grpc/         # gRPC mocking library
+│   ├── mockforge-grpc/         # gRPC mocking library (+ HTTP bridge)
+│   ├── mockforge-graphql/      # GraphQL mocking library
+│   ├── mockforge-kafka/        # Kafka mock broker
+│   ├── mockforge-mqtt/         # MQTT broker (3.1.1 and 5.0)
+│   ├── mockforge-amqp/         # AMQP 0.9.1 broker
+│   ├── mockforge-smtp/         # SMTP server
+│   ├── mockforge-ftp/          # FTP server
+│   ├── mockforge-tcp/          # Raw TCP mocking
 │   ├── mockforge-data/         # Synthetic data generation (faker + RAG)
-│   └── mockforge-ui/           # Admin UI (Axum routes + static assets)
+│   ├── mockforge-sdk/          # Rust SDK for embedding in tests
+│   ├── mockforge-plugin-*/     # Plugin core, loader, SDK, registry, CLI
+│   ├── mockforge-ui/           # Admin UI (Axum routes + static assets)
+│   └── mockforge-registry-*/   # Multi-tenant registry server & core
+├── sdk/                        # Non-Rust SDKs (nodejs, python, go, java, dotnet, browser)
 ├── config.example.yaml         # Configuration example
+├── config.template.yaml        # Fully-documented config template
 ├── docs/                       # Project documentation
 ├── book/                       # mdBook documentation
 ├── examples/                   # Example configurations and test files
-├── tools/                      # Development tools
+├── vscode-extension/           # VS Code extension
 ├── scripts/                    # Setup and utility scripts
-├── .github/                    # GitHub Actions and templates
-└── tools/                      # Development utilities
+└── .github/                    # GitHub Actions and templates
 ```
 
 ### Contributing
