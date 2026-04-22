@@ -130,6 +130,7 @@ pub mod fixture_file;
 pub mod fixtures;
 pub mod metrics;
 pub mod partitions;
+pub mod produce_codec;
 pub mod protocol;
 /// Unified protocol server lifecycle implementation (KafkaMockServer)
 pub mod server;

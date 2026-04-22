@@ -48,12 +48,14 @@ impl KafkaProtocolHandler {
     /// broker (node 1) as leader + sole replica + in-sync replica.
     pub fn with_topology(host: impl Into<String>, port: i32, topics: Vec<TopicMetadata>) -> Self {
         let mut api_versions = HashMap::new();
-        // Add supported API versions
+        // Add supported API versions. Produce is capped at v9 because that's
+        // the newest flexible version our codec serializes; auto-negotiating
+        // clients will land on v9.
         api_versions.insert(
             0,
             ApiVersion {
                 min_version: 0,
-                max_version: 12,
+                max_version: 9,
             },
         ); // Produce
         api_versions.insert(
@@ -183,10 +185,18 @@ impl KafkaProtocolHandler {
                 .map_err(|e| anyhow::anyhow!("Invalid client ID encoding: {}", e))?;
             (end, s)
         };
-        // Request-header v2 (flexible) appends a TAG_BUFFER after client_id;
-        // we don't consume any tagged fields yet but it's fine to ignore them
-        // — the caller only reads fields we've already parsed.
-        let _ = client_id_end;
+        // Request-header v2 (flexible) appends a TAG_BUFFER after client_id.
+        // Flexible request headers apply when the API is at its flexible-
+        // version threshold or higher. Produce went flexible at v9, Metadata
+        // at v9, ApiVersions at v3, etc. For bodies we need to parse
+        // (currently Produce v9), the tag buffer must be consumed here so
+        // `body_offset` points at the body proper.
+        let mut body_offset = client_id_end;
+        if is_flexible_request(api_key, api_version) {
+            let tail = &data[body_offset..];
+            let (_, consumed) = read_and_skip_tag_buffer(tail)?;
+            body_offset += consumed;
+        }
 
         let request_type = match api_key {
             0 => KafkaRequestType::Produce,
@@ -207,6 +217,7 @@ impl KafkaProtocolHandler {
             correlation_id,
             client_id,
             request_type,
+            body_offset,
         })
     }
 
@@ -339,6 +350,7 @@ impl KafkaProtocolHandler {
                 data.extend_from_slice(&(-1i16).to_be_bytes()); // nullable error message
                 Ok(data)
             }
+            KafkaResponse::Preserialized(body) => Ok(body.clone()),
             _ => {
                 // Generic "success" response envelope for currently-supported request handlers.
                 let mut data = Vec::new();
@@ -367,6 +379,11 @@ pub struct KafkaRequest {
     pub correlation_id: i32,
     pub client_id: String,
     pub request_type: KafkaRequestType,
+    /// Byte offset into the original message buffer where the request body
+    /// starts (i.e. just past the request header, including any flexible-
+    /// version tag buffer). Handlers that need to parse the body slice
+    /// `message_buf[body_offset..]`.
+    pub body_offset: usize,
 }
 
 /// Kafka request types
@@ -395,6 +412,12 @@ pub enum KafkaResponse {
     CreateTopics,
     DeleteTopics,
     DescribeConfigs,
+    /// Fully-serialized response body INCLUDING the response header
+    /// (correlation_id + any tag buffer). `serialize_response` returns the
+    /// inner bytes verbatim. Used by handlers whose wire format is too
+    /// version-specific to express with an enum variant alone (e.g. the
+    /// flexible produce v9 response).
+    Preserialized(Vec<u8>),
 }
 
 #[derive(Debug)]
@@ -410,6 +433,66 @@ fn push_unsigned_varint(buf: &mut Vec<u8>, mut value: u32) {
         value >>= 7;
     }
     buf.push(value as u8);
+}
+
+/// Minimum API version at which each Kafka API switched to a flexible
+/// request header (= v2 request header: client_id + TAG_BUFFER). When an
+/// incoming request is at or above this threshold, `parse_request` must
+/// consume the trailing tag buffer so `body_offset` lands on the body.
+fn is_flexible_request(api_key: i16, api_version: i16) -> bool {
+    let min_flex = match api_key {
+        0 => 9,  // Produce
+        1 => 12, // Fetch
+        3 => 9,  // Metadata
+        9 => 3,  // ListGroups
+        15 => 6, // DescribeGroups
+        16 => 5, // DescribeGroups (alternative)
+        18 => 3, // ApiVersions
+        19 => 5, // CreateTopics
+        20 => 4, // DeleteTopics
+        32 => 4, // DescribeConfigs
+        _ => return false,
+    };
+    api_version >= min_flex
+}
+
+/// Read an unsigned varint + its tagged fields out of `buf`, returning the
+/// value of each field we skipped (unused today) and the number of bytes
+/// consumed. Used by `parse_request` to step past a flexible-header tag
+/// buffer without needing the full `produce_codec` dependency graph.
+fn read_and_skip_tag_buffer(mut buf: &[u8]) -> Result<((), usize)> {
+    let start_len = buf.len();
+    let count = read_unsigned_varint_local(&mut buf)?;
+    for _ in 0..count {
+        let _tag_id = read_unsigned_varint_local(&mut buf)?;
+        let len = read_unsigned_varint_local(&mut buf)? as usize;
+        if buf.len() < len {
+            return Err(anyhow::anyhow!("tag buffer overrun"));
+        }
+        buf = &buf[len..];
+    }
+    let consumed = start_len - buf.len();
+    Ok(((), consumed))
+}
+
+fn read_unsigned_varint_local(buf: &mut &[u8]) -> Result<u32> {
+    let mut value: u32 = 0;
+    let mut shift: u32 = 0;
+    loop {
+        if buf.is_empty() {
+            return Err(anyhow::anyhow!("truncated varint in header"));
+        }
+        let byte = buf[0];
+        *buf = &buf[1..];
+        value |= ((byte & 0x7F) as u32) << shift;
+        if (byte & 0x80) == 0 {
+            return Ok(value);
+        }
+        shift += 7;
+        if shift >= 32 {
+            return Err(anyhow::anyhow!("varint overflow in header"));
+        }
+    }
 }
 
 type Result<T> = std::result::Result<T, anyhow::Error>;
@@ -439,9 +522,10 @@ mod tests {
     fn test_is_api_version_supported_produce() {
         let handler = KafkaProtocolHandler::new();
         // Produce API (key 0) supports versions 0-12
+        // Produce capped at v9 (first flexible version — see serialize path).
         assert!(handler.is_api_version_supported(0, 0));
-        assert!(handler.is_api_version_supported(0, 12));
-        assert!(!handler.is_api_version_supported(0, 13));
+        assert!(handler.is_api_version_supported(0, 9));
+        assert!(!handler.is_api_version_supported(0, 10));
         assert!(!handler.is_api_version_supported(0, -1));
     }
 
@@ -897,6 +981,7 @@ mod tests {
             correlation_id: 123,
             client_id: "test".to_string(),
             request_type: KafkaRequestType::Produce,
+            body_offset: 0,
         };
 
         let debug_str = format!("{:?}", request);
@@ -926,7 +1011,7 @@ mod tests {
 
         // Test all configured API versions
         let api_configs = vec![
-            (0, 0, 12), // Produce
+            (0, 0, 9),  // Produce (capped at v9 — see serialize_response)
             (1, 0, 16), // Fetch
             (3, 0, 4),  // Metadata (capped at v4 — see serialize_response)
             (9, 0, 5),  // ListGroups
