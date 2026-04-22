@@ -5,6 +5,17 @@
 
 use std::collections::HashMap;
 
+/// A topic the broker wants to advertise in its Metadata response.
+///
+/// Kept intentionally narrow (name + partition count) so the protocol layer
+/// doesn't have to understand the full fixture schema — `broker.rs`
+/// translates `KafkaTopicSpec` into these before constructing the handler.
+#[derive(Debug, Clone)]
+pub struct TopicMetadata {
+    pub name: String,
+    pub partitions: i32,
+}
+
 /// Kafka protocol handler
 #[derive(Debug)]
 pub struct KafkaProtocolHandler {
@@ -13,17 +24,29 @@ pub struct KafkaProtocolHandler {
     advertised_host: String,
     /// Port advertised to clients in Metadata responses.
     advertised_port: i32,
+    /// Topics advertised in Metadata responses. Empty = zero-topic response
+    /// (used by non-fixture-driven Docker runs and tests).
+    topics: Vec<TopicMetadata>,
 }
 
 impl KafkaProtocolHandler {
-    /// Create a new protocol handler with the default advertised endpoint.
+    /// Create a new protocol handler with the default advertised endpoint
+    /// and no topics.
     pub fn new() -> Self {
         Self::with_advertised_endpoint("localhost", 9092)
     }
 
     /// Create a new protocol handler that advertises a specific endpoint
-    /// (host, port) in Metadata responses.
+    /// (host, port) in Metadata responses, with an empty topic list.
     pub fn with_advertised_endpoint(host: impl Into<String>, port: i32) -> Self {
+        Self::with_topology(host, port, Vec::new())
+    }
+
+    /// Create a new protocol handler that advertises a specific endpoint
+    /// AND a list of topics. Each topic is emitted in the Metadata v4
+    /// response body with its partition count; every partition lists this
+    /// broker (node 1) as leader + sole replica + in-sync replica.
+    pub fn with_topology(host: impl Into<String>, port: i32, topics: Vec<TopicMetadata>) -> Self {
         let mut api_versions = HashMap::new();
         // Add supported API versions
         api_versions.insert(
@@ -111,6 +134,7 @@ impl KafkaProtocolHandler {
             api_versions,
             advertised_host: host.into(),
             advertised_port: port,
+            topics,
         }
     }
 }
@@ -245,35 +269,64 @@ impl KafkaProtocolHandler {
                 Ok(data)
             }
             KafkaResponse::Metadata => {
-                // Minimal-but-valid Metadata v4 (non-flexible) response.
+                // Metadata v4 (non-flexible) response.
                 // Layout:
                 //   correlation_id i32
                 //   throttle_time_ms i32 (v3+)
                 //   brokers: i32 length + [node_id i32, host string, port i32, rack nullable_string (v1+)]
                 //   cluster_id nullable_string (v2+)
                 //   controller_id i32 (v1+)
-                //   topics: i32 length + []
-                // We reply with exactly one broker pointing at this server so
-                // clients know where to route follow-up requests, and zero
-                // topics so auto-negotiated `kcat -L` probes succeed.
+                //   topics: i32 length + [
+                //     error_code i16,
+                //     name string,
+                //     is_internal bool (v1+),
+                //     partitions: i32 length + [
+                //       error_code i16,
+                //       partition_index i32,
+                //       leader_id i32,
+                //       replica_nodes: i32 length + [i32 ...],
+                //       isr_nodes: i32 length + [i32 ...],
+                //     ],
+                //   ]
+                // We report ourselves as the single broker (node 1), then
+                // enumerate whatever topics the handler was constructed with.
+                // Every partition lists node 1 as leader + sole replica + ISR,
+                // which is the right shape for a single-node mock cluster.
+                const BROKER_NODE_ID: i32 = 1;
                 let mut data = Vec::new();
                 data.extend_from_slice(&correlation_id.to_be_bytes());
                 data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
-                                                             // brokers array: 1 entry
+                                                             // brokers array: 1 entry (self)
                 data.extend_from_slice(&1i32.to_be_bytes());
-                data.extend_from_slice(&1i32.to_be_bytes()); // node_id
+                data.extend_from_slice(&BROKER_NODE_ID.to_be_bytes());
                 push_kafka_string(&mut data, &self.advertised_host);
                 data.extend_from_slice(&self.advertised_port.to_be_bytes());
-                // rack: null (v1+). Metadata v0 doesn't include rack, but the
-                // CLI-driven defaults land on v4, and we advertise max=4 so v0
-                // clients are vanishingly rare.
+                // rack: null
                 data.extend_from_slice(&(-1i16).to_be_bytes());
-                // cluster_id (v2+): short identifier
+                // cluster_id
                 push_kafka_string(&mut data, "mockforge-cluster");
-                // controller_id (v1+)
-                data.extend_from_slice(&1i32.to_be_bytes());
-                // topics: zero (no fixtures loaded in this path)
-                data.extend_from_slice(&0i32.to_be_bytes());
+                // controller_id
+                data.extend_from_slice(&BROKER_NODE_ID.to_be_bytes());
+                // topics array
+                data.extend_from_slice(&(self.topics.len() as i32).to_be_bytes());
+                for topic in &self.topics {
+                    data.extend_from_slice(&0i16.to_be_bytes()); // error_code
+                    push_kafka_string(&mut data, &topic.name);
+                    data.push(0); // is_internal = false
+                    let partitions = topic.partitions.max(1);
+                    data.extend_from_slice(&partitions.to_be_bytes());
+                    for partition_index in 0..partitions {
+                        data.extend_from_slice(&0i16.to_be_bytes()); // partition error_code
+                        data.extend_from_slice(&partition_index.to_be_bytes());
+                        data.extend_from_slice(&BROKER_NODE_ID.to_be_bytes()); // leader_id
+                                                                               // replica_nodes: [BROKER_NODE_ID]
+                        data.extend_from_slice(&1i32.to_be_bytes());
+                        data.extend_from_slice(&BROKER_NODE_ID.to_be_bytes());
+                        // isr_nodes: [BROKER_NODE_ID]
+                        data.extend_from_slice(&1i32.to_be_bytes());
+                        data.extend_from_slice(&BROKER_NODE_ID.to_be_bytes());
+                    }
+                }
                 Ok(data)
             }
             KafkaResponse::CreateTopics => {
@@ -639,6 +692,102 @@ mod tests {
         // topics array length = 0
         assert_eq!(&data[56..60], &0i32.to_be_bytes());
         assert_eq!(data.len(), 60);
+    }
+
+    #[test]
+    fn test_serialize_response_metadata_v4_with_topics() {
+        // When the handler is constructed with a topic list, the Metadata
+        // response must enumerate each topic + each partition, with every
+        // partition leader/replica/ISR pointing at broker node 1.
+        let handler = KafkaProtocolHandler::with_topology(
+            "mockforge",
+            19092,
+            vec![
+                TopicMetadata {
+                    name: "orders".to_string(),
+                    partitions: 2,
+                },
+                TopicMetadata {
+                    name: "events".to_string(),
+                    partitions: 1,
+                },
+            ],
+        );
+        let data = handler.serialize_response(&KafkaResponse::Metadata, 42, 4).unwrap();
+
+        // Header fields (same prefix as the empty-topics variant). Jump
+        // straight to where the topics array starts: byte 56.
+        let mut off = 56;
+
+        // topics array length = 2
+        assert_eq!(&data[off..off + 4], &2i32.to_be_bytes());
+        off += 4;
+
+        // --- topic 0: orders, 2 partitions -------------------------------
+        assert_eq!(&data[off..off + 2], &0i16.to_be_bytes()); // error_code
+        off += 2;
+        assert_eq!(&data[off..off + 2], &6i16.to_be_bytes()); // name length
+        off += 2;
+        assert_eq!(&data[off..off + 6], b"orders");
+        off += 6;
+        assert_eq!(data[off], 0); // is_internal = false
+        off += 1;
+        assert_eq!(&data[off..off + 4], &2i32.to_be_bytes()); // partitions len
+        off += 4;
+
+        for expected_idx in 0..2i32 {
+            assert_eq!(&data[off..off + 2], &0i16.to_be_bytes()); // partition err
+            off += 2;
+            assert_eq!(&data[off..off + 4], &expected_idx.to_be_bytes());
+            off += 4;
+            assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // leader = 1
+            off += 4;
+            assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // replicas len
+            off += 4;
+            assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // replica id
+            off += 4;
+            assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // ISR len
+            off += 4;
+            assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // ISR id
+            off += 4;
+        }
+
+        // --- topic 1: events, 1 partition --------------------------------
+        assert_eq!(&data[off..off + 2], &0i16.to_be_bytes());
+        off += 2;
+        assert_eq!(&data[off..off + 2], &6i16.to_be_bytes());
+        off += 2;
+        assert_eq!(&data[off..off + 6], b"events");
+        off += 6;
+        assert_eq!(data[off], 0);
+        off += 1;
+        assert_eq!(&data[off..off + 4], &1i32.to_be_bytes()); // 1 partition
+        off += 4;
+        // one partition record = err(2) + idx(4) + leader(4) + replicas_len(4)
+        // + replica(4) + isr_len(4) + isr(4) = 26 bytes
+        off += 26;
+
+        assert_eq!(data.len(), off, "unexpected trailing bytes");
+    }
+
+    #[test]
+    fn test_metadata_zero_partitions_is_clamped_to_one() {
+        // Guard against a nonsensical fixture that declared 0 partitions —
+        // Kafka requires at least one partition per topic.
+        let handler = KafkaProtocolHandler::with_topology(
+            "mockforge",
+            19092,
+            vec![TopicMetadata {
+                name: "t".to_string(),
+                partitions: 0,
+            }],
+        );
+        let data = handler.serialize_response(&KafkaResponse::Metadata, 1, 4).unwrap();
+        // topic array length = 1
+        assert_eq!(&data[56..60], &1i32.to_be_bytes());
+        // skip error_code(2) + name_len(2) + "t"(1) + is_internal(1) => 6 bytes
+        let partitions_len = i32::from_be_bytes([data[66], data[67], data[68], data[69]]);
+        assert_eq!(partitions_len, 1);
     }
 
     #[test]

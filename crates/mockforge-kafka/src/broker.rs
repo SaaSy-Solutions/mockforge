@@ -157,11 +157,22 @@ impl KafkaMockBroker {
 
     /// Handle a client connection
     async fn handle_connection(&self, mut socket: TcpStream) -> Result<()> {
-        // Advertise this broker's own host/port in Metadata responses so
-        // clients know where to route produce/fetch follow-ups.
-        let protocol_handler = KafkaProtocolHandler::with_advertised_endpoint(
+        // Advertise this broker's own host/port in Metadata responses and
+        // surface every topic we know about from the fixture registry, so
+        // `kcat -L` / client metadata probes see real state.
+        let topics: Vec<crate::protocol::TopicMetadata> = self
+            .spec_registry
+            .topic_specs()
+            .iter()
+            .map(|spec| crate::protocol::TopicMetadata {
+                name: spec.name.clone(),
+                partitions: spec.partitions.max(1),
+            })
+            .collect();
+        let protocol_handler = KafkaProtocolHandler::with_topology(
             self.config.host.clone(),
             self.config.port as i32,
+            topics,
         );
         self.metrics.record_connection();
 
