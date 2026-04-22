@@ -1,3 +1,10 @@
+# Pin hooks to the pre-commit stage only. Without this, any hook that doesn't
+# declare `stages:` runs at every installed git-hook type. When the commit-msg
+# hook is also installed (see `ls .git/hooks/`), that means the full hook set
+# (clippy + cargo-check included) runs twice per commit. All hooks below are
+# source-state checks, so pre-commit is the only stage that makes sense.
+default_stages: [pre-commit]
+
 repos:
 - repo: local
   hooks:
