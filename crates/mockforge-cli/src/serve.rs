@@ -2208,21 +2208,30 @@ pub async fn handle_serve(
 
             println!("📨 Kafka broker listening on {}:{}", kafka_config.host, kafka_config.port);
 
-            // Create and start the Kafka broker
-            match KafkaMockBroker::new(kafka_config.clone()).await {
-                Ok(broker) => {
-                    tokio::select! {
-                        result = broker.start() => {
-                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
-                        }
-                        _ = kafka_shutdown.cancelled() => {
-                            println!("🛑 Shutting down Kafka broker...");
-                            Ok(())
+            // Create and start the Kafka broker. The returned JoinHandle is
+            // never awaited, so silent Err would vanish — surface failures
+            // through tracing before returning them (otherwise a bad
+            // fixtures_dir etc. leaves the port unbound with no log at all).
+            let result: std::result::Result<(), String> =
+                match KafkaMockBroker::new(kafka_config.clone()).await {
+                    Ok(broker) => {
+                        tokio::select! {
+                            result = broker.start() => {
+                                result.map_err(|e| format!("Kafka broker error: {:?}", e))
+                            }
+                            _ = kafka_shutdown.cancelled() => {
+                                println!("🛑 Shutting down Kafka broker...");
+                                Ok(())
+                            }
                         }
                     }
-                }
-                Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+                    Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+                };
+
+            if let Err(msg) = &result {
+                tracing::error!("{}", msg);
             }
+            result
         }))
     } else {
         None
