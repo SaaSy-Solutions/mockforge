@@ -59,8 +59,11 @@ COPY config.example.yaml ./
 COPY --from=ui-builder /ui/dist/ crates/mockforge-ui/ui/dist/
 RUN rm -f crates/mockforge-ui/build_ui.sh
 
-# Build the application in release mode
-RUN cargo build --release --bin mockforge
+# Build the application in release mode with all protocol features enabled.
+# Default features are HTTP-only; without `all-protocols` the ws/grpc/kafka/
+# mqtt/amqp/smtp/tcp/graphql/ftp server spawns are cfg-gated out of the binary
+# and the CLI silently runs as HTTP-only despite printing "configured" lines.
+RUN cargo build --release --bin mockforge --features all-protocols
 
 # Stage 2: Create the runtime image
 # Use debian:trixie-slim to match builder's GLIBC version (2.39+)

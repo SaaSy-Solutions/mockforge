@@ -433,6 +433,29 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         }
     }
 
+    if let Ok(enabled) = std::env::var("MOCKFORGE_GRPC_ENABLED") {
+        config.grpc.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
+    }
+
+    // Kafka broker overrides
+    if let Ok(port) = std::env::var("MOCKFORGE_KAFKA_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.kafka.port = port_num;
+        }
+    }
+
+    if let Ok(host) = std::env::var("MOCKFORGE_KAFKA_HOST") {
+        config.kafka.host = host;
+    }
+
+    if let Ok(enabled) = std::env::var("MOCKFORGE_KAFKA_ENABLED") {
+        config.kafka.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
+    }
+
+    if let Ok(dir) = std::env::var("MOCKFORGE_KAFKA_FIXTURES_DIR") {
+        config.kafka.fixtures_dir = Some(std::path::PathBuf::from(dir));
+    }
+
     // SMTP server overrides
     if let Ok(port) = std::env::var("MOCKFORGE_SMTP_PORT") {
         if let Ok(port_num) = port.parse() {
