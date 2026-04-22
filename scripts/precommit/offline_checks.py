@@ -105,8 +105,12 @@ def run_check_added_large_files(files: list[Path], max_kb: int) -> int:
 
 
 def run_check_merge_conflict(files: list[Path]) -> int:
+    # Flag the file only if it contains one of the unambiguous bookend markers
+    # (`<<<<<<< <ref>` or `>>>>>>> <ref>`). A bare `=======` line can never
+    # indicate a real conflict without one of those, and matching it alone
+    # false-positives on markdown H1 underlines with 7 `=` characters.
+    prefix_patterns = ("<<<<<<< ", ">>>>>>> ")
     failed = 0
-    patterns = ("<<<<<<< ", "=======", ">>>>>>> ")
     for path in files:
         if not is_text_file(path):
             continue
@@ -114,7 +118,7 @@ def run_check_merge_conflict(files: list[Path]) -> int:
             lines = read_text(path).splitlines()
         except OSError:
             continue
-        if any(any(line.startswith(p) for p in patterns) for line in lines):
+        if any(line.startswith(p) for line in lines for p in prefix_patterns):
             print(f"merge conflict marker: {path}")
             failed += 1
     return 1 if failed else 0

@@ -69,13 +69,14 @@ repos:
     entry: typos
     language: system
     pass_filenames: false
-    exclude: ^(book/|target/|\.git/|crates/mockforge-ui/ui/dist/)
+    # Exclusions live in .typos.toml (`[files] extend-exclude`). A pre-commit
+    # `exclude:` here has no effect when pass_filenames is false.
   - id: rust-fmt
     name: rust fmt
     entry: cargo fmt --check --all
     language: system
     files: \.(rs)$
-    exclude: ^(target/|book/|crates/mockforge-registry-server/)
+    exclude: ^(target/|book/)
     pass_filenames: false
   - id: cargo-audit
     name: cargo audit
