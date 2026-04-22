@@ -126,6 +126,7 @@
 
 pub mod broker;
 pub mod consumer_groups;
+pub mod fixture_file;
 pub mod fixtures;
 pub mod metrics;
 pub mod partitions;
@@ -138,6 +139,9 @@ pub mod topics;
 // Re-export main types
 pub use broker::KafkaMockBroker;
 pub use consumer_groups::{ConsumerGroup, ConsumerGroupManager};
+pub use fixture_file::{
+    FlattenedFixtures, KafkaFixtureFile, KafkaMessageSpec, KafkaTopicSpec, MessageAutoProduce,
+};
 pub use fixtures::{AutoProduceConfig, KafkaFixture};
 pub use metrics::{KafkaMetrics, MetricsExporter, MetricsSnapshot};
 pub use partitions::{KafkaMessage, Partition};

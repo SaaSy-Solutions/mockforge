@@ -13,6 +13,11 @@ use mockforge_core::{Protocol, Result};
 #[derive(Debug)]
 pub struct KafkaSpecRegistry {
     fixtures: Vec<Arc<crate::fixtures::KafkaFixture>>,
+    /// Topic-level specs loaded from the nested-topology YAML (partition
+    /// counts, replication factor, config). Empty when only the legacy
+    /// flat-array fixture form was provided. The Metadata v4 response reads
+    /// from here to advertise real topics to clients.
+    topic_specs: Vec<Arc<crate::fixture_file::KafkaTopicSpec>>,
     template_engine: mockforge_core::templating::TemplateEngine,
     topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
 }
@@ -23,19 +28,38 @@ impl KafkaSpecRegistry {
         config: mockforge_core::config::KafkaConfig,
         topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
     ) -> Result<Self> {
-        let fixtures = if let Some(fixtures_dir) = &config.fixtures_dir {
-            crate::fixtures::KafkaFixture::load_from_dir(fixtures_dir)?
-                .into_iter()
-                .map(Arc::new)
-                .collect()
+        let (topic_specs, fixtures) = if let Some(fixtures_dir) = &config.fixtures_dir {
+            let flat = crate::fixtures::load_kafka_fixtures_from_dir(fixtures_dir)?;
+            let specs: Vec<_> = flat.topics.into_iter().map(Arc::new).collect();
+            let fixtures: Vec<_> = flat.fixtures.into_iter().map(Arc::new).collect();
+            (specs, fixtures)
         } else {
-            vec![]
+            (vec![], vec![])
         };
+
+        // Pre-register every topic we know about from the fixture file so
+        // Produce/Fetch routing and Metadata responses see consistent state.
+        // (No messages are pre-populated — only the topic shell with the
+        // right partition count.)
+        {
+            let mut topic_map = topics.write().await;
+            for spec in &topic_specs {
+                topic_map.entry(spec.name.clone()).or_insert_with(|| {
+                    let cfg = crate::topics::TopicConfig {
+                        num_partitions: spec.partitions.max(1),
+                        replication_factor: spec.replication_factor.max(1),
+                        ..Default::default()
+                    };
+                    crate::topics::Topic::new(spec.name.clone(), cfg)
+                });
+            }
+        }
 
         let template_engine = mockforge_core::templating::TemplateEngine::new();
 
         Ok(Self {
             fixtures,
+            topic_specs,
             template_engine,
             topics,
         })
@@ -44,6 +68,12 @@ impl KafkaSpecRegistry {
     /// Find fixture by topic
     pub fn find_fixture_by_topic(&self, topic: &str) -> Option<Arc<crate::fixtures::KafkaFixture>> {
         self.fixtures.iter().find(|f| f.topic == topic).cloned()
+    }
+
+    /// Topic specs loaded from the nested-topology fixture file, in file
+    /// order. Consumed by the Metadata response wiring in a follow-up PR.
+    pub fn topic_specs(&self) -> &[Arc<crate::fixture_file::KafkaTopicSpec>] {
+        &self.topic_specs
     }
 
     /// Produce a message to a topic
