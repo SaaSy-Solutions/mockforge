@@ -6,9 +6,9 @@ This guide covers how to run MockForge using Docker and Docker Compose for both 
 
 ### Pull the prebuilt image (fastest)
 
-Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GitHub
-Container Registry on every push to `main` and on every semver tag. No
-auth is needed to pull.
+Images are published to GitHub Container Registry on every push to
+`main` and on every semver tag. Currently `linux/amd64` only; arm64
+builds are on the roadmap. No auth is needed to pull.
 
 ```bash
 # Latest main build

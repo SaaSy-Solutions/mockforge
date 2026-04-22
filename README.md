@@ -498,9 +498,9 @@ See `examples/README.md` for detailed documentation on the example files.
 
 ### Docker (Alternative Installation)
 
-Prebuilt multi-arch images (`linux/amd64`, `linux/arm64`) are published to
-GitHub Container Registry on every push to `main` and on every semver tag.
-No authentication is needed to pull.
+Prebuilt images are published to GitHub Container Registry on every push
+to `main` and on every semver tag (currently `linux/amd64` only; arm64
+builds are on the roadmap). No authentication is needed to pull.
 
 #### Pull and run from GHCR
 
