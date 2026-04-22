@@ -2,17 +2,16 @@
 
 Step-by-step guide to deploy the MockForge registry server, admin UI, and supporting infrastructure.
 
-**Architecture:** Fly.io (compute + hosted mocks) + Neon (Postgres) + Vercel (admin UI)
+**Architecture:** Fly.io (compute + hosted mocks) + Neon (Postgres) + Cloudflare Pages (admin UI) + Cloudflare R2 (storage)
 
-**Estimated monthly cost at launch:** ~$8-10/mo
+**Estimated monthly cost at launch:** ~$7-9/mo
 
 ## Prerequisites
 
 - [flyctl](https://fly.io/docs/flyctl/install/) installed and authenticated (`fly auth login`)
 - [neonctl](https://neon.com/docs/reference/neon-cli) installed (`npm install -g neonctl`) and authenticated (`neonctl auth`)
-- [Vercel CLI](https://vercel.com/docs/cli) installed and authenticated
 - [Stripe CLI](https://stripe.com/docs/stripe-cli) installed (for webhook testing)
-- [Cloudflare account](https://dash.cloudflare.com/) with R2 enabled (for spec/plugin storage)
+- [Cloudflare account](https://dash.cloudflare.com/) with R2 + Pages enabled, and an API token with permissions `Account > Cloudflare Pages: Edit` and `User > Memberships: Read` (exported as `CLOUDFLARE_API_TOKEN` for `make deploy-ui`). The wrangler CLI itself is not installed locally — `make deploy-ui` invokes it via `pnpm dlx`.
 - [Brevo account](https://www.brevo.com/) with sending domain verified (for transactional email)
 - DNS control over `mockforge.dev`
 
@@ -131,11 +130,13 @@ fly logs -a mockforge-registry
 
 Add the following DNS records for `mockforge.dev`:
 
-| Record   | Type  | Value                        | Purpose           |
-|----------|-------|------------------------------|--------------------|
-| `api`    | CNAME | `mockforge-registry.fly.dev` | Registry API       |
-| `*.mocks`| CNAME | `mockforge-registry.fly.dev` | Customer mock subdomains |
-| `app`    | CNAME | `cname.vercel-dns.com`       | Admin UI           |
+| Record   | Type  | Value                          | Purpose           |
+|----------|-------|--------------------------------|--------------------|
+| `api`    | CNAME | `mockforge-registry.fly.dev`   | Registry API       |
+| `*.mocks`| CNAME | `mockforge-registry.fly.dev`   | Customer mock subdomains |
+| `app`    | CNAME | `mockforge-admin-ui.pages.dev` | Admin UI (Cloudflare Pages) |
+
+> If DNS is hosted on Cloudflare, you can skip the manual `app` CNAME and instead attach `app.mockforge.dev` to the `mockforge-admin-ui` project via the Pages dashboard — Cloudflare will create the record for you. The CNAME above is only needed when DNS lives elsewhere.
 
 ### Add TLS certificates on Fly.io
 
@@ -166,22 +167,40 @@ Wait for DNS propagation, then verify:
 fly certs check "*.mocks.mockforge.dev" -a mockforge-registry
 ```
 
-## 4. Admin UI on Vercel
+## 4. Admin UI on Cloudflare Pages
+
+The admin UI ships as a static SPA built with Vite and deployed to Cloudflare Pages (project: `mockforge-admin-ui`). Deploys are local (no GitHub Actions runner) via the `make deploy-ui` target, which builds the bundle with `pnpm build` and uploads it with `pnpm dlx wrangler@latest pages deploy`.
 
 ```bash
-cd crates/mockforge-ui/ui
-
 # Set the API base URL for the production build
-echo "VITE_API_BASE_URL=https://api.mockforge.dev" > .env.production
+echo "VITE_API_BASE_URL=https://api.mockforge.dev" \
+  > crates/mockforge-ui/ui/.env.production
 
-# Deploy to Vercel
-vercel --prod
+# Export the Cloudflare API token (scoped to Pages:Edit + Memberships:Read)
+export CLOUDFLARE_API_TOKEN=...
 
-# Set custom domain
-vercel domains add app.mockforge.dev
+# Deploy to production (branch=main)
+make deploy-ui
+
+# …or deploy the current git branch as a preview URL
+make deploy-ui-preview
 ```
 
-The `vercel.json` in `crates/mockforge-ui/ui/` proxies `/api/*` requests to `https://api.mockforge.dev`.
+The Makefile pins `CLOUDFLARE_ACCOUNT_ID` in-target, so you only need to supply the token. `pnpm dlx wrangler@latest` fetches wrangler on demand — no global install.
+
+### SPA routing & security headers
+
+`crates/mockforge-ui/ui/public/_redirects` contains `/*  /index.html  200` so React Router paths resolve on refresh, and `public/_headers` sets `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`. Vite copies both files to `dist/` during `pnpm build` and Pages picks them up automatically.
+
+### Custom domain
+
+Custom-domain attachment is dashboard-only (the wrangler CLI doesn't expose it): **Cloudflare Dashboard → Pages → `mockforge-admin-ui` → Custom domains → Set up a custom domain**, enter `app.mockforge.dev`, and follow the prompts.
+
+If the zone is on Cloudflare DNS, Pages creates the CNAME automatically. Otherwise, add the `app` CNAME from the DNS table above manually before attaching.
+
+### CORS
+
+Cross-origin requests from `app.mockforge.dev` to `api.mockforge.dev` are handled by the registry server's `CORS_ALLOWED_ORIGINS` secret (set in Section 2).
 
 ## 5. Stripe Products
 
@@ -270,25 +289,29 @@ curl -X POST https://api.mockforge.dev/api/v1/waitlist/subscribe \
 
 ### At launch (0-10 customers)
 
-| Component                          | Monthly Cost |
-|------------------------------------|-------------|
-| Fly.io registry server (shared-cpu-1x, 512MB) | ~$3.50 |
-| Fly.io shared IPv4                 | ~$2.00      |
-| Neon Postgres (Free tier)          | $0.00       |
-| Vercel (Hobby)                     | $0.00       |
-| Customer mocks (auto-stopped)      | ~$1-3       |
-| **Total**                          | **~$7-9/mo** |
+| Component                                     | Monthly Cost |
+|-----------------------------------------------|--------------|
+| Fly.io registry server (shared-cpu-1x, 512MB) | ~$3.50       |
+| Fly.io shared IPv4                            | ~$2.00       |
+| Neon Postgres (Free tier)                     | $0.00        |
+| Cloudflare Pages (Free tier)                  | $0.00        |
+| Cloudflare R2 (under 10 GB storage)           | $0.00        |
+| Customer mocks (auto-stopped)                 | ~$1-3        |
+| **Total**                                     | **~$7-9/mo** |
 
 ### At 50 paying customers
 
-| Component                          | Monthly Cost |
-|------------------------------------|-------------|
-| Fly.io registry (shared-cpu-2x, 1GB) | ~$7        |
-| Fly.io shared IPv4                 | ~$2          |
-| Neon Launch (usage-based)          | ~$10-15      |
-| Vercel (Hobby or Pro)              | $0-20        |
-| 50 customer mocks (most auto-stopped) | ~$20-30   |
-| **Total**                          | **~$40-74/mo** |
+| Component                             | Monthly Cost  |
+|---------------------------------------|---------------|
+| Fly.io registry (shared-cpu-2x, 1GB)  | ~$7           |
+| Fly.io shared IPv4                    | ~$2           |
+| Neon Launch (usage-based)             | ~$10-15       |
+| Cloudflare Pages (Free tier)          | $0.00         |
+| Cloudflare R2 (~50 GB, $0.015/GB)     | ~$0.75        |
+| 50 customer mocks (most auto-stopped) | ~$20-30       |
+| **Total**                             | **~$40-55/mo** |
+
+Cloudflare Pages Free tier covers unlimited requests and bandwidth for static assets, with a 500 builds/month limit — since deploys are manual and on-demand, this is effectively free forever.
 
 ### Scaling notes
 
