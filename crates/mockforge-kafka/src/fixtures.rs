@@ -1,5 +1,5 @@
+use crate::fixture_file::{FlattenedFixtures, KafkaFixtureFile};
 use chrono::Utc;
-use mockforge_core::fixture_store::{load_fixtures_from_dir, FixtureLoadOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -124,11 +124,98 @@ impl AutoProducer {
 }
 
 impl KafkaFixture {
-    /// Load fixtures from a directory
+    /// Load flat `KafkaFixture` records from every `.yaml` / `.yml` file in
+    /// `dir`. Each file may be either the legacy flat-array shape or the
+    /// nested-topology shape described in [`crate::fixture_file`]; both are
+    /// accepted transparently so existing fixtures keep working while richer
+    /// files (topics + partitions + messages) can now load too.
+    ///
+    /// If you also need the topic-level metadata (partition counts etc.),
+    /// use [`load_kafka_fixtures_from_dir`] — it returns both.
     pub fn load_from_dir(dir: &Path) -> mockforge_core::Result<Vec<Self>> {
-        load_fixtures_from_dir(dir, &FixtureLoadOptions::yaml_array_strict())
+        Ok(load_kafka_fixtures_from_dir(dir)?.fixtures)
+    }
+}
+
+/// Load every Kafka fixture file under `dir` and merge the results.
+///
+/// Each file is parsed twice-ish: first as the nested [`KafkaFixtureFile`]
+/// shape (since that's what realistic fixtures look like), falling back to
+/// the legacy flat `Vec<KafkaFixture>` shape when the top-level keys don't
+/// match. Partially-valid files hard-fail so users see real parse errors
+/// instead of silent drops — matching the previous behavior of
+/// `FixtureLoadOptions::yaml_array_strict()`.
+pub fn load_kafka_fixtures_from_dir(dir: &Path) -> mockforge_core::Result<FlattenedFixtures> {
+    if !dir.exists() {
+        tracing::debug!("Kafka fixture directory does not exist: {}", dir.display());
+        return Ok(FlattenedFixtures::default());
     }
 
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        mockforge_core::Error::io_with_context(
+            format!("reading kafka fixture directory {}", dir.display()),
+            e.to_string(),
+        )
+    })?;
+
+    let mut merged = FlattenedFixtures::default();
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("Failed to read directory entry: {}", e);
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_yaml = matches!(path.extension().and_then(|e| e.to_str()), Some("yaml" | "yml"));
+        if !is_yaml {
+            continue;
+        }
+
+        let content = std::fs::read_to_string(&path).map_err(|e| {
+            mockforge_core::Error::io_with_context(
+                format!("reading fixture {}", path.display()),
+                e.to_string(),
+            )
+        })?;
+
+        // Try the nested-topology shape first — that's what realistic
+        // fixtures look like. Fall back to the legacy flat array. If both
+        // fail, surface the nested error since its schema guidance is more
+        // useful to a user writing a new file.
+        let nested = serde_yaml::from_str::<KafkaFixtureFile>(&content);
+        match nested {
+            Ok(file) if !file.topics.is_empty() => {
+                let flat = file.flatten();
+                merged.topics.extend(flat.topics);
+                merged.fixtures.extend(flat.fixtures);
+            }
+            _ => match serde_yaml::from_str::<Vec<KafkaFixture>>(&content) {
+                Ok(fixtures) => merged.fixtures.extend(fixtures),
+                Err(flat_err) => {
+                    let err = match nested {
+                        Err(nested_err) => nested_err,
+                        Ok(_) => flat_err,
+                    };
+                    return Err(mockforge_core::Error::from(err));
+                }
+            },
+        }
+    }
+    tracing::info!(
+        "Loaded {} kafka topics and {} fixtures from {}",
+        merged.topics.len(),
+        merged.fixtures.len(),
+        dir.display()
+    );
+    Ok(merged)
+}
+
+impl KafkaFixture {
     /// Generate a message using the fixture
     pub fn generate_message(
         &self,
