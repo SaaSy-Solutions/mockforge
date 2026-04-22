@@ -2,7 +2,7 @@
 
 Step-by-step guide to deploy the MockForge registry server, admin UI, and supporting infrastructure.
 
-**Architecture:** Fly.io (compute + hosted mocks) + Neon (Postgres) + Vercel (admin UI)
+**Architecture:** Fly.io (compute + hosted mocks) + Neon (Postgres) + Cloudflare Pages (admin UI) + Cloudflare R2 (blob storage)
 
 **Estimated monthly cost at launch:** ~$8-10/mo
 
@@ -10,7 +10,7 @@ Step-by-step guide to deploy the MockForge registry server, admin UI, and suppor
 
 - [flyctl](https://fly.io/docs/flyctl/install/) installed and authenticated (`fly auth login`)
 - [neonctl](https://neon.com/docs/reference/neon-cli) installed (`npm install -g neonctl`) and authenticated (`neonctl auth`)
-- [Vercel CLI](https://vercel.com/docs/cli) installed and authenticated
+- Cloudflare account authenticated via `pnpm dlx wrangler@latest login` (for Pages deploys from the Makefile)
 - [Stripe CLI](https://stripe.com/docs/stripe-cli) installed (for webhook testing)
 - [Cloudflare account](https://dash.cloudflare.com/) with R2 enabled (for spec/plugin storage)
 - [Brevo account](https://www.brevo.com/) with sending domain verified (for transactional email)
@@ -135,7 +135,7 @@ Add the following DNS records for `mockforge.dev`:
 |----------|-------|------------------------------|--------------------|
 | `api`    | CNAME | `mockforge-registry.fly.dev` | Registry API       |
 | `*.mocks`| CNAME | `mockforge-registry.fly.dev` | Customer mock subdomains |
-| `app`    | CNAME | `cname.vercel-dns.com`       | Admin UI           |
+| `app`    | CNAME | `mockforge-admin-ui.pages.dev` | Admin UI (Cloudflare Pages, proxied) |
 
 ### Add TLS certificates on Fly.io
 
@@ -166,22 +166,46 @@ Wait for DNS propagation, then verify:
 fly certs check "*.mocks.mockforge.dev" -a mockforge-registry
 ```
 
-## 4. Admin UI on Vercel
+## 4. Admin UI on Cloudflare Pages
+
+The admin UI deploys to a Cloudflare Pages project named `mockforge-admin-ui`. Build and upload happen locally via `wrangler` — there is no CI pipeline for this (removed intentionally to avoid hosted-runner build minutes). Build is ~45s.
+
+### One-time setup
 
 ```bash
-cd crates/mockforge-ui/ui
+# Authenticate wrangler against your Cloudflare account (writes ~/.wrangler/config)
+pnpm dlx wrangler@latest login
 
-# Set the API base URL for the production build
-echo "VITE_API_BASE_URL=https://api.mockforge.dev" > .env.production
-
-# Deploy to Vercel
-vercel --prod
-
-# Set custom domain
-vercel domains add app.mockforge.dev
+# Confirm VITE_API_BASE_URL is set for the production build
+cat crates/mockforge-ui/ui/.env.production
+# Expected: VITE_API_BASE_URL=https://api.mockforge.dev
 ```
 
-The `vercel.json` in `crates/mockforge-ui/ui/` proxies `/api/*` requests to `https://api.mockforge.dev`.
+Create the Pages project (first deploy only — `wrangler pages deploy` will auto-create it if the name is unused on the account, but you can also pre-create via the Cloudflare dashboard). The `CLOUDFLARE_ACCOUNT_ID` is hard-coded in the Makefile targets.
+
+### Deploy
+
+```bash
+# Production (main branch)
+make deploy-ui
+
+# Preview (deploys under the current git branch name)
+make deploy-ui-preview
+```
+
+Both targets run `pnpm install --frozen-lockfile && pnpm build` then `wrangler pages deploy dist --project-name=mockforge-admin-ui`.
+
+### Attach the custom domain
+
+In the Cloudflare dashboard: **Pages → `mockforge-admin-ui` → Custom domains → Set up a custom domain → `app.mockforge.dev`**. Cloudflare auto-issues the TLS cert (propagation usually within a few minutes). The `app` CNAME from section 3 routes traffic.
+
+### How routing works
+
+The repo ships three Pages-native files that replace what a `vercel.json` would have done:
+
+- `crates/mockforge-ui/ui/public/_redirects` — SPA fallback (`/* /index.html 200`), so deep links survive hard-refresh.
+- `crates/mockforge-ui/ui/public/_headers` — security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`).
+- `crates/mockforge-ui/ui/functions/api/[[path]].ts` — a Pages Function that proxies `/api/*` requests to `https://api.mockforge.dev` (forwards method, headers, and body).
 
 ## 5. Stripe Products
 
@@ -275,7 +299,7 @@ curl -X POST https://api.mockforge.dev/api/v1/waitlist/subscribe \
 | Fly.io registry server (shared-cpu-1x, 512MB) | ~$3.50 |
 | Fly.io shared IPv4                 | ~$2.00      |
 | Neon Postgres (Free tier)          | $0.00       |
-| Vercel (Hobby)                     | $0.00       |
+| Cloudflare Pages (Free tier)       | $0.00       |
 | Customer mocks (auto-stopped)      | ~$1-3       |
 | **Total**                          | **~$7-9/mo** |
 
@@ -286,7 +310,7 @@ curl -X POST https://api.mockforge.dev/api/v1/waitlist/subscribe \
 | Fly.io registry (shared-cpu-2x, 1GB) | ~$7        |
 | Fly.io shared IPv4                 | ~$2          |
 | Neon Launch (usage-based)          | ~$10-15      |
-| Vercel (Hobby or Pro)              | $0-20        |
+| Cloudflare Pages (Free or Pro)     | $0-20        |
 | 50 customer mocks (most auto-stopped) | ~$20-30   |
 | **Total**                          | **~$40-74/mo** |
 

@@ -6,9 +6,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { logger } from '@/utils/logger';
 
-// Detect cloud mode — relative WebSocket paths don't work on Vercel
-// because /__mockforge/ws doesn't exist on the registry server.
-// However, absolute URLs to hosted mock deployments ARE allowed.
+// Detect cloud mode — relative WebSocket paths don't work when the UI
+// is served by a static host (Cloudflare Pages) because /__mockforge/ws
+// doesn't exist on the registry server. Absolute URLs to hosted mock
+// deployments ARE allowed.
 const isCloud = (() => {
   const apiBase = import.meta.env.VITE_API_BASE_URL;
   return !!apiBase && apiBase !== '';
