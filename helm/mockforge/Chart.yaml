@@ -12,7 +12,7 @@ keywords:
   - testing
 home: https://mockforge.dev
 sources:
-  - https://github.com/mockforge/mockforge
+  - https://github.com/SaaSy-Solutions/mockforge
 maintainers:
   - name: MockForge Team
     email: team@mockforge.dev

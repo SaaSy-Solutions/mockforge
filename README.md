@@ -498,30 +498,40 @@ See `examples/README.md` for detailed documentation on the example files.
 
 ### Docker (Alternative Installation)
 
-MockForge can also be run using Docker for easy deployment:
+Prebuilt images are published to GitHub Container Registry on every push
+to `main` and on every semver tag (currently `linux/amd64` only; arm64
+builds are on the roadmap). No authentication is needed to pull.
 
-#### Quick Docker Start
-
-```bash
-# Using Docker Compose (recommended)
-make docker-compose-up
-
-# Or using Docker directly
-make docker-build && make docker-run
-```
-
-#### Manual Docker Commands
+#### Pull and run from GHCR
 
 ```bash
-# Build the image
-docker build -t mockforge .
+# Latest main build
+docker pull ghcr.io/saasy-solutions/mockforge:latest
 
-# Run with examples
+# Pinned release (recommended for production)
+docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
+
+# Run with the bundled example spec + admin UI
 docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
-  -v $(pwd)/examples:/app/examples:ro \
   -e MOCKFORGE_ADMIN_ENABLED=true \
   -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
-  mockforge
+  ghcr.io/saasy-solutions/mockforge:latest
+```
+
+The admin UI is then at <http://localhost:9080> — sign in with the default
+local credentials (`admin` / `admin123`, or `editor` / `editor123` /
+`viewer` / `viewer123`).
+
+#### Build from source
+
+If you're iterating on MockForge itself, build the image locally:
+
+```bash
+# Using Docker Compose (recommended for dev)
+make docker-compose-up
+
+# Or build + run directly
+make docker-build && make docker-run
 ```
 
 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
