@@ -158,17 +158,21 @@ impl KafkaMockBroker {
     /// Handle a client connection
     async fn handle_connection(&self, mut socket: TcpStream) -> Result<()> {
         // Advertise this broker's own host/port in Metadata responses and
-        // surface every topic we know about from the fixture registry, so
-        // `kcat -L` / client metadata probes see real state.
-        let topics: Vec<crate::protocol::TopicMetadata> = self
-            .spec_registry
-            .topic_specs()
-            .iter()
-            .map(|spec| crate::protocol::TopicMetadata {
-                name: spec.name.clone(),
-                partitions: spec.partitions.max(1),
-            })
-            .collect();
+        // surface every topic we know about (fixture-declared + auto-created
+        // from produce) so `kcat -L` and librdkafka's Metadata-before-Produce
+        // probe see real state. The topics map is the authoritative source:
+        // the spec_registry pre-populates it at startup, and handle_produce
+        // writes auto-created topics into it too.
+        let topics: Vec<crate::protocol::TopicMetadata> = {
+            let guard = self.topics.read().await;
+            guard
+                .iter()
+                .map(|(name, topic)| crate::protocol::TopicMetadata {
+                    name: name.clone(),
+                    partitions: (topic.partitions.len() as i32).max(1),
+                })
+                .collect()
+        };
         let protocol_handler = KafkaProtocolHandler::with_topology(
             self.config.host.clone(),
             self.config.port as i32,
@@ -236,7 +240,7 @@ impl KafkaMockBroker {
                     let start_time = std::time::Instant::now();
 
                     // Handle request
-                    let response = match self.handle_request(request).await {
+                    let response = match self.handle_request(&message_buf, request).await {
                         Ok(resp) => resp,
                         Err(e) => {
                             self.metrics.record_error();
@@ -295,10 +299,14 @@ impl KafkaMockBroker {
     }
 
     /// Handle a parsed Kafka request
-    async fn handle_request(&self, request: KafkaRequest) -> Result<KafkaResponse> {
+    async fn handle_request(
+        &self,
+        message_buf: &[u8],
+        request: KafkaRequest,
+    ) -> Result<KafkaResponse> {
         match request.request_type {
             KafkaRequestType::Metadata => self.handle_metadata().await,
-            KafkaRequestType::Produce => self.handle_produce().await,
+            KafkaRequestType::Produce => self.handle_produce(message_buf, &request).await,
             KafkaRequestType::Fetch => self.handle_fetch().await,
             KafkaRequestType::ListGroups => self.handle_list_groups().await,
             KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
@@ -314,23 +322,133 @@ impl KafkaMockBroker {
         Ok(KafkaResponse::Metadata)
     }
 
-    async fn handle_produce(&self) -> Result<KafkaResponse> {
-        let mut topics = self.topics.write().await;
-        let topic = topics.entry("default-topic".to_string()).or_insert_with(|| {
-            Topic::new("default-topic".to_string(), crate::topics::TopicConfig::default())
-        });
-
-        let partition = topic.assign_partition(None);
-        let message = KafkaMessage {
-            offset: 0,
-            timestamp: chrono::Utc::now().timestamp_millis(),
-            key: None,
-            value: b"mockforge-produce".to_vec(),
-            headers: vec![],
+    /// Handle a Produce v9 request: parse the flexible body, decode each
+    /// RecordBatch v2, write decoded records into the corresponding topic
+    /// partition, and serialize a v9 response with real base_offsets.
+    ///
+    /// Currently only v9 is supported. Older Produce versions advertise
+    /// max=9 in ApiVersions, so auto-negotiating clients land here; if a
+    /// v8-or-older request does arrive it gets an error code per partition
+    /// rather than a crash.
+    async fn handle_produce(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::produce_codec::{
+            parse_produce_v9, serialize_produce_v9_response, PartitionProduceResult,
+            TopicProduceResult,
         };
-        let _ = topic.produce(partition, message).await?;
 
-        Ok(KafkaResponse::Produce)
+        const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
+        const ERR_UNSUPPORTED_COMPRESSION_TYPE: i16 = 74;
+        const ERR_UNSUPPORTED_VERSION: i16 = 35;
+
+        if request.api_version != 9 {
+            // Only v9 is implemented. Respond with per-topic UNSUPPORTED_VERSION
+            // so clients get a real error instead of a hang. Shape-wise the
+            // response still has to match v9 flexible since that's the version
+            // we advertised.
+            let body = serialize_produce_v9_response(request.correlation_id, &[]);
+            tracing::warn!("rejecting Produce v{} (only v9 supported)", request.api_version);
+            // Client will see zero topic results and a non-error response;
+            // better than nothing. (A full implementation returns
+            // UNSUPPORTED_VERSION at the partition level once we decode the
+            // request, but the body format differs per version so we can't
+            // parse a non-v9 request.)
+            let _ = ERR_UNSUPPORTED_VERSION;
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("produce request body_offset past end of buffer")
+        })?;
+
+        let parsed = parse_produce_v9(body_slice).map_err(|e| {
+            mockforge_core::Error::internal(format!("failed to parse Produce v9: {e}"))
+        })?;
+
+        let append_time_ms = chrono::Utc::now().timestamp_millis();
+        let mut topic_results = Vec::with_capacity(parsed.topics.len());
+
+        for topic_data in parsed.topics {
+            let mut partition_results = Vec::with_capacity(topic_data.partitions.len());
+            for part in topic_data.partitions {
+                let mut topics_guard = self.topics.write().await;
+                // Auto-create the topic if a client produces to a name we
+                // don't know yet. Single partition is a sensible default;
+                // real Kafka uses the broker's auto-create config.
+                let topic_entry =
+                    topics_guard.entry(topic_data.name.clone()).or_insert_with(|| {
+                        Topic::new(topic_data.name.clone(), crate::topics::TopicConfig::default())
+                    });
+
+                if part.compression_codec != 0 {
+                    partition_results.push(PartitionProduceResult {
+                        partition_index: part.partition_index,
+                        error_code: ERR_UNSUPPORTED_COMPRESSION_TYPE,
+                        base_offset: -1,
+                        log_append_time_ms: -1,
+                        log_start_offset: 0,
+                    });
+                    continue;
+                }
+
+                // Empty batches still need a response entry. base_offset of
+                // an empty batch is -1 per the Kafka convention.
+                if part.records.is_empty() {
+                    partition_results.push(PartitionProduceResult {
+                        partition_index: part.partition_index,
+                        error_code: 0,
+                        base_offset: -1,
+                        log_append_time_ms: append_time_ms,
+                        log_start_offset: 0,
+                    });
+                    continue;
+                }
+
+                if topic_entry.get_partition(part.partition_index).is_none() {
+                    partition_results.push(PartitionProduceResult {
+                        partition_index: part.partition_index,
+                        error_code: ERR_UNKNOWN_TOPIC_OR_PARTITION,
+                        base_offset: -1,
+                        log_append_time_ms: -1,
+                        log_start_offset: 0,
+                    });
+                    continue;
+                }
+
+                let mut base_offset: i64 = -1;
+                for (i, rec) in part.records.into_iter().enumerate() {
+                    let msg = KafkaMessage {
+                        offset: 0, // assigned by Topic::produce
+                        timestamp: rec.timestamp_ms,
+                        key: rec.key,
+                        value: rec.value,
+                        headers: rec.headers,
+                    };
+                    let offset = topic_entry.produce(part.partition_index, msg).await?;
+                    if i == 0 {
+                        base_offset = offset;
+                    }
+                }
+
+                partition_results.push(PartitionProduceResult {
+                    partition_index: part.partition_index,
+                    error_code: 0,
+                    base_offset,
+                    log_append_time_ms: append_time_ms,
+                    log_start_offset: 0,
+                });
+            }
+            topic_results.push(TopicProduceResult {
+                name: topic_data.name,
+                partitions: partition_results,
+            });
+        }
+
+        let body = serialize_produce_v9_response(request.correlation_id, &topic_results);
+        Ok(KafkaResponse::Preserialized(body))
     }
 
     async fn handle_fetch(&self) -> Result<KafkaResponse> {
@@ -777,6 +895,7 @@ mod tests {
             correlation_id: 1,
             client_id: "test-client".to_string(),
             request_type: KafkaRequestType::Produce,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 0);
@@ -790,6 +909,7 @@ mod tests {
             correlation_id: 2,
             client_id: "consumer".to_string(),
             request_type: KafkaRequestType::Fetch,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 1);
@@ -803,6 +923,7 @@ mod tests {
             correlation_id: 3,
             client_id: "admin".to_string(),
             request_type: KafkaRequestType::Metadata,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 3);
@@ -816,6 +937,7 @@ mod tests {
             correlation_id: 100,
             client_id: "client".to_string(),
             request_type: KafkaRequestType::ApiVersions,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 18);
@@ -829,6 +951,7 @@ mod tests {
             correlation_id: 5,
             client_id: "admin-client".to_string(),
             request_type: KafkaRequestType::ListGroups,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 16);
@@ -842,6 +965,7 @@ mod tests {
             correlation_id: 10,
             client_id: "admin".to_string(),
             request_type: KafkaRequestType::CreateTopics,
+            body_offset: 0,
         };
 
         assert_eq!(get_api_key_from_request(&request), 19);
@@ -857,6 +981,7 @@ mod tests {
             correlation_id: 12345,
             client_id: "my-producer".to_string(),
             request_type: KafkaRequestType::Produce,
+            body_offset: 0,
         };
 
         assert_eq!(request.api_key, 0);
@@ -873,6 +998,7 @@ mod tests {
             correlation_id: 1,
             client_id: String::new(),
             request_type: KafkaRequestType::Metadata,
+            body_offset: 0,
         };
 
         assert!(request.client_id.is_empty());
@@ -886,6 +1012,7 @@ mod tests {
             correlation_id: i32::MAX,
             client_id: "test".to_string(),
             request_type: KafkaRequestType::Produce,
+            body_offset: 0,
         };
 
         assert_eq!(request.correlation_id, i32::MAX);
@@ -969,15 +1096,99 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_handle_produce_creates_default_topic_and_record() {
+    async fn test_handle_produce_v9_writes_records_to_topic() {
+        // Build a complete Produce v9 request over the wire, feed it through
+        // parse_request + handle_produce, and assert the record actually
+        // landed in the corresponding topic partition.
+        use crate::produce_codec::{parse_produce_v9, PartitionProduceData, TopicProduceData};
+        // The broker auto-creates topics on produce, so we can target any name.
         let broker = KafkaMockBroker::new(KafkaConfig::default()).await.expect("broker");
-        let response = broker.handle_produce().await.expect("produce");
-        assert!(matches!(response, KafkaResponse::Produce));
 
+        // Hand-craft a minimal but complete produce v9 frame.
+        let record_batch =
+            crate::produce_codec::one_record_batch_for_testing(Some(b"key-1"), b"hello-produce");
+
+        // Request header v2: api_key=0, api_version=9, correlation=777,
+        // client_id="t", flexible header tag buffer.
+        let mut msg = Vec::new();
+        msg.extend_from_slice(&0i16.to_be_bytes());
+        msg.extend_from_slice(&9i16.to_be_bytes());
+        msg.extend_from_slice(&777i32.to_be_bytes());
+        msg.extend_from_slice(&1i16.to_be_bytes());
+        msg.push(b't');
+        msg.push(0); // header tag buffer
+
+        // Body
+        msg.push(0); // transactional_id null
+        msg.extend_from_slice(&(-1i16).to_be_bytes()); // acks
+        msg.extend_from_slice(&30_000i32.to_be_bytes());
+        // topics: 1+1=2
+        msg.push(2);
+        // topic name "prod-target"
+        let topic_name = b"prod-target";
+        msg.push((topic_name.len() as u8) + 1);
+        msg.extend_from_slice(topic_name);
+        // partitions: 1+1=2
+        msg.push(2);
+        // partition_index=0
+        msg.extend_from_slice(&0i32.to_be_bytes());
+        // records compact bytes
+        let rb_len_plus_one = (record_batch.len() as u32) + 1;
+        // Varint encode rb_len_plus_one manually (small enough for test)
+        if rb_len_plus_one < 128 {
+            msg.push(rb_len_plus_one as u8);
+        } else {
+            let mut v = rb_len_plus_one;
+            while (v & !0x7F) != 0 {
+                msg.push(((v & 0x7F) | 0x80) as u8);
+                v >>= 7;
+            }
+            msg.push(v as u8);
+        }
+        msg.extend_from_slice(&record_batch);
+        msg.push(0); // partition tag buffer
+        msg.push(0); // topic tag buffer
+        msg.push(0); // request tag buffer
+
+        // Sanity-check the produce codec can parse our frame body.
+        let body_offset = 10 /* header fixed */ + 1 /* client_id "t" */ + 1 /* tag buffer */;
+        let parsed = parse_produce_v9(&msg[body_offset..]).expect("codec parse");
+        assert_eq!(parsed.topics[0].name, "prod-target");
+        assert_eq!(parsed.topics[0].partitions[0].records[0].value, b"hello-produce");
+
+        // Now round-trip through the broker.
+        let handler = crate::protocol::KafkaProtocolHandler::new();
+        let request = handler.parse_request(&msg).expect("parse header");
+        assert_eq!(request.api_key, 0);
+        assert_eq!(request.api_version, 9);
+        assert_eq!(request.body_offset, body_offset);
+
+        let response = broker.handle_produce(&msg, &request).await.expect("produce");
+        match response {
+            KafkaResponse::Preserialized(bytes) => {
+                // correlation_id echoed back
+                assert_eq!(&bytes[0..4], &777i32.to_be_bytes());
+            }
+            other => panic!("unexpected response variant: {other:?}"),
+        }
+
+        // The record should be in the topic.
         let topics = broker.topics.read().await;
-        let topic = topics.get("default-topic").expect("default topic");
+        let topic = topics.get("prod-target").expect("auto-created topic");
         let record_count: usize = topic.partitions.iter().map(|p| p.messages.len()).sum();
-        assert!(record_count > 0);
+        assert_eq!(record_count, 1);
+        let stored = topic.partitions[0].messages.front().unwrap();
+        assert_eq!(stored.value, b"hello-produce");
+        assert_eq!(stored.key.as_deref(), Some(b"key-1".as_ref()));
+        let _ = TopicProduceData {
+            name: String::new(),
+            partitions: vec![],
+        };
+        let _ = PartitionProduceData {
+            partition_index: 0,
+            records: vec![],
+            compression_codec: 0,
+        };
     }
 
     #[tokio::test]
