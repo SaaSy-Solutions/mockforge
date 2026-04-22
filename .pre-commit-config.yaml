@@ -1,3 +1,10 @@
+# Pin hooks to the pre-commit stage only. Without this, any hook that doesn't
+# declare `stages:` runs at every installed git-hook type. When the commit-msg
+# hook is also installed (see `ls .git/hooks/`), that means the full hook set
+# (clippy included) runs twice per commit. All hooks below are source-state
+# checks, so pre-commit is the only stage that makes sense.
+default_stages: [pre-commit]
+
 repos:
 - repo: local
   hooks:
@@ -51,11 +58,12 @@ repos:
     entry: cargo clippy --all-targets --all-features --workspace --exclude mockforge-desktop
     language: system
     pass_filenames: false
-  - id: cargo-check
-    name: cargo-check
-    entry: cargo check --workspace --exclude mockforge-desktop
-    language: system
-    pass_filenames: false
+    # `cargo check` is intentionally NOT run here. `cargo clippy --all-targets
+    # --all-features` is a strict superset of `cargo check --workspace` (clippy
+    # type-checks everything check does, plus more targets/features). Running
+    # both back-to-back roughly doubles pre-commit time because clippy and check
+    # write incompatible metadata into target/ and invalidate each other's
+    # incremental cache (rust-lang/cargo#9307).
   - id: typos
     name: typos
     entry: typos
