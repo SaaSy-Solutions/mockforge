@@ -64,6 +64,8 @@ pub struct CreateFixtureRequest {
     #[serde(default = "default_method")]
     pub method: String,
     pub content: Option<serde_json::Value>,
+    pub protocol: Option<String>,
+    pub tags: Option<serde_json::Value>,
 }
 
 fn default_method() -> String {
@@ -94,6 +96,8 @@ pub async fn create_fixture(
             &request.path,
             &request.method,
             request.content.as_ref(),
+            request.protocol.as_deref(),
+            request.tags.as_ref(),
         )
         .await?;
 

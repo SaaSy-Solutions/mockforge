@@ -35,11 +35,14 @@ impl CloudFixture {
         path: &str,
         method: &str,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
+        tags: Option<&serde_json::Value>,
     ) -> sqlx::Result<Self> {
+        let tags_value = tags.cloned().unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
         sqlx::query_as::<_, Self>(
             r#"
-            INSERT INTO fixtures (org_id, name, description, path, method, content, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO fixtures (org_id, name, description, path, method, content, protocol, tags, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             "#,
         )
@@ -49,6 +52,8 @@ impl CloudFixture {
         .bind(path)
         .bind(method)
         .bind(content)
+        .bind(protocol)
+        .bind(tags_value)
         .bind(created_by)
         .fetch_one(pool)
         .await

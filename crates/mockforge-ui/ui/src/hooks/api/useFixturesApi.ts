@@ -79,10 +79,11 @@ export function useRenameFixture() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ oldPath, newPath }: { oldPath: string; newPath: string }) =>
-      fixturesApi.renameFixture(oldPath, newPath),
+    mutationFn: ({ fixtureId, newName }: { fixtureId: string; newName: string }) =>
+      fixturesApi.renameFixture(fixtureId, newName),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
+      queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
     },
   });
 }
@@ -91,10 +92,42 @@ export function useMoveFixture() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ sourcePath, destinationPath }: { sourcePath: string; destinationPath: string }) =>
-      fixturesApi.moveFixture(sourcePath, destinationPath),
+    mutationFn: ({ fixtureId, newPath }: { fixtureId: string; newPath: string }) =>
+      fixturesApi.moveFixture(fixtureId, newPath),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
+      queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
+    },
+  });
+}
+
+export function useCreateFixture() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: fixturesApi.createFixture,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
+      queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+    },
+  });
+}
+
+export function useUpdateFixture() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      fixtureId,
+      payload,
+    }: {
+      fixtureId: string;
+      payload: Parameters<typeof fixturesApi.updateFixture>[1];
+    }) => fixturesApi.updateFixture(fixtureId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.fixtures });
+      queryClient.invalidateQueries({ queryKey: ['fixtures-v2'] });
     },
   });
 }

@@ -1436,6 +1436,8 @@ impl RegistryStore for SqliteRegistryStore {
         path: &str,
         method: &str,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
+        tags: Option<&serde_json::Value>,
     ) -> StoreResult<CloudFixture> {
         Err(StoreError::NotFound)
     }

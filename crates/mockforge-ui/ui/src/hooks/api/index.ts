@@ -55,6 +55,8 @@ export {
   useDownloadFixture,
   useRenameFixture,
   useMoveFixture,
+  useCreateFixture,
+  useUpdateFixture,
   useSmokeTests,
   useRunSmokeTests,
   useImportPostman,
