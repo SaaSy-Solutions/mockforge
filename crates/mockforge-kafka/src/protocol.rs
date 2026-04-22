@@ -9,11 +9,21 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct KafkaProtocolHandler {
     api_versions: HashMap<i16, ApiVersion>,
+    /// Host advertised to clients in Metadata responses.
+    advertised_host: String,
+    /// Port advertised to clients in Metadata responses.
+    advertised_port: i32,
 }
 
 impl KafkaProtocolHandler {
-    /// Create a new protocol handler
+    /// Create a new protocol handler with the default advertised endpoint.
     pub fn new() -> Self {
+        Self::with_advertised_endpoint("localhost", 9092)
+    }
+
+    /// Create a new protocol handler that advertises a specific endpoint
+    /// (host, port) in Metadata responses.
+    pub fn with_advertised_endpoint(host: impl Into<String>, port: i32) -> Self {
         let mut api_versions = HashMap::new();
         // Add supported API versions
         api_versions.insert(
@@ -30,11 +40,14 @@ impl KafkaProtocolHandler {
                 max_version: 16,
             },
         ); // Fetch
+           // Metadata: we only implement v4 response encoding. Advertising max=4
+           // forces auto-negotiating clients (librdkafka, kafka-python, etc.) to
+           // pick a version we can actually serialize.
         api_versions.insert(
             3,
             ApiVersion {
                 min_version: 0,
-                max_version: 12,
+                max_version: 4,
             },
         ); // Metadata
         api_versions.insert(
@@ -94,7 +107,11 @@ impl KafkaProtocolHandler {
             },
         ); // DescribeConfigs (alternative)
 
-        Self { api_versions }
+        Self {
+            api_versions,
+            advertised_host: host.into(),
+            advertised_port: port,
+        }
     }
 }
 
@@ -105,43 +122,47 @@ impl Default for KafkaProtocolHandler {
 }
 
 impl KafkaProtocolHandler {
-    /// Parse a Kafka request from bytes
+    /// Parse a Kafka request from bytes.
+    ///
+    /// `data` is the request body as delivered by `broker::handle_connection`
+    /// — the 4-byte length prefix has already been consumed off the socket,
+    /// so offset 0 here is the request header's `api_key`. (Earlier revisions
+    /// of this function read from offset 4, which silently misinterpreted
+    /// every real client request as api_key=0 / Produce.)
     pub fn parse_request(&self, data: &[u8]) -> Result<KafkaRequest> {
-        // Parse Kafka protocol header
-        if data.len() < 12 {
+        // Need at least api_key(2) + api_version(2) + correlation_id(4).
+        if data.len() < 8 {
             return Err(anyhow::anyhow!("Message too short for header"));
         }
 
-        // Extract API key from bytes 4-5 (big-endian i16)
-        let api_key = ((data[4] as i16) << 8) | (data[5] as i16);
+        let api_key = i16::from_be_bytes([data[0], data[1]]);
+        let api_version = i16::from_be_bytes([data[2], data[3]]);
+        let correlation_id = i32::from_be_bytes([data[4], data[5], data[6], data[7]]);
 
-        // Extract API version from bytes 6-7 (big-endian i16)
-        let api_version = ((data[6] as i16) << 8) | (data[7] as i16);
-
-        // Extract correlation ID from bytes 8-11 (big-endian i32)
-        let correlation_id = ((data[8] as i32) << 24)
-            | ((data[9] as i32) << 16)
-            | ((data[10] as i32) << 8)
-            | (data[11] as i32);
-
-        // Parse client ID length from bytes 12-13 (big-endian i16)
-        if data.len() < 14 {
+        // Request-header v1+ has a nullable client_id string (int16 length
+        // then bytes; -1 means null). v0 has no client_id, but every real
+        // Kafka API has a v1+ request header, so we require it here.
+        if data.len() < 10 {
             return Err(anyhow::anyhow!("Message too short for client ID length"));
         }
-        let client_id_len = ((data[12] as i16) << 8) | (data[13] as i16);
+        let client_id_len = i16::from_be_bytes([data[8], data[9]]);
 
-        // Parse client ID
-        let client_id_start = 14;
-        let client_id_end = client_id_start + (client_id_len as usize);
-        if data.len() < client_id_end {
-            return Err(anyhow::anyhow!("Message too short for client ID"));
-        }
-        let client_id = if client_id_len > 0 {
-            String::from_utf8(data[client_id_start..client_id_end].to_vec())
-                .map_err(|e| anyhow::anyhow!("Invalid client ID encoding: {}", e))?
+        let (client_id_end, client_id) = if client_id_len < 0 {
+            // Null client_id
+            (10, String::new())
         } else {
-            String::new()
+            let end = 10 + client_id_len as usize;
+            if data.len() < end {
+                return Err(anyhow::anyhow!("Message too short for client ID"));
+            }
+            let s = String::from_utf8(data[10..end].to_vec())
+                .map_err(|e| anyhow::anyhow!("Invalid client ID encoding: {}", e))?;
+            (end, s)
         };
+        // Request-header v2 (flexible) appends a TAG_BUFFER after client_id;
+        // we don't consume any tagged fields yet but it's fine to ignore them
+        // — the caller only reads fields we've already parsed.
+        let _ = client_id_end;
 
         let request_type = match api_key {
             0 => KafkaRequestType::Produce,
@@ -165,11 +186,18 @@ impl KafkaProtocolHandler {
         })
     }
 
-    /// Serialize a Kafka response to bytes
+    /// Serialize a Kafka response to bytes.
+    ///
+    /// `request_api_version` is the API version the client requested, not the
+    /// ApiVersions of the response itself — it controls whether we emit the
+    /// "flexible" wire format (compact arrays + tag buffers, introduced for
+    /// ApiVersions at v3). librdkafka/kcat default to ApiVersions v3 on
+    /// connect, so without the flexible branch the handshake disconnects.
     pub fn serialize_response(
         &self,
         response: &KafkaResponse,
         correlation_id: i32,
+        request_api_version: i16,
     ) -> Result<Vec<u8>> {
         fn push_kafka_string(buf: &mut Vec<u8>, value: &str) {
             buf.extend_from_slice(&(value.len() as i16).to_be_bytes());
@@ -178,20 +206,74 @@ impl KafkaProtocolHandler {
 
         match response {
             KafkaResponse::ApiVersions => {
-                // ApiVersions response with all registered API keys.
                 let mut api_versions = self.api_versions.iter().collect::<Vec<_>>();
                 api_versions.sort_by_key(|(api_key, _)| **api_key);
 
                 let mut data = Vec::new();
+                // ApiVersions response header is ALWAYS v0 (correlation_id only,
+                // no tag buffer) even when the body is flexible — that lets
+                // clients bootstrap without knowing the server version.
                 data.extend_from_slice(&correlation_id.to_be_bytes());
-                data.extend_from_slice(&0i16.to_be_bytes());
-                data.extend_from_slice(&(api_versions.len() as i32).to_be_bytes());
-                for (api_key, version) in api_versions {
-                    data.extend_from_slice(&api_key.to_be_bytes());
-                    data.extend_from_slice(&version.min_version.to_be_bytes());
-                    data.extend_from_slice(&version.max_version.to_be_bytes());
+
+                if request_api_version >= 3 {
+                    // Flexible (v3+) body: error_code, COMPACT_ARRAY of api
+                    // entries (each followed by an empty tag buffer),
+                    // throttle_time_ms, trailing tag buffer.
+                    data.extend_from_slice(&0i16.to_be_bytes()); // error_code
+                    push_unsigned_varint(&mut data, (api_versions.len() as u32) + 1);
+                    for (api_key, version) in api_versions {
+                        data.extend_from_slice(&api_key.to_be_bytes());
+                        data.extend_from_slice(&version.min_version.to_be_bytes());
+                        data.extend_from_slice(&version.max_version.to_be_bytes());
+                        data.push(0); // empty tag buffer for this entry
+                    }
+                    data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
+                    data.push(0); // top-level tag buffer
+                } else {
+                    // Non-flexible (v0–v2) body
+                    data.extend_from_slice(&0i16.to_be_bytes()); // error_code
+                    data.extend_from_slice(&(api_versions.len() as i32).to_be_bytes());
+                    for (api_key, version) in api_versions {
+                        data.extend_from_slice(&api_key.to_be_bytes());
+                        data.extend_from_slice(&version.min_version.to_be_bytes());
+                        data.extend_from_slice(&version.max_version.to_be_bytes());
+                    }
+                    if request_api_version >= 1 {
+                        data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
+                    }
                 }
+                Ok(data)
+            }
+            KafkaResponse::Metadata => {
+                // Minimal-but-valid Metadata v4 (non-flexible) response.
+                // Layout:
+                //   correlation_id i32
+                //   throttle_time_ms i32 (v3+)
+                //   brokers: i32 length + [node_id i32, host string, port i32, rack nullable_string (v1+)]
+                //   cluster_id nullable_string (v2+)
+                //   controller_id i32 (v1+)
+                //   topics: i32 length + []
+                // We reply with exactly one broker pointing at this server so
+                // clients know where to route follow-up requests, and zero
+                // topics so auto-negotiated `kcat -L` probes succeed.
+                let mut data = Vec::new();
+                data.extend_from_slice(&correlation_id.to_be_bytes());
                 data.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
+                                                             // brokers array: 1 entry
+                data.extend_from_slice(&1i32.to_be_bytes());
+                data.extend_from_slice(&1i32.to_be_bytes()); // node_id
+                push_kafka_string(&mut data, &self.advertised_host);
+                data.extend_from_slice(&self.advertised_port.to_be_bytes());
+                // rack: null (v1+). Metadata v0 doesn't include rack, but the
+                // CLI-driven defaults land on v4, and we advertise max=4 so v0
+                // clients are vanishingly rare.
+                data.extend_from_slice(&(-1i16).to_be_bytes());
+                // cluster_id (v2+): short identifier
+                push_kafka_string(&mut data, "mockforge-cluster");
+                // controller_id (v1+)
+                data.extend_from_slice(&1i32.to_be_bytes());
+                // topics: zero (no fixtures loaded in this path)
+                data.extend_from_slice(&0i32.to_be_bytes());
                 Ok(data)
             }
             KafkaResponse::CreateTopics => {
@@ -268,6 +350,15 @@ struct ApiVersion {
     max_version: i16,
 }
 
+/// Append a Kafka unsigned varint (7 bits/byte, continuation bit in MSB).
+fn push_unsigned_varint(buf: &mut Vec<u8>, mut value: u32) {
+    while (value & !0x7F) != 0 {
+        buf.push(((value & 0x7F) | 0x80) as u8);
+        value >>= 7;
+    }
+    buf.push(value as u8);
+}
+
 type Result<T> = std::result::Result<T, anyhow::Error>;
 
 #[cfg(test)]
@@ -313,10 +404,11 @@ mod tests {
     #[test]
     fn test_is_api_version_supported_metadata() {
         let handler = KafkaProtocolHandler::new();
-        // Metadata API (key 3) supports versions 0-12
+        // Metadata API (key 3) supports versions 0-4. Capped at v4 because
+        // serialize_response only emits v4-shaped bodies.
         assert!(handler.is_api_version_supported(3, 0));
-        assert!(handler.is_api_version_supported(3, 12));
-        assert!(!handler.is_api_version_supported(3, 13));
+        assert!(handler.is_api_version_supported(3, 4));
+        assert!(!handler.is_api_version_supported(3, 5));
     }
 
     #[test]
@@ -337,71 +429,56 @@ mod tests {
     }
 
     // ==================== parse_request Tests ====================
+    //
+    // `data` here represents the request body AFTER the 4-byte length prefix
+    // has been consumed by the broker — offset 0 = api_key high byte.
+
+    /// Build a minimal v1 request header: api_key, api_version, correlation_id,
+    /// empty client_id.
+    fn build_header(
+        api_key: i16,
+        api_version: i16,
+        correlation_id: i32,
+        client_id: Option<&[u8]>,
+    ) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&api_key.to_be_bytes());
+        data.extend_from_slice(&api_version.to_be_bytes());
+        data.extend_from_slice(&correlation_id.to_be_bytes());
+        match client_id {
+            None => data.extend_from_slice(&(-1i16).to_be_bytes()),
+            Some(b) => {
+                data.extend_from_slice(&(b.len() as i16).to_be_bytes());
+                data.extend_from_slice(b);
+            }
+        }
+        data
+    }
 
     #[test]
     fn test_parse_request_too_short() {
         let handler = KafkaProtocolHandler::new();
-        let data = vec![0u8; 5]; // Too short for header
-        let result = handler.parse_request(&data);
-        assert!(result.is_err());
+        let data = vec![0u8; 5];
+        assert!(handler.parse_request(&data).is_err());
     }
 
     #[test]
     fn test_parse_request_minimal_header() {
         let handler = KafkaProtocolHandler::new();
-        // Create minimal valid request
-        let mut data = vec![0u8; 14];
-        // API key (2 bytes): 18 (ApiVersions)
-        data[4] = 0;
-        data[5] = 18;
-        // API version (2 bytes): 0
-        data[6] = 0;
-        data[7] = 0;
-        // Correlation ID (4 bytes): 1
-        data[8] = 0;
-        data[9] = 0;
-        data[10] = 0;
-        data[11] = 1;
-        // Client ID length (2 bytes): 0 (empty string)
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_ok());
-        let request = result.unwrap();
+        let data = build_header(18, 0, 1, Some(b""));
+        let request = handler.parse_request(&data).unwrap();
         assert_eq!(request.api_key, 18);
         assert_eq!(request.api_version, 0);
         assert_eq!(request.correlation_id, 1);
         assert_eq!(request.client_id, "");
+        assert!(matches!(request.request_type, KafkaRequestType::ApiVersions));
     }
 
     #[test]
     fn test_parse_request_with_client_id() {
         let handler = KafkaProtocolHandler::new();
-        let client_id = b"test-client";
-        let client_id_len = client_id.len() as i16;
-
-        let mut data = vec![0u8; 14 + client_id.len()];
-        // API key: 0 (Produce)
-        data[4] = 0;
-        data[5] = 0;
-        // API version: 7
-        data[6] = 0;
-        data[7] = 7;
-        // Correlation ID: 42
-        data[8] = 0;
-        data[9] = 0;
-        data[10] = 0;
-        data[11] = 42;
-        // Client ID length
-        data[12] = (client_id_len >> 8) as u8;
-        data[13] = (client_id_len & 0xFF) as u8;
-        // Client ID
-        data[14..].copy_from_slice(client_id);
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_ok());
-        let request = result.unwrap();
+        let data = build_header(0, 7, 42, Some(b"test-client"));
+        let request = handler.parse_request(&data).unwrap();
         assert_eq!(request.api_key, 0);
         assert_eq!(request.api_version, 7);
         assert_eq!(request.correlation_id, 42);
@@ -410,181 +487,83 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_request_produce() {
+    fn test_parse_request_null_client_id() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 0 (Produce)
-        data[5] = 0;
-        data[12] = 0; // Client ID length: 0
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::Produce));
+        let data = build_header(3, 0, 99, None);
+        let request = handler.parse_request(&data).unwrap();
+        assert_eq!(request.api_key, 3);
+        assert_eq!(request.client_id, "");
+        assert!(matches!(request.request_type, KafkaRequestType::Metadata));
     }
 
     #[test]
-    fn test_parse_request_fetch() {
+    fn test_parse_request_api_key_dispatch() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 1 (Fetch)
-        data[5] = 1;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::Fetch));
-    }
-
-    #[test]
-    fn test_parse_request_metadata() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 3 (Metadata)
-        data[5] = 3;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::Metadata));
-    }
-
-    #[test]
-    fn test_parse_request_list_groups() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 9 (ListGroups)
-        data[5] = 9;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::ListGroups));
-    }
-
-    #[test]
-    fn test_parse_request_describe_groups() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 15 (DescribeGroups)
-        data[5] = 15;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::DescribeGroups));
-    }
-
-    #[test]
-    fn test_parse_request_api_versions() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 18 (ApiVersions)
-        data[5] = 18;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::ApiVersions));
-    }
-
-    #[test]
-    fn test_parse_request_create_topics() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 19 (CreateTopics)
-        data[5] = 19;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::CreateTopics));
-    }
-
-    #[test]
-    fn test_parse_request_delete_topics() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 20 (DeleteTopics)
-        data[5] = 20;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::DeleteTopics));
-    }
-
-    #[test]
-    fn test_parse_request_describe_configs() {
-        let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 32 (DescribeConfigs)
-        data[5] = 32;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        assert!(matches!(result.request_type, KafkaRequestType::DescribeConfigs));
+        fn discriminant_name(t: &KafkaRequestType) -> &'static str {
+            match t {
+                KafkaRequestType::Produce => "Produce",
+                KafkaRequestType::Fetch => "Fetch",
+                KafkaRequestType::Metadata => "Metadata",
+                KafkaRequestType::ListGroups => "ListGroups",
+                KafkaRequestType::DescribeGroups => "DescribeGroups",
+                KafkaRequestType::ApiVersions => "ApiVersions",
+                KafkaRequestType::CreateTopics => "CreateTopics",
+                KafkaRequestType::DeleteTopics => "DeleteTopics",
+                KafkaRequestType::DescribeConfigs => "DescribeConfigs",
+            }
+        }
+        let cases = [
+            (0i16, "Produce"),
+            (1, "Fetch"),
+            (3, "Metadata"),
+            (9, "ListGroups"),
+            (15, "DescribeGroups"),
+            (18, "ApiVersions"),
+            (19, "CreateTopics"),
+            (20, "DeleteTopics"),
+            (32, "DescribeConfigs"),
+        ];
+        for (key, expected) in cases {
+            let data = build_header(key, 0, 1, Some(b""));
+            let request = handler.parse_request(&data).unwrap();
+            assert_eq!(
+                discriminant_name(&request.request_type),
+                expected,
+                "api_key={key} dispatched wrong"
+            );
+        }
     }
 
     #[test]
     fn test_parse_request_unsupported_api_defaults_to_api_versions() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0; // API key: 99 (unsupported)
-        data[5] = 99;
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data).unwrap();
-        // Unsupported APIs default to ApiVersions
-        assert!(matches!(result.request_type, KafkaRequestType::ApiVersions));
+        let data = build_header(99, 0, 1, Some(b""));
+        let request = handler.parse_request(&data).unwrap();
+        assert!(matches!(request.request_type, KafkaRequestType::ApiVersions));
     }
 
     #[test]
     fn test_parse_request_invalid_client_id_length() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        data[4] = 0;
-        data[5] = 18;
-        // Client ID length: 100 (but not enough data)
-        data[12] = 0;
-        data[13] = 100;
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_err());
+        // client_id_len=100 but no bytes follow
+        let mut data = build_header(18, 0, 1, Some(b""));
+        data[8] = 0;
+        data[9] = 100;
+        assert!(handler.parse_request(&data).is_err());
     }
 
     #[test]
     fn test_parse_request_missing_client_id_length() {
         let handler = KafkaProtocolHandler::new();
-        let data = vec![0u8; 12]; // Too short to contain client ID length
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_err());
+        let data = vec![0u8; 9]; // Has header but client_id_len is cut off
+        assert!(handler.parse_request(&data).is_err());
     }
 
     #[test]
     fn test_parse_request_max_values() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 14];
-        // Max API key value
-        data[4] = 0x7F;
-        data[5] = 0xFF;
-        // Max API version
-        data[6] = 0x7F;
-        data[7] = 0xFF;
-        // Max correlation ID
-        data[8] = 0x7F;
-        data[9] = 0xFF;
-        data[10] = 0xFF;
-        data[11] = 0xFF;
-        // Empty client ID
-        data[12] = 0;
-        data[13] = 0;
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_ok());
-        let request = result.unwrap();
+        let data = build_header(0x7FFF, 0x7FFF, 0x7FFF_FFFF, Some(b""));
+        let request = handler.parse_request(&data).unwrap();
         assert_eq!(request.api_key, 0x7FFF);
         assert_eq!(request.api_version, 0x7FFF);
         assert_eq!(request.correlation_id, 0x7FFFFFFF);
@@ -598,7 +577,7 @@ mod tests {
         let response = KafkaResponse::ApiVersions;
         let correlation_id = 12345;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
 
         let data = result.unwrap();
@@ -619,7 +598,7 @@ mod tests {
         let response = KafkaResponse::CreateTopics;
         let correlation_id = 999;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
 
         let data = result.unwrap();
@@ -631,16 +610,44 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_response_metadata() {
+    fn test_serialize_response_metadata_v4() {
+        // Minimal v4 Metadata response: one broker pointing at us, empty topics.
+        // This unblocks `kcat -L` probes after the ApiVersions handshake.
+        let handler = KafkaProtocolHandler::with_advertised_endpoint("mockforge", 19092);
+        let data = handler.serialize_response(&KafkaResponse::Metadata, 7, 4).unwrap();
+
+        // correlation_id
+        assert_eq!(&data[0..4], &7i32.to_be_bytes());
+        // throttle_time_ms
+        assert_eq!(&data[4..8], &0i32.to_be_bytes());
+        // brokers array length = 1
+        assert_eq!(&data[8..12], &1i32.to_be_bytes());
+        // broker node_id = 1
+        assert_eq!(&data[12..16], &1i32.to_be_bytes());
+        // host string: i16 length then "mockforge" (9 bytes)
+        assert_eq!(&data[16..18], &9i16.to_be_bytes());
+        assert_eq!(&data[18..27], b"mockforge");
+        // port
+        assert_eq!(&data[27..31], &19092i32.to_be_bytes());
+        // rack (null nullable_string)
+        assert_eq!(&data[31..33], &(-1i16).to_be_bytes());
+        // cluster_id "mockforge-cluster" (17 bytes)
+        assert_eq!(&data[33..35], &17i16.to_be_bytes());
+        assert_eq!(&data[35..52], b"mockforge-cluster");
+        // controller_id = 1
+        assert_eq!(&data[52..56], &1i32.to_be_bytes());
+        // topics array length = 0
+        assert_eq!(&data[56..60], &0i32.to_be_bytes());
+        assert_eq!(data.len(), 60);
+    }
+
+    #[test]
+    fn test_metadata_advertised_max_version_is_four() {
+        // We only serialize Metadata v4. Advertising anything higher would let
+        // auto-negotiating clients pick a version we can't encode.
         let handler = KafkaProtocolHandler::new();
-        let response = KafkaResponse::Metadata;
-        let correlation_id = 1;
-
-        let result = handler.serialize_response(&response, correlation_id);
-        assert!(result.is_ok());
-
-        let data = result.unwrap();
-        assert!(data.len() >= 6); // correlation_id (4) + error_code (2)
+        let meta = handler.api_versions.get(&3).unwrap();
+        assert_eq!(meta.max_version, 4);
     }
 
     #[test]
@@ -649,7 +656,7 @@ mod tests {
         let response = KafkaResponse::Produce;
         let correlation_id = 42;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -659,7 +666,7 @@ mod tests {
         let response = KafkaResponse::Fetch;
         let correlation_id = 100;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -669,7 +676,7 @@ mod tests {
         let response = KafkaResponse::ListGroups;
         let correlation_id = 200;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -679,7 +686,7 @@ mod tests {
         let response = KafkaResponse::DescribeGroups;
         let correlation_id = 300;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -689,7 +696,7 @@ mod tests {
         let response = KafkaResponse::DeleteTopics;
         let correlation_id = 400;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -699,7 +706,7 @@ mod tests {
         let response = KafkaResponse::DescribeConfigs;
         let correlation_id = 500;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
     }
 
@@ -709,7 +716,7 @@ mod tests {
         let response = KafkaResponse::ApiVersions;
         let correlation_id = -1;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
 
         let data = result.unwrap();
@@ -723,7 +730,7 @@ mod tests {
         let response = KafkaResponse::ApiVersions;
         let correlation_id = 0;
 
-        let result = handler.serialize_response(&response, correlation_id);
+        let result = handler.serialize_response(&response, correlation_id, 0);
         assert!(result.is_ok());
 
         let data = result.unwrap();
@@ -772,7 +779,7 @@ mod tests {
         let api_configs = vec![
             (0, 0, 12), // Produce
             (1, 0, 16), // Fetch
-            (3, 0, 12), // Metadata
+            (3, 0, 4),  // Metadata (capped at v4 — see serialize_response)
             (9, 0, 5),  // ListGroups
             (15, 0, 9), // DescribeGroups
             (16, 0, 9), // DescribeGroups (alternative)
@@ -798,36 +805,114 @@ mod tests {
     #[test]
     fn test_parse_request_large_client_id() {
         let handler = KafkaProtocolHandler::new();
-        let client_id = "a".repeat(1000); // Large client ID
-        let client_id_len = client_id.len() as i16;
-
-        let mut data = vec![0u8; 14 + client_id.len()];
-        data[4] = 0;
-        data[5] = 18;
-        data[12] = (client_id_len >> 8) as u8;
-        data[13] = (client_id_len & 0xFF) as u8;
-        data[14..].copy_from_slice(client_id.as_bytes());
-
-        let result = handler.parse_request(&data);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().client_id, client_id);
+        let client_id = "a".repeat(1000);
+        let data = build_header(18, 0, 1, Some(client_id.as_bytes()));
+        let request = handler.parse_request(&data).unwrap();
+        assert_eq!(request.client_id, client_id);
     }
 
     #[test]
     fn test_parse_request_invalid_utf8_client_id() {
         let handler = KafkaProtocolHandler::new();
-        let mut data = vec![0u8; 17];
-        data[4] = 0;
-        data[5] = 18;
-        data[12] = 0;
-        data[13] = 3; // 3 bytes client ID
-                      // Invalid UTF-8 sequence
-        data[14] = 0xFF;
-        data[15] = 0xFF;
-        data[16] = 0xFF;
+        let data = build_header(18, 0, 1, Some(&[0xFF, 0xFF, 0xFF]));
+        assert!(handler.parse_request(&data).is_err());
+    }
 
-        let result = handler.parse_request(&data);
-        assert!(result.is_err());
+    #[test]
+    fn test_parse_request_kcat_apiversions_v3() {
+        // Regression test: a real kcat/librdkafka ApiVersions v3 request
+        // previously got misread (api_key=0/Produce, garbage correlation_id)
+        // because parse_request was reading 4 bytes past the real header.
+        let handler = KafkaProtocolHandler::new();
+        let mut data = Vec::new();
+        data.extend_from_slice(&18i16.to_be_bytes()); // api_key = ApiVersions
+        data.extend_from_slice(&3i16.to_be_bytes()); // api_version = 3 (flexible)
+        data.extend_from_slice(&1i32.to_be_bytes()); // correlation_id = 1
+        data.extend_from_slice(&7i16.to_be_bytes()); // client_id length = 7
+        data.extend_from_slice(b"rdkafka"); // client_id bytes
+        data.push(0x00); // flexible header tag buffer
+                         // body (compact strings + tag buffer) — parse_request ignores it
+        data.push(0x08);
+        data.extend_from_slice(b"rdkafka");
+        data.push(0x06);
+        data.extend_from_slice(b"1.8.2");
+        data.push(0x00);
+
+        let request = handler.parse_request(&data).unwrap();
+        assert_eq!(request.api_key, 18);
+        assert_eq!(request.api_version, 3);
+        assert_eq!(request.correlation_id, 1);
+        assert_eq!(request.client_id, "rdkafka");
+        assert!(matches!(request.request_type, KafkaRequestType::ApiVersions));
+    }
+
+    #[test]
+    fn test_serialize_response_api_versions_v3_flexible() {
+        // librdkafka/kcat default to ApiVersions v3; the response must use
+        // flexible encoding (compact array + tag buffers) or the client
+        // disconnects. This test locks in the layout byte-for-byte.
+        let handler = KafkaProtocolHandler::new();
+        let data = handler.serialize_response(&KafkaResponse::ApiVersions, 0x12345678, 3).unwrap();
+
+        // Header: correlation_id int32 (ApiVersions response header is v0
+        // even for flexible bodies — no tag buffer here).
+        assert_eq!(&data[0..4], &0x12345678i32.to_be_bytes());
+
+        // Body: error_code int16 = 0
+        assert_eq!(&data[4..6], &0i16.to_be_bytes());
+
+        // Compact array length (unsigned varint): handler registers 11 api
+        // entries, varint(11 + 1) = 0x0C in a single byte.
+        let n = handler.api_versions.len() as u32;
+        assert_eq!(n, 11);
+        assert_eq!(data[6], 0x0C);
+
+        // Each entry: api_key(i16) + min(i16) + max(i16) + tag_buffer(0x00) = 7 bytes.
+        let entries_start = 7;
+        let entries_end = entries_start + (n as usize) * 7;
+
+        // Entries must be sorted ascending by api_key so clients can binary-search.
+        let mut prev_key: i32 = -1;
+        for chunk in data[entries_start..entries_end].chunks_exact(7) {
+            let api_key = i16::from_be_bytes([chunk[0], chunk[1]]) as i32;
+            assert!(api_key > prev_key, "api entries must be ascending by key");
+            prev_key = api_key;
+            // Tag buffer byte for each entry
+            assert_eq!(chunk[6], 0);
+        }
+
+        // throttle_time_ms int32 = 0 + trailing tag buffer 0x00
+        assert_eq!(&data[entries_end..entries_end + 4], &0i32.to_be_bytes());
+        assert_eq!(data[entries_end + 4], 0);
+        assert_eq!(data.len(), entries_end + 5);
+    }
+
+    #[test]
+    fn test_serialize_response_api_versions_v0_non_flexible() {
+        // v0 has no throttle_time_ms field.
+        let handler = KafkaProtocolHandler::new();
+        let data = handler.serialize_response(&KafkaResponse::ApiVersions, 7, 0).unwrap();
+        let n = handler.api_versions.len();
+        // 4 (corr) + 2 (err) + 4 (array len) + n*6 (entries, no per-entry tag)
+        assert_eq!(data.len(), 4 + 2 + 4 + n * 6);
+        let arr_len = i32::from_be_bytes([data[6], data[7], data[8], data[9]]);
+        assert_eq!(arr_len as usize, n);
+    }
+
+    #[test]
+    fn test_push_unsigned_varint() {
+        let mut buf = Vec::new();
+        push_unsigned_varint(&mut buf, 0);
+        assert_eq!(buf, vec![0x00]);
+        buf.clear();
+        push_unsigned_varint(&mut buf, 127);
+        assert_eq!(buf, vec![0x7F]);
+        buf.clear();
+        push_unsigned_varint(&mut buf, 128);
+        assert_eq!(buf, vec![0x80, 0x01]);
+        buf.clear();
+        push_unsigned_varint(&mut buf, 300);
+        assert_eq!(buf, vec![0xAC, 0x02]);
     }
 
     #[test]

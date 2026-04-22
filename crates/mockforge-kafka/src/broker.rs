@@ -157,7 +157,12 @@ impl KafkaMockBroker {
 
     /// Handle a client connection
     async fn handle_connection(&self, mut socket: TcpStream) -> Result<()> {
-        let protocol_handler = KafkaProtocolHandler::new();
+        // Advertise this broker's own host/port in Metadata responses so
+        // clients know where to route produce/fetch follow-ups.
+        let protocol_handler = KafkaProtocolHandler::with_advertised_endpoint(
+            self.config.host.clone(),
+            self.config.port as i32,
+        );
         self.metrics.record_connection();
 
         // Ensure we decrement active connections when done
@@ -208,6 +213,12 @@ impl KafkaMockBroker {
                         }
                     };
 
+                    // Stash correlation_id and api_version before the request is
+                    // moved into handle_request — both are needed to serialize
+                    // a response the client will actually accept.
+                    let correlation_id = request.correlation_id;
+                    let request_api_version = request.api_version;
+
                     // Record request metrics
                     self.metrics.record_request(get_api_key_from_request(&request));
 
@@ -229,7 +240,11 @@ impl KafkaMockBroker {
                     self.metrics.record_response();
 
                     // Serialize response
-                    let response_data = match protocol_handler.serialize_response(&response, 0) {
+                    let response_data = match protocol_handler.serialize_response(
+                        &response,
+                        correlation_id,
+                        request_api_version,
+                    ) {
                         Ok(data) => data,
                         Err(e) => {
                             self.metrics.record_error();
