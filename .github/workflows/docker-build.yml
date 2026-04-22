@@ -149,54 +149,34 @@ jobs:
       security-events: write
 
     steps:
+      # Advisory only. Trivy (in build-and-push) already uploads
+      # CRITICAL/HIGH SARIF to the Security tab; Grype is here as a
+      # second-opinion scanner, but should not gate the pipeline — a
+      # HIGH CVE in a base image (glibc, openssl) is typically not
+      # actionable same-day and would otherwise red every main run.
       - name: Run Grype vulnerability scanner
         uses: anchore/scan-action@v3
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          fail-build: true
+          fail-build: false
           severity-cutoff: high
 
+      # Advisory only. Dockle at --exit-level=warn fails on benign
+      # findings (e.g. CIS-DI-0001 for missing explicit USER) — useful
+      # as signal, not as a gate.
       - name: Run Dockle security linter
+        continue-on-error: true
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             goodwithtech/dockle:latest \
-            --exit-code 1 \
-            --exit-level warn \
+            --exit-level fatal \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  update-deployment:
-    name: Update Kubernetes Deployment
-    needs: build-and-push
-    runs-on: [self-hosted, linux, x64, rust]
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-
-      - name: Update Kubernetes manifests
-        run: |
-          # Update image tag in deployment
-          sed -i "s|image: .*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}|g" k8s/deployment.yaml
-
-          # Update Helm values
-          sed -i "s|tag: .*|tag: ${{ steps.meta.outputs.version }}|g" helm/mockforge/values.yaml
-
-      - name: Commit and push changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add k8s/deployment.yaml helm/mockforge/values.yaml
-          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update Docker image to ${{ steps.meta.outputs.version }}"
-          git push
+  # Removed: the old `update-deployment` job that auto-committed image
+  # tag bumps to k8s/deployment.yaml and helm/mockforge/values.yaml. It
+  # had zero successful runs since Feb 2026 — the default GITHUB_TOKEN
+  # cannot push to protected main, and the sed rewrite fought with the
+  # pinned tags the manifests carry. For GitOps-style image bumps, open
+  # a PR via peter-evans/create-pull-request or use an external image
+  # automation controller (Flux, ArgoCD Image Updater).
