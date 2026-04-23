@@ -7,8 +7,12 @@
 //! features like the plugin/template/scenario marketplace, SSO/SAML,
 //! Stripe billing, hosted mocks, federations, and cloud workspaces.
 //!
-//! The migrations for this backend live in `../../migrations-sqlite/` and
-//! are applied at connect time via [`SqliteRegistryStore::connect`].
+//! The migrations for this backend live in `./migrations/` (inside this
+//! crate's source tree — they used to sit in `mockforge-registry-server`
+//! but that broke `cargo install` from crates.io because `sqlx::migrate!`
+//! resolves its path at compile time and the sibling crate directory
+//! doesn't exist in a published tarball) and are applied at connect time
+//! via [`SqliteRegistryStore::connect`].
 //!
 //! This is the Phase 2b skeleton — the struct, the connect/migrate entry
 //! points, and a `RegistryStore` impl whose methods are generated stubs.
@@ -96,7 +100,7 @@ impl SqliteRegistryStore {
 
     /// Run the bundled SQLite migrations (subset of the Postgres schema).
     pub async fn migrate(&self) -> StoreResult<()> {
-        sqlx::migrate!("../mockforge-registry-server/migrations-sqlite")
+        sqlx::migrate!("./migrations")
             .run(&self.pool)
             .await
             .map_err(|e| StoreError::Hash(format!("migrate: {}", e)))?;

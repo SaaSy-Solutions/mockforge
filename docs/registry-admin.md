@@ -14,7 +14,10 @@ crates/mockforge-registry-core/       ← shared models, store trait, auth helpe
 │   ├── mod.rs                        ← RegistryStore trait (151 methods)
 │   ├── postgres.rs                   ← PgRegistryStore (SaaS binary)
 │   └── sqlite.rs                     ← SqliteRegistryStore (this doc)
-└── migrations-sqlite/                ← 10-table OSS schema
+└── migrations/                       ← 10-table OSS schema (bundled so
+                                         `cargo install` works against the
+                                         published crate — `sqlx::migrate!`
+                                         resolves paths at compile time)
 ```
 
 ## Enabling the registry admin
