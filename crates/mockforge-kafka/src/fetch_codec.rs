@@ -257,13 +257,13 @@ pub fn serialize_fetch_v12_response(
             push_unsigned_varint(&mut out, 1);
             // preferred_read_replica = -1 (no preference)
             out.extend_from_slice(&(-1i32).to_be_bytes());
-            // records compact_bytes: null when empty, else len+1 + bytes
-            if p.records.is_empty() {
-                push_unsigned_varint(&mut out, 0);
-            } else {
-                push_unsigned_varint(&mut out, (p.records.len() as u32) + 1);
-                out.extend_from_slice(&p.records);
-            }
+            // records compact_bytes. librdkafka treats a null (varint 0)
+            // here as "invalid MessageSetSize -1" and backs off, so we
+            // always emit a non-null compact_bytes — length+1 as varint
+            // followed by the batch bytes (empty fetch → just the 0x01
+            // varint for a zero-length bytes field).
+            push_unsigned_varint(&mut out, (p.records.len() as u32) + 1);
+            out.extend_from_slice(&p.records);
             push_empty_tag_buffer(&mut out);
         }
         push_empty_tag_buffer(&mut out);

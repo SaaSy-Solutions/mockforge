@@ -87,13 +87,59 @@ impl KafkaProtocolHandler {
                 max_version: 4,
             },
         ); // Metadata
+           // Consumer-group path. Every one of these advertises its latest
+           // NON-flexible version as the max so librdkafka lands on a codec
+           // we implement without us having to write both flexible and
+           // non-flexible layouts. OffsetCommit / OffsetFetch are stubs in
+           // this PR (accept commits but don't persist, return "no committed
+           // offset" on fetch so `auto.offset.reset` kicks in); real
+           // persistence lands in a follow-up PR.
+           //
+           // Flexible-boundary cheat sheet (first flexible version):
+           //   FindCoordinator=3, JoinGroup=6, SyncGroup=4, Heartbeat=4,
+           //   OffsetFetch=6, OffsetCommit=8.
+        api_versions.insert(
+            8,
+            ApiVersion {
+                min_version: 0,
+                max_version: 7,
+            },
+        ); // OffsetCommit (v7 = last non-flexible)
         api_versions.insert(
             9,
             ApiVersion {
                 min_version: 0,
                 max_version: 5,
             },
-        ); // ListGroups
+        ); // OffsetFetch (api_key 9 per Kafka spec; v5 = last non-flexible)
+        api_versions.insert(
+            10,
+            ApiVersion {
+                min_version: 0,
+                max_version: 2,
+            },
+        ); // FindCoordinator (v2 = last non-flexible)
+        api_versions.insert(
+            11,
+            ApiVersion {
+                min_version: 0,
+                max_version: 5,
+            },
+        ); // JoinGroup (v5 = last non-flexible)
+        api_versions.insert(
+            12,
+            ApiVersion {
+                min_version: 0,
+                max_version: 3,
+            },
+        ); // Heartbeat (v3 = last non-flexible)
+        api_versions.insert(
+            14,
+            ApiVersion {
+                min_version: 0,
+                max_version: 3,
+            },
+        ); // SyncGroup (v3 = last non-flexible)
         api_versions.insert(
             15,
             ApiVersion {
@@ -105,9 +151,9 @@ impl KafkaProtocolHandler {
             16,
             ApiVersion {
                 min_version: 0,
-                max_version: 9,
+                max_version: 5,
             },
-        ); // DescribeGroups (alternative)
+        ); // ListGroups (api_key 16 per Kafka spec)
         api_versions.insert(
             18,
             ApiVersion {
@@ -215,7 +261,18 @@ impl KafkaProtocolHandler {
             1 => KafkaRequestType::Fetch,
             2 => KafkaRequestType::ListOffsets,
             3 => KafkaRequestType::Metadata,
-            9 => KafkaRequestType::ListGroups,
+            // Per Kafka spec:
+            //   key 8  = OffsetCommit
+            //   key 9  = OffsetFetch (was mislabeled as ListGroups before
+            //                         consumer-group support was added)
+            //   key 16 = ListGroups
+            8 => KafkaRequestType::OffsetCommit,
+            9 => KafkaRequestType::OffsetFetch,
+            16 => KafkaRequestType::ListGroups,
+            10 => KafkaRequestType::FindCoordinator,
+            11 => KafkaRequestType::JoinGroup,
+            12 => KafkaRequestType::Heartbeat,
+            14 => KafkaRequestType::SyncGroup,
             15 => KafkaRequestType::DescribeGroups,
             18 => KafkaRequestType::ApiVersions,
             19 => KafkaRequestType::CreateTopics,
@@ -406,6 +463,12 @@ pub enum KafkaRequestType {
     Produce,
     Fetch,
     ListOffsets,
+    OffsetCommit,
+    OffsetFetch,
+    FindCoordinator,
+    JoinGroup,
+    SyncGroup,
+    Heartbeat,
     ListGroups,
     DescribeGroups,
     ApiVersions,
@@ -459,9 +522,18 @@ fn is_flexible_request(api_key: i16, api_version: i16) -> bool {
         1 => 12, // Fetch
         2 => 6,  // ListOffsets
         3 => 9,  // Metadata
-        9 => 3,  // ListGroups
+        // Consumer-group APIs: we advertise only non-flexible max versions
+        // (see `KafkaProtocolHandler::with_topology`), so the flexible
+        // threshold is set above each API's actual advertised max — the
+        // `is_flexible_request` branch should never fire for them.
+        8 => 8,  // OffsetCommit (flex at 8; we cap at 7)
+        9 => 6,  // OffsetFetch  (flex at 6; we cap at 5)
+        10 => 3, // FindCoordinator (flex at 3; we cap at 2)
+        11 => 6, // JoinGroup    (flex at 6; we cap at 5)
+        12 => 4, // Heartbeat    (flex at 4; we cap at 3)
+        14 => 4, // SyncGroup    (flex at 4; we cap at 3)
         15 => 6, // DescribeGroups
-        16 => 5, // DescribeGroups (alternative)
+        16 => 3, // ListGroups
         18 => 3, // ApiVersions
         19 => 5, // CreateTopics
         20 => 4, // DeleteTopics
@@ -658,6 +730,12 @@ mod tests {
                 KafkaRequestType::Fetch => "Fetch",
                 KafkaRequestType::ListOffsets => "ListOffsets",
                 KafkaRequestType::Metadata => "Metadata",
+                KafkaRequestType::OffsetCommit => "OffsetCommit",
+                KafkaRequestType::OffsetFetch => "OffsetFetch",
+                KafkaRequestType::FindCoordinator => "FindCoordinator",
+                KafkaRequestType::JoinGroup => "JoinGroup",
+                KafkaRequestType::SyncGroup => "SyncGroup",
+                KafkaRequestType::Heartbeat => "Heartbeat",
                 KafkaRequestType::ListGroups => "ListGroups",
                 KafkaRequestType::DescribeGroups => "DescribeGroups",
                 KafkaRequestType::ApiVersions => "ApiVersions",
@@ -671,7 +749,13 @@ mod tests {
             (2, "ListOffsets"),
             (1, "Fetch"),
             (3, "Metadata"),
-            (9, "ListGroups"),
+            (10, "FindCoordinator"),
+            (11, "JoinGroup"),
+            (12, "Heartbeat"),
+            (14, "SyncGroup"),
+            (8, "OffsetCommit"),
+            (9, "OffsetFetch"),
+            (16, "ListGroups"),
             (15, "DescribeGroups"),
             (18, "ApiVersions"),
             (19, "CreateTopics"),
@@ -1031,10 +1115,16 @@ mod tests {
         let api_configs = vec![
             (0, 0, 9),  // Produce (capped at v9 — see serialize_response)
             (1, 0, 12), // Fetch (capped at v12 — see serialize_response)
+            (2, 0, 7),  // ListOffsets
             (3, 0, 4),  // Metadata (capped at v4 — see serialize_response)
-            (9, 0, 5),  // ListGroups
+            (8, 0, 7),  // OffsetCommit (v7 = last non-flexible)
+            (9, 0, 5),  // OffsetFetch  (v5 = last non-flexible; api_key 9 per Kafka spec)
+            (10, 0, 2), // FindCoordinator (v2 = last non-flexible)
+            (11, 0, 5), // JoinGroup (v5 = last non-flexible)
+            (12, 0, 3), // Heartbeat (v3 = last non-flexible)
+            (14, 0, 3), // SyncGroup (v3 = last non-flexible)
             (15, 0, 9), // DescribeGroups
-            (16, 0, 9), // DescribeGroups (alternative)
+            (16, 0, 5), // ListGroups (api_key 16 per Kafka spec)
             (18, 0, 4), // ApiVersions
             (19, 0, 7), // CreateTopics
             (20, 0, 6), // DeleteTopics
@@ -1117,8 +1207,11 @@ mod tests {
         // entries (bumped from 11 when ListOffsets (key 2) was added);
         // varint(12 + 1) = 0x0D in a single byte.
         let n = handler.api_versions.len() as u32;
-        assert_eq!(n, 12);
-        assert_eq!(data[6], 0x0D);
+        // 17 registered API keys after adding OffsetCommit (8) and
+        // OffsetFetch (9) and the corrected ListGroups slot at key 16.
+        // varint(17 + 1) = 0x12.
+        assert_eq!(n, 17);
+        assert_eq!(data[6], 0x12);
 
         // Each entry: api_key(i16) + min(i16) + max(i16) + tag_buffer(0x00) = 7 bytes.
         let entries_start = 7;

@@ -63,6 +63,10 @@ pub struct KafkaMockBroker {
     pub topics: Arc<RwLock<HashMap<String, Topic>>>,
     /// Consumer group manager
     pub consumer_groups: Arc<RwLock<ConsumerGroupManager>>,
+    /// Minimal consumer-group coordinator (FindCoordinator / JoinGroup /
+    /// SyncGroup / Heartbeat). Shared across all connections so the
+    /// coordinator's decision for a group survives heartbeat reconnects.
+    pub group_coordinator: Arc<RwLock<crate::group_coordinator::GroupCoordinator>>,
     /// Specification registry for fixture-based responses
     spec_registry: Arc<KafkaSpecRegistry>,
     /// Metrics collection and reporting
@@ -105,6 +109,9 @@ impl KafkaMockBroker {
             config,
             topics,
             consumer_groups,
+            group_coordinator: Arc::new(RwLock::new(
+                crate::group_coordinator::GroupCoordinator::new(),
+            )),
             spec_registry: Arc::new(spec_registry),
             metrics,
         })
@@ -309,6 +316,16 @@ impl KafkaMockBroker {
             KafkaRequestType::Produce => self.handle_produce(message_buf, &request).await,
             KafkaRequestType::Fetch => self.handle_fetch(message_buf, &request).await,
             KafkaRequestType::ListOffsets => self.handle_list_offsets(message_buf, &request).await,
+            KafkaRequestType::FindCoordinator => {
+                self.handle_find_coordinator(message_buf, &request).await
+            }
+            KafkaRequestType::JoinGroup => self.handle_join_group(message_buf, &request).await,
+            KafkaRequestType::SyncGroup => self.handle_sync_group(message_buf, &request).await,
+            KafkaRequestType::Heartbeat => self.handle_heartbeat(message_buf, &request).await,
+            KafkaRequestType::OffsetCommit => {
+                self.handle_offset_commit(message_buf, &request).await
+            }
+            KafkaRequestType::OffsetFetch => self.handle_offset_fetch(message_buf, &request).await,
             KafkaRequestType::ListGroups => self.handle_list_groups().await,
             KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
             KafkaRequestType::ApiVersions => self.handle_api_versions().await,
@@ -666,6 +683,205 @@ impl KafkaMockBroker {
         }
 
         let body = serialize_listoffsets_v7_response(request.correlation_id, &topic_responses);
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle FindCoordinator v2: the mock is always the coordinator for
+    /// any group the caller asks about. Advertised max is 2 so librdkafka
+    /// 2.x (which caps at v2 anyway) lands on exactly this path.
+    async fn handle_find_coordinator(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{
+            parse_find_coordinator_v2, serialize_find_coordinator_v2_response,
+        };
+        if request.api_version != 2 {
+            let body = serialize_find_coordinator_v2_response(
+                request.correlation_id,
+                &self.config.host,
+                self.config.port as i32,
+            );
+            tracing::warn!(
+                "rejecting FindCoordinator v{} (only v2 supported)",
+                request.api_version
+            );
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("find_coordinator body_offset past buffer end")
+        })?;
+        let _parsed = parse_find_coordinator_v2(body_slice).map_err(|e| {
+            mockforge_core::Error::internal(format!("FindCoordinator v2 parse: {e}"))
+        })?;
+        let body = serialize_find_coordinator_v2_response(
+            request.correlation_id,
+            &self.config.host,
+            self.config.port as i32,
+        );
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle JoinGroup v5 (non-flexible).
+    async fn handle_join_group(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{
+            parse_join_group_v5, serialize_join_group_v5_response, JoinGroupResponseMember,
+        };
+        if request.api_version != 5 {
+            let body =
+                serialize_join_group_v5_response(request.correlation_id, 0, "range", "", "", &[]);
+            tracing::warn!("rejecting JoinGroup v{} (only v5 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("join_group body_offset past buffer end")
+        })?;
+        let parsed = parse_join_group_v5(body_slice)
+            .map_err(|e| mockforge_core::Error::internal(format!("JoinGroup v5 parse: {e}")))?;
+
+        let protocols: Vec<(String, Vec<u8>)> =
+            parsed.protocols.iter().map(|p| (p.name.clone(), p.metadata.clone())).collect();
+        let outcome = self.group_coordinator.write().await.join_group(
+            &parsed.group_id,
+            &parsed.member_id,
+            &protocols,
+        );
+        let members: Vec<JoinGroupResponseMember> = outcome
+            .members
+            .iter()
+            .map(|m| JoinGroupResponseMember {
+                member_id: m.member_id.clone(),
+                metadata: m.metadata.clone(),
+            })
+            .collect();
+
+        let body = serialize_join_group_v5_response(
+            request.correlation_id,
+            outcome.generation_id,
+            &outcome.protocol_name,
+            &outcome.leader_id,
+            &outcome.member_id,
+            &members,
+        );
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle SyncGroup v3 (non-flexible).
+    async fn handle_sync_group(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{parse_sync_group_v3, serialize_sync_group_v3_response};
+        if request.api_version != 3 {
+            let body = serialize_sync_group_v3_response(request.correlation_id, &[]);
+            tracing::warn!("rejecting SyncGroup v{} (only v3 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("sync_group body_offset past buffer end")
+        })?;
+        let parsed = parse_sync_group_v3(body_slice)
+            .map_err(|e| mockforge_core::Error::internal(format!("SyncGroup v3 parse: {e}")))?;
+
+        let pairs: Vec<(String, Vec<u8>)> =
+            parsed.assignments.into_iter().map(|a| (a.member_id, a.assignment)).collect();
+        let assignment = self
+            .group_coordinator
+            .write()
+            .await
+            .sync_group(&parsed.group_id, &parsed.member_id, pairs)
+            .unwrap_or_default();
+
+        let body = serialize_sync_group_v3_response(request.correlation_id, &assignment);
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle Heartbeat v3 (non-flexible).
+    async fn handle_heartbeat(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{parse_heartbeat_v3, serialize_heartbeat_v3_response};
+        if request.api_version != 3 {
+            let body = serialize_heartbeat_v3_response(request.correlation_id, 0);
+            tracing::warn!("rejecting Heartbeat v{} (only v3 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("heartbeat body_offset past buffer end")
+        })?;
+        let parsed = parse_heartbeat_v3(body_slice)
+            .map_err(|e| mockforge_core::Error::internal(format!("Heartbeat v3 parse: {e}")))?;
+
+        let err = self
+            .group_coordinator
+            .read()
+            .await
+            .heartbeat(&parsed.group_id, parsed.generation_id, &parsed.member_id)
+            .err()
+            .unwrap_or(0);
+        let body = serialize_heartbeat_v3_response(request.correlation_id, err);
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle OffsetCommit v7 (non-flexible) — minimum stub: accept every
+    /// partition with success. Real commit persistence is a follow-up PR;
+    /// this just unblocks librdkafka's consumer group flow which sends
+    /// periodic commits even when `enable.auto.commit=false`.
+    async fn handle_offset_commit(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{parse_offset_commit_v7, serialize_offset_commit_v7_response};
+        if request.api_version != 7 {
+            let body = serialize_offset_commit_v7_response(request.correlation_id, &[]);
+            tracing::warn!("rejecting OffsetCommit v{} (only v7 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("offset_commit body_offset past buffer end")
+        })?;
+        let parsed = parse_offset_commit_v7(body_slice)
+            .map_err(|e| mockforge_core::Error::internal(format!("OffsetCommit v7 parse: {e}")))?;
+        let body = serialize_offset_commit_v7_response(request.correlation_id, &parsed.topics);
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle OffsetFetch v5 (non-flexible) — minimum stub: every
+    /// requested partition returns `offset = -1` (no committed offset),
+    /// which causes librdkafka to fall back to `auto.offset.reset`.
+    /// Persistence comes in the follow-up PR.
+    async fn handle_offset_fetch(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{
+            parse_offset_fetch_v5, serialize_offset_fetch_v5_response, OffsetFetchRequestV5,
+        };
+        if request.api_version != 5 {
+            let empty = OffsetFetchRequestV5 {
+                group_id: String::new(),
+                topics: Vec::new(),
+            };
+            let body = serialize_offset_fetch_v5_response(request.correlation_id, &empty);
+            tracing::warn!("rejecting OffsetFetch v{} (only v5 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("offset_fetch body_offset past buffer end")
+        })?;
+        let parsed = parse_offset_fetch_v5(body_slice)
+            .map_err(|e| mockforge_core::Error::internal(format!("OffsetFetch v5 parse: {e}")))?;
+        let body = serialize_offset_fetch_v5_response(request.correlation_id, &parsed);
         Ok(KafkaResponse::Preserialized(body))
     }
 
