@@ -2042,28 +2042,36 @@ impl AmqpConnection {
             return Ok(());
         }
 
-        // For each consumer, try to deliver messages
+        // For each consumer, drain the queue up to the consumer's
+        // prefetch budget. Without the loop, only one message goes
+        // out per `deliver_to_consumers` call — so a durable queue
+        // with N messages where N > 1 only dribbles to a late
+        // subscriber as new publishes trigger new notifications.
         for (channel_id, consumer_tag, no_ack, prefetch_count) in deliveries {
-            // Check prefetch limit
-            let unacked_count =
-                self.channels.get(&channel_id).map(|ch| ch.unacked_messages.len()).unwrap_or(0);
+            loop {
+                // Check prefetch limit each iteration — an ack arriving
+                // mid-drain could free up budget.
+                let unacked_count =
+                    self.channels.get(&channel_id).map(|ch| ch.unacked_messages.len()).unwrap_or(0);
 
-            if prefetch_count > 0 && unacked_count >= prefetch_count as usize {
-                tracing::debug!(
-                    "Consumer {} on channel {} at prefetch limit",
-                    consumer_tag,
-                    channel_id
-                );
-                continue;
-            }
+                if prefetch_count > 0 && unacked_count >= prefetch_count as usize {
+                    tracing::debug!(
+                        "Consumer {} on channel {} at prefetch limit",
+                        consumer_tag,
+                        channel_id
+                    );
+                    break;
+                }
 
-            // Try to get a message from the queue
-            let message_opt = {
-                let mut queues = self.queues.write().await;
-                queues.get_queue_mut(queue_name).and_then(|q| q.dequeue())
-            };
+                // Try to get a message from the queue
+                let message_opt = {
+                    let mut queues = self.queues.write().await;
+                    queues.get_queue_mut(queue_name).and_then(|q| q.dequeue())
+                };
 
-            if let Some(queued_msg) = message_opt {
+                let Some(queued_msg) = message_opt else {
+                    break; // queue empty — done for this consumer
+                };
                 // Get delivery tag
                 let delivery_tag = self
                     .channels
