@@ -58,11 +58,13 @@ impl KafkaProtocolHandler {
                 max_version: 9,
             },
         ); // Produce
+           // Fetch capped at v12 — the first flexible version, which is the one
+           // our codec emits. Auto-negotiating clients land on v12.
         api_versions.insert(
             1,
             ApiVersion {
                 min_version: 0,
-                max_version: 16,
+                max_version: 12,
             },
         ); // Fetch
            // Metadata: we only implement v4 response encoding. Advertising max=4
@@ -533,9 +535,10 @@ mod tests {
     fn test_is_api_version_supported_fetch() {
         let handler = KafkaProtocolHandler::new();
         // Fetch API (key 1) supports versions 0-16
+        // Fetch capped at v12 (first flexible version — what our codec emits).
         assert!(handler.is_api_version_supported(1, 0));
-        assert!(handler.is_api_version_supported(1, 16));
-        assert!(!handler.is_api_version_supported(1, 17));
+        assert!(handler.is_api_version_supported(1, 12));
+        assert!(!handler.is_api_version_supported(1, 13));
     }
 
     #[test]
@@ -1012,7 +1015,7 @@ mod tests {
         // Test all configured API versions
         let api_configs = vec![
             (0, 0, 9),  // Produce (capped at v9 — see serialize_response)
-            (1, 0, 16), // Fetch
+            (1, 0, 12), // Fetch (capped at v12 — see serialize_response)
             (3, 0, 4),  // Metadata (capped at v4 — see serialize_response)
             (9, 0, 5),  // ListGroups
             (15, 0, 9), // DescribeGroups
