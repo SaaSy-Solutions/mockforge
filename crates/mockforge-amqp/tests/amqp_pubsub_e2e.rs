@@ -668,3 +668,99 @@ async fn amqp_dead_letter_exchange_receives_rejected_messages() {
     let _ = conn.close(0, "bye").await;
     server.abort();
 }
+
+/// AMQP server-side transactions (`tx.select` / `tx.commit` /
+/// `tx.rollback`). After `tx.select`, every `basic.publish` on that
+/// channel is held in a pending buffer and MUST NOT route to queues
+/// until `tx.commit`. `tx.rollback` discards the buffer without
+/// routing. The mock already implements this path (see
+/// `handle_tx_method` + `tx_pending_publishes`); this regression pins
+/// both commit and rollback semantics end-to-end so a future change
+/// to the publish path doesn't silently bypass the tx buffer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_tx_commit_flushes_and_rollback_discards() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let conn = Connection::connect(&uri, ConnectionProperties::default()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
+
+    let queue_name = "tx-queue";
+    channel
+        .queue_declare(
+            queue_name,
+            QueueDeclareOptions {
+                durable: false,
+                exclusive: false,
+                auto_delete: false,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    channel.tx_select().await.expect("tx.select on channel");
+
+    // --- Transaction 1: publish + rollback → nothing lands ----------
+    channel
+        .basic_publish(
+            "",
+            queue_name,
+            BasicPublishOptions::default(),
+            b"rolled-back",
+            BasicProperties::default(),
+        )
+        .await
+        .unwrap();
+    channel.tx_rollback().await.expect("tx.rollback");
+
+    // --- Transaction 2: publish + commit → exactly this message lands
+    channel
+        .basic_publish(
+            "",
+            queue_name,
+            BasicPublishOptions::default(),
+            b"committed",
+            BasicProperties::default(),
+        )
+        .await
+        .unwrap();
+    channel.tx_commit().await.expect("tx.commit");
+
+    // Subscribe and confirm we ONLY see the committed payload. A
+    // leaked rollback would surface as a second delivery here.
+    let mut consumer = channel
+        .basic_consume(
+            queue_name,
+            "tx-consumer",
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    let delivery = tokio::time::timeout(Duration::from_secs(5), consumer.next())
+        .await
+        .expect("committed message should arrive within 5s")
+        .expect("stream produced")
+        .expect("delivery");
+    assert_eq!(
+        delivery.data,
+        b"committed",
+        "only the committed message should be delivered; got: {:?}",
+        String::from_utf8_lossy(&delivery.data)
+    );
+
+    let extra = tokio::time::timeout(Duration::from_millis(500), consumer.next()).await;
+    assert!(
+        extra.is_err(),
+        "no further deliveries expected — the rolled-back publish must not leak: {extra:?}"
+    );
+
+    let _ = conn.close(0, "bye").await;
+    server.abort();
+}
