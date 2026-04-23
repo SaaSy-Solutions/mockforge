@@ -617,10 +617,24 @@ where
                         return Ok(true);
                     }
                     Some(mut packet) => {
-                        // Assign packet ID for QoS > 0 publish packets
+                        // Assign packet ID for QoS > 0 publish packets.
+                        // For QoS 2 we also need to register outbound
+                        // state up-front so the subscriber's PUBREC
+                        // has a matching entry to match against — the
+                        // "atomic" helper assigns the id and inserts
+                        // into pending_qos2_out in the same lock scope.
                         if let Packet::Publish(ref mut publish) = packet {
-                            if publish.qos != QoS::AtMostOnce && publish.packet_id.is_none() {
-                                if let Some(id) = session_manager.assign_packet_id(client_id).await {
+                            if publish.packet_id.is_none() {
+                                let maybe_id = match publish.qos {
+                                    QoS::AtMostOnce => None,
+                                    QoS::AtLeastOnce => {
+                                        session_manager.assign_packet_id(client_id).await
+                                    }
+                                    QoS::ExactlyOnce => {
+                                        session_manager.assign_packet_id_qos2(client_id).await
+                                    }
+                                };
+                                if let Some(id) = maybe_id {
                                     publish.packet_id = Some(id);
                                 }
                             }
@@ -1016,10 +1030,24 @@ async fn handle_client_loop(
                         return Ok(true);
                     }
                     Some(mut packet) => {
-                        // Assign packet ID for QoS > 0 publish packets
+                        // Assign packet ID for QoS > 0 publish packets.
+                        // For QoS 2 we also need to register outbound
+                        // state up-front so the subscriber's PUBREC
+                        // has a matching entry to match against — the
+                        // "atomic" helper assigns the id and inserts
+                        // into pending_qos2_out in the same lock scope.
                         if let Packet::Publish(ref mut publish) = packet {
-                            if publish.qos != QoS::AtMostOnce && publish.packet_id.is_none() {
-                                if let Some(id) = session_manager.assign_packet_id(client_id).await {
+                            if publish.packet_id.is_none() {
+                                let maybe_id = match publish.qos {
+                                    QoS::AtMostOnce => None,
+                                    QoS::AtLeastOnce => {
+                                        session_manager.assign_packet_id(client_id).await
+                                    }
+                                    QoS::ExactlyOnce => {
+                                        session_manager.assign_packet_id_qos2(client_id).await
+                                    }
+                                };
+                                if let Some(id) = maybe_id {
                                     publish.packet_id = Some(id);
                                 }
                             }

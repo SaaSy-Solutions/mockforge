@@ -711,6 +711,19 @@ impl SessionManager {
         active.get_mut(client_id).map(|c| c.session.next_packet_id())
     }
 
+    /// Atomically assign a packet id *and* register the QoS 2 outbound
+    /// state so the subscriber's PUBREC lands in `handle_pubrec` with a
+    /// matching entry. If these two steps are separate, a racing PUBREC
+    /// from a very fast subscriber could arrive between them and get
+    /// silently dropped.
+    pub async fn assign_packet_id_qos2(&self, client_id: &str) -> Option<u16> {
+        let mut active = self.active_clients.write().await;
+        let client = active.get_mut(client_id)?;
+        let id = client.session.next_packet_id();
+        client.session.start_qos2_outbound(id);
+        Some(id)
+    }
+
     /// Get a client's subscriptions
     pub async fn get_client_subscriptions(&self, client_id: &str) -> Vec<(String, QoS)> {
         let active = self.active_clients.read().await;
