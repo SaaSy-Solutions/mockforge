@@ -426,6 +426,14 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         }
     }
 
+    if let Ok(host) = std::env::var("MOCKFORGE_WS_HOST") {
+        config.websocket.host = host;
+    }
+
+    if let Ok(replay) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
+        config.websocket.replay_file = Some(replay);
+    }
+
     // gRPC server overrides
     if let Ok(port) = std::env::var("MOCKFORGE_GRPC_PORT") {
         if let Ok(port_num) = port.parse() {

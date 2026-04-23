@@ -1935,6 +1935,16 @@ pub async fn handle_serve(
             let ws_port = config.websocket.port;
             let ws_host = config.websocket.host.clone();
             let ws_shutdown = shutdown_token.clone();
+            // The WS handler reads MOCKFORGE_WS_REPLAY_FILE at connection time
+            // to decide between replay mode and echo mode. Config is the
+            // source of truth — whether it was set by --ws-replay-file, a
+            // YAML file, or the env var itself, push the final value back
+            // into the env so the handler sees it. Without this, the CLI
+            // flag was silently ignored (it wrote to config but the handler
+            // only consulted the env var).
+            if let Some(path) = &config.websocket.replay_file {
+                std::env::set_var("MOCKFORGE_WS_REPLAY_FILE", path);
+            }
             tokio::spawn(async move {
                 println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
                 tokio::select! {
