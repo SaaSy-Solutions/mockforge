@@ -129,6 +129,8 @@ pub mod consumer_groups;
 pub mod fetch_codec;
 pub mod fixture_file;
 pub mod fixtures;
+pub mod group_codec;
+pub mod group_coordinator;
 pub mod listoffsets_codec;
 pub mod metrics;
 pub mod partitions;
