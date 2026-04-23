@@ -5,11 +5,11 @@ Embed MockForge servers directly in your JavaScript/TypeScript tests.
 ## Installation
 
 ```bash
-npm install @mockforge/sdk
+npm install @mockforge-dev/sdk
 # or
-yarn add @mockforge/sdk
+yarn add @mockforge-dev/sdk
 # or
-pnpm add @mockforge/sdk
+pnpm add @mockforge-dev/sdk
 ```
 
 ## Prerequisites
@@ -27,7 +27,7 @@ npm install -g @mockforge/cli
 ## Quick Start
 
 ```typescript
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 // Start a mock server
 const server = await MockServer.start({ port: 0 }); // port 0 = random available port
@@ -250,7 +250,7 @@ console.log(`Products API called ${count} times`);
 ### Jest
 
 ```typescript
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 describe('User Service', () => {
   let server: MockServer;
@@ -294,7 +294,7 @@ describe('User Service', () => {
 
 ```typescript
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest';
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 describe('API Client', () => {
   let server: MockServer;
@@ -337,7 +337,7 @@ describe('API Client', () => {
 ### Mocha
 
 ```typescript
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 import { expect } from 'chai';
 
 describe('Payment Gateway', function() {
@@ -456,7 +456,7 @@ await apiServer.stop();
 ## Error Handling
 
 ```typescript
-import { MockServer, MockServerError, MockServerErrorCode } from '@mockforge/sdk';
+import { MockServer, MockServerError, MockServerErrorCode } from '@mockforge-dev/sdk';
 
 try {
   const server = await MockServer.start();
@@ -489,7 +489,7 @@ import type {
   VerificationRequest,
   VerificationCount,
   VerificationResult
-} from '@mockforge/sdk';
+} from '@mockforge-dev/sdk';
 ```
 
 ## See Also

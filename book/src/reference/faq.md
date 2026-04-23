@@ -109,7 +109,7 @@ with MockServer(port=3000) as server:
 
 **Node.js**:
 ```typescript
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 const server = await MockServer.start({ port: 3000 });
 await server.stubResponse('GET', '/api/users/123', { id: 123 });

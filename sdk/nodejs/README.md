@@ -1,143 +1,142 @@
-# MockForge Node.js SDK
+# @mockforge-dev/sdk
 
-Embed MockForge mock servers directly in your Node.js/TypeScript tests.
+Embed [MockForge](https://github.com/SaaSy-Solutions/mockforge) mock servers directly in your Node.js / TypeScript tests. Start on a random port, register stubs at runtime, and tear the server down when you're done.
 
-## Prerequisites
+> Requires the `mockforge` CLI (≥ 0.3.116) on your PATH. The SDK spawns it as a child process.
 
-The Node.js SDK requires the MockForge CLI to be installed and available in your PATH:
+## Install
 
 ```bash
-# Via Cargo
+npm install --save-dev @mockforge-dev/sdk
+```
+
+Install the CLI once per machine:
+
+```bash
+# Rust toolchain present?
 cargo install mockforge-cli
 
-# Or download pre-built binaries from:
+# Otherwise grab a pre-built release:
 # https://github.com/SaaSy-Solutions/mockforge/releases
 ```
 
-## Installation
-
-```bash
-npm install @mockforge/sdk
-```
+Verify with `mockforge --version`.
 
 ## Usage
 
-### Basic Example
+```ts
+import { MockServer } from '@mockforge-dev/sdk';
 
-```typescript
-import { MockServer } from '@mockforge/sdk';
-
-describe('API Tests', () => {
+describe('User API', () => {
   let server: MockServer;
 
   beforeEach(async () => {
-    server = await MockServer.start({ port: 3000 });
+    server = await MockServer.start({ port: 0 }); // 0 = random available port
   });
 
   afterEach(async () => {
     await server.stop();
   });
 
-  it('should mock user API', async () => {
+  it('returns the stubbed user', async () => {
     await server.stubResponse('GET', '/api/users/123', {
       id: 123,
       name: 'John Doe',
-      email: 'john@example.com'
     });
 
-    const response = await fetch('http://localhost:3000/api/users/123');
-    const data = await response.json();
-
-    expect(data.id).toBe(123);
-    expect(data.name).toBe('John Doe');
+    const res = await fetch(`${server.url()}/api/users/123`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: 123, name: 'John Doe' });
   });
 });
 ```
 
-### With OpenAPI Specification
+### Custom status and headers
 
-```typescript
-import { MockServer } from '@mockforge/sdk';
+```ts
+await server.stubResponse(
+  'POST',
+  '/api/widgets',
+  { ok: true },
+  { status: 201, headers: { 'X-Source': 'sdk-test' }, latencyMs: 50 }
+);
+```
 
+### Against an OpenAPI spec
+
+```ts
 const server = await MockServer.start({
-  port: 3000,
-  openApiSpec: './openapi.yaml'
+  port: 0,
+  openApiSpec: './openapi.yaml',
 });
 ```
 
-### With Custom Configuration
+## Configuration
 
-```typescript
-const server = await MockServer.start({
-  port: 3000,
-  host: '127.0.0.1',
-  configFile: './mockforge.yaml'
-});
+All fields on `MockServerConfig` are optional.
+
+| Field              | Default       | Description                                                                                         |
+| ------------------ | ------------- | --------------------------------------------------------------------------------------------------- |
+| `port`             | `0`           | HTTP port. `0` = random available port.                                                             |
+| `host`             | `127.0.0.1`   | Host to bind to.                                                                                    |
+| `adminPort`        | _disabled_    | If set, also starts the admin UI on this port. Rarely needed for tests.                             |
+| `wsPort`           | `0`           | WebSocket port. `0` = random.                                                                       |
+| `grpcPort`         | `0`           | gRPC port. `0` disables gRPC entirely.                                                              |
+| `metricsPort`      | `0`           | Prometheus metrics port. Metrics are off unless the CLI-level `--metrics` flag is set.              |
+| `configFile`       | _unset_       | Path to a MockForge config file.                                                                    |
+| `openApiSpec`      | _unset_       | Path to an OpenAPI spec file.                                                                       |
+| `noConfig`         | `true`        | Skip auto-discovery of `mockforge.yaml` in the cwd / ancestors. Avoids accidental config inheritance. |
+| `startupTimeoutMs` | `12_000`      | Timeout for the CLI to bind its ports and report ready. Bump on slow CI.                            |
+
+## Instance methods
+
+| Method                                       | Description                                           |
+| -------------------------------------------- | ----------------------------------------------------- |
+| `stubResponse(method, path, body, options?)` | Register a response stub at runtime.                  |
+| `updateStub(method, path, body, options?)`   | Replace an existing stub (creates one if missing).    |
+| `removeStub(method, path)`                   | Remove a single stub.                                 |
+| `clearStubs()`                               | Remove every stub.                                    |
+| `url()`                                      | Base URL (e.g. `http://127.0.0.1:38381`).             |
+| `getPort()`                                  | Bound HTTP port.                                      |
+| `getAdminPort()`                             | Bound admin UI port (`0` if not started).             |
+| `isRunning()`                                | Whether the CLI subprocess is still alive.            |
+| `stop()`                                     | Terminate the subprocess.                             |
+| `verify(pattern, count)`                     | Assert request count matches pattern + expectation.   |
+| `verifyNever(pattern)`                       | Assert no request matched the pattern.                |
+| `verifyAtLeast(pattern, n)`                  | Assert at least `n` requests matched.                 |
+| `verifySequence(patterns[])`                 | Assert requests occurred in the given order.          |
+| `countRequests(pattern)`                     | Return the number of requests matching the pattern.   |
+
+## How stubs work
+
+Stubs go through the MockForge HTTP server's management API at `http://<host>:<httpPort>/__mockforge/api/mocks`. When a request comes in that doesn't match any OpenAPI route, MockForge checks its dynamic mock table and serves the first match by descending priority. This means:
+
+- Stubs registered via `stubResponse` take effect immediately — no restart.
+- Stubs are **per-server**; they live in memory and disappear with `stop()`.
+- If you also load an OpenAPI spec, explicit routes defined by the spec win over dynamic stubs.
+
+## Errors
+
+All failures throw a `MockServerError` with a `code` from `MockServerErrorCode`:
+
+```ts
+import { MockServerError, MockServerErrorCode } from '@mockforge-dev/sdk';
+
+try {
+  server = await MockServer.start({ port: 0 });
+} catch (e) {
+  if (e instanceof MockServerError && e.code === MockServerErrorCode.CLI_NOT_FOUND) {
+    console.error('Install mockforge: cargo install mockforge-cli');
+  }
+  throw e;
+}
 ```
 
-## API Reference
+## Requirements
 
-### `MockServer.start(config)`
-
-Starts a mock server.
-
-**Config Options:**
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `port` | `number` | random | Port to listen on |
-| `host` | `string` | `127.0.0.1` | Host to bind to |
-| `configFile` | `string` | - | Path to MockForge config file |
-| `openApiSpec` | `string` | - | Path to OpenAPI specification |
-
-### Instance Methods
-
-| Method | Description |
-|--------|-------------|
-| `stubResponse(method, path, body, options?)` | Add a response stub |
-| `clearStubs()` | Remove all stubs |
-| `stop()` | Stop the server |
-| `url()` | Get the server URL |
-| `getPort()` | Get the server port |
-| `isRunning()` | Check if server is running |
-
-### Stub Options
-
-```typescript
-await server.stubResponse('GET', '/api/users', { users: [] }, {
-  status: 200,
-  headers: { 'X-Custom-Header': 'value' },
-  latencyMs: 100
-});
-```
-
-## Jest Integration
-
-```typescript
-// jest.setup.ts
-import { MockServer } from '@mockforge/sdk';
-
-let server: MockServer;
-
-beforeAll(async () => {
-  server = await MockServer.start({ port: 3000 });
-});
-
-afterAll(async () => {
-  await server.stop();
-});
-
-beforeEach(async () => {
-  await server.clearStubs();
-});
-```
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `MOCKFORGE_CLI_PATH` | Custom path to MockForge CLI binary |
-| `MOCKFORGE_LOG_LEVEL` | Log level (debug, info, warn, error) |
+- Node.js ≥ 18 (for built-in `fetch`)
+- `mockforge` CLI ≥ 0.3.116 on PATH
 
 ## License
 
-Apache-2.0 OR MIT
+MIT

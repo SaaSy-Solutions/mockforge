@@ -23,7 +23,7 @@ Let's get started with MockForge's developer experience features:
 cargo install mockforge-cli
 
 # Or use npm for Node.js SDK
-npm install @mockforge/sdk
+npm install @mockforge-dev/sdk
 
 # Or pip for Python SDK
 pip install mockforge-sdk
@@ -68,7 +68,7 @@ async fn test_user_api() {
 
 **Node.js:**
 ```javascript
-const { MockServer } = require('@mockforge/sdk');
+const { MockServer } = require('@mockforge-dev/sdk');
 
 describe('User API', () => {
   let server;

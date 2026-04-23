@@ -1,0 +1,73 @@
+name: Publish @mockforge/sdk to npm
+
+# Publishes `sdk/nodejs/` as the `@mockforge/sdk` npm package.
+#
+# Triggers:
+#   1. `workflow_dispatch` - manual publish. Lets the maintainer cut a release
+#      without pushing a tag first (useful for `0.2.0-rc.*` dry runs).
+#   2. `push` on a tag matching `sdk-v*` (e.g. `sdk-v0.2.0`) - the normal path.
+#      The tag is independent of the workspace Cargo version so the SDK can
+#      rev without forcing a Rust release.
+#
+# Prereqs (one-time setup on the repo):
+#   - Add `NPM_TOKEN` as a repo secret (automation token with publish
+#     permission on the @mockforge scope).
+#   - id-token: write is required for npm provenance (already set below).
+
+on:
+  push:
+    tags:
+      - 'sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (pack + publish --dry-run, do not actually publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/nodejs
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Sanity-check package version
+        run: |
+          node -e "const p=require('./package.json'); if(!p.version||p.version==='0.0.0'){process.exit(1)}"
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Pack dry-run
+        run: npm pack --dry-run
+
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            npm publish --dry-run --access public --provenance
+          else
+            npm publish --access public --provenance
+          fi

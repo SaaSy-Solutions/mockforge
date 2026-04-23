@@ -532,6 +532,14 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Validation")]
     pub verbose: bool,
 
+    /// Skip auto-discovery of `mockforge.yaml` / `mockforge.config.{ts,js}`
+    /// from the current directory and its ancestors. Use this for embedded
+    /// scenarios (e.g. the @mockforge-dev/sdk Node.js SDK) where a config
+    /// file in the host project would otherwise silently override explicit
+    /// flags.
+    #[arg(long, help_heading = "Configuration")]
+    pub no_config: bool,
+
     #[command(flatten)]
     pub ports: PortArgs,
 
@@ -2277,6 +2285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 dry_run: args.dry_run,
                 progress: args.progress,
                 verbose: args.verbose,
+                no_config: args.no_config,
             })
             .await?;
         }

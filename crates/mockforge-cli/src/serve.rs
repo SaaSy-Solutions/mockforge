@@ -87,6 +87,11 @@ pub(crate) struct ServeArgs {
     pub(crate) progress: bool,
     #[allow(dead_code)]
     pub(crate) verbose: bool,
+    /// Skip auto-discovery of mockforge config files from the current working
+    /// directory and its ancestors. Useful for embedded/SDK usage where the
+    /// host project may happen to contain a `mockforge.yaml` that would
+    /// otherwise be picked up and override explicit flags.
+    pub(crate) no_config: bool,
 }
 
 impl Default for ServeArgs {
@@ -155,6 +160,7 @@ impl Default for ServeArgs {
             dry_run: false,
             progress: false,
             verbose: false,
+            no_config: false,
         }
     }
 }
@@ -197,6 +203,10 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
                 ServerConfig::default()
             }
         }
+    } else if serve_args.no_config {
+        // Caller (e.g. @mockforge-dev/sdk) opted out of auto-discovery so
+        // local mockforge.yaml files can't silently change behavior.
+        ServerConfig::default()
     } else {
         // Try to auto-discover config file (now supports all formats)
         match discover_config_file_all_formats().await {
@@ -1889,18 +1899,23 @@ pub async fn handle_serve(
 
     let http_tls_config_final = http_tls_config.clone();
     let http_shutdown = shutdown_token.clone();
-    let http_handle = tokio::spawn(async move {
-        if let Some(ref tls) = http_tls_config_final {
-            if tls.enabled {
-                println!("🔒 HTTPS server listening on https://localhost:{}", http_port);
-            } else {
-                println!("📡 HTTP server listening on http://localhost:{}", http_port);
+    let (http_bound_tx, http_bound_rx) = tokio::sync::oneshot::channel::<u16>();
+    let http_tls_for_log = http_tls_config_final.clone();
+    tokio::spawn(async move {
+        if let Ok(actual_port) = http_bound_rx.await {
+            match http_tls_for_log.as_ref() {
+                Some(tls) if tls.enabled => {
+                    println!("🔒 HTTPS server listening on https://localhost:{}", actual_port);
+                }
+                _ => {
+                    println!("📡 HTTP server listening on http://localhost:{}", actual_port);
+                }
             }
-        } else {
-            println!("📡 HTTP server listening on http://localhost:{}", http_port);
         }
+    });
+    let http_handle = tokio::spawn(async move {
         tokio::select! {
-            result = mockforge_http::serve_router_with_tls(http_port, http_app, http_tls_config_final) => {
+            result = mockforge_http::serve_router_with_tls_notify(http_port, http_app, http_tls_config_final, Some(http_bound_tx)) => {
                 result.map_err(|e| format!("HTTP server error: {}", e))
             }
             _ = http_shutdown.cancelled() => {
@@ -2410,9 +2425,14 @@ pub async fn handle_serve(
         let recorder_clone = recorder_for_admin.clone();
         let federation_clone = federation_for_admin.clone();
         let vbr_engine_clone = vbr_engine_for_admin.clone();
+        let (admin_bound_tx, admin_bound_rx) = tokio::sync::oneshot::channel::<u16>();
+        let admin_host_for_log = admin_host.clone();
+        tokio::spawn(async move {
+            if let Ok(actual_port) = admin_bound_rx.await {
+                println!("🎛️ Admin UI listening on http://{}:{}", admin_host_for_log, actual_port);
+            }
+        });
         Some(tokio::spawn(async move {
-            println!("🎛️ Admin UI listening on http://{}:{}", admin_host, admin_port);
-
             // Parse addresses with proper error handling
             use crate::progress::parse_address;
             let addr = match parse_address(&format!("{}:{}", admin_host, admin_port), "admin UI") {
@@ -2461,7 +2481,7 @@ pub async fn handle_serve(
             let virtual_clock_for_continuum = Some(time_travel_manager_clone.clock());
 
             tokio::select! {
-                result = mockforge_ui::start_admin_server(
+                result = mockforge_ui::start_admin_server_notify(
                     addr,
                     http_addr,
                     ws_addr,
@@ -2477,6 +2497,7 @@ pub async fn handle_serve(
                     recorder_clone,
                     federation_clone,
                     vbr_engine_clone,
+                    Some(admin_bound_tx),
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))
                 }
