@@ -33,10 +33,12 @@ describe('MockServer', () => {
     });
   });
 
-  // Gate: require MOCKFORGE_CLI_PATH to be set or the `mockforge` binary to be
-  // on PATH. CI sets this; local devs can opt in with `MOCKFORGE_INTEGRATION=1`.
-  const runIntegration =
-    process.env.MOCKFORGE_INTEGRATION === '1' || !!process.env.CI;
+  // Integration tests spawn the real `mockforge` CLI, so they only run when
+  // the caller explicitly opts in — NOT automatically under CI, because the
+  // publish workflow runs on GitHub-hosted runners that don't have the CLI
+  // installed. The main CI job that exercises integration tests installs
+  // mockforge first and sets MOCKFORGE_INTEGRATION=1.
+  const runIntegration = process.env.MOCKFORGE_INTEGRATION === '1';
   const d = runIntegration ? describe : describe.skip;
 
   d('Integration tests (require MockForge CLI)', () => {
