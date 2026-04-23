@@ -29,6 +29,97 @@ fn generate_id() -> u64 {
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Minimal AMQP field-table parser that pulls a single integer-typed
+/// value out by key. Used for `x-message-ttl` on Queue.Declare and,
+/// later, other numeric x-args. Handles the tags AMQP clients
+/// actually use for TTL: `I` (i32), `i` (u32), `l` / `L` (i64 / u64),
+/// `B` (u8), `b` (i8), `u` (u16), `s` (i16). Returns `None` for
+/// anything else — malformed tables are silently ignored rather than
+/// faulting the channel, which keeps strict-mode clients usable
+/// against the mock.
+///
+/// Format: `u32 body_length` + body of (shortstr name, tagged value)
+/// pairs.
+fn extract_long_arg(table: &[u8], key: &str) -> Option<i64> {
+    if table.len() < 4 {
+        return None;
+    }
+    let body_len = u32::from_be_bytes([table[0], table[1], table[2], table[3]]) as usize;
+    let body = table.get(4..4 + body_len)?;
+
+    let mut i = 0usize;
+    while i < body.len() {
+        // name: shortstr (u8 len + bytes)
+        let name_len = *body.get(i)? as usize;
+        i += 1;
+        let name_bytes = body.get(i..i + name_len)?;
+        i += name_len;
+        // tag
+        let tag = *body.get(i)?;
+        i += 1;
+
+        let (value, consumed): (Option<i64>, usize) = match tag {
+            b'I' => {
+                let b = body.get(i..i + 4)?;
+                (Some(i32::from_be_bytes([b[0], b[1], b[2], b[3]]) as i64), 4)
+            }
+            b'i' => {
+                let b = body.get(i..i + 4)?;
+                (Some(u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as i64), 4)
+            }
+            b'l' | b'L' => {
+                let b = body.get(i..i + 8)?;
+                (Some(i64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])), 8)
+            }
+            b's' => {
+                let b = body.get(i..i + 2)?;
+                (Some(i16::from_be_bytes([b[0], b[1]]) as i64), 2)
+            }
+            b'u' => {
+                let b = body.get(i..i + 2)?;
+                (Some(u16::from_be_bytes([b[0], b[1]]) as i64), 2)
+            }
+            b'b' => (Some(*body.get(i)? as i8 as i64), 1),
+            b'B' => (Some(*body.get(i)? as i64), 1),
+            // Known variable-width tags we need to skip past to keep
+            // scanning further key/value pairs.
+            b't' => (None, 1), // boolean
+            b'f' => (None, 4), // float
+            b'd' => (None, 8), // double
+            b'V' => (None, 0), // void
+            b'S' => {
+                // long string: u32 len + bytes
+                let b = body.get(i..i + 4)?;
+                let s_len = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                (None, 4 + s_len)
+            }
+            b'x' => {
+                // byte array: u32 len + bytes
+                let b = body.get(i..i + 4)?;
+                let x_len = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                (None, 4 + x_len)
+            }
+            b'F' => {
+                // nested field-table: u32 len + body
+                let b = body.get(i..i + 4)?;
+                let f_len = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                (None, 4 + f_len)
+            }
+            _ => {
+                // Unknown tag — we can't safely advance, bail out so
+                // we don't wrongly pair names with values downstream.
+                return None;
+            }
+        };
+        i += consumed;
+
+        if name_bytes == key.as_bytes() {
+            return value;
+        }
+    }
+    None
+}
+
 /// Connection state machine
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
@@ -935,17 +1026,32 @@ impl AmqpConnection {
         let exclusive = flags & 0x04 != 0;
         let auto_delete = flags & 0x08 != 0;
         let no_wait = flags & 0x10 != 0;
+        offset += 1;
 
         // Generate queue name if empty
         if queue_name.is_empty() {
             queue_name = format!("amq.gen-{}", generate_id());
         }
 
-        tracing::debug!("Queue declare: {}", queue_name);
+        // Everything remaining in the Queue.Declare frame is the
+        // client-supplied argument field-table (`x-message-ttl`,
+        // `x-dead-letter-exchange`, etc.). We only pull out the keys
+        // we actually act on — unknown keys are ignored, matching the
+        // AMQP "broker chooses which extensions it supports" rule.
+        let message_ttl = extract_long_arg(&arguments[offset..], "x-message-ttl")
+            .map(|ms| std::time::Duration::from_millis(ms as u64));
+
+        tracing::debug!("Queue declare: {} (ttl={:?})", queue_name, message_ttl);
 
         // Declare the queue
         let mut queues = self.queues.write().await;
-        queues.declare_queue(queue_name.clone(), durable, exclusive, auto_delete);
+        queues.declare_queue_with_ttl(
+            queue_name.clone(),
+            durable,
+            exclusive,
+            auto_delete,
+            message_ttl,
+        );
         self.metrics.record_queue_declared();
         drop(queues);
 

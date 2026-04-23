@@ -164,6 +164,25 @@ impl QueueManager {
             .or_insert_with(|| Queue::new(name, durable, exclusive, auto_delete));
     }
 
+    /// Variant of `declare_queue` that also applies `x-message-ttl`
+    /// from the queue's declare-time field-table. Applied only when
+    /// the queue is freshly created — redeclarations preserve the
+    /// existing properties to match AMQP spec idempotence.
+    pub fn declare_queue_with_ttl(
+        &mut self,
+        name: String,
+        durable: bool,
+        exclusive: bool,
+        auto_delete: bool,
+        message_ttl: Option<Duration>,
+    ) {
+        self.queues.entry(name.clone()).or_insert_with(|| {
+            let mut q = Queue::new(name, durable, exclusive, auto_delete);
+            q.properties.message_ttl = message_ttl;
+            q
+        });
+    }
+
     pub fn get_queue(&self, name: &str) -> Option<&Queue> {
         self.queues.get(name)
     }

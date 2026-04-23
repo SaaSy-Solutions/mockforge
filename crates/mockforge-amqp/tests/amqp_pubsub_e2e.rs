@@ -358,3 +358,169 @@ async fn amqp_publisher_confirms_ack_every_publish() {
     let _ = conn.close(0, "bye").await;
     server.abort();
 }
+
+/// Per-message TTL (AMQP `expiration` property). Messages with a
+/// per-message expiration MUST be silently dropped once the TTL
+/// elapses — the consumer MUST NOT see the expired payload. The
+/// expected flow:
+///   1. Publish two messages: one short-lived (`expiration=100ms`),
+///      one without expiration.
+///   2. Sleep 300ms, well past the TTL on the first message.
+///   3. Subscribe and drain. Only the second (unexpired) message
+///      should arrive.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_per_message_expiration_drops_stale_payload() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let conn = Connection::connect(&uri, ConnectionProperties::default())
+        .await
+        .expect("lapin connects");
+    let channel = conn.create_channel().await.expect("open channel");
+
+    let queue_name = "ttl-queue";
+    channel
+        .queue_declare(
+            queue_name,
+            QueueDeclareOptions {
+                durable: false,
+                exclusive: false,
+                auto_delete: false,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    // Short-lived message — AMQP `expiration` is a string of ms.
+    channel
+        .basic_publish(
+            "",
+            queue_name,
+            BasicPublishOptions::default(),
+            b"expires-fast",
+            BasicProperties::default().with_expiration("100".into()),
+        )
+        .await
+        .unwrap();
+    // Immortal message.
+    channel
+        .basic_publish(
+            "",
+            queue_name,
+            BasicPublishOptions::default(),
+            b"lives-forever",
+            BasicProperties::default(),
+        )
+        .await
+        .unwrap();
+
+    // Wait past the TTL before subscribing. The broker checks
+    // expiration at dequeue time (see `QueuedMessage::is_expired`),
+    // so subscribing AFTER the TTL is what drops the stale payload.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let mut consumer = channel
+        .basic_consume(
+            queue_name,
+            "ttl-consumer",
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    // Drain. The first delivery must be the unexpired message.
+    let delivery = tokio::time::timeout(Duration::from_secs(5), consumer.next())
+        .await
+        .expect("consumer should receive the unexpired message within 5s")
+        .expect("stream produced")
+        .expect("delivery");
+    assert_eq!(
+        delivery.data, b"lives-forever",
+        "expired message must be silently dropped — consumer should only see the live one"
+    );
+
+    // Verify no further deliveries. A lingering expired message
+    // would surface here.
+    let extra = tokio::time::timeout(Duration::from_millis(500), consumer.next()).await;
+    assert!(
+        extra.is_err(),
+        "no further messages expected (expired one should be gone), got: {extra:?}"
+    );
+
+    let _ = conn.close(0, "bye").await;
+    server.abort();
+}
+
+/// Queue-level TTL via `x-message-ttl` queue argument. When the queue
+/// itself is declared with a TTL, every enqueued message inherits it
+/// even if the publisher doesn't set `expiration`. Same assertion as
+/// the per-message test: expired messages must not be delivered.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_queue_level_ttl_drops_stale_messages() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let conn = Connection::connect(&uri, ConnectionProperties::default()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
+
+    let queue_name = "queue-ttl";
+    // x-message-ttl is an AMQP i64 ms argument on queue.declare.
+    let mut args = FieldTable::default();
+    args.insert("x-message-ttl".into(), lapin::types::AMQPValue::LongInt(100));
+
+    channel
+        .queue_declare(
+            queue_name,
+            QueueDeclareOptions {
+                durable: false,
+                exclusive: false,
+                auto_delete: false,
+                ..Default::default()
+            },
+            args,
+        )
+        .await
+        .expect("declare queue with x-message-ttl");
+
+    // Publish WITHOUT per-message expiration — the queue TTL applies.
+    channel
+        .basic_publish(
+            "",
+            queue_name,
+            BasicPublishOptions::default(),
+            b"should-expire",
+            BasicProperties::default(),
+        )
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let mut consumer = channel
+        .basic_consume(
+            queue_name,
+            "queue-ttl-consumer",
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    let got = tokio::time::timeout(Duration::from_millis(500), consumer.next()).await;
+    assert!(
+        got.is_err(),
+        "queue with x-message-ttl=100ms must drop a 300ms-old payload; got: {got:?}"
+    );
+
+    let _ = conn.close(0, "bye").await;
+    server.abort();
+}
