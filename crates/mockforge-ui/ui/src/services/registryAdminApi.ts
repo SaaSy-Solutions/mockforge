@@ -13,7 +13,7 @@ import { isCloudMode as detectCloudMode } from '../utils/cloudMode';
 const TOKEN_STORAGE_KEY = 'mockforge_registry_admin_token';
 const SAAS_TOKEN_KEY = 'auth_token'; // matches useAuthStore's persist key
 
-/** True when the frontend is served by Vercel with a cloud API backend. */
+/** True when the frontend is built against a remote cloud API backend (VITE_MOCKFORGE_MODE=cloud). */
 export const isCloudMode = detectCloudMode;
 
 export interface RegistryUser {
