@@ -1,6 +1,8 @@
 //! GraphQL schema parsing and generation
 
-use async_graphql::{EmptySubscription, Object, Schema};
+use async_graphql::{Object, Schema, Subscription};
+use futures::stream::Stream;
+use std::time::Duration;
 
 /// Simple User type for GraphQL
 #[derive(async_graphql::SimpleObject, Clone)]
@@ -97,20 +99,45 @@ impl MutationRoot {
     }
 }
 
+/// Root subscription type. A single `tick` subscription lets clients
+/// exercise the subscription dispatch path (WebSocket via
+/// `graphql-transport-ws` / `graphql-ws`, SSE, etc.) against the
+/// default schema without registering a custom SDL.
+///
+/// `tick` emits a monotonically increasing `i32` every 100ms, starting
+/// from 1, up to the requested `count`. Clients without a `count`
+/// argument get 5 ticks by default. The interval is short enough that
+/// multi-event tests complete in well under a second.
+pub struct SubscriptionRoot;
+
+#[Subscription]
+impl SubscriptionRoot {
+    /// Emit `count` ticks (default 5) at 100ms intervals.
+    async fn tick(&self, count: Option<i32>) -> impl Stream<Item = i32> {
+        let n = count.unwrap_or(5).max(1) as usize;
+        async_stream::stream! {
+            for i in 1..=n {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                yield i as i32;
+            }
+        }
+    }
+}
+
 /// GraphQL schema manager
 pub struct GraphQLSchema {
-    schema: Schema<QueryRoot, MutationRoot, EmptySubscription>,
+    schema: Schema<QueryRoot, MutationRoot, SubscriptionRoot>,
 }
 
 impl GraphQLSchema {
     /// Create a new basic schema
     pub fn new() -> Self {
-        let schema = Schema::build(QueryRoot, MutationRoot, EmptySubscription).finish();
+        let schema = Schema::build(QueryRoot, MutationRoot, SubscriptionRoot).finish();
         Self { schema }
     }
 
     /// Get the underlying schema
-    pub fn schema(&self) -> &Schema<QueryRoot, MutationRoot, EmptySubscription> {
+    pub fn schema(&self) -> &Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
         &self.schema
     }
 
