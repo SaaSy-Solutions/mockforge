@@ -8921,6 +8921,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "criterion",
+ "lettre",
  "mail-parser",
  "mockforge-core",
  "regex",
