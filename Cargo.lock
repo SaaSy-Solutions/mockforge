@@ -8080,9 +8080,11 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "async-graphql-axum",
+ "async-stream",
  "async-trait",
  "axum 0.8.8",
  "base64 0.22.1",
+ "futures",
  "indexmap 2.13.0",
  "mockforge-core",
  "mockforge-data",
@@ -8103,8 +8105,10 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite 0.24.0",
  "tower 0.5.3",
  "tracing",
+ "url",
 ]
 
 [[package]]

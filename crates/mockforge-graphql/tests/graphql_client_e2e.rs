@@ -12,6 +12,14 @@ use serde_json::json;
 use std::time::Duration;
 
 async fn spawn_server() -> String {
+    let (http_url, _ws_url) = spawn_server_pair().await;
+    http_url
+}
+
+/// Spawn a GraphQL server and return both the HTTP `/graphql` URL
+/// and the WebSocket `/graphql/ws` URL. Used by the subscriptions
+/// test; the HTTP tests just discard the second element.
+async fn spawn_server_pair() -> (String, String) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = create_graphql_router(None).await.expect("router builds cleanly");
@@ -20,7 +28,7 @@ async fn spawn_server() -> String {
     });
     // Give axum a tick to start accepting.
     tokio::time::sleep(Duration::from_millis(50)).await;
-    format!("http://{addr}/graphql")
+    (format!("http://{addr}/graphql"), format!("ws://{addr}/graphql/ws"))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -128,16 +136,18 @@ async fn graphql_real_client_introspection_query_returns_schema() {
         "queryType name should be QueryRoot"
     );
 
-    // Default schema exposes `MutationRoot` (with `createUser`) but
-    // still uses `EmptySubscription` — so subscriptionType stays null.
+    // Default schema now exposes both a mutation root (`createUser`)
+    // and a subscription root (`tick`) — introspection must report
+    // both.
     assert_eq!(
         schema.pointer("/mutationType/name").and_then(|v| v.as_str()),
         Some("MutationRoot"),
-        "default schema now has a mutation root named MutationRoot"
+        "default schema has a mutation root named MutationRoot"
     );
-    assert!(
-        schema.pointer("/subscriptionType").map(|v| v.is_null()).unwrap_or(false),
-        "default schema has no subscription root; subscriptionType should be null"
+    assert_eq!(
+        schema.pointer("/subscriptionType/name").and_then(|v| v.as_str()),
+        Some("SubscriptionRoot"),
+        "default schema has a subscription root named SubscriptionRoot"
     );
 
     let types = schema
@@ -204,4 +214,104 @@ async fn graphql_syntactically_invalid_query_surfaces_error_field() {
         errors.is_some_and(|e| !e.is_empty()),
         "expected non-empty errors array for invalid query, got: {value}"
     );
+}
+
+/// Real-client subscription via WebSocket. Uses the
+/// `graphql-transport-ws` subprotocol (the current spec; Apollo
+/// defaults to this, and async-graphql-axum's GraphQLSubscription
+/// service handles it). The default schema exposes a `tick`
+/// subscription that yields `count` monotonically increasing ints
+/// at 100ms intervals; we ask for 3 and assert we see exactly those
+/// three values in order.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn graphql_real_client_subscription_ticks_over_websocket() {
+    use futures::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::handshake::client::generate_key;
+    use tokio_tungstenite::tungstenite::http::Request;
+    use tokio_tungstenite::tungstenite::Message;
+
+    let (_http_url, ws_url) = spawn_server_pair().await;
+
+    // Build the upgrade request by hand so we can advertise the
+    // `graphql-transport-ws` subprotocol, which the server requires.
+    let parsed = url::Url::parse(&ws_url).expect("valid ws url");
+    let host = parsed.host_str().expect("host");
+    let port = parsed.port().expect("port");
+    let req = Request::builder()
+        .uri(&ws_url)
+        .header("Host", format!("{host}:{port}"))
+        .header("Upgrade", "websocket")
+        .header("Connection", "Upgrade")
+        .header("Sec-WebSocket-Key", generate_key())
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Protocol", "graphql-transport-ws")
+        .body(())
+        .expect("request builds");
+
+    let (mut ws, _resp) =
+        tokio::time::timeout(Duration::from_secs(5), tokio_tungstenite::connect_async(req))
+            .await
+            .expect("ws connect should complete within 5s")
+            .expect("ws handshake ok");
+
+    // graphql-transport-ws handshake: client sends `connection_init`,
+    // server replies `connection_ack`.
+    ws.send(Message::Text(r#"{"type":"connection_init"}"#.into()))
+        .await
+        .expect("send connection_init");
+    let ack = tokio::time::timeout(Duration::from_secs(5), ws.next())
+        .await
+        .expect("ack arrives within 5s")
+        .expect("ack is present")
+        .expect("no transport error");
+    let ack_text = ack.to_text().expect("ack is text");
+    assert!(ack_text.contains("connection_ack"), "expected connection_ack, got: {ack_text}");
+
+    // Open the subscription. `id` is arbitrary; the server echoes it
+    // back on every `next` frame so we can demultiplex. We ask for 3
+    // ticks so the stream terminates quickly.
+    ws.send(Message::Text(
+        r#"{"type":"subscribe","id":"1","payload":{"query":"subscription { tick(count: 3) }"}}"#
+            .into(),
+    ))
+    .await
+    .expect("send subscribe");
+
+    // Drain `next` frames until we've collected 3 ticks or the stream
+    // ends. graphql-transport-ws emits:
+    //   {"type":"next","id":"1","payload":{"data":{"tick":N}}}
+    // followed by a final {"type":"complete","id":"1"}.
+    let mut ticks: Vec<i64> = Vec::new();
+    let mut saw_complete = false;
+    loop {
+        let msg = tokio::time::timeout(Duration::from_secs(5), ws.next())
+            .await
+            .expect("frame arrives within 5s")
+            .expect("frame present")
+            .expect("no transport error");
+        let text = match msg {
+            Message::Text(t) => t,
+            Message::Close(_) => break,
+            _ => continue, // ping/pong/binary — ignore.
+        };
+        let v: serde_json::Value = serde_json::from_str(&text).expect("valid json frame");
+        match v.pointer("/type").and_then(|t| t.as_str()) {
+            Some("next") => {
+                let n = v
+                    .pointer("/payload/data/tick")
+                    .and_then(|x| x.as_i64())
+                    .expect("tick value present in frame");
+                ticks.push(n);
+            }
+            Some("complete") => {
+                saw_complete = true;
+                break;
+            }
+            Some("error") => panic!("subscription error frame: {v}"),
+            _ => {}
+        }
+    }
+
+    assert!(saw_complete, "expected a terminal `complete` frame; got {} ticks", ticks.len());
+    assert_eq!(ticks, vec![1, 2, 3], "expected 3 monotonically increasing ticks");
 }
