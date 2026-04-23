@@ -340,9 +340,16 @@ impl SessionManager {
     ) -> Option<Vec<SubackReturnCode>> {
         let mut active = self.active_clients.write().await;
         let client = active.get_mut(client_id)?;
+        let sender = client.sender.clone();
 
         let mut topics = self.topics.write().await;
         let mut return_codes = Vec::new();
+        // Snapshot every retained PUBLISH that matches one of the new
+        // subscriptions so we can deliver after releasing the `topics`
+        // write lock. MQTT spec: retained messages MUST be delivered
+        // with the retain flag set, and the delivery QoS is the minimum
+        // of the retained QoS and the subscription QoS.
+        let mut retained_to_deliver: Vec<(String, Vec<u8>, u8, QoS)> = Vec::new();
 
         for (filter, requested_qos) in subscriptions {
             // Add to topic tree
@@ -358,7 +365,46 @@ impl SessionManager {
                 metrics.record_subscription();
             }
 
+            // Collect any retained PUBLISH matching this filter.
+            for (topic, retained) in topics.get_retained_for_filter(&filter) {
+                retained_to_deliver.push((
+                    topic.to_string(),
+                    retained.payload.clone(),
+                    retained.qos,
+                    requested_qos,
+                ));
+            }
+
             debug!("Client {} subscribed to {} with QoS {:?}", client_id, filter, requested_qos);
+        }
+
+        drop(topics);
+        drop(active);
+
+        // Deliver retained messages. Done *after* the locks are released
+        // so a backpressured `sender.send` can't deadlock against another
+        // handler that takes these same locks.
+        for (topic, payload, retained_qos, sub_qos) in retained_to_deliver {
+            let delivery_qos = std::cmp::min(retained_qos, sub_qos as u8);
+            let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
+            let packet = Packet::Publish(PublishPacket {
+                dup: false,
+                qos: delivery_qos,
+                retain: true, // spec: set on delivery to a new subscriber
+                topic: topic.clone(),
+                // Leave packet_id = None for QoS > 0; the writer task
+                // assigns it from the subscriber's session to avoid the
+                // packet_id=0 wire error (same invariant as regular
+                // publishes, see handle_publish).
+                packet_id: None,
+                payload,
+            });
+            if sender.send(packet).await.is_ok() {
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_delivery();
+                }
+                debug!("Delivered retained message to {} on topic {}", client_id, topic);
+            }
         }
 
         Some(return_codes)
