@@ -42,12 +42,10 @@ async fn test_schema_introspection_mutation_type() {
     let result = execute_query(router, "{ __schema { mutationType { name } } }").await;
 
     let data = result.get("data").expect("should have data");
-    // The default schema has EmptyMutation, so mutationType should be null
-    let mutation_type = &data["__schema"]["mutationType"];
-    assert!(
-        mutation_type.is_null(),
-        "default schema has no mutations, mutationType should be null"
-    );
+    // The default schema now exposes `MutationRoot` (with `createUser`)
+    // so `mutationType` must be non-null.
+    let name = &data["__schema"]["mutationType"]["name"];
+    assert_eq!(name, "MutationRoot");
 }
 
 #[tokio::test]
