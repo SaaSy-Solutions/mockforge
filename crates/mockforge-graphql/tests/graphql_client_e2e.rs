@@ -128,11 +128,12 @@ async fn graphql_real_client_introspection_query_returns_schema() {
         "queryType name should be QueryRoot"
     );
 
-    // Default schema has EmptyMutation/EmptySubscription, which async-graphql
-    // renders as a null type in introspection (not an empty type).
-    assert!(
-        schema.pointer("/mutationType").map(|v| v.is_null()).unwrap_or(false),
-        "default schema has no mutation root; mutationType should be null"
+    // Default schema exposes `MutationRoot` (with `createUser`) but
+    // still uses `EmptySubscription` — so subscriptionType stays null.
+    assert_eq!(
+        schema.pointer("/mutationType/name").and_then(|v| v.as_str()),
+        Some("MutationRoot"),
+        "default schema now has a mutation root named MutationRoot"
     );
     assert!(
         schema.pointer("/subscriptionType").map(|v| v.is_null()).unwrap_or(false),
@@ -153,6 +154,41 @@ async fn graphql_real_client_introspection_query_returns_schema() {
             "introspection types missing `{required}`; returned: {names:?}"
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn graphql_real_client_create_user_mutation_returns_user() {
+    let url = spawn_server().await;
+    let client = reqwest::Client::new();
+    let body = json!({
+        "query": r#"
+            mutation CreateUser($name: String!, $email: String!) {
+              createUser(name: $name, email: $email) { id name email }
+            }
+        "#,
+        "variables": { "name": "Alice", "email": "alice@example.com" },
+    });
+    let response =
+        tokio::time::timeout(Duration::from_secs(5), client.post(&url).json(&body).send())
+            .await
+            .expect("request should complete within 5s")
+            .expect("reqwest transport ok");
+    assert!(response.status().is_success(), "HTTP {}", response.status());
+
+    let value: serde_json::Value = response.json().await.expect("response must be JSON");
+    if let Some(errs) = value.get("errors") {
+        assert!(
+            errs.as_array().map(|a| a.is_empty()).unwrap_or(false),
+            "expected no GraphQL errors, got: {errs}"
+        );
+    }
+
+    let user = value.pointer("/data/createUser").expect("data.createUser must be present");
+    assert_eq!(user.pointer("/name").and_then(|v| v.as_str()), Some("Alice"));
+    assert_eq!(user.pointer("/email").and_then(|v| v.as_str()), Some("alice@example.com"));
+    let id = user.pointer("/id").and_then(|v| v.as_str()).expect("id must be a string");
+    assert!(id.starts_with("user-"), "expected derived id `user-<hex>`, got {id}");
+    assert_eq!(id.len(), "user-".len() + 12, "expected 12-hex-char suffix, got {id}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
