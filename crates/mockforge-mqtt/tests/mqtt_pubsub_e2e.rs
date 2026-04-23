@@ -325,6 +325,69 @@ async fn mqtt_last_will_suppressed_on_graceful_disconnect() {
     server.abort();
 }
 
+/// QoS 2 (exactly-once) round-trip. The broker runs two separate
+/// four-step handshakes per message:
+///   inbound:  publisher → PUBLISH; broker → PUBREC; publisher → PUBREL;
+///             broker → PUBCOMP
+///   outbound: broker → PUBLISH; subscriber → PUBREC; broker → PUBREL;
+///             subscriber → PUBCOMP
+/// rumqttc's event loop drives both sides transparently — we just set
+/// `QoS::ExactlyOnce` and assert the payload arrives exactly once. The
+/// real check is "does the outbound PUBREL ever go out". Before this
+/// fix the broker assigned an outbound packet id but never registered
+/// it in `pending_qos2_out`, so the subscriber's PUBREC had no matching
+/// entry and the flow stalled.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mqtt_qos2_exactly_once_round_trip() {
+    let port = free_port().await;
+    let config = MqttConfig {
+        port,
+        host: "127.0.0.1".into(),
+        ..MqttConfig::default()
+    };
+    let server = tokio::spawn(async move {
+        start_mqtt_server(config).await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    let mut sub_opts = MqttOptions::new("qos2-sub", "127.0.0.1", port);
+    sub_opts.set_keep_alive(Duration::from_secs(30));
+    let (sub_client, sub_eventloop) = AsyncClient::new(sub_opts, 16);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let sub_pump = drain_until_publish(sub_eventloop, tx);
+
+    sub_client.subscribe("qos2/topic", QoS::ExactlyOnce).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let mut pub_opts = MqttOptions::new("qos2-pub", "127.0.0.1", port);
+    pub_opts.set_keep_alive(Duration::from_secs(30));
+    let (pub_client, pub_eventloop) = AsyncClient::new(pub_opts, 16);
+    let pub_pump = pump(pub_eventloop);
+
+    pub_client
+        .publish("qos2/topic", QoS::ExactlyOnce, false, b"exactly-once-payload".to_vec())
+        .await
+        .unwrap();
+
+    let payload = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("qos2 subscriber should receive payload within 5s")
+        .expect("eventloop forwarded payload");
+    assert_eq!(payload, b"exactly-once-payload");
+
+    // Exactly-once: no *additional* payload should arrive on the same
+    // topic. Poll for a short window and assert silence — catches any
+    // duplicate-delivery bug.
+    let extra = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+    assert!(extra.is_err(), "QoS 2 must deliver exactly once; got a duplicate: {extra:?}");
+
+    sub_client.disconnect().await.ok();
+    pub_client.disconnect().await.ok();
+    sub_pump.abort();
+    pub_pump.abort();
+    server.abort();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mqtt_wildcard_subscription_matches_published_topic() {
     // A `+` wildcard subscription must receive messages from any single-
