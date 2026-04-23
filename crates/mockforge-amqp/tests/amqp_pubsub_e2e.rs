@@ -8,7 +8,8 @@
 //! locks in the end-to-end pub/sub contract.
 
 use lapin::options::{
-    BasicConsumeOptions, BasicPublishOptions, QueueBindOptions, QueueDeclareOptions,
+    BasicConsumeOptions, BasicPublishOptions, ConfirmSelectOptions, QueueBindOptions,
+    QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
 use lapin::{BasicProperties, Connection, ConnectionProperties};
@@ -287,5 +288,73 @@ async fn amqp_durable_queue_retains_messages_across_producer_disconnect() {
     );
 
     let _ = consumer_conn.close(0, "consumer done").await;
+    server.abort();
+}
+
+/// Publisher confirms (`confirm.select` + `basic.ack`). After a client
+/// opts a channel into publisher-confirm mode, every `basic.publish`
+/// MUST produce either a `basic.ack` (accepted) or `basic.nack`
+/// (rejected) from the broker, tagged with a monotonically increasing
+/// delivery tag. lapin's `basic_publish` in confirm mode returns a
+/// `PublisherConfirm` future that resolves to a `Confirmation` we can
+/// assert on. Before publisher confirms are wired end-to-end, this
+/// future hangs forever — the real check here is "the await
+/// actually resolves".
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_publisher_confirms_ack_every_publish() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let conn = Connection::connect(&uri, ConnectionProperties::default())
+        .await
+        .expect("lapin connects");
+    let channel = conn.create_channel().await.expect("open channel");
+
+    // Opt the channel into publisher-confirm mode.
+    channel
+        .confirm_select(ConfirmSelectOptions::default())
+        .await
+        .expect("confirm.select must succeed");
+
+    // Declare a target queue (keeps lapin from drop-on-floor + gives
+    // the publish something to land in).
+    let queue_name = "confirms-queue";
+    channel
+        .queue_declare(
+            queue_name,
+            QueueDeclareOptions {
+                durable: false,
+                exclusive: false,
+                auto_delete: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    // Three publishes. Each returns a `PublisherConfirm`; we await
+    // it under a short timeout and assert it resolves to Ack.
+    for i in 0..3u32 {
+        let confirm = channel
+            .basic_publish(
+                "",
+                queue_name,
+                BasicPublishOptions::default(),
+                format!("payload-{i}").as_bytes(),
+                BasicProperties::default(),
+            )
+            .await
+            .expect("basic_publish returns a PublisherConfirm future in confirm mode");
+
+        let confirmation = tokio::time::timeout(Duration::from_secs(5), confirm)
+            .await
+            .expect("broker should ack within 5s")
+            .expect("confirm future resolves without error");
+
+        assert!(confirmation.is_ack(), "publish {i} should be ack'd; got {confirmation:?}");
+    }
+
+    let _ = conn.close(0, "bye").await;
     server.abort();
 }
