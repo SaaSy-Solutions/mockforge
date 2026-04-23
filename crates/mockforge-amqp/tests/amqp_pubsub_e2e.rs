@@ -190,3 +190,102 @@ async fn amqp_topic_exchange_routes_wildcard_binding() {
     let _ = conn.close(0, "bye").await;
     server.abort();
 }
+
+/// Durable queues persist across a producer's disconnect. The AMQP
+/// broker must:
+///   1. Keep the queue declared by client A after A's connection
+///      closes (rather than replacing it when a subsequent redeclare
+///      arrives).
+///   2. Keep any pending messages that were routed into that queue.
+///   3. Deliver them to a fresh consumer C that reconnects later and
+///      redeclares the same queue name with the same flags.
+///
+/// Previously `declare_queue` unconditionally overwrote the existing
+/// queue on every call, so client B's redeclare dropped A's pending
+/// messages on the floor and the consumer got nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_durable_queue_retains_messages_across_producer_disconnect() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let queue_name = "durable-retains";
+    let durable_opts = QueueDeclareOptions {
+        durable: true,
+        exclusive: false,
+        auto_delete: false,
+        ..Default::default()
+    };
+
+    // --- Producer: declare durable queue + publish, then disconnect ---
+    {
+        let producer_conn = Connection::connect(&uri, ConnectionProperties::default())
+            .await
+            .expect("producer connects");
+        let producer_ch = producer_conn.create_channel().await.expect("producer channel");
+        producer_ch
+            .queue_declare(queue_name, durable_opts, FieldTable::default())
+            .await
+            .expect("producer declares durable queue");
+        for i in 0..3u32 {
+            producer_ch
+                .basic_publish(
+                    "",
+                    queue_name,
+                    BasicPublishOptions::default(),
+                    format!("persist-{i}").as_bytes(),
+                    BasicProperties::default(),
+                )
+                .await
+                .expect("publish");
+        }
+        // Give the broker a moment to route + persist.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let _ = producer_conn.close(0, "producer done").await;
+    }
+
+    // --- Consumer: fresh connection, redeclare same queue, drain ---
+    let consumer_conn = Connection::connect(&uri, ConnectionProperties::default())
+        .await
+        .expect("consumer reconnects after producer disconnect");
+    let consumer_ch = consumer_conn.create_channel().await.expect("consumer channel");
+    consumer_ch
+        .queue_declare(queue_name, durable_opts, FieldTable::default())
+        .await
+        .expect("consumer redeclares same durable queue — should be idempotent");
+
+    let mut consumer = consumer_ch
+        .basic_consume(
+            queue_name,
+            "durable-consumer",
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .expect("basic_consume");
+
+    let mut received: Vec<Vec<u8>> = Vec::new();
+    for _ in 0..3 {
+        let delivery = tokio::time::timeout(Duration::from_secs(5), consumer.next())
+            .await
+            .expect("each persisted message should arrive within 5s")
+            .expect("stream produced")
+            .expect("delivery parses");
+        received.push(delivery.data);
+    }
+    received.sort();
+    assert_eq!(
+        received,
+        vec![
+            b"persist-0".to_vec(),
+            b"persist-1".to_vec(),
+            b"persist-2".to_vec(),
+        ],
+        "durable queue must deliver every persisted message to the new consumer"
+    );
+
+    let _ = consumer_conn.close(0, "consumer done").await;
+    server.abort();
+}
