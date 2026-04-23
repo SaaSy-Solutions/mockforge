@@ -24,4 +24,10 @@ ignore = [
     { id = "RUSTSEC-2026-0096", reason = "wasmtime aarch64 Cranelift sandbox escape - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
     { id = "RUSTSEC-2026-0093", reason = "wasmtime heap OOB read in UTF-16 transcoding - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
     { id = "RUSTSEC-2026-0002", reason = "lru IterMut Stacked Borrows violation - transitive dep of ratatui/aws-sdk, no fix available" },
+    { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS - transitive dep via hickory-resolver/dns, upgrade blocked by quinn API changes downstream" },
+    { id = "RUSTSEC-2026-0098", reason = "rustls-webpki URI name constraints accepted - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
+    { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints accepted - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
+    { id = "RUSTSEC-2026-0104", reason = "rustls-webpki reachable panic in CRL parsing - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
+    { id = "RUSTSEC-2026-0008", reason = "git2 Buf deref UB - transitive dep via mockforge-scenarios, no fixed upgrade available" },
+    { id = "RUSTSEC-2026-0105", reason = "core2 unmaintained/yanked - transitive dep, no direct replacement, low-impact binary-format crate" },
 ]
