@@ -10,6 +10,7 @@
 //! contract.
 
 use lettre::message::{header::ContentType, Mailbox, Message};
+use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use mockforge_smtp::{SmtpConfig, SmtpServer, SmtpSpecRegistry};
 use std::sync::Arc;
@@ -288,6 +289,145 @@ async fn smtp_raw_client_8bitmime_body_preserved_byte_for_byte() {
         "non-ASCII body bytes (0xFF 0xFE 0x80 'h' 'i') were lost from raw: {raw:?}"
     );
     assert_eq!(mail.subject, "8BITMIME test");
+
+    server_handle.abort();
+}
+
+/// AUTH PLAIN via lettre's `Credentials` — the common path for apps
+/// that use `SmtpTransport::builder_dangerous(...).credentials(...)`.
+/// The mock advertises `AUTH PLAIN LOGIN` in EHLO, so lettre picks
+/// one and sends the SASL dialog. Accept any credentials, then send
+/// a regular message to prove the session is usable after AUTH.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn smtp_real_client_auth_plain_then_deliver() {
+    let port = free_port().await;
+    let config = SmtpConfig {
+        port,
+        host: "127.0.0.1".into(),
+        enable_starttls: false,
+        fixtures_dir: None,
+        ..SmtpConfig::default()
+    };
+    let spec_registry = Arc::new(SmtpSpecRegistry::new());
+    let server = SmtpServer::new(config, spec_registry.clone()).expect("server builds cleanly");
+    let server_handle = tokio::spawn(async move {
+        server.start().await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    let creds = Credentials::new("alice".into(), "hunter2".into());
+    let transport: AsyncSmtpTransport<Tokio1Executor> =
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous("127.0.0.1")
+            .port(port)
+            .credentials(creds)
+            .build();
+
+    let email = Message::builder()
+        .from("alice@example.test".parse::<Mailbox>().unwrap())
+        .to("receiver@example.test".parse::<Mailbox>().unwrap())
+        .subject("MockForge SMTP AUTH")
+        .header(ContentType::TEXT_PLAIN)
+        .body("After a successful AUTH the session accepts mail".to_string())
+        .unwrap();
+
+    transport.send(email).await.expect("lettre delivers via mock SMTP after AUTH");
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let captured = loop {
+        let emails = spec_registry.get_emails().expect("mailbox read");
+        if !emails.is_empty() {
+            break emails;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("authed message never made it into the mock mailbox");
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(captured.len(), 1, "expected exactly one authed message");
+    let mail = &captured[0];
+    assert!(
+        mail.from.contains("alice@example.test"),
+        "authed from address should round-trip; got {:?}",
+        mail.from
+    );
+    assert_eq!(mail.subject, "MockForge SMTP AUTH");
+
+    server_handle.abort();
+}
+
+/// AUTH LOGIN via a raw TCP session so we can drive the two-step
+/// `334` challenges explicitly. lettre always picks AUTH PLAIN when
+/// both are advertised, so this covers the LOGIN path directly.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn smtp_raw_client_auth_login_two_step_challenge() {
+    use base64::Engine as _;
+
+    let port = free_port().await;
+    let config = SmtpConfig {
+        port,
+        host: "127.0.0.1".into(),
+        enable_starttls: false,
+        fixtures_dir: None,
+        ..SmtpConfig::default()
+    };
+    let spec_registry = Arc::new(SmtpSpecRegistry::new());
+    let server = SmtpServer::new(config, spec_registry.clone()).expect("server builds cleanly");
+    let server_handle = tokio::spawn(async move {
+        server.start().await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    let stream = TcpStream::connect(("127.0.0.1", port)).await.expect("connect");
+    let (read_half, mut write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+
+    // 220 greeting
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("220"), "greeting: {line}");
+
+    // EHLO + drain multi-line response. The AUTH capability line must
+    // appear so clients know LOGIN is supported.
+    write_half.write_all(b"EHLO test-client\r\n").await.unwrap();
+    let mut saw_auth = false;
+    loop {
+        let line = read_line_until_code(&mut reader).await;
+        if line.to_ascii_uppercase().contains("AUTH ") && line.contains("LOGIN") {
+            saw_auth = true;
+        }
+        if line.len() >= 4 && &line[3..4] == " " {
+            break;
+        }
+    }
+    assert!(saw_auth, "EHLO must advertise AUTH ... LOGIN");
+
+    // AUTH LOGIN → 334 "Username:" base64
+    write_half.write_all(b"AUTH LOGIN\r\n").await.unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(
+        line.trim_end() == "334 VXNlcm5hbWU6",
+        "expected `334 VXNlcm5hbWU6` (base64 Username:), got: {line:?}"
+    );
+
+    // Send base64 username → 334 "Password:" base64
+    let user_b64 = base64::engine::general_purpose::STANDARD.encode("alice");
+    write_half.write_all(format!("{user_b64}\r\n").as_bytes()).await.unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(
+        line.trim_end() == "334 UGFzc3dvcmQ6",
+        "expected `334 UGFzc3dvcmQ6` (base64 Password:), got: {line:?}"
+    );
+
+    // Send base64 password → 235 Authentication successful
+    let pass_b64 = base64::engine::general_purpose::STANDARD.encode("hunter2");
+    write_half.write_all(format!("{pass_b64}\r\n").as_bytes()).await.unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("235 "), "expected `235 ...`, got: {line:?}");
+
+    write_half.write_all(b"QUIT\r\n").await.unwrap();
+    // Let the server write its 221, ignore content.
+    let mut tail = Vec::new();
+    let _ = reader.read_to_end(&mut tail).await;
 
     server_handle.abort();
 }
