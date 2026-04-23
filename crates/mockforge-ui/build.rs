@@ -11,21 +11,41 @@ struct ManifestEntry {
     css: Option<Vec<String>>,
 }
 
+// The published mockforge-ui crate deliberately omits the compiled Vite
+// bundle (see `include = [...]` in Cargo.toml) because it would push the
+// tarball well past crates.io's 10 MiB cap. When `ui/dist/index.html`
+// isn't present at compile time, this placeholder is embedded instead.
+// The mock server itself is fully functional — only the React dashboard
+// is a stub. Users who want the full dashboard should run the Docker
+// image or build from source.
 const PLACEHOLDER_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>MockForge Admin UI</title>
-<style>body{font-family:system-ui,sans-serif;max-width:600px;margin:60px auto;padding:0 20px;color:#333}
-h1{color:#1a1a1a}pre{background:#f4f4f4;padding:12px;border-radius:4px;overflow-x:auto}</style>
+<head>
+<meta charset="utf-8">
+<title>MockForge — Admin UI not bundled</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:60px auto;padding:0 24px;color:#1a1a1a;line-height:1.55}
+  h1{margin-bottom:4px}
+  p.muted{color:#666;margin-top:0}
+  pre{background:#f4f4f4;padding:12px 14px;border-radius:6px;overflow-x:auto;font-size:13px}
+  code{background:#f4f4f4;padding:2px 5px;border-radius:3px;font-size:90%}
+  a{color:#2962ff}
+  ul{padding-left:20px}
+</style>
 </head>
 <body>
-<h1>MockForge Admin UI Not Available</h1>
-<p>The admin UI assets were not included in this build. The mock server is fully functional — only the web dashboard is unavailable.</p>
-<p>To get the admin UI, build from source:</p>
-<pre>git clone https://github.com/SaaSy-Solutions/mockforge
-cd mockforge/crates/mockforge-ui/ui
-pnpm install && pnpm build
-cd ../../..
-cargo install --path crates/mockforge-cli</pre>
+<h1>MockForge Admin UI</h1>
+<p class="muted">The mock server is running. The web dashboard is not bundled in this build.</p>
+
+<p>This <code>mockforge-cli</code> was installed from crates.io, where the full React admin UI can't be shipped (it would exceed the 10 MiB package cap). The mock server, its OpenAPI routes, dynamic stubs, and management API at <code>/__mockforge/api/*</code> all work normally — you just don't get the dashboard UI on this port.</p>
+
+<h2>To get the dashboard</h2>
+<ul>
+  <li><strong>Docker</strong> (recommended): <code>docker run -p 3000:3000 -p 9080:9080 ghcr.io/saasy-solutions/mockforge:latest</code></li>
+  <li><strong>From source</strong>: <code>git clone https://github.com/SaaSy-Solutions/mockforge &amp;&amp; cd mockforge/crates/mockforge-ui/ui &amp;&amp; pnpm install &amp;&amp; pnpm build &amp;&amp; cargo install --path ../../mockforge-cli --locked</code></li>
+</ul>
+
+<p>The management API is available at this host — you can POST mocks to <code>/__mockforge/api/mocks</code> directly or via the <a href="https://www.npmjs.com/package/@mockforge-dev/sdk">@mockforge-dev/sdk</a> Node.js SDK.</p>
 </body>
 </html>"#;
 
