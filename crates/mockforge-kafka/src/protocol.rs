@@ -134,6 +134,13 @@ impl KafkaProtocolHandler {
             },
         ); // Heartbeat (v3 = last non-flexible)
         api_versions.insert(
+            13,
+            ApiVersion {
+                min_version: 0,
+                max_version: 3,
+            },
+        ); // LeaveGroup (v3 = last non-flexible; librdkafka 2.x sends v3 on close)
+        api_versions.insert(
             14,
             ApiVersion {
                 min_version: 0,
@@ -272,6 +279,7 @@ impl KafkaProtocolHandler {
             10 => KafkaRequestType::FindCoordinator,
             11 => KafkaRequestType::JoinGroup,
             12 => KafkaRequestType::Heartbeat,
+            13 => KafkaRequestType::LeaveGroup,
             14 => KafkaRequestType::SyncGroup,
             15 => KafkaRequestType::DescribeGroups,
             18 => KafkaRequestType::ApiVersions,
@@ -469,6 +477,7 @@ pub enum KafkaRequestType {
     JoinGroup,
     SyncGroup,
     Heartbeat,
+    LeaveGroup,
     ListGroups,
     DescribeGroups,
     ApiVersions,
@@ -531,6 +540,7 @@ fn is_flexible_request(api_key: i16, api_version: i16) -> bool {
         10 => 3, // FindCoordinator (flex at 3; we cap at 2)
         11 => 6, // JoinGroup    (flex at 6; we cap at 5)
         12 => 4, // Heartbeat    (flex at 4; we cap at 3)
+        13 => 4, // LeaveGroup   (flex at 4; we cap at 3)
         14 => 4, // SyncGroup    (flex at 4; we cap at 3)
         15 => 6, // DescribeGroups
         16 => 3, // ListGroups
@@ -736,6 +746,7 @@ mod tests {
                 KafkaRequestType::JoinGroup => "JoinGroup",
                 KafkaRequestType::SyncGroup => "SyncGroup",
                 KafkaRequestType::Heartbeat => "Heartbeat",
+                KafkaRequestType::LeaveGroup => "LeaveGroup",
                 KafkaRequestType::ListGroups => "ListGroups",
                 KafkaRequestType::DescribeGroups => "DescribeGroups",
                 KafkaRequestType::ApiVersions => "ApiVersions",
@@ -752,6 +763,7 @@ mod tests {
             (10, "FindCoordinator"),
             (11, "JoinGroup"),
             (12, "Heartbeat"),
+            (13, "LeaveGroup"),
             (14, "SyncGroup"),
             (8, "OffsetCommit"),
             (9, "OffsetFetch"),
@@ -1122,6 +1134,7 @@ mod tests {
             (10, 0, 2), // FindCoordinator (v2 = last non-flexible)
             (11, 0, 5), // JoinGroup (v5 = last non-flexible)
             (12, 0, 3), // Heartbeat (v3 = last non-flexible)
+            (13, 0, 3), // LeaveGroup (v3 = last non-flexible)
             (14, 0, 3), // SyncGroup (v3 = last non-flexible)
             (15, 0, 9), // DescribeGroups
             (16, 0, 5), // ListGroups (api_key 16 per Kafka spec)
@@ -1207,11 +1220,12 @@ mod tests {
         // entries (bumped from 11 when ListOffsets (key 2) was added);
         // varint(12 + 1) = 0x0D in a single byte.
         let n = handler.api_versions.len() as u32;
-        // 17 registered API keys after adding OffsetCommit (8) and
-        // OffsetFetch (9) and the corrected ListGroups slot at key 16.
-        // varint(17 + 1) = 0x12.
-        assert_eq!(n, 17);
-        assert_eq!(data[6], 0x12);
+        // 18 registered API keys after adding LeaveGroup (13) so
+        // librdkafka can send LeaveGroup on close and the coordinator
+        // evicts the member cleanly.
+        // varint(18 + 1) = 0x13.
+        assert_eq!(n, 18);
+        assert_eq!(data[6], 0x13);
 
         // Each entry: api_key(i16) + min(i16) + max(i16) + tag_buffer(0x00) = 7 bytes.
         let entries_start = 7;

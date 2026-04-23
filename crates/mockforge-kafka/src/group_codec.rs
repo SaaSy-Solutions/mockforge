@@ -270,12 +270,87 @@ pub fn serialize_heartbeat_v3_response(correlation_id: i32, error_code: i16) -> 
 }
 
 // =========================================================================
-// OffsetCommit v7 (minimum stub — accept everything; no persistence yet)
+// LeaveGroup v0-v3 (non-flexible). Versions differ in:
+//   request : v0-v2 are single-member (group_id + member_id)
+//             v3+   are batch (group_id + [members])
+//   response: v0-v1: error_code
+//             v2+  : throttle_time_ms + error_code
+//             v3+  : adds per-member errors array
+// librdkafka 2.x picks v1 for our broker despite our ApiVersions saying
+// max=3; we accept any of v0..=v3 and respond appropriately.
+// =========================================================================
+
+/// Request fields we care about, after merging v0-v3 variants. Every
+/// version carries enough info to identify which member(s) to evict.
+#[derive(Debug, Clone)]
+pub struct LeaveGroupMember {
+    pub member_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct LeaveGroupRequest {
+    pub group_id: String,
+    pub members: Vec<LeaveGroupMember>,
+}
+
+/// Parse any non-flexible LeaveGroup request (v0..=v3).
+pub fn parse_leave_group(api_version: i16, body: &[u8]) -> Result<LeaveGroupRequest, String> {
+    let mut cur = body;
+    let group_id = read_string(&mut cur)?;
+    let members = if api_version >= 3 {
+        let count = read_i32(&mut cur)?;
+        if count < 0 {
+            return Err("leave_group members count is negative".into());
+        }
+        let mut out = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let member_id = read_string(&mut cur)?;
+            let _group_instance_id = read_nullable_string(&mut cur)?;
+            out.push(LeaveGroupMember { member_id });
+        }
+        out
+    } else {
+        // v0-v2: single-member, no group_instance_id.
+        let member_id = read_string(&mut cur)?;
+        vec![LeaveGroupMember { member_id }]
+    };
+    Ok(LeaveGroupRequest { group_id, members })
+}
+
+/// Serialize a LeaveGroup response matching the request version.
+pub fn serialize_leave_group_response(
+    api_version: i16,
+    correlation_id: i32,
+    members: &[LeaveGroupMember],
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&correlation_id.to_be_bytes());
+    if api_version >= 2 {
+        out.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
+    }
+    out.extend_from_slice(&0i16.to_be_bytes()); // top-level error_code
+    if api_version >= 3 {
+        out.extend_from_slice(&(members.len() as i32).to_be_bytes());
+        for m in members {
+            push_string(&mut out, &m.member_id);
+            push_nullable_string(&mut out, None); // group_instance_id
+            out.extend_from_slice(&0i16.to_be_bytes()); // per-member error_code
+        }
+    }
+    out
+}
+
+// =========================================================================
+// OffsetCommit v7 — parsed fields include the actual committed offset so
+// the coordinator can persist it, and the metadata blob the client wants
+// to round-trip on the next OffsetFetch.
 // =========================================================================
 
 #[derive(Debug, Clone)]
 pub struct OffsetCommitPartition {
     pub partition_index: i32,
+    pub committed_offset: i64,
+    pub committed_metadata: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -286,12 +361,13 @@ pub struct OffsetCommitTopic {
 
 #[derive(Debug, Clone)]
 pub struct OffsetCommitRequestV7 {
+    pub group_id: String,
     pub topics: Vec<OffsetCommitTopic>,
 }
 
 pub fn parse_offset_commit_v7(body: &[u8]) -> Result<OffsetCommitRequestV7, String> {
     let mut cur = body;
-    let _group_id = read_string(&mut cur)?;
+    let group_id = read_string(&mut cur)?;
     let _generation_id = read_i32(&mut cur)?;
     let _member_id = read_string(&mut cur)?;
     let _group_instance_id = read_nullable_string(&mut cur)?;
@@ -309,14 +385,18 @@ pub fn parse_offset_commit_v7(body: &[u8]) -> Result<OffsetCommitRequestV7, Stri
         let mut partitions = Vec::with_capacity(parts_count as usize);
         for _ in 0..parts_count {
             let partition_index = read_i32(&mut cur)?;
-            let _committed_offset = read_i64(&mut cur)?;
+            let committed_offset = read_i64(&mut cur)?;
             let _committed_leader_epoch = read_i32(&mut cur)?;
-            let _committed_metadata = read_nullable_string(&mut cur)?;
-            partitions.push(OffsetCommitPartition { partition_index });
+            let committed_metadata = read_nullable_string(&mut cur)?;
+            partitions.push(OffsetCommitPartition {
+                partition_index,
+                committed_offset,
+                committed_metadata,
+            });
         }
         topics.push(OffsetCommitTopic { name, partitions });
     }
-    Ok(OffsetCommitRequestV7 { topics })
+    Ok(OffsetCommitRequestV7 { group_id, topics })
 }
 
 pub fn serialize_offset_commit_v7_response(
@@ -377,22 +457,38 @@ pub fn parse_offset_fetch_v5(body: &[u8]) -> Result<OffsetFetchRequestV5, String
     Ok(OffsetFetchRequestV5 { group_id, topics })
 }
 
+/// One partition's committed-offset lookup result for the OffsetFetch
+/// response. `offset == -1` means "no committed offset" (librdkafka
+/// then falls back to `auto.offset.reset`).
+#[derive(Debug, Clone)]
+pub struct OffsetFetchPartitionResponse {
+    pub partition_index: i32,
+    pub committed_offset: i64,
+    pub committed_metadata: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OffsetFetchTopicResponse {
+    pub name: String,
+    pub partitions: Vec<OffsetFetchPartitionResponse>,
+}
+
 pub fn serialize_offset_fetch_v5_response(
     correlation_id: i32,
-    req: &OffsetFetchRequestV5,
+    topics: &[OffsetFetchTopicResponse],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&correlation_id.to_be_bytes());
     out.extend_from_slice(&0i32.to_be_bytes()); // throttle_time_ms
-    out.extend_from_slice(&(req.topics.len() as i32).to_be_bytes());
-    for t in &req.topics {
+    out.extend_from_slice(&(topics.len() as i32).to_be_bytes());
+    for t in topics {
         push_string(&mut out, &t.name);
-        out.extend_from_slice(&(t.partition_indexes.len() as i32).to_be_bytes());
-        for &idx in &t.partition_indexes {
-            out.extend_from_slice(&idx.to_be_bytes());
-            out.extend_from_slice(&(-1i64).to_be_bytes()); // committed_offset = none
+        out.extend_from_slice(&(t.partitions.len() as i32).to_be_bytes());
+        for p in &t.partitions {
+            out.extend_from_slice(&p.partition_index.to_be_bytes());
+            out.extend_from_slice(&p.committed_offset.to_be_bytes());
             out.extend_from_slice(&(-1i32).to_be_bytes()); // committed_leader_epoch (v5+)
-            push_nullable_string(&mut out, None); // metadata
+            push_nullable_string(&mut out, p.committed_metadata.as_deref());
             out.extend_from_slice(&0i16.to_be_bytes()); // error_code
         }
     }
@@ -448,14 +544,15 @@ mod tests {
 
     #[test]
     fn offset_fetch_v5_response_says_no_committed() {
-        let req = OffsetFetchRequestV5 {
-            group_id: "g".into(),
-            topics: vec![OffsetFetchTopic {
-                name: "t".into(),
-                partition_indexes: vec![0],
+        let topics = vec![OffsetFetchTopicResponse {
+            name: "t".into(),
+            partitions: vec![OffsetFetchPartitionResponse {
+                partition_index: 0,
+                committed_offset: -1,
+                committed_metadata: None,
             }],
-        };
-        let resp = serialize_offset_fetch_v5_response(5, &req);
+        }];
+        let resp = serialize_offset_fetch_v5_response(5, &topics);
         // Layout: corr_id (4) + throttle_time_ms (4) + topics_len (4) + …
         assert_eq!(&resp[0..4], &5i32.to_be_bytes()); // correlation_id
         assert_eq!(&resp[4..8], &0i32.to_be_bytes()); // throttle_time_ms
@@ -470,5 +567,46 @@ mod tests {
         assert_eq!(&resp[23..31], &(-1i64).to_be_bytes());
         // committed_leader_epoch = -1 (v5+)
         assert_eq!(&resp[31..35], &(-1i32).to_be_bytes());
+    }
+
+    #[test]
+    fn offset_fetch_v5_response_carries_real_offset() {
+        let topics = vec![OffsetFetchTopicResponse {
+            name: "t".into(),
+            partitions: vec![OffsetFetchPartitionResponse {
+                partition_index: 2,
+                committed_offset: 42,
+                committed_metadata: Some("m".into()),
+            }],
+        }];
+        let resp = serialize_offset_fetch_v5_response(9, &topics);
+        // partition_index at byte 19, committed_offset at 23..31.
+        assert_eq!(&resp[0..4], &9i32.to_be_bytes());
+        assert_eq!(&resp[19..23], &2i32.to_be_bytes());
+        assert_eq!(&resp[23..31], &42i64.to_be_bytes());
+    }
+
+    #[test]
+    fn offset_commit_v7_parser_keeps_offset_and_metadata() {
+        let mut body = Vec::new();
+        push_string(&mut body, "g");
+        body.extend_from_slice(&7i32.to_be_bytes()); // generation_id
+        push_string(&mut body, "m"); // member_id
+        push_nullable_string(&mut body, None); // group_instance_id
+        body.extend_from_slice(&1i32.to_be_bytes()); // topics_count = 1
+        push_string(&mut body, "t");
+        body.extend_from_slice(&1i32.to_be_bytes()); // parts_count = 1
+        body.extend_from_slice(&3i32.to_be_bytes()); // partition_index
+        body.extend_from_slice(&42i64.to_be_bytes()); // committed_offset
+        body.extend_from_slice(&(-1i32).to_be_bytes()); // leader_epoch
+        push_nullable_string(&mut body, Some("meta"));
+
+        let parsed = parse_offset_commit_v7(&body).unwrap();
+        assert_eq!(parsed.group_id, "g");
+        assert_eq!(parsed.topics.len(), 1);
+        let p = &parsed.topics[0].partitions[0];
+        assert_eq!(p.partition_index, 3);
+        assert_eq!(p.committed_offset, 42);
+        assert_eq!(p.committed_metadata.as_deref(), Some("meta"));
     }
 }

@@ -29,9 +29,13 @@ impl Partition {
         }
     }
 
-    /// Append a message to the partition
-    pub fn append(&mut self, message: KafkaMessage) -> i64 {
+    /// Append a message to the partition. The message's `offset` field
+    /// is overwritten with the assigned offset before it's stored, so
+    /// downstream Fetch path can compare `msg.offset` against
+    /// `fetch_offset` correctly.
+    pub fn append(&mut self, mut message: KafkaMessage) -> i64 {
         let offset = self.high_watermark;
+        message.offset = offset;
         self.messages.push_back(message);
         self.high_watermark += 1;
         offset
@@ -97,6 +101,19 @@ mod tests {
         assert_eq!(offset, 0);
         assert_eq!(partition.high_watermark, 1);
         assert_eq!(partition.messages.len(), 1);
+    }
+
+    #[test]
+    fn test_append_stamps_assigned_offset_onto_message() {
+        let mut partition = Partition::new(0);
+        // Incoming message has offset=0, but this is the 3rd append so
+        // the assigned offset should be 2 — append must overwrite.
+        partition.append(create_test_message(0, b"m1"));
+        partition.append(create_test_message(0, b"m2"));
+        partition.append(create_test_message(0, b"m3"));
+
+        let offsets: Vec<i64> = partition.messages.iter().map(|m| m.offset).collect();
+        assert_eq!(offsets, vec![0, 1, 2]);
     }
 
     #[test]

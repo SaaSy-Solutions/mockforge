@@ -322,6 +322,7 @@ impl KafkaMockBroker {
             KafkaRequestType::JoinGroup => self.handle_join_group(message_buf, &request).await,
             KafkaRequestType::SyncGroup => self.handle_sync_group(message_buf, &request).await,
             KafkaRequestType::Heartbeat => self.handle_heartbeat(message_buf, &request).await,
+            KafkaRequestType::LeaveGroup => self.handle_leave_group(message_buf, &request).await,
             KafkaRequestType::OffsetCommit => {
                 self.handle_offset_commit(message_buf, &request).await
             }
@@ -822,7 +823,7 @@ impl KafkaMockBroker {
 
         let err = self
             .group_coordinator
-            .read()
+            .write()
             .await
             .heartbeat(&parsed.group_id, parsed.generation_id, &parsed.member_id)
             .err()
@@ -831,10 +832,56 @@ impl KafkaMockBroker {
         Ok(KafkaResponse::Preserialized(body))
     }
 
-    /// Handle OffsetCommit v7 (non-flexible) — minimum stub: accept every
-    /// partition with success. Real commit persistence is a follow-up PR;
-    /// this just unblocks librdkafka's consumer group flow which sends
-    /// periodic commits even when `enable.auto.commit=false`.
+    /// Handle LeaveGroup v0..=v3 (non-flexible). Removes each listed
+    /// member from the group; committed offsets are intentionally kept
+    /// so a new consumer joining the same group resumes from them.
+    ///
+    /// librdkafka 2.x picks v1 (single-member) against us even though
+    /// we advertise max=3 — so we accept any supported version and let
+    /// the codec pick the right wire shape.
+    async fn handle_leave_group(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::group_codec::{parse_leave_group, serialize_leave_group_response};
+        if !(0..=3).contains(&request.api_version) {
+            let body = serialize_leave_group_response(3, request.correlation_id, &[]);
+            tracing::warn!(
+                "rejecting LeaveGroup v{} (only v0..=v3 supported)",
+                request.api_version
+            );
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("leave_group body_offset past buffer end")
+        })?;
+        let parsed = parse_leave_group(request.api_version, body_slice).map_err(|e| {
+            mockforge_core::Error::internal(format!(
+                "LeaveGroup v{} parse: {e}",
+                request.api_version
+            ))
+        })?;
+
+        {
+            let mut coord = self.group_coordinator.write().await;
+            for m in &parsed.members {
+                coord.leave_group(&parsed.group_id, &m.member_id);
+            }
+        }
+
+        let body = serialize_leave_group_response(
+            request.api_version,
+            request.correlation_id,
+            &parsed.members,
+        );
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle OffsetCommit v7 (non-flexible). Persists each committed
+    /// offset (and its opaque metadata blob) in the group coordinator so
+    /// a subsequent OffsetFetch — possibly from a different consumer in
+    /// the same group — resumes from the committed position.
     async fn handle_offset_commit(
         &self,
         message_buf: &[u8],
@@ -851,28 +898,41 @@ impl KafkaMockBroker {
         })?;
         let parsed = parse_offset_commit_v7(body_slice)
             .map_err(|e| mockforge_core::Error::internal(format!("OffsetCommit v7 parse: {e}")))?;
+
+        {
+            let mut coord = self.group_coordinator.write().await;
+            for topic in &parsed.topics {
+                for p in &topic.partitions {
+                    coord.commit_offset(
+                        &parsed.group_id,
+                        &topic.name,
+                        p.partition_index,
+                        p.committed_offset,
+                        p.committed_metadata.clone(),
+                    );
+                }
+            }
+        }
+
         let body = serialize_offset_commit_v7_response(request.correlation_id, &parsed.topics);
         Ok(KafkaResponse::Preserialized(body))
     }
 
-    /// Handle OffsetFetch v5 (non-flexible) — minimum stub: every
-    /// requested partition returns `offset = -1` (no committed offset),
-    /// which causes librdkafka to fall back to `auto.offset.reset`.
-    /// Persistence comes in the follow-up PR.
+    /// Handle OffsetFetch v5 (non-flexible). Looks up each requested
+    /// partition in the coordinator; partitions without a prior commit
+    /// return `offset = -1` so librdkafka falls back to
+    /// `auto.offset.reset`.
     async fn handle_offset_fetch(
         &self,
         message_buf: &[u8],
         request: &KafkaRequest,
     ) -> Result<KafkaResponse> {
         use crate::group_codec::{
-            parse_offset_fetch_v5, serialize_offset_fetch_v5_response, OffsetFetchRequestV5,
+            parse_offset_fetch_v5, serialize_offset_fetch_v5_response,
+            OffsetFetchPartitionResponse, OffsetFetchTopicResponse,
         };
         if request.api_version != 5 {
-            let empty = OffsetFetchRequestV5 {
-                group_id: String::new(),
-                topics: Vec::new(),
-            };
-            let body = serialize_offset_fetch_v5_response(request.correlation_id, &empty);
+            let body = serialize_offset_fetch_v5_response(request.correlation_id, &[]);
             tracing::warn!("rejecting OffsetFetch v{} (only v5 supported)", request.api_version);
             return Ok(KafkaResponse::Preserialized(body));
         }
@@ -881,7 +941,36 @@ impl KafkaMockBroker {
         })?;
         let parsed = parse_offset_fetch_v5(body_slice)
             .map_err(|e| mockforge_core::Error::internal(format!("OffsetFetch v5 parse: {e}")))?;
-        let body = serialize_offset_fetch_v5_response(request.correlation_id, &parsed);
+
+        let coord = self.group_coordinator.read().await;
+        let topic_responses: Vec<OffsetFetchTopicResponse> = parsed
+            .topics
+            .iter()
+            .map(|t| {
+                let partitions = t
+                    .partition_indexes
+                    .iter()
+                    .map(|&idx| match coord.fetch_offset(&parsed.group_id, &t.name, idx) {
+                        Some(committed) => OffsetFetchPartitionResponse {
+                            partition_index: idx,
+                            committed_offset: committed.offset,
+                            committed_metadata: committed.metadata,
+                        },
+                        None => OffsetFetchPartitionResponse {
+                            partition_index: idx,
+                            committed_offset: -1,
+                            committed_metadata: None,
+                        },
+                    })
+                    .collect();
+                OffsetFetchTopicResponse {
+                    name: t.name.clone(),
+                    partitions,
+                }
+            })
+            .collect();
+
+        let body = serialize_offset_fetch_v5_response(request.correlation_id, &topic_responses);
         Ok(KafkaResponse::Preserialized(body))
     }
 
