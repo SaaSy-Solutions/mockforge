@@ -81,6 +81,80 @@ async fn graphql_real_client_user_by_id_returns_single_record() {
     assert!(user.pointer("/name").and_then(|v| v.as_str()).is_some());
 }
 
+/// Standard introspection query (abridged) exercising `__schema`,
+/// `types`, `queryType`, and field shapes — the shape Apollo / GraphiQL /
+/// Relay compiler send during schema discovery. Covers the over-the-wire
+/// path specifically; existing handler-level coverage lives in
+/// `tests/introspection_test.rs` which bypasses axum routing.
+const INTROSPECTION_QUERY: &str = r#"
+    query IntrospectionQuery {
+      __schema {
+        queryType { name }
+        mutationType { name }
+        subscriptionType { name }
+        types {
+          name
+          kind
+          fields(includeDeprecated: true) { name }
+        }
+      }
+    }
+"#;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn graphql_real_client_introspection_query_returns_schema() {
+    let url = spawn_server().await;
+    let client = reqwest::Client::new();
+    let body = json!({ "query": INTROSPECTION_QUERY });
+    let response =
+        tokio::time::timeout(Duration::from_secs(5), client.post(&url).json(&body).send())
+            .await
+            .expect("request should complete within 5s")
+            .expect("reqwest transport ok");
+    assert!(response.status().is_success(), "HTTP {}", response.status());
+
+    let value: serde_json::Value = response.json().await.expect("response must be JSON");
+    if let Some(errs) = value.get("errors") {
+        assert!(
+            errs.as_array().map(|a| a.is_empty()).unwrap_or(false),
+            "expected no GraphQL errors, got: {errs}"
+        );
+    }
+
+    let schema = value.pointer("/data/__schema").expect("response.data.__schema must be present");
+    assert_eq!(
+        schema.pointer("/queryType/name").and_then(|v| v.as_str()),
+        Some("QueryRoot"),
+        "queryType name should be QueryRoot"
+    );
+
+    // Default schema has EmptyMutation/EmptySubscription, which async-graphql
+    // renders as a null type in introspection (not an empty type).
+    assert!(
+        schema.pointer("/mutationType").map(|v| v.is_null()).unwrap_or(false),
+        "default schema has no mutation root; mutationType should be null"
+    );
+    assert!(
+        schema.pointer("/subscriptionType").map(|v| v.is_null()).unwrap_or(false),
+        "default schema has no subscription root; subscriptionType should be null"
+    );
+
+    let types = schema
+        .pointer("/types")
+        .and_then(|v| v.as_array())
+        .expect("__schema.types must be an array");
+    let names: std::collections::HashSet<&str> = types
+        .iter()
+        .filter_map(|t| t.pointer("/name").and_then(|v| v.as_str()))
+        .collect();
+    for required in ["QueryRoot", "User", "Post"] {
+        assert!(
+            names.contains(required),
+            "introspection types missing `{required}`; returned: {names:?}"
+        );
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn graphql_syntactically_invalid_query_surfaces_error_field() {
     let url = spawn_server().await;
