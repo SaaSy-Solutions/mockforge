@@ -9,7 +9,7 @@
 
 use mockforge_mqtt::broker::MqttConfig;
 use mockforge_mqtt::start_mqtt_server;
-use rumqttc::{AsyncClient, Event, EventLoop, Incoming, MqttOptions, QoS};
+use rumqttc::{AsyncClient, Event, EventLoop, Incoming, LastWill, MqttOptions, QoS};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -190,6 +190,135 @@ async fn mqtt_retained_message_delivered_to_new_subscriber() {
         retain_flag,
         "retained messages MUST be delivered with retain=true per MQTT spec"
     );
+
+    sub_client.disconnect().await.ok();
+    sub_pump.abort();
+    server.abort();
+}
+
+/// Last-Will-and-Testament delivery on *abrupt* disconnect. The MQTT
+/// spec (§3.1.2.5): a client that declares a will on CONNECT and then
+/// goes away without sending a DISCONNECT packet causes the broker to
+/// publish that will to its declared topic on behalf of the departed
+/// client. A graceful DISCONNECT, by contrast, silently discards the
+/// will. This test covers the abrupt case end-to-end:
+///   1. Subscriber attaches to "device/will-topic".
+///   2. Second client connects with a Last Will pointing at that topic.
+///   3. Second client's event loop is dropped without `disconnect()` —
+///      simulating a crash / network drop.
+///   4. Subscriber must receive the will payload.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mqtt_last_will_delivered_on_abrupt_disconnect() {
+    let port = free_port().await;
+    let config = MqttConfig {
+        port,
+        host: "127.0.0.1".into(),
+        ..MqttConfig::default()
+    };
+    let server = tokio::spawn(async move {
+        start_mqtt_server(config).await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    // --- Subscriber waits on the will topic -----------------------------
+    let mut sub_opts = MqttOptions::new("will-watcher", "127.0.0.1", port);
+    sub_opts.set_keep_alive(Duration::from_secs(30));
+    let (sub_client, sub_eventloop) = AsyncClient::new(sub_opts, 16);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let sub_pump = drain_until_publish(sub_eventloop, tx);
+
+    sub_client.subscribe("device/will-topic", QoS::AtLeastOnce).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // --- Client with a Last Will; CONNECT, then go away ungracefully ---
+    let mut will_opts = MqttOptions::new("will-maker", "127.0.0.1", port);
+    will_opts.set_keep_alive(Duration::from_secs(30));
+    will_opts.set_last_will(LastWill::new(
+        "device/will-topic",
+        b"will-maker went offline".to_vec(),
+        QoS::AtLeastOnce,
+        /*retain=*/ false,
+    ));
+    let (will_client, will_eventloop) = AsyncClient::new(will_opts, 16);
+
+    // Pump the event loop just long enough to finish CONNECT/CONNACK,
+    // then drop both halves. Dropping the event loop closes the TCP
+    // socket without a DISCONNECT packet — the broker treats this as an
+    // abrupt disconnect and publishes the will.
+    let will_handle = tokio::spawn(async move {
+        let mut ev = will_eventloop;
+        // Poll once so the CONNECT/CONNACK handshake completes. If we
+        // return before that, the broker never saw the will.
+        for _ in 0..20 {
+            if ev.poll().await.is_err() {
+                return;
+            }
+        }
+    });
+    // Let the connect handshake land.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    drop(will_client);
+    will_handle.abort();
+
+    // --- Subscriber should see the will --------------------------------
+    let payload = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("subscriber should receive will within 5s")
+        .expect("eventloop forwarded payload");
+    assert_eq!(payload, b"will-maker went offline");
+
+    sub_client.disconnect().await.ok();
+    sub_pump.abort();
+    server.abort();
+}
+
+/// Counterpart: a graceful DISCONNECT must *not* trigger the will.
+/// Without this, the broker would wrongly publish wills on every clean exit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mqtt_last_will_suppressed_on_graceful_disconnect() {
+    let port = free_port().await;
+    let config = MqttConfig {
+        port,
+        host: "127.0.0.1".into(),
+        ..MqttConfig::default()
+    };
+    let server = tokio::spawn(async move {
+        start_mqtt_server(config).await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    let mut sub_opts = MqttOptions::new("will-watcher-graceful", "127.0.0.1", port);
+    sub_opts.set_keep_alive(Duration::from_secs(30));
+    let (sub_client, sub_eventloop) = AsyncClient::new(sub_opts, 16);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let sub_pump = drain_until_publish(sub_eventloop, tx);
+
+    sub_client.subscribe("device/graceful-will", QoS::AtLeastOnce).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let mut will_opts = MqttOptions::new("graceful-will-maker", "127.0.0.1", port);
+    will_opts.set_keep_alive(Duration::from_secs(30));
+    will_opts.set_last_will(LastWill::new(
+        "device/graceful-will",
+        b"should NOT be delivered".to_vec(),
+        QoS::AtLeastOnce,
+        false,
+    ));
+    let (will_client, will_eventloop) = AsyncClient::new(will_opts, 16);
+    let will_pump = pump(will_eventloop);
+
+    // Give the handshake a beat, then disconnect gracefully.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    will_client.disconnect().await.ok();
+    // Allow the broker to process the DISCONNECT + the client's close.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    will_pump.abort();
+
+    // The subscriber should *not* see anything. Using a short timeout
+    // here is the whole assertion — if the will fires, rx.recv() hands
+    // us the payload.
+    let got = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+    assert!(got.is_err(), "graceful disconnect must NOT publish the will; received: {got:?}");
 
     sub_client.disconnect().await.ok();
     sub_pump.abort();
