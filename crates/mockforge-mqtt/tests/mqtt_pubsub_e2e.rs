@@ -114,6 +114,88 @@ async fn mqtt_publish_subscribe_round_trip() {
     server.abort();
 }
 
+/// Variant of `drain_until_publish` that also forwards the `retain`
+/// flag — the retained-messages test needs to distinguish "delivered
+/// as retained snapshot" from "delivered as live publish".
+fn drain_with_retain(
+    mut eventloop: EventLoop,
+    tx: mpsc::UnboundedSender<(Vec<u8>, bool)>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        loop {
+            match eventloop.poll().await {
+                Ok(Event::Incoming(Incoming::Publish(p))) => {
+                    let _ = tx.send((p.payload.to_vec(), p.retain));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("rumqttc eventloop terminated: {e}");
+                    break;
+                }
+            }
+        }
+    })
+}
+
+/// Retained-message delivery for late subscribers. The MQTT spec:
+/// when a PUBLISH arrives with `retain=true`, the broker stores it
+/// per-topic and delivers it immediately to any future subscriber —
+/// with the `retain` flag set on that delivery. This test:
+///   1. Publisher sets retain=true on "home/temperature".
+///   2. Publisher disconnects (broker keeps the retained value).
+///   3. A fresh subscriber subscribes — expects the retained PUBLISH
+///      immediately, with retain=true.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mqtt_retained_message_delivered_to_new_subscriber() {
+    let port = free_port().await;
+    let config = MqttConfig {
+        port,
+        host: "127.0.0.1".into(),
+        ..MqttConfig::default()
+    };
+    let server = tokio::spawn(async move {
+        start_mqtt_server(config).await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    // --- Publish a retained message, then disconnect --------------------
+    let mut pub_opts = MqttOptions::new("retain-pub", "127.0.0.1", port);
+    pub_opts.set_keep_alive(Duration::from_secs(30));
+    let (pub_client, pub_eventloop) = AsyncClient::new(pub_opts, 16);
+    let pub_pump = pump(pub_eventloop);
+    pub_client
+        .publish("home/temperature", QoS::AtLeastOnce, /*retain=*/ true, b"21.8C".to_vec())
+        .await
+        .unwrap();
+    // Give the broker a beat to process the PUBLISH + persist the retain.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    pub_client.disconnect().await.ok();
+    pub_pump.abort();
+
+    // --- Fresh subscriber joins after the publisher is gone -------------
+    let mut sub_opts = MqttOptions::new("retain-sub", "127.0.0.1", port);
+    sub_opts.set_keep_alive(Duration::from_secs(30));
+    let (sub_client, sub_eventloop) = AsyncClient::new(sub_opts, 16);
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let sub_pump = drain_with_retain(sub_eventloop, tx);
+
+    sub_client.subscribe("home/temperature", QoS::AtLeastOnce).await.unwrap();
+
+    let (payload, retain_flag) = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("subscriber should receive retained message within 5s")
+        .expect("eventloop forwarded payload");
+    assert_eq!(payload, b"21.8C", "retained payload must round-trip byte-for-byte");
+    assert!(
+        retain_flag,
+        "retained messages MUST be delivered with retain=true per MQTT spec"
+    );
+
+    sub_client.disconnect().await.ok();
+    sub_pump.abort();
+    server.abort();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mqtt_wildcard_subscription_matches_published_topic() {
     // A `+` wildcard subscription must receive messages from any single-
