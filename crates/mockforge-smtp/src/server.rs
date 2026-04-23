@@ -189,6 +189,16 @@ async fn handle_smtp_session(
         let command = as_str.trim();
         debug!("SMTP command from {}: {}", peer_addr, command);
 
+        // AUTH continuation: if the previous command opened an AUTH
+        // dialog, this line is base64 credential material, not an
+        // SMTP verb. Handle it here before the verb table would send
+        // back "502 Command not implemented".
+        if let Some(stage) = session_state.pending_auth.clone() {
+            handle_auth_continuation(stage, command, &mut session_state, &mut writer).await?;
+            line.clear();
+            continue;
+        }
+
         // Skip blank lines outside DATA mode — otherwise idle keep-alive
         // newlines would reach the verb parser.
         if command.is_empty() {
@@ -227,6 +237,82 @@ async fn handle_smtp_session(
     Ok(())
 }
 
+/// Decode `AUTH PLAIN`'s base64 credential blob. The SASL PLAIN
+/// payload is `\0authzid\0authcid\0passwd` (authzid may be empty).
+/// Returns the authcid (username) on success; `None` if the base64
+/// is malformed or the structure is wrong. The mock accepts any
+/// credentials — we only parse enough to pull out the username for
+/// mailbox observability.
+fn decode_plain_auth(b64: &str) -> Option<String> {
+    use base64::Engine as _;
+    let decoded = base64::engine::general_purpose::STANDARD.decode(b64.trim()).ok()?;
+    // Split on NULs. Valid forms produce 3 segments; we just need the
+    // middle one (authcid).
+    let mut parts = decoded.split(|b| *b == 0);
+    let _authzid = parts.next()?;
+    let authcid = parts.next()?;
+    let _passwd = parts.next()?;
+    Some(String::from_utf8_lossy(authcid).into_owned())
+}
+
+/// Handle the line *following* an AUTH open. Advances or completes
+/// the dialog depending on the stage we left off in.
+async fn handle_auth_continuation<W: AsyncWriteExt + Unpin>(
+    stage: AuthStage,
+    line: &str,
+    state: &mut SessionState,
+    writer: &mut W,
+) -> Result<()> {
+    use base64::Engine as _;
+    match stage {
+        AuthStage::AwaitingPlainCredentials => {
+            state.pending_auth = None;
+            match decode_plain_auth(line) {
+                Some(user) => {
+                    state.authenticated_user = Some(user);
+                    writer.write_all(b"235 2.7.0 Authentication successful\r\n").await?;
+                }
+                None => {
+                    writer.write_all(b"535 5.7.8 Authentication credentials invalid\r\n").await?;
+                }
+            }
+        }
+        AuthStage::AwaitingLoginUsername => {
+            let decoded = base64::engine::general_purpose::STANDARD
+                .decode(line.trim())
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok());
+            match decoded {
+                Some(u) => {
+                    state.authenticated_user = Some(u);
+                    state.pending_auth = Some(AuthStage::AwaitingLoginPassword);
+                    // "Password:" base64 = "UGFzc3dvcmQ6".
+                    writer.write_all(b"334 UGFzc3dvcmQ6\r\n").await?;
+                }
+                None => {
+                    state.pending_auth = None;
+                    state.authenticated_user = None;
+                    writer.write_all(b"535 5.7.8 Authentication credentials invalid\r\n").await?;
+                }
+            }
+        }
+        AuthStage::AwaitingLoginPassword => {
+            state.pending_auth = None;
+            // We don't actually verify the password — accept anything
+            // that decodes as base64. On decode failure reject with
+            // 535 so clients that intentionally pass junk (negative
+            // tests) still get a sane response.
+            if base64::engine::general_purpose::STANDARD.decode(line.trim()).is_ok() {
+                writer.write_all(b"235 2.7.0 Authentication successful\r\n").await?;
+            } else {
+                state.authenticated_user = None;
+                writer.write_all(b"535 5.7.8 Authentication credentials invalid\r\n").await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Strip trailing `\r\n` or `\n` from an SMTP line read via
 /// `read_until(b'\n', ...)`. Keeps the rest of the bytes intact so
 /// a non-UTF-8 body round-trips verbatim.
@@ -258,8 +344,17 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
         "HELLO" | "EHLO" => {
             let domain = parts.get(1).unwrap_or(&hostname);
             let response = if cmd == "EHLO" {
+                // Advertise AUTH PLAIN LOGIN so clients that gate on the
+                // capability line (lettre with Credentials, Python's
+                // smtplib.login, etc.) actually try AUTH instead of
+                // skipping to MAIL FROM.
                 format!(
-                    "250-{} Hello {}\r\n250-SIZE 10485760\r\n250-8BITMIME\r\n250-STARTTLS\r\n250 HELP\r\n",
+                    "250-{} Hello {}\r\n\
+                     250-SIZE 10485760\r\n\
+                     250-8BITMIME\r\n\
+                     250-STARTTLS\r\n\
+                     250-AUTH PLAIN LOGIN\r\n\
+                     250 HELP\r\n",
                     hostname, domain
                 )
             } else {
@@ -319,6 +414,60 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
             // Mock STARTTLS implementation - accept but don't actually upgrade
             writer.write_all(b"220 Ready to start TLS\r\n").await?;
             Ok(true)
+        }
+
+        "AUTH" => {
+            // AUTH dispatch. Any credentials are accepted — this is a
+            // mock, not an authenticator — but we do go through the full
+            // handshake so clients that gate on the 334/235 responses
+            // work as expected.
+            //
+            // `parts` uses `splitn(2, ' ')`, so for `AUTH PLAIN <b64>`
+            // we get parts = ["AUTH", "PLAIN <b64>"]. Split the rest
+            // into its own mechanism + optional initial-response piece.
+            let rest = parts.get(1).copied().unwrap_or("");
+            let mut auth_args = rest.splitn(2, ' ');
+            let mechanism = auth_args.next().map(|s| s.to_ascii_uppercase()).unwrap_or_default();
+            let initial_response = auth_args.next().map(str::trim).filter(|s| !s.is_empty());
+            match mechanism.as_str() {
+                "PLAIN" => {
+                    // Two forms:
+                    //   "AUTH PLAIN <base64>"          — single-shot
+                    //   "AUTH PLAIN\r\n" then client → <base64>  — two-shot
+                    if let Some(b64) = initial_response {
+                        match decode_plain_auth(b64) {
+                            Some(user) => {
+                                state.authenticated_user = Some(user);
+                                writer
+                                    .write_all(b"235 2.7.0 Authentication successful\r\n")
+                                    .await?;
+                            }
+                            None => {
+                                writer
+                                    .write_all(b"535 5.7.8 Authentication credentials invalid\r\n")
+                                    .await?;
+                            }
+                        }
+                    } else {
+                        state.pending_auth = Some(AuthStage::AwaitingPlainCredentials);
+                        // 334 with empty challenge = "send me the SASL initial response".
+                        writer.write_all(b"334 \r\n").await?;
+                    }
+                    Ok(true)
+                }
+                "LOGIN" => {
+                    state.pending_auth = Some(AuthStage::AwaitingLoginUsername);
+                    // "Username:" base64-encoded = "VXNlcm5hbWU6".
+                    writer.write_all(b"334 VXNlcm5hbWU6\r\n").await?;
+                    Ok(true)
+                }
+                _ => {
+                    writer
+                        .write_all(b"504 5.5.4 Authentication mechanism not supported\r\n")
+                        .await?;
+                    Ok(true)
+                }
+            }
         }
 
         "HELP" => {
@@ -477,6 +626,26 @@ fn extract_subject(data: &[u8]) -> String {
     String::new()
 }
 
+/// AUTH dialog state. SMTP's AUTH LOGIN / AUTH PLAIN both need
+/// multi-round-trip exchanges where the *next* line from the client
+/// is not an SMTP verb — it's base64-encoded credential material.
+/// The main read loop consults `SessionState.pending_auth` before
+/// dispatching to the verb table so that continuation data isn't
+/// misrouted into `502 Command not implemented`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // all stages share the `Awaiting` prefix by design.
+enum AuthStage {
+    /// Client sent `AUTH LOGIN`. Next line should be the base64
+    /// username; we respond with `334 <base64("Password:")>`.
+    AwaitingLoginUsername,
+    /// Client sent the AUTH LOGIN username. Next line should be the
+    /// base64 password; we accept it and send 235.
+    AwaitingLoginPassword,
+    /// Client sent `AUTH PLAIN` on its own. Next line should be a
+    /// single base64 blob decoding to `\0user\0pass`.
+    AwaitingPlainCredentials,
+}
+
 /// Session state for SMTP connection.
 ///
 /// `data` is `Vec<u8>` (not `String`) so the DATA body survives
@@ -489,6 +658,12 @@ struct SessionState {
     rcpt_to: Vec<String>,
     data: Vec<u8>,
     in_data_mode: bool,
+    /// Mid-AUTH dialog state, `None` when not currently negotiating.
+    pending_auth: Option<AuthStage>,
+    /// Best-effort capture of the authenticated username so callers
+    /// inspecting the mailbox can filter by who sent what. Populated
+    /// on successful AUTH PLAIN / AUTH LOGIN; cleared by RSET/reset().
+    authenticated_user: Option<String>,
 }
 
 impl SessionState {
@@ -498,6 +673,8 @@ impl SessionState {
             rcpt_to: Vec::new(),
             data: Vec::new(),
             in_data_mode: false,
+            pending_auth: None,
+            authenticated_user: None,
         }
     }
 
@@ -506,6 +683,10 @@ impl SessionState {
         self.rcpt_to.clear();
         self.data.clear();
         self.in_data_mode = false;
+        self.pending_auth = None;
+        // `authenticated_user` intentionally survives RSET — RFC 4954:
+        // the authenticated state is tied to the connection, not the
+        // mail transaction.
     }
 }
 

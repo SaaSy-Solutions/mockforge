@@ -8919,6 +8919,7 @@ version = "0.3.116"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "criterion",
  "lettre",
