@@ -150,3 +150,115 @@ async fn grpc_real_client_server_streaming_yields_expected_count() {
 
     server.abort();
 }
+
+/// `SayHelloClientStream` is client-streaming: many requests collapse
+/// into one aggregated `HelloReply`. The handler echoes the count +
+/// the joined list of names. This test sends 3 `HelloRequest`s, closes
+/// the send side, and asserts on the single response.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn grpc_real_client_client_streaming_aggregates_into_single_reply() {
+    let (endpoint, server) = spawn_greeter().await;
+
+    let mut client = GreeterClient::connect(endpoint)
+        .await
+        .expect("tonic GreeterClient should connect to the running mock server");
+
+    // tonic expects an outbound Stream<HelloRequest>. `futures::stream::iter`
+    // + `tonic::Request::new` is the standard pattern for canned inputs.
+    let names = ["alice", "bob", "carol"];
+    // Owned HelloRequests so the stream borrows nothing from the test frame
+    // (tonic requires the stream be `'static`).
+    let payloads: Vec<HelloRequest> = names
+        .iter()
+        .map(|n| HelloRequest {
+            name: (*n).to_string(),
+            user_info: None,
+            tags: vec![],
+        })
+        .collect();
+    let requests = futures::stream::iter(payloads);
+
+    let response = tokio::time::timeout(
+        Duration::from_secs(5),
+        client.say_hello_client_stream(tonic::Request::new(requests)),
+    )
+    .await
+    .expect("say_hello_client_stream should complete within 5s")
+    .expect("say_hello_client_stream should return Ok");
+
+    let reply = response.into_inner();
+    assert!(
+        !reply.message.is_empty(),
+        "aggregated HelloReply must carry a non-empty message"
+    );
+    for name in &names {
+        assert!(
+            reply.message.contains(name),
+            "aggregated reply should mention `{name}`; got: {}",
+            reply.message
+        );
+    }
+    // The handler also announces the count — loose-match the digit so
+    // we don't over-couple to the exact wording.
+    assert!(
+        reply.message.contains("3"),
+        "aggregated reply should report the message count (3); got: {}",
+        reply.message
+    );
+
+    server.abort();
+}
+
+/// `Chat` is bidirectional: the server responds as soon as each client
+/// message arrives. The handler tags each reply with its 1-based index
+/// ("Chat response N:"). This test interleaves 3 sends with 3 receives
+/// and asserts each response pairs with its request.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn grpc_real_client_bidi_streaming_chat_echoes_each_request() {
+    let (endpoint, server) = spawn_greeter().await;
+
+    let mut client = GreeterClient::connect(endpoint)
+        .await
+        .expect("tonic GreeterClient should connect to the running mock server");
+
+    // Use a tokio mpsc channel as the outbound stream so we can send
+    // messages one at a time and observe responses interleaved with
+    // sends. ReceiverStream adapts the mpsc channel into the Stream
+    // that tonic's client expects.
+    let (tx, rx) = tokio::sync::mpsc::channel::<HelloRequest>(8);
+    let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let response = client
+        .chat(tonic::Request::new(outbound))
+        .await
+        .expect("chat should open bidi stream");
+    let mut inbound = response.into_inner();
+
+    let names = ["one", "two", "three"];
+    for (i, n) in names.iter().enumerate() {
+        tx.send(HelloRequest {
+            name: (*n).to_string(),
+            user_info: None,
+            tags: vec![],
+        })
+        .await
+        .expect("send on outbound stream");
+        let reply = tokio::time::timeout(Duration::from_secs(5), inbound.next())
+            .await
+            .expect("bidi reply should arrive within 5s")
+            .expect("bidi stream should not close early")
+            .expect("no transport error mid-bidi");
+        assert!(
+            reply.message.contains(n),
+            "bidi reply {i} must echo request name `{n}`; got: {}",
+            reply.message
+        );
+        assert!(
+            reply.message.contains(&(i + 1).to_string()),
+            "bidi reply {i} should carry its 1-based sequence number; got: {}",
+            reply.message
+        );
+    }
+
+    drop(tx); // closes the outbound stream → handler should finish.
+    server.abort();
+}
