@@ -8,11 +8,11 @@
 //! locks in the end-to-end pub/sub contract.
 
 use lapin::options::{
-    BasicConsumeOptions, BasicPublishOptions, ConfirmSelectOptions, QueueBindOptions,
-    QueueDeclareOptions,
+    BasicConsumeOptions, BasicNackOptions, BasicPublishOptions, ConfirmSelectOptions,
+    ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
 };
 use lapin::types::FieldTable;
-use lapin::{BasicProperties, Connection, ConnectionProperties};
+use lapin::{BasicProperties, Connection, ConnectionProperties, ExchangeKind};
 use mockforge_amqp::broker::AmqpBroker;
 use mockforge_amqp::spec_registry::AmqpSpecRegistry;
 use mockforge_core::config::AmqpConfig;
@@ -519,6 +519,150 @@ async fn amqp_queue_level_ttl_drops_stale_messages() {
     assert!(
         got.is_err(),
         "queue with x-message-ttl=100ms must drop a 300ms-old payload; got: {got:?}"
+    );
+
+    let _ = conn.close(0, "bye").await;
+    server.abort();
+}
+
+/// Dead-letter-exchange routing. When a queue is declared with
+/// `x-dead-letter-exchange` and a consumer rejects a delivery with
+/// `requeue=false`, the rejected message MUST be re-routed to the
+/// DLX (and the optional `x-dead-letter-routing-key`). A DLX-bound
+/// queue then picks it up for retry / audit flows.
+///
+/// Topology:
+///   producer → work-queue (with x-dead-letter-exchange=dlx,
+///                          x-dead-letter-routing-key=dead)
+///   dlx (direct) → dlq bound on routing_key=dead
+///   consumer on work-queue nacks → broker republishes to dlx →
+///   dlq consumer receives the dead-lettered payload.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn amqp_dead_letter_exchange_receives_rejected_messages() {
+    let (port, server) = spawn_broker().await;
+    let uri = format!("amqp://127.0.0.1:{port}/%2f");
+
+    let conn = Connection::connect(&uri, ConnectionProperties::default()).await.unwrap();
+    let channel = conn.create_channel().await.unwrap();
+
+    // Declare the DLX + DLQ first. The DLX is a plain direct
+    // exchange; the DLQ is a normal durable queue bound on
+    // `routing_key=dead`.
+    channel
+        .exchange_declare(
+            "dlx",
+            ExchangeKind::Direct,
+            ExchangeDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .expect("declare dlx");
+    channel
+        .queue_declare(
+            "dlq",
+            QueueDeclareOptions {
+                durable: true,
+                exclusive: false,
+                auto_delete: false,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .expect("declare dlq");
+    channel
+        .queue_bind("dlq", "dlx", "dead", QueueBindOptions::default(), FieldTable::default())
+        .await
+        .expect("bind dlq");
+
+    // Declare the work queue with DLX routing configured.
+    let mut args = FieldTable::default();
+    args.insert(
+        "x-dead-letter-exchange".into(),
+        lapin::types::AMQPValue::LongString("dlx".into()),
+    );
+    args.insert(
+        "x-dead-letter-routing-key".into(),
+        lapin::types::AMQPValue::LongString("dead".into()),
+    );
+    channel
+        .queue_declare(
+            "work-queue",
+            QueueDeclareOptions {
+                durable: false,
+                exclusive: false,
+                auto_delete: false,
+                ..Default::default()
+            },
+            args,
+        )
+        .await
+        .expect("declare work-queue with DLX args");
+
+    // Publish one message to the work queue.
+    channel
+        .basic_publish(
+            "",
+            "work-queue",
+            BasicPublishOptions::default(),
+            b"doomed",
+            BasicProperties::default(),
+        )
+        .await
+        .unwrap();
+
+    // Consume and nack with requeue=false — this is what triggers
+    // the dead-letter.
+    let mut work_consumer = channel
+        .basic_consume(
+            "work-queue",
+            "work-consumer",
+            BasicConsumeOptions {
+                no_ack: false, // must ack/nack explicitly for DLX to fire
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    let delivery = tokio::time::timeout(Duration::from_secs(5), work_consumer.next())
+        .await
+        .expect("work consumer receives within 5s")
+        .expect("stream produced")
+        .expect("delivery");
+    assert_eq!(delivery.data, b"doomed");
+    // Nack with requeue=false → broker should reroute to dlx.
+    delivery
+        .nack(BasicNackOptions {
+            requeue: false,
+            multiple: false,
+        })
+        .await
+        .expect("nack");
+
+    // Now subscribe to the DLQ and expect the dead-lettered payload.
+    let mut dlq_consumer = channel
+        .basic_consume(
+            "dlq",
+            "dlq-consumer",
+            BasicConsumeOptions {
+                no_ack: true,
+                ..Default::default()
+            },
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    let dead = tokio::time::timeout(Duration::from_secs(5), dlq_consumer.next())
+        .await
+        .expect("DLQ consumer should see the rejected payload within 5s")
+        .expect("stream produced")
+        .expect("delivery");
+    assert_eq!(
+        dead.data, b"doomed",
+        "DLQ should receive the exact rejected payload byte-for-byte"
     );
 
     let _ = conn.close(0, "bye").await;

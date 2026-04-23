@@ -120,6 +120,62 @@ fn extract_long_arg(table: &[u8], key: &str) -> Option<i64> {
     None
 }
 
+/// Pull a single string-typed value out of an AMQP field-table by
+/// key. Handles both shortstr (`S` is used by lapin for strings,
+/// though the AMQP wire tag is technically `S`/longstr) and
+/// shortstr-in-table encoding. Used for `x-dead-letter-exchange`
+/// / `x-dead-letter-routing-key` on Queue.Declare.
+fn extract_string_arg(table: &[u8], key: &str) -> Option<String> {
+    if table.len() < 4 {
+        return None;
+    }
+    let body_len = u32::from_be_bytes([table[0], table[1], table[2], table[3]]) as usize;
+    let body = table.get(4..4 + body_len)?;
+
+    let mut i = 0usize;
+    while i < body.len() {
+        let name_len = *body.get(i)? as usize;
+        i += 1;
+        let name_bytes = body.get(i..i + name_len)?;
+        i += name_len;
+        let tag = *body.get(i)?;
+        i += 1;
+
+        let (value, consumed): (Option<String>, usize) = match tag {
+            b'S' => {
+                let b = body.get(i..i + 4)?;
+                let s_len = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                let bytes = body.get(i + 4..i + 4 + s_len)?;
+                (Some(String::from_utf8_lossy(bytes).into_owned()), 4 + s_len)
+            }
+            b's' => {
+                let b = body.get(i..i + 2)?;
+                let slen = i16::from_be_bytes([b[0], b[1]]).max(0) as usize;
+                let bytes = body.get(i + 2..i + 2 + slen)?;
+                (Some(String::from_utf8_lossy(bytes).into_owned()), 2 + slen)
+            }
+            // Fixed-width numeric tags — skip past the value.
+            b't' | b'b' | b'B' => (None, 1),
+            b'u' => (None, 2),
+            b'I' | b'i' | b'f' => (None, 4),
+            b'l' | b'L' | b'd' => (None, 8),
+            b'V' => (None, 0),
+            b'x' | b'F' | b'A' => {
+                let b = body.get(i..i + 4)?;
+                let v_len = u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize;
+                (None, 4 + v_len)
+            }
+            _ => return None,
+        };
+        i += consumed;
+
+        if name_bytes == key.as_bytes() {
+            return value;
+        }
+    }
+    None
+}
+
 /// Connection state machine
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionState {
@@ -1035,22 +1091,34 @@ impl AmqpConnection {
 
         // Everything remaining in the Queue.Declare frame is the
         // client-supplied argument field-table (`x-message-ttl`,
-        // `x-dead-letter-exchange`, etc.). We only pull out the keys
-        // we actually act on — unknown keys are ignored, matching the
-        // AMQP "broker chooses which extensions it supports" rule.
-        let message_ttl = extract_long_arg(&arguments[offset..], "x-message-ttl")
+        // `x-dead-letter-exchange`, `x-dead-letter-routing-key`,
+        // etc.). We only pull out the keys we actually act on —
+        // unknown keys are ignored, matching the AMQP "broker chooses
+        // which extensions it supports" rule.
+        let tail = &arguments[offset..];
+        let message_ttl = extract_long_arg(tail, "x-message-ttl")
             .map(|ms| std::time::Duration::from_millis(ms as u64));
+        let dlx = extract_string_arg(tail, "x-dead-letter-exchange");
+        let dlrk = extract_string_arg(tail, "x-dead-letter-routing-key");
 
-        tracing::debug!("Queue declare: {} (ttl={:?})", queue_name, message_ttl);
+        tracing::debug!(
+            "Queue declare: {} (ttl={:?} dlx={:?} dlrk={:?})",
+            queue_name,
+            message_ttl,
+            dlx,
+            dlrk
+        );
 
         // Declare the queue
         let mut queues = self.queues.write().await;
-        queues.declare_queue_with_ttl(
+        queues.declare_queue_with_args(
             queue_name.clone(),
             durable,
             exclusive,
             auto_delete,
             message_ttl,
+            dlx,
+            dlrk,
         );
         self.metrics.record_queue_declared();
         drop(queues);
@@ -1644,12 +1712,44 @@ impl AmqpConnection {
                     }
                 }
             }
-        } else if let Some(ch) = self.channels.get_mut(&channel) {
-            ch.unacked_messages.remove(&delivery_tag);
+        } else {
+            // requeue=false: pop the unacked message and, if the
+            // queue is configured with `x-dead-letter-exchange`,
+            // republish to that exchange so retry / audit flows see
+            // the rejected payload.
+            let popped = self
+                .channels
+                .get_mut(&channel)
+                .and_then(|ch| ch.unacked_messages.remove(&delivery_tag));
+            if let Some(unacked) = popped {
+                self.dead_letter(&unacked.queue_name, unacked.message).await;
+            }
         }
 
         self.metrics.record_reject();
         Ok(true)
+    }
+
+    /// If `queue_name` is configured with an `x-dead-letter-exchange`,
+    /// republish `message` to that exchange using the configured
+    /// dead-letter routing key (or the message's original routing key
+    /// if none was set). No-op when the queue has no DLX or doesn't
+    /// exist anymore.
+    async fn dead_letter(&mut self, queue_name: &str, message: Message) {
+        let (dlx, dlrk) = {
+            let queues = self.queues.read().await;
+            let Some(q) = queues.get_queue(queue_name) else {
+                return;
+            };
+            (
+                q.properties.dead_letter_exchange.clone(),
+                q.properties.dead_letter_routing_key.clone(),
+            )
+        };
+        let Some(dlx) = dlx else { return };
+        let routing_key = dlrk.unwrap_or_else(|| message.routing_key.clone());
+        tracing::debug!("Dead-lettering message from {queue_name} -> {dlx}/{routing_key}");
+        self.route_message(&dlx, &routing_key, message).await;
     }
 
     async fn handle_basic_nack(&mut self, channel: u16, arguments: &[u8]) -> io::Result<bool> {
@@ -1679,9 +1779,14 @@ impl AmqpConnection {
             requeue
         );
 
-        // Similar to reject but can be multiple
-        if let Some(ch) = self.channels.get_mut(&channel) {
-            let tags_to_nack: Vec<u64> = if multiple {
+        // Collect tags + unacked messages up front so we can drop
+        // the `self.channels` borrow before doing DLX routing
+        // (which needs `&mut self`).
+        let popped: Vec<UnackedMessage> = {
+            let Some(ch) = self.channels.get_mut(&channel) else {
+                return Ok(true);
+            };
+            let tags: Vec<u64> = if multiple {
                 ch.unacked_messages
                     .keys()
                     .filter(|&&tag| tag <= delivery_tag)
@@ -1690,18 +1795,20 @@ impl AmqpConnection {
             } else {
                 vec![delivery_tag]
             };
+            tags.into_iter().filter_map(|t| ch.unacked_messages.remove(&t)).collect()
+        };
 
-            for tag in tags_to_nack {
-                if let Some(unacked) = ch.unacked_messages.remove(&tag) {
-                    if requeue {
-                        let mut queues = self.queues.write().await;
-                        if let Some(queue) = queues.get_queue_mut(&unacked.queue_name) {
-                            queue.messages.push_front(QueuedMessage::new(unacked.message));
-                        }
-                    }
+        for unacked in popped {
+            if requeue {
+                let mut queues = self.queues.write().await;
+                if let Some(queue) = queues.get_queue_mut(&unacked.queue_name) {
+                    queue.messages.push_front(QueuedMessage::new(unacked.message));
                 }
-                self.metrics.record_reject();
+            } else {
+                // requeue=false + DLX configured → republish there.
+                self.dead_letter(&unacked.queue_name, unacked.message).await;
             }
+            self.metrics.record_reject();
         }
 
         Ok(true)
