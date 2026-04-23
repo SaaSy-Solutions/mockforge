@@ -14,6 +14,8 @@ use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 use mockforge_smtp::{SmtpConfig, SmtpServer, SmtpSpecRegistry};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
 
 async fn free_port() -> u16 {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -170,6 +172,122 @@ async fn smtp_real_client_multi_recipient_delivery_captures_all() {
             mail.to
         );
     }
+
+    server_handle.abort();
+}
+
+/// Drive the SMTP server directly over a raw `TcpStream` so we can
+/// include non-UTF-8 bytes in the body. lettre / `Message` insist on
+/// valid UTF-8 internally, so a lettre-based test can't exercise the
+/// 8BITMIME byte-preservation path end to end.
+async fn read_line_until_code(reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>) -> String {
+    let mut buf = String::new();
+    reader.read_line(&mut buf).await.expect("read SMTP reply line");
+    buf
+}
+
+/// 8BITMIME body preservation. The server advertises 8BITMIME in its
+/// EHLO response and must therefore preserve non-ASCII bytes in the
+/// DATA payload verbatim — specifically, `String::push_str`-based
+/// accumulation would drop or corrupt invalid UTF-8. This test drives
+/// a raw SMTP session and puts 0xFF/0xFE/0x80 in the body, then
+/// inspects `StoredEmail.raw` for a byte-exact match.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn smtp_raw_client_8bitmime_body_preserved_byte_for_byte() {
+    let port = free_port().await;
+    let config = SmtpConfig {
+        port,
+        host: "127.0.0.1".into(),
+        enable_starttls: false,
+        fixtures_dir: None,
+        ..SmtpConfig::default()
+    };
+    let spec_registry = Arc::new(SmtpSpecRegistry::new());
+    let server = SmtpServer::new(config, spec_registry.clone()).expect("server builds cleanly");
+    let server_handle = tokio::spawn(async move {
+        server.start().await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    let stream = TcpStream::connect(("127.0.0.1", port)).await.expect("connect");
+    let (read_half, mut write_half) = stream.into_split();
+    let mut reader = BufReader::new(read_half);
+
+    // Greeting
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("220"), "unexpected greeting: {line}");
+
+    // EHLO → 250 multiline response; drain until we see a code line
+    // without a '-' continuation.
+    write_half.write_all(b"EHLO test-client\r\n").await.unwrap();
+    loop {
+        let line = read_line_until_code(&mut reader).await;
+        if line.len() >= 4 && &line[3..4] == " " {
+            break;
+        }
+    }
+
+    // Use BODY=8BITMIME on MAIL FROM to match what a real 8BITMIME
+    // client would advertise. The server doesn't need to do anything
+    // special with it — it just shouldn't reject the verb form.
+    write_half
+        .write_all(b"MAIL FROM:<sender@example.test> BODY=8BITMIME\r\n")
+        .await
+        .unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("250"), "MAIL FROM reply: {line}");
+
+    write_half.write_all(b"RCPT TO:<receiver@example.test>\r\n").await.unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("250"), "RCPT TO reply: {line}");
+
+    write_half.write_all(b"DATA\r\n").await.unwrap();
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("354"), "DATA reply: {line}");
+
+    // Headers (ASCII) + blank line + body (deliberately non-UTF-8).
+    let body_bytes: &[u8] = &[0xff, 0xfe, 0x80, b'h', b'i'];
+    let mut payload = Vec::new();
+    payload.extend_from_slice(b"Subject: 8BITMIME test\r\n");
+    payload.extend_from_slice(b"From: sender@example.test\r\n");
+    payload.extend_from_slice(b"To: receiver@example.test\r\n");
+    payload.extend_from_slice(b"\r\n");
+    payload.extend_from_slice(body_bytes);
+    payload.extend_from_slice(b"\r\n.\r\n");
+    write_half.write_all(&payload).await.unwrap();
+
+    let line = read_line_until_code(&mut reader).await;
+    assert!(line.starts_with("250"), "end-of-DATA reply: {line}");
+
+    write_half.write_all(b"QUIT\r\n").await.unwrap();
+    // Drain anything else the server sends.
+    let mut tail = Vec::new();
+    let _ = reader.read_to_end(&mut tail).await;
+
+    // Wait for the mailbox to register the delivery, then assert.
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let captured = loop {
+        let emails = spec_registry.get_emails().expect("mailbox read");
+        if !emails.is_empty() {
+            break emails;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("8BITMIME message never made it into the mock mailbox");
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+
+    assert_eq!(captured.len(), 1);
+    let mail = &captured[0];
+    let raw = mail.raw.as_ref().expect("raw bytes must be captured");
+    // The body bytes must survive. We don't assert on the exact header
+    // formatting — different SMTP servers canonicalize headers — but
+    // the non-ASCII body bytes must be present intact.
+    assert!(
+        raw.windows(body_bytes.len()).any(|w| w == body_bytes),
+        "non-ASCII body bytes (0xFF 0xFE 0x80 'h' 'i') were lost from raw: {raw:?}"
+    );
+    assert_eq!(mail.subject, "8BITMIME test");
 
     server_handle.abort();
 }

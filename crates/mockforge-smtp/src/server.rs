@@ -151,35 +151,43 @@ async fn handle_smtp_session(
     writer.write_all(greeting.as_bytes()).await?;
 
     let mut session_state = SessionState::new();
-    let mut line = String::new();
+    // Byte-level accumulator so 8BITMIME bodies (Latin-1, UTF-8 with
+    // explicit content-transfer-encoding, etc.) round-trip verbatim.
+    // `read_line` would fail on non-UTF-8 inputs.
+    let mut line: Vec<u8> = Vec::new();
 
-    while reader.read_line(&mut line).await? > 0 {
-        let command = line.trim();
-        debug!("SMTP command from {}: {}", peer_addr, command);
-
+    while reader.read_until(b'\n', &mut line).await? > 0 {
         // DATA mode bypasses command parsing entirely. Without this, the
         // first word of every body line would be matched against the SMTP
         // verb table — any body beginning with "Hello ..." / "Data ..." /
         // "Quit ..." / etc. was being re-interpreted as a command and
         // dropped on the floor. Inside DATA mode, only the bare "." ends
         // the message; everything else (headers, blank separator, body
-        // lines, verbatim) accumulates.
+        // lines, verbatim) accumulates *as bytes*.
         if session_state.in_data_mode {
-            if command == "." {
+            // Strip trailing \r\n / \n. If the line is exactly "." +
+            // newline, that terminates the DATA section per RFC 5321.
+            let trimmed = strip_line_terminator(&line);
+            if trimmed == b"." {
                 session_state.in_data_mode = false;
                 let response =
                     process_email(&session_state, &registry, &middleware, peer_addr).await?;
                 writer.write_all(response.as_bytes()).await?;
                 session_state.reset();
             } else {
-                // Preserve the raw line (minus trailing \r\n) so headers
-                // and body content survive byte-for-byte.
-                session_state.data.push_str(line.trim_end_matches(['\r', '\n']));
-                session_state.data.push('\n');
+                session_state.data.extend_from_slice(trimmed);
+                session_state.data.push(b'\n');
             }
             line.clear();
             continue;
         }
+
+        // Outside DATA mode, SMTP verbs are ASCII-only per spec. Decode
+        // lossily so a malformed UTF-8 byte doesn't crash the session,
+        // then parse the verb table as before.
+        let as_str = String::from_utf8_lossy(&line);
+        let command = as_str.trim();
+        debug!("SMTP command from {}: {}", peer_addr, command);
 
         // Skip blank lines outside DATA mode — otherwise idle keep-alive
         // newlines would reach the verb parser.
@@ -217,6 +225,20 @@ async fn handle_smtp_session(
     }
 
     Ok(())
+}
+
+/// Strip trailing `\r\n` or `\n` from an SMTP line read via
+/// `read_until(b'\n', ...)`. Keeps the rest of the bytes intact so
+/// a non-UTF-8 body round-trips verbatim.
+fn strip_line_terminator(line: &[u8]) -> &[u8] {
+    let mut end = line.len();
+    if end > 0 && line[end - 1] == b'\n' {
+        end -= 1;
+    }
+    if end > 0 && line[end - 1] == b'\r' {
+        end -= 1;
+    }
+    &line[..end]
 }
 
 /// Handle a single SMTP command
@@ -322,8 +344,13 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
                     writer.write_all(response.as_bytes()).await?;
                     state.reset();
                 } else {
-                    state.data.push_str(command);
-                    state.data.push('\n');
+                    // Command path: the caller already trimmed the line
+                    // into a `&str`. Non-ASCII bodies are accumulated
+                    // via the byte-level DATA-mode branch in
+                    // `handle_smtp_session`; this fallback just
+                    // preserves the UTF-8 subset.
+                    state.data.extend_from_slice(command.as_bytes());
+                    state.data.push(b'\n');
                 }
                 Ok(true)
             } else {
@@ -365,14 +392,17 @@ async fn process_email(
         from: from.clone(),
         to: state.rcpt_to.clone(),
         subject: subject.clone(),
-        body: state.data.clone(),
+        // `body` is `String`; decode lossy so callers that only want a
+        // preview of a UTF-8 message aren't forced to round-trip
+        // through `raw`. Byte-exact consumers use `raw`.
+        body: String::from_utf8_lossy(&state.data).into_owned(),
         headers: HashMap::from([
             ("from".to_string(), from.clone()),
             ("to".to_string(), to.clone()),
             ("subject".to_string(), subject.clone()),
         ]),
         received_at: chrono::Utc::now(),
-        raw: Some(state.data.as_bytes().to_vec()),
+        raw: Some(state.data.clone()),
     };
     if let Err(e) = registry.store_email(captured) {
         warn!("Failed to store email in mailbox: {}", e);
@@ -393,7 +423,7 @@ async fn process_email(
             ("to".to_string(), to.clone()),
             ("subject".to_string(), subject.clone()),
         ]),
-        body: Some(state.data.as_bytes().to_vec()),
+        body: Some(state.data.clone()),
         client_ip: Some(peer_addr.ip().to_string()),
     };
 
@@ -429,9 +459,17 @@ fn extract_email_address(param: &str) -> String {
     param.trim().to_string()
 }
 
-/// Extract subject from email data
-fn extract_subject(data: &str) -> String {
-    for line in data.lines() {
+/// Extract subject from email data. Takes bytes so non-UTF-8 bodies
+/// still succeed; the header zone (above the blank line) is ASCII per
+/// RFC 5322, so lossy decoding for the search is safe.
+fn extract_subject(data: &[u8]) -> String {
+    let header_text = String::from_utf8_lossy(data);
+    for line in header_text.lines() {
+        // Headers end at the first blank line; stop searching there so we
+        // don't accidentally match a "Subject:" that appears in the body.
+        if line.is_empty() {
+            break;
+        }
         if line.to_lowercase().starts_with("subject:") {
             return line[8..].trim().to_string();
         }
@@ -439,11 +477,17 @@ fn extract_subject(data: &str) -> String {
     String::new()
 }
 
-/// Session state for SMTP connection
+/// Session state for SMTP connection.
+///
+/// `data` is `Vec<u8>` (not `String`) so the DATA body survives
+/// byte-for-byte even when the sender negotiated 8BITMIME and
+/// included non-ASCII / non-UTF-8 content. The mailbox API still
+/// exposes a `String` body via lossy decoding; `raw` holds the
+/// byte-accurate version for consumers that need it.
 struct SessionState {
     mail_from: Option<String>,
     rcpt_to: Vec<String>,
-    data: String,
+    data: Vec<u8>,
     in_data_mode: bool,
 }
 
@@ -452,7 +496,7 @@ impl SessionState {
         Self {
             mail_from: None,
             rcpt_to: Vec::new(),
-            data: String::new(),
+            data: Vec::new(),
             in_data_mode: false,
         }
     }
@@ -495,25 +539,25 @@ mod tests {
     fn test_extract_subject() {
         let data =
             "From: sender@example.com\nSubject: Test Email\nTo: recipient@example.com\n\nBody text";
-        assert_eq!(extract_subject(data), "Test Email");
+        assert_eq!(extract_subject(data.as_bytes()), "Test Email");
     }
 
     #[test]
     fn test_extract_subject_not_found() {
         let data = "From: sender@example.com\nTo: recipient@example.com\n\nBody text";
-        assert_eq!(extract_subject(data), "");
+        assert_eq!(extract_subject(data.as_bytes()), "");
     }
 
     #[test]
     fn test_extract_subject_lowercase() {
         let data = "subject: lowercase subject\nFrom: sender@example.com";
-        assert_eq!(extract_subject(data), "lowercase subject");
+        assert_eq!(extract_subject(data.as_bytes()), "lowercase subject");
     }
 
     #[test]
     fn test_extract_subject_mixed_case() {
         let data = "SUBJECT: UPPERCASE SUBJECT\nFrom: sender@example.com";
-        assert_eq!(extract_subject(data), "UPPERCASE SUBJECT");
+        assert_eq!(extract_subject(data.as_bytes()), "UPPERCASE SUBJECT");
     }
 
     #[test]
@@ -545,7 +589,7 @@ mod tests {
         state.mail_from = Some("test@example.com".to_string());
         state.rcpt_to.push("recipient1@example.com".to_string());
         state.rcpt_to.push("recipient2@example.com".to_string());
-        state.data = "Email body content".to_string();
+        state.data = b"Email body content".to_vec();
         state.in_data_mode = true;
 
         state.reset();
@@ -568,10 +612,30 @@ mod tests {
     #[test]
     fn test_session_state_data_accumulation() {
         let mut state = SessionState::new();
-        state.data.push_str("Line 1\n");
-        state.data.push_str("Line 2\n");
-        state.data.push_str("Line 3\n");
-        assert_eq!(state.data, "Line 1\nLine 2\nLine 3\n");
+        state.data.extend_from_slice(b"Line 1\n");
+        state.data.extend_from_slice(b"Line 2\n");
+        state.data.extend_from_slice(b"Line 3\n");
+        assert_eq!(state.data, b"Line 1\nLine 2\nLine 3\n");
+    }
+
+    #[test]
+    fn test_strip_line_terminator() {
+        assert_eq!(strip_line_terminator(b"hello\r\n"), b"hello");
+        assert_eq!(strip_line_terminator(b"hello\n"), b"hello");
+        assert_eq!(strip_line_terminator(b"hello"), b"hello");
+        assert_eq!(strip_line_terminator(b""), b"");
+        // Non-UTF-8 bytes survive intact through the strip.
+        assert_eq!(strip_line_terminator(b"\xff\xfe\r\n"), b"\xff\xfe");
+    }
+
+    #[test]
+    fn test_extract_subject_from_bytes_with_non_utf8_body() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"From: a@example.test\r\n");
+        data.extend_from_slice(b"Subject: 8BITMIME body below\r\n");
+        data.extend_from_slice(b"\r\n");
+        data.extend_from_slice(&[0xff, 0xfe, 0xfd]); // garbage bytes
+        assert_eq!(extract_subject(&data), "8BITMIME body below");
     }
 
     #[tokio::test]
