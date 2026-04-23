@@ -157,6 +157,32 @@ async fn handle_smtp_session(
         let command = line.trim();
         debug!("SMTP command from {}: {}", peer_addr, command);
 
+        // DATA mode bypasses command parsing entirely. Without this, the
+        // first word of every body line would be matched against the SMTP
+        // verb table — any body beginning with "Hello ..." / "Data ..." /
+        // "Quit ..." / etc. was being re-interpreted as a command and
+        // dropped on the floor. Inside DATA mode, only the bare "." ends
+        // the message; everything else (headers, blank separator, body
+        // lines, verbatim) accumulates.
+        if session_state.in_data_mode {
+            if command == "." {
+                session_state.in_data_mode = false;
+                let response =
+                    process_email(&session_state, &registry, &middleware, peer_addr).await?;
+                writer.write_all(response.as_bytes()).await?;
+                session_state.reset();
+            } else {
+                // Preserve the raw line (minus trailing \r\n) so headers
+                // and body content survive byte-for-byte.
+                session_state.data.push_str(line.trim_end_matches(['\r', '\n']));
+                session_state.data.push('\n');
+            }
+            line.clear();
+            continue;
+        }
+
+        // Skip blank lines outside DATA mode — otherwise idle keep-alive
+        // newlines would reach the verb parser.
         if command.is_empty() {
             line.clear();
             continue;
@@ -283,19 +309,19 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
         }
 
         _ => {
-            // Handle data mode or unknown command
+            // DATA-mode lines are short-circuited before `handle_smtp_command`
+            // is called (see `handle_smtp_session`), so we only land here for
+            // genuinely unknown verbs.
             if state.in_data_mode {
+                // Defensive fallback in case the short-circuit is ever
+                // bypassed — keep the original accumulator behavior so the
+                // session doesn't derail.
                 if command == "." {
-                    // End of data
                     state.in_data_mode = false;
-
-                    // Process the email
                     let response = process_email(state, registry, middleware, peer_addr).await?;
-
                     writer.write_all(response.as_bytes()).await?;
                     state.reset();
                 } else {
-                    // Accumulate email data
                     state.data.push_str(command);
                     state.data.push('\n');
                 }
@@ -325,6 +351,33 @@ async fn process_email(
     // Extract subject from data
     let subject = extract_subject(&state.data);
 
+    // Capture the delivered message in the in-memory mailbox before we
+    // touch fixture-driven response generation. The spec-registry's
+    // storage logic used to live inside `generate_mock_response` gated on
+    // `fixture.storage.save_to_mailbox`, which meant that if no fixture
+    // matched (the common case: users running the mock SMTP to inspect
+    // outgoing mail from their application) the message would silently
+    // disappear AND the server would return a 500 to the client. Capture
+    // is the primary contract of a mock SMTP; fixture matching should only
+    // affect the reply.
+    let captured = crate::fixtures::StoredEmail {
+        id: uuid::Uuid::new_v4().to_string(),
+        from: from.clone(),
+        to: state.rcpt_to.clone(),
+        subject: subject.clone(),
+        body: state.data.clone(),
+        headers: HashMap::from([
+            ("from".to_string(), from.clone()),
+            ("to".to_string(), to.clone()),
+            ("subject".to_string(), subject.clone()),
+        ]),
+        received_at: chrono::Utc::now(),
+        raw: Some(state.data.as_bytes().to_vec()),
+    };
+    if let Err(e) = registry.store_email(captured) {
+        warn!("Failed to store email in mailbox: {}", e);
+    }
+
     // Create protocol request
     let mut request = ProtocolRequest {
         protocol: Protocol::Smtp,
@@ -349,14 +402,18 @@ async fn process_email(
         return Ok(String::from_utf8_lossy(&short_circuit_response.body).to_string());
     }
 
-    // Generate response
-    let mut response = registry.generate_mock_response(&request)?;
+    // Ask the spec registry for a fixture-driven reply. When no fixture
+    // matches, fall back to the standard 250 OK so clients accept the
+    // message (the message has already been captured above).
+    let response = match registry.generate_mock_response(&request) {
+        Ok(mut resp) => {
+            middleware.process_response(&request, &mut resp).await?;
+            String::from_utf8_lossy(&resp.body).to_string()
+        }
+        Err(_) => "250 OK\r\n".to_string(),
+    };
 
-    // Process response through middleware
-    middleware.process_response(&request, &mut response).await?;
-
-    // Return SMTP response
-    Ok(String::from_utf8_lossy(&response.body).to_string())
+    Ok(response)
 }
 
 /// Extract email address from SMTP command parameter

@@ -39,6 +39,9 @@ rustls = "0.23"
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.0"
 criterion = { workspace = true }
+# Real SMTP client for the end-to-end regression test — sends a message
+# via the mock server and we then inspect the captured mailbox.
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1"] }
 
 [[bench]]
 name = "smtp_benchmarks"

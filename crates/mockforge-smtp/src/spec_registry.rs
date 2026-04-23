@@ -14,7 +14,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Email search filters
 #[derive(Debug, Clone, Default)]
@@ -341,24 +341,10 @@ impl SpecRegistry for SmtpSpecRegistry {
             mockforge_core::Error::internal("No matching fixture found for email")
         })?;
 
-        // Store email if configured
-        if fixture.storage.save_to_mailbox {
-            let email = StoredEmail {
-                id: uuid::Uuid::new_v4().to_string(),
-                from: from.clone(),
-                to: to.split(',').map(|s| s.trim().to_string()).collect(),
-                subject: subject.clone(),
-                body: String::from_utf8_lossy(request.body.as_ref().unwrap_or(&Vec::new()))
-                    .to_string(),
-                headers: request.metadata.clone(),
-                received_at: chrono::Utc::now(),
-                raw: request.body.clone(),
-            };
-
-            if let Err(e) = self.store_email(email) {
-                error!("Failed to store email: {}", e);
-            }
-        }
+        // Storage lives in `server::process_email` now so every delivered
+        // message is captured whether or not a fixture matched. The old
+        // fixture-gated storage here caused silent drops in the common case
+        // of running the mock without any fixtures loaded.
 
         // Generate response
         let response_message =
