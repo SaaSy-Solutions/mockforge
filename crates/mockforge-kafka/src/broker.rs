@@ -308,6 +308,7 @@ impl KafkaMockBroker {
             KafkaRequestType::Metadata => self.handle_metadata().await,
             KafkaRequestType::Produce => self.handle_produce(message_buf, &request).await,
             KafkaRequestType::Fetch => self.handle_fetch(message_buf, &request).await,
+            KafkaRequestType::ListOffsets => self.handle_list_offsets(message_buf, &request).await,
             KafkaRequestType::ListGroups => self.handle_list_groups().await,
             KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
             KafkaRequestType::ApiVersions => self.handle_api_versions().await,
@@ -575,6 +576,96 @@ impl KafkaMockBroker {
             parsed.session_id,
             &topic_responses,
         );
+        Ok(KafkaResponse::Preserialized(body))
+    }
+
+    /// Handle a ListOffsets v7 request. Resolves each partition's
+    /// `timestamp` field to a real offset by consulting the storage layer:
+    /// `-2` (earliest) → `partition.log_start_offset`, `-1` (latest) →
+    /// `partition.high_watermark`, positive timestamps → first message at
+    /// or after that timestamp (best-effort linear scan since we keep
+    /// messages in insertion order).
+    async fn handle_list_offsets(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::listoffsets_codec::{
+            parse_listoffsets_v7, serialize_listoffsets_v7_response, ListOffsetsPartitionResponse,
+            ListOffsetsTopicResponse,
+        };
+
+        const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
+        const TS_EARLIEST: i64 = -2;
+        const TS_LATEST: i64 = -1;
+
+        if request.api_version != 7 {
+            let body = serialize_listoffsets_v7_response(request.correlation_id, &[]);
+            tracing::warn!("rejecting ListOffsets v{} (only v7 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
+        }
+
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("listoffsets body_offset past end of buffer")
+        })?;
+
+        let parsed = parse_listoffsets_v7(body_slice).map_err(|e| {
+            mockforge_core::Error::internal(format!("failed to parse ListOffsets v7: {e}"))
+        })?;
+
+        let topics_guard = self.topics.read().await;
+        let mut topic_responses = Vec::with_capacity(parsed.topics.len());
+        for t in &parsed.topics {
+            let mut partition_responses = Vec::with_capacity(t.partitions.len());
+            let topic = topics_guard.get(&t.topic);
+            for p in &t.partitions {
+                let Some(topic) = topic else {
+                    partition_responses.push(ListOffsetsPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: ERR_UNKNOWN_TOPIC_OR_PARTITION,
+                        timestamp: -1,
+                        offset: -1,
+                    });
+                    continue;
+                };
+                let Some(part) = topic.get_partition(p.partition_index) else {
+                    partition_responses.push(ListOffsetsPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: ERR_UNKNOWN_TOPIC_OR_PARTITION,
+                        timestamp: -1,
+                        offset: -1,
+                    });
+                    continue;
+                };
+
+                let (offset, ts) = match p.timestamp {
+                    TS_EARLIEST => (part.log_start_offset, -1),
+                    TS_LATEST => (part.high_watermark, -1),
+                    needle => {
+                        // Best-effort timestamp lookup: return the first message
+                        // whose timestamp >= needle. If none, fall back to the
+                        // high watermark (caller will just get an empty fetch).
+                        let found = part.messages.iter().find(|m| m.timestamp >= needle);
+                        match found {
+                            Some(m) => (m.offset, m.timestamp),
+                            None => (part.high_watermark, -1),
+                        }
+                    }
+                };
+                partition_responses.push(ListOffsetsPartitionResponse {
+                    partition_index: p.partition_index,
+                    error_code: 0,
+                    timestamp: ts,
+                    offset,
+                });
+            }
+            topic_responses.push(ListOffsetsTopicResponse {
+                topic: t.topic.clone(),
+                partitions: partition_responses,
+            });
+        }
+
+        let body = serialize_listoffsets_v7_response(request.correlation_id, &topic_responses);
         Ok(KafkaResponse::Preserialized(body))
     }
 
