@@ -1,6 +1,6 @@
-name: Publish @mockforge/sdk to npm
+name: Publish @mockforge-dev/sdk to npm
 
-# Publishes `sdk/nodejs/` as the `@mockforge/sdk` npm package.
+# Publishes `sdk/nodejs/` as the `@mockforge-dev/sdk` npm package.
 #
 # Triggers:
 #   1. `workflow_dispatch` - manual publish. Lets the maintainer cut a release
