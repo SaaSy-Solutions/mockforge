@@ -307,7 +307,7 @@ impl KafkaMockBroker {
         match request.request_type {
             KafkaRequestType::Metadata => self.handle_metadata().await,
             KafkaRequestType::Produce => self.handle_produce(message_buf, &request).await,
-            KafkaRequestType::Fetch => self.handle_fetch().await,
+            KafkaRequestType::Fetch => self.handle_fetch(message_buf, &request).await,
             KafkaRequestType::ListGroups => self.handle_list_groups().await,
             KafkaRequestType::DescribeGroups => self.handle_describe_groups().await,
             KafkaRequestType::ApiVersions => self.handle_api_versions().await,
@@ -451,15 +451,131 @@ impl KafkaMockBroker {
         Ok(KafkaResponse::Preserialized(body))
     }
 
-    async fn handle_fetch(&self) -> Result<KafkaResponse> {
-        let topics = self.topics.read().await;
-        if let Some(topic) = topics.get("default-topic") {
-            for partition in &topic.partitions {
-                let _ = partition.fetch(0, 1024 * 1024);
-            }
+    /// Handle a Fetch v12 request: parse the flexible body, pull records
+    /// from topic/partition storage starting at each requested fetch_offset,
+    /// and serialize a v12 response with real RecordBatch v2 blobs
+    /// (CRC32C-validated so consumers accept them).
+    async fn handle_fetch(
+        &self,
+        message_buf: &[u8],
+        request: &KafkaRequest,
+    ) -> Result<KafkaResponse> {
+        use crate::fetch_codec::{
+            parse_fetch_v12, serialize_fetch_v12_response, serialize_record_batch_v2,
+            FetchPartitionResponse, FetchTopicResponse,
+        };
+
+        const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
+        const ERR_OFFSET_OUT_OF_RANGE: i16 = 1;
+
+        if request.api_version != 12 {
+            let body = serialize_fetch_v12_response(request.correlation_id, 0, &[]);
+            tracing::warn!("rejecting Fetch v{} (only v12 supported)", request.api_version);
+            return Ok(KafkaResponse::Preserialized(body));
         }
 
-        Ok(KafkaResponse::Fetch)
+        let body_slice = message_buf.get(request.body_offset..).ok_or_else(|| {
+            mockforge_core::Error::internal("fetch request body_offset past end of buffer")
+        })?;
+
+        let parsed = parse_fetch_v12(body_slice).map_err(|e| {
+            mockforge_core::Error::internal(format!("failed to parse Fetch v12: {e}"))
+        })?;
+
+        let topics_guard = self.topics.read().await;
+        let mut topic_responses = Vec::with_capacity(parsed.topics.len());
+        for t in &parsed.topics {
+            let mut partition_responses = Vec::with_capacity(t.partitions.len());
+            let topic = topics_guard.get(&t.topic);
+            for p in &t.partitions {
+                let Some(topic) = topic else {
+                    partition_responses.push(FetchPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: ERR_UNKNOWN_TOPIC_OR_PARTITION,
+                        high_watermark: -1,
+                        log_start_offset: -1,
+                        records: Vec::new(),
+                    });
+                    continue;
+                };
+                let Some(part) = topic.get_partition(p.partition_index) else {
+                    partition_responses.push(FetchPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: ERR_UNKNOWN_TOPIC_OR_PARTITION,
+                        high_watermark: -1,
+                        log_start_offset: -1,
+                        records: Vec::new(),
+                    });
+                    continue;
+                };
+
+                // Validate offset: fetch_offset > high_watermark is
+                // OFFSET_OUT_OF_RANGE; == high_watermark is a valid empty
+                // fetch (consumer is caught up).
+                if p.fetch_offset > part.high_watermark {
+                    partition_responses.push(FetchPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: ERR_OFFSET_OUT_OF_RANGE,
+                        high_watermark: part.high_watermark,
+                        log_start_offset: part.log_start_offset,
+                        records: Vec::new(),
+                    });
+                    continue;
+                }
+
+                // Collect records with offset >= fetch_offset, respecting
+                // partition_max_bytes. Kafka requires at least one record be
+                // returned when any are available past fetch_offset, even
+                // when that exceeds max_bytes.
+                let max_bytes = p.partition_max_bytes.max(0) as usize;
+                let mut selected: Vec<&crate::partitions::KafkaMessage> = Vec::new();
+                let mut estimated_size: usize = 0;
+                for msg in &part.messages {
+                    if msg.offset < p.fetch_offset {
+                        continue;
+                    }
+                    // Rough pre-serialize size estimate: key+value+headers
+                    // + 16 byte record framing. Accurate enough for the
+                    // soft-limit behavior.
+                    let headers_size: usize =
+                        msg.headers.iter().map(|(k, v)| k.len() + v.len() + 8).sum();
+                    let record_size = msg.key.as_ref().map_or(0, |k| k.len())
+                        + msg.value.len()
+                        + headers_size
+                        + 16;
+                    if !selected.is_empty() && estimated_size + record_size > max_bytes {
+                        break;
+                    }
+                    estimated_size += record_size;
+                    selected.push(msg);
+                }
+
+                let records_blob = if selected.is_empty() {
+                    Vec::new()
+                } else {
+                    serialize_record_batch_v2(&selected)
+                };
+
+                partition_responses.push(FetchPartitionResponse {
+                    partition_index: p.partition_index,
+                    error_code: 0,
+                    high_watermark: part.high_watermark,
+                    log_start_offset: part.log_start_offset,
+                    records: records_blob,
+                });
+            }
+            topic_responses.push(FetchTopicResponse {
+                topic: t.topic.clone(),
+                partitions: partition_responses,
+            });
+        }
+
+        let body = serialize_fetch_v12_response(
+            request.correlation_id,
+            parsed.session_id,
+            &topic_responses,
+        );
+        Ok(KafkaResponse::Preserialized(body))
     }
 
     async fn handle_api_versions(&self) -> Result<KafkaResponse> {

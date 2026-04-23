@@ -82,7 +82,7 @@ pub struct TopicProduceResult {
 // Wire-format primitives (cursor-style)
 // =========================================================================
 
-fn take<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], String> {
+pub(crate) fn take<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], String> {
     if buf.len() < n {
         return Err(format!("short read: wanted {n}, have {}", buf.len()));
     }
@@ -91,21 +91,21 @@ fn take<'a>(buf: &mut &'a [u8], n: usize) -> Result<&'a [u8], String> {
     Ok(head)
 }
 
-fn read_i8(buf: &mut &[u8]) -> Result<i8, String> {
+pub(crate) fn read_i8(buf: &mut &[u8]) -> Result<i8, String> {
     Ok(take(buf, 1)?[0] as i8)
 }
 
-fn read_i16(buf: &mut &[u8]) -> Result<i16, String> {
+pub(crate) fn read_i16(buf: &mut &[u8]) -> Result<i16, String> {
     let b = take(buf, 2)?;
     Ok(i16::from_be_bytes([b[0], b[1]]))
 }
 
-fn read_i32(buf: &mut &[u8]) -> Result<i32, String> {
+pub(crate) fn read_i32(buf: &mut &[u8]) -> Result<i32, String> {
     let b = take(buf, 4)?;
     Ok(i32::from_be_bytes([b[0], b[1], b[2], b[3]]))
 }
 
-fn read_i64(buf: &mut &[u8]) -> Result<i64, String> {
+pub(crate) fn read_i64(buf: &mut &[u8]) -> Result<i64, String> {
     let b = take(buf, 8)?;
     Ok(i64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
 }
@@ -159,7 +159,7 @@ pub fn read_signed_varint(buf: &mut &[u8]) -> Result<i64, String> {
 
 /// Read a compact string. `unsigned_varint(len + 1)` then bytes.
 /// A leading 0 means null; 1 means empty string.
-fn read_compact_nullable_string(buf: &mut &[u8]) -> Result<Option<String>, String> {
+pub(crate) fn read_compact_nullable_string(buf: &mut &[u8]) -> Result<Option<String>, String> {
     let len_plus_one = read_unsigned_varint(buf)?;
     if len_plus_one == 0 {
         return Ok(None);
@@ -171,12 +171,14 @@ fn read_compact_nullable_string(buf: &mut &[u8]) -> Result<Option<String>, Strin
         .map_err(|e| format!("invalid utf8: {e}"))
 }
 
-fn read_compact_string(buf: &mut &[u8]) -> Result<String, String> {
+pub(crate) fn read_compact_string(buf: &mut &[u8]) -> Result<String, String> {
     read_compact_nullable_string(buf)?.ok_or_else(|| "expected non-null compact string".into())
 }
 
 /// Read a compact bytes field. A leading 0 means null.
-fn read_compact_nullable_bytes<'a>(buf: &mut &'a [u8]) -> Result<Option<&'a [u8]>, String> {
+pub(crate) fn read_compact_nullable_bytes<'a>(
+    buf: &mut &'a [u8],
+) -> Result<Option<&'a [u8]>, String> {
     let len_plus_one = read_unsigned_varint(buf)?;
     if len_plus_one == 0 {
         return Ok(None);
@@ -189,7 +191,7 @@ fn read_compact_nullable_bytes<'a>(buf: &mut &'a [u8]) -> Result<Option<&'a [u8]
 /// Tag buffer: read the count, then for each tag, skip its length+1 bytes.
 /// We don't act on any tagged fields today — this just advances the cursor
 /// past them.
-fn skip_tag_buffer(buf: &mut &[u8]) -> Result<(), String> {
+pub(crate) fn skip_tag_buffer(buf: &mut &[u8]) -> Result<(), String> {
     let count = read_unsigned_varint(buf)?;
     for _ in 0..count {
         let _tag_id = read_unsigned_varint(buf)?;
@@ -203,7 +205,7 @@ fn skip_tag_buffer(buf: &mut &[u8]) -> Result<(), String> {
 // Output helpers
 // =========================================================================
 
-fn push_unsigned_varint(buf: &mut Vec<u8>, mut value: u32) {
+pub(crate) fn push_unsigned_varint(buf: &mut Vec<u8>, mut value: u32) {
     while (value & !0x7F) != 0 {
         buf.push(((value & 0x7F) | 0x80) as u8);
         value >>= 7;
@@ -211,12 +213,22 @@ fn push_unsigned_varint(buf: &mut Vec<u8>, mut value: u32) {
     buf.push(value as u8);
 }
 
-fn push_compact_string(buf: &mut Vec<u8>, s: &str) {
+pub(crate) fn push_signed_varint(buf: &mut Vec<u8>, value: i64) {
+    let zz = ((value << 1) ^ (value >> 63)) as u64;
+    let mut v = zz;
+    while (v & !0x7F) != 0 {
+        buf.push(((v & 0x7F) | 0x80) as u8);
+        v >>= 7;
+    }
+    buf.push(v as u8);
+}
+
+pub(crate) fn push_compact_string(buf: &mut Vec<u8>, s: &str) {
     push_unsigned_varint(buf, (s.len() as u32) + 1);
     buf.extend_from_slice(s.as_bytes());
 }
 
-fn push_empty_tag_buffer(buf: &mut Vec<u8>) {
+pub(crate) fn push_empty_tag_buffer(buf: &mut Vec<u8>) {
     buf.push(0);
 }
 
