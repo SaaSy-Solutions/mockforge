@@ -32,12 +32,12 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
     ) -> Result<Self::Metadata> {
         let path = path.as_ref();
 
-        if let Some(file) = self.vfs.get_file(path) {
+        if let Some(file) = self.vfs.get_file_async(path).await {
             Ok(MockForgeMetadata {
                 file: Some(file),
                 is_dir: false,
             })
-        } else if self.vfs.directory_exists(path) {
+        } else if self.vfs.directory_exists_async(path).await {
             Ok(MockForgeMetadata {
                 file: None,
                 is_dir: true,
@@ -53,7 +53,7 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
         path: P,
     ) -> Result<Vec<Fileinfo<PathBuf, Self::Metadata>>> {
         let path = path.as_ref();
-        let files = self.vfs.list_files(path);
+        let files = self.vfs.list_files_async(path).await;
 
         let mut result = Vec::new();
         for file in files {
@@ -77,7 +77,7 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
     ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Sync + Unpin>> {
         let path = path.as_ref();
 
-        if let Some(file) = self.vfs.get_file(path) {
+        if let Some(file) = self.vfs.get_file_async(path).await {
             let content =
                 file.render_content().map_err(|e| Error::new(ErrorKind::LocalError, e))?;
             Ok(Box::new(std::io::Cursor::new(content)))
@@ -126,7 +126,8 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
                 );
 
                 self.vfs
-                    .add_file(path.to_path_buf(), file)
+                    .add_file_async(path.to_path_buf(), file)
+                    .await
                     .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
 
                 // Record the upload
@@ -147,8 +148,11 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
     async fn del<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
         let path = path.as_ref();
 
-        if self.vfs.get_file(path).is_some() {
-            self.vfs.remove_file(path).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        if self.vfs.get_file_async(path).await.is_some() {
+            self.vfs
+                .remove_file_async(path)
+                .await
+                .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
             Ok(())
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
@@ -157,14 +161,15 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
 
     async fn mkd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
         let path = path.as_ref();
-        if self.vfs.directory_exists(path) {
+        if self.vfs.directory_exists_async(path).await {
             return Err(Error::new(
                 ErrorKind::PermanentFileNotAvailable,
                 "Directory already exists",
             ));
         }
         self.vfs
-            .create_directory(path.to_path_buf())
+            .create_directory_async(path.to_path_buf())
+            .await
             .map_err(|e| Error::new(ErrorKind::LocalError, e))
     }
 
@@ -172,13 +177,17 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
         let from = from.as_ref();
         let to = to.as_ref();
 
-        if let Some(file) = self.vfs.get_file(from) {
-            self.vfs.remove_file(from).map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+        if let Some(file) = self.vfs.get_file_async(from).await {
             self.vfs
-                .add_file(
+                .remove_file_async(from)
+                .await
+                .map_err(|e| Error::new(ErrorKind::LocalError, e))?;
+            self.vfs
+                .add_file_async(
                     to.to_path_buf(),
                     VirtualFile::new(to.to_path_buf(), file.content, file.metadata),
                 )
+                .await
                 .map_err(|e| Error::new(ErrorKind::LocalError, e))
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
@@ -187,17 +196,18 @@ impl<U: libunftp::auth::UserDetail + Send + Sync + 'static> StorageBackend<U> fo
 
     async fn rmd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
         let path = path.as_ref();
-        if !self.vfs.directory_exists(path) {
+        if !self.vfs.directory_exists_async(path).await {
             return Err(Error::from(ErrorKind::PermanentFileNotAvailable));
         }
         self.vfs
-            .remove_directory(path)
+            .remove_directory_async(path)
+            .await
             .map_err(|e| Error::new(ErrorKind::PermissionDenied, e))
     }
 
     async fn cwd<P: AsRef<Path> + Send + Debug>(&self, _user: &U, path: P) -> Result<()> {
         let path = path.as_ref();
-        if self.vfs.directory_exists(path) {
+        if self.vfs.directory_exists_async(path).await {
             Ok(())
         } else {
             Err(Error::from(ErrorKind::PermanentFileNotAvailable))
