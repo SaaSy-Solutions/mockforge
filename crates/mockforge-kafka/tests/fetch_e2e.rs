@@ -86,11 +86,13 @@ async fn librdkafka_produce_then_fetch_round_trip() {
         consumer_cfg.set("fetch.wait.max.ms", "50");
         let consumer: BaseConsumer = consumer_cfg.create().expect("consumer");
 
-        // Explicit Offset::Offset(0) (rather than Offset::Beginning) avoids
-        // the ListOffsets API which this PR doesn't implement yet.
+        // `Offset::Beginning` drives librdkafka through the ListOffsets API
+        // (key 2, earliest timestamp = -2). Before ListOffsets was
+        // implemented this test hardcoded `Offset::Offset(0)` to bypass it;
+        // now we exercise the real consumer-oriented resolution path.
         let mut assignment = TopicPartitionList::new();
         assignment
-            .add_partition_offset("fetch-topic", 0, rdkafka::Offset::Offset(0))
+            .add_partition_offset("fetch-topic", 0, rdkafka::Offset::Beginning)
             .unwrap();
         consumer.assign(&assignment).expect("assign");
 

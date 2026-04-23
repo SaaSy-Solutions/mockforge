@@ -67,6 +67,16 @@ impl KafkaProtocolHandler {
                 max_version: 12,
             },
         ); // Fetch
+           // ListOffsets capped at v7 (first flexible version). Required so
+           // consumers can resolve `Offset::Beginning` / `Offset::End` and
+           // honor `auto.offset.reset`.
+        api_versions.insert(
+            2,
+            ApiVersion {
+                min_version: 0,
+                max_version: 7,
+            },
+        ); // ListOffsets
            // Metadata: we only implement v4 response encoding. Advertising max=4
            // forces auto-negotiating clients (librdkafka, kafka-python, etc.) to
            // pick a version we can actually serialize.
@@ -203,6 +213,7 @@ impl KafkaProtocolHandler {
         let request_type = match api_key {
             0 => KafkaRequestType::Produce,
             1 => KafkaRequestType::Fetch,
+            2 => KafkaRequestType::ListOffsets,
             3 => KafkaRequestType::Metadata,
             9 => KafkaRequestType::ListGroups,
             15 => KafkaRequestType::DescribeGroups,
@@ -394,6 +405,7 @@ pub enum KafkaRequestType {
     Metadata,
     Produce,
     Fetch,
+    ListOffsets,
     ListGroups,
     DescribeGroups,
     ApiVersions,
@@ -445,6 +457,7 @@ fn is_flexible_request(api_key: i16, api_version: i16) -> bool {
     let min_flex = match api_key {
         0 => 9,  // Produce
         1 => 12, // Fetch
+        2 => 6,  // ListOffsets
         3 => 9,  // Metadata
         9 => 3,  // ListGroups
         15 => 6, // DescribeGroups
@@ -643,6 +656,7 @@ mod tests {
             match t {
                 KafkaRequestType::Produce => "Produce",
                 KafkaRequestType::Fetch => "Fetch",
+                KafkaRequestType::ListOffsets => "ListOffsets",
                 KafkaRequestType::Metadata => "Metadata",
                 KafkaRequestType::ListGroups => "ListGroups",
                 KafkaRequestType::DescribeGroups => "DescribeGroups",
@@ -654,6 +668,7 @@ mod tests {
         }
         let cases = [
             (0i16, "Produce"),
+            (2, "ListOffsets"),
             (1, "Fetch"),
             (3, "Metadata"),
             (9, "ListGroups"),
@@ -1098,11 +1113,12 @@ mod tests {
         // Body: error_code int16 = 0
         assert_eq!(&data[4..6], &0i16.to_be_bytes());
 
-        // Compact array length (unsigned varint): handler registers 11 api
-        // entries, varint(11 + 1) = 0x0C in a single byte.
+        // Compact array length (unsigned varint): handler registers 12 api
+        // entries (bumped from 11 when ListOffsets (key 2) was added);
+        // varint(12 + 1) = 0x0D in a single byte.
         let n = handler.api_versions.len() as u32;
-        assert_eq!(n, 11);
-        assert_eq!(data[6], 0x0C);
+        assert_eq!(n, 12);
+        assert_eq!(data[6], 0x0D);
 
         // Each entry: api_key(i16) + min(i16) + max(i16) + tag_buffer(0x00) = 7 bytes.
         let entries_start = 7;
