@@ -430,16 +430,20 @@ impl SessionManager {
                 let delivery_qos = std::cmp::min(publish.qos as u8, sub.qos);
                 let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
 
+                // Leave `packet_id = None` for QoS > 0 forwards — the writer
+                // task picks up `is_none()` and calls `assign_packet_id`
+                // against the subscriber's session. A previous version set
+                // this to `Some(0)` expecting the writer to overwrite it,
+                // but the writer only fills `is_none()`, so the PUBLISH
+                // shipped with packet_id=0 on the wire, which MQTT spec
+                // forbids for QoS > 0 (librdkafka/rumqttc clients reject
+                // with "Packet id Zero" and drop the connection).
                 let packet = Packet::Publish(PublishPacket {
                     dup: false,
                     qos: delivery_qos,
                     retain: false, // Only first delivery can have retain
                     topic: publish.topic.clone(),
-                    packet_id: if delivery_qos != QoS::AtMostOnce {
-                        Some(0) // Will be assigned by receiver
-                    } else {
-                        None
-                    },
+                    packet_id: None,
                     payload: publish.payload.clone(),
                 });
 
