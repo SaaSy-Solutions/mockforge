@@ -190,6 +190,16 @@ jobs:
         with:
           key: ${{ matrix.os }}
 
+      # The mockforge binary must be built with all-protocols so the e2e
+      # tests in mockforge-integration-tests find a WebSocket and gRPC
+      # server to talk to when they spawn it as a subprocess. Without
+      # this step the binary ships with just its default features
+      # (no ws/grpc/mqtt), and every non-HTTP e2e probe gets
+      # Connection refused.
+      - name: Build mockforge binary with all protocols
+        run: cargo build --bin mockforge --features all-protocols
+        shell: bash
+
       - name: Run tests
         run: |
           EXCLUDES="--exclude mockforge-desktop"

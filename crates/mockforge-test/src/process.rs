@@ -237,32 +237,30 @@ pub fn is_port_available(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
-/// Find an available port near `start_port`.
+/// Find an available port.
 ///
-/// Sequentially probes `start_port..start_port+100`, returning the first
-/// port that isn't currently bound. If every port in that range is taken
-/// (which happens under heavy parallel test load), falls back to asking
-/// the OS for an ephemeral port via binding to port 0 — the test will get
-/// *some* free port even when its preferred range is saturated.
-pub fn find_available_port(start_port: u16) -> Result<u16> {
-    for port in start_port..start_port.saturating_add(100) {
-        if is_port_available(port) {
-            return Ok(port);
-        }
-    }
-    // Fallback: ask the OS to assign an ephemeral port. Without this,
-    // running many integration tests in parallel could exhaust the
-    // sequential range and surface a confusing "no available ports"
-    // error even though the machine had thousands of free ports.
+/// Always asks the OS for an ephemeral port (binds to `127.0.0.1:0` and
+/// reads back the assigned port). The `start_port` argument is accepted
+/// for API compatibility but ignored — the old "sequentially probe
+/// `start_port..start_port+100`" strategy raced badly under parallel
+/// nextest runs, where two tests would both see the same port as free
+/// and both subprocesses would try to bind it. On macOS the loser's
+/// `bind` returns `EADDRINUSE` (errno 48) and the losing subprocess's
+/// `tokio::select!` over its admin handle would then short-circuit the
+/// entire mock server, taking HTTP + WS down with it. The test's
+/// `connect_async` saw `Connection refused` and failed.
+///
+/// The OS-assigned ephemeral range is ~30k ports wide, so the same race
+/// is still technically possible but astronomically unlikely in practice.
+///
+/// A tiny TOCTOU window remains — the listener drops before the caller's
+/// subprocess binds the same port — but in practice this hasn't been
+/// observed because the ephemeral range is large and no other process is
+/// typically aggressively snapping ports in that window.
+pub fn find_available_port(_start_port: u16) -> Result<u16> {
     use std::net::TcpListener;
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| {
-        Error::ConfigError(format!(
-            "No available ports in {}-{} and OS-assigned fallback failed: {}",
-            start_port,
-            start_port.saturating_add(100),
-            e
-        ))
-    })?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .map_err(|e| Error::ConfigError(format!("OS-assigned port bind failed: {}", e)))?;
     let port = listener
         .local_addr()
         .map_err(|e| Error::ConfigError(format!("Failed to read OS-assigned port: {}", e)))?
@@ -282,25 +280,22 @@ mod tests {
     }
 
     #[test]
-    fn test_find_available_port() {
-        // Should find a port starting from 30000
+    fn test_find_available_port_returns_nonzero() {
+        // `find_available_port` always asks the OS for an ephemeral port.
+        // The `start_port` hint is ignored (see the function's doc comment
+        // for why), so the assigned port is from the OS ephemeral range
+        // rather than the argument's range.
         let port = find_available_port(30000).expect("Failed to find available port");
-        assert!(port >= 30000);
-        assert!(port < 30100);
+        assert!(port > 0);
     }
 
     #[test]
-    fn test_find_available_port_from_different_start() {
-        let port = find_available_port(40000).expect("Failed to find available port");
-        assert!(port >= 40000);
-        assert!(port < 40100);
-    }
-
-    #[test]
-    fn test_find_available_port_high_range() {
-        let port = find_available_port(60000).expect("Failed to find available port");
-        assert!(port >= 60000);
-        assert!(port < 60100);
+    fn test_find_available_port_ignores_hint() {
+        // Two calls with the same hint should hand back distinct ports
+        // (ephemeral allocation is effectively never reused back-to-back).
+        let port1 = find_available_port(30000).expect("Failed to find port 1");
+        let port2 = find_available_port(30000).expect("Failed to find port 2");
+        assert_ne!(port1, port2, "ephemeral allocator handed back the same port twice");
     }
 
     #[test]
@@ -314,14 +309,16 @@ mod tests {
 
     #[test]
     fn test_multiple_port_allocations() {
-        // Find multiple available ports
+        // Get three ports; they should all be nonzero and distinct.
         let port1 = find_available_port(31000).expect("Failed to find port 1");
         let port2 = find_available_port(32000).expect("Failed to find port 2");
         let port3 = find_available_port(33000).expect("Failed to find port 3");
 
-        // Ports should be in their respective ranges
-        assert!((31000..31100).contains(&port1));
-        assert!((32000..32100).contains(&port2));
-        assert!((33000..33100).contains(&port3));
+        assert!(port1 > 0);
+        assert!(port2 > 0);
+        assert!(port3 > 0);
+        assert_ne!(port1, port2);
+        assert_ne!(port1, port3);
+        assert_ne!(port2, port3);
     }
 }
