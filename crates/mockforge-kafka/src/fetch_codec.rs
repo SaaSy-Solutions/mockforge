@@ -149,10 +149,28 @@ pub fn parse_fetch_v12(body: &[u8]) -> Result<FetchRequestV12, String> {
 // =========================================================================
 
 /// Serialize a set of stored `KafkaMessage`s (with absolute offsets already
-/// assigned) as one RecordBatch v2 blob suitable for inclusion in a Fetch
-/// response. The CRC32C is computed over the canonical range
-/// `[attributes..end]` as the Kafka spec requires.
+/// assigned) as one uncompressed RecordBatch v2 blob suitable for inclusion
+/// in a Fetch response.
+///
+/// Uncompressed responses are valid regardless of the client's
+/// `compression.type` — consumers select decompression per-batch based on
+/// the attributes bits, not their local config. Call
+/// `serialize_record_batch_v2_with_compression` if you need to produce a
+/// compressed batch for a consumer that requires it.
 pub fn serialize_record_batch_v2(records: &[&KafkaMessage]) -> Vec<u8> {
+    serialize_record_batch_v2_with_compression(
+        records,
+        crate::record_compression::CompressionCodec::None,
+    )
+}
+
+/// Like `serialize_record_batch_v2` but applies `codec` to the records
+/// blob and sets the matching attributes bits. CRC32C is computed over the
+/// compressed body, as the Kafka spec requires.
+pub fn serialize_record_batch_v2_with_compression(
+    records: &[&KafkaMessage],
+    codec: crate::record_compression::CompressionCodec,
+) -> Vec<u8> {
     if records.is_empty() {
         return Vec::new();
     }
@@ -161,7 +179,8 @@ pub fn serialize_record_batch_v2(records: &[&KafkaMessage]) -> Vec<u8> {
     let max_timestamp = records.iter().map(|r| r.timestamp).max().unwrap_or(base_timestamp);
     let last_offset_delta = (records.last().unwrap().offset - base_offset) as i32;
 
-    // Build the records blob first.
+    // Build the records blob (uncompressed form first — compression is
+    // applied at the boundary below).
     let mut records_blob = Vec::new();
     for r in records {
         let mut rec = Vec::new();
@@ -190,12 +209,18 @@ pub fn serialize_record_batch_v2(records: &[&KafkaMessage]) -> Vec<u8> {
         records_blob.extend_from_slice(&framed);
     }
 
+    // Apply compression to the records blob. `compress` handles None as a
+    // passthrough.
+    let compressed_blob = crate::record_compression::compress(codec, &records_blob)
+        .expect("compression of in-memory records blob must succeed");
+
     // Body-after-CRC: everything from `attributes` to the end of `records`.
     // attributes (2) + last_offset_delta (4) + base_timestamp (8) +
     // max_timestamp (8) + producer_id (8) + producer_epoch (2) +
     // base_sequence (4) + records_count (4) + records_blob
     let mut body = Vec::new();
-    body.extend_from_slice(&0i16.to_be_bytes()); // attributes = 0 (no compression, create-timestamp)
+    // attributes: low 3 bits = codec, create-time (bit 3 = 0), no-tx
+    body.extend_from_slice(&codec.attributes_bits().to_be_bytes());
     body.extend_from_slice(&last_offset_delta.to_be_bytes());
     body.extend_from_slice(&base_timestamp.to_be_bytes());
     body.extend_from_slice(&max_timestamp.to_be_bytes());
@@ -203,7 +228,7 @@ pub fn serialize_record_batch_v2(records: &[&KafkaMessage]) -> Vec<u8> {
     body.extend_from_slice(&(-1i16).to_be_bytes()); // producer_epoch
     body.extend_from_slice(&(-1i32).to_be_bytes()); // base_sequence
     body.extend_from_slice(&(records.len() as i32).to_be_bytes());
-    body.extend_from_slice(&records_blob);
+    body.extend_from_slice(&compressed_blob);
 
     let crc = crc32c::crc32c(&body);
 
@@ -324,6 +349,49 @@ mod tests {
     fn empty_records_serialize_to_empty_blob() {
         let v: Vec<&KafkaMessage> = Vec::new();
         assert!(serialize_record_batch_v2(&v).is_empty());
+    }
+
+    #[test]
+    fn compressed_record_batch_roundtrips_through_parser() {
+        use crate::record_compression::CompressionCodec;
+
+        let msgs = [
+            stored_msg(5, 100, Some(b"k"), b"value-one"),
+            stored_msg(6, 200, None, b"value-two-slightly-longer-to-exercise-compression"),
+        ];
+        let refs: Vec<&KafkaMessage> = msgs.iter().collect();
+
+        for codec in [
+            CompressionCodec::Gzip,
+            CompressionCodec::Snappy,
+            CompressionCodec::Lz4,
+            CompressionCodec::Zstd,
+        ] {
+            let batch = serialize_record_batch_v2_with_compression(&refs, codec);
+            let (decoded, attrs) =
+                parse_record_batch(&batch).unwrap_or_else(|e| panic!("parse {codec:?}: {e}"));
+            assert_eq!(attrs & 0x7, codec.attributes_bits(), "{codec:?}: attributes bits mismatch");
+            assert_eq!(decoded.len(), 2, "{codec:?}: wrong record count");
+            assert_eq!(decoded[0].value, b"value-one", "{codec:?}: v1 mismatch");
+            assert_eq!(decoded[0].key.as_deref(), Some(b"k".as_ref()), "{codec:?}: k1 mismatch");
+            assert_eq!(
+                decoded[1].value, b"value-two-slightly-longer-to-exercise-compression",
+                "{codec:?}: v2 mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn compressed_batch_crc_validates() {
+        use crate::record_compression::CompressionCodec;
+
+        let msgs = [stored_msg(0, 0, None, b"hello")];
+        let refs: Vec<&KafkaMessage> = msgs.iter().collect();
+        let batch = serialize_record_batch_v2_with_compression(&refs, CompressionCodec::Snappy);
+        // CRC is at offset 17; spec body starts at 21.
+        let crc_in_batch = u32::from_be_bytes([batch[17], batch[18], batch[19], batch[20]]);
+        let expected = crc32c::crc32c(&batch[21..]);
+        assert_eq!(crc_in_batch, expected);
     }
 
     #[test]

@@ -138,6 +138,7 @@ pub mod partitions;
 pub mod produce_codec;
 pub mod produce_nonflex;
 pub mod protocol;
+pub mod record_compression;
 /// Unified protocol server lifecycle implementation (KafkaMockServer)
 pub mod server;
 pub mod spec_registry;

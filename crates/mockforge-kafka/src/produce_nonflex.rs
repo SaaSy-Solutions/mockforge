@@ -262,18 +262,11 @@ mod tests {
         assert!(parsed.topics[0].partitions[0].records.is_empty());
     }
 
-    #[test]
-    fn detects_compressed_batch_in_v7_request() {
-        let mut batch = one_record_batch_for_testing(None, b"x");
-        // Attributes i16 is at offset 21: flip compression to gzip (bit 0).
-        batch[21] = 0;
-        batch[22] = 1;
-        let body = build_request_body("t", 0, &batch);
-
-        let parsed = parse_produce_v3_v8(&body).unwrap();
-        assert_eq!(parsed.topics[0].partitions[0].compression_codec, 1);
-        assert!(parsed.topics[0].partitions[0].records.is_empty());
-    }
+    // NB: the previous `detects_compressed_batch_in_v7_request` test was written under the
+    // pre-decompression parser (it only flagged `compression_codec` and returned empty
+    // records). Compression is now decompressed inline by `parse_record_batch`, so that
+    // hand-crafted payload is no longer valid gzip and the test would panic. End-to-end
+    // compression coverage lives in `tests/compression_e2e.rs` instead.
 
     fn one_result(log_start_offset: i64) -> Vec<TopicProduceResult> {
         vec![TopicProduceResult {
