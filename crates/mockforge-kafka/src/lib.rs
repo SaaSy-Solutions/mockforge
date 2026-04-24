@@ -128,6 +128,7 @@ pub mod broker;
 pub mod consumer_groups;
 pub mod fetch_codec;
 pub mod fetch_nonflex;
+pub mod fixture_executor;
 pub mod fixture_file;
 pub mod fixtures;
 pub mod group_codec;
