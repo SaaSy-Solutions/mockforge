@@ -127,6 +127,7 @@
 pub mod broker;
 pub mod consumer_groups;
 pub mod fetch_codec;
+pub mod fetch_nonflex;
 pub mod fixture_file;
 pub mod fixtures;
 pub mod group_codec;
@@ -135,6 +136,7 @@ pub mod listoffsets_codec;
 pub mod metrics;
 pub mod partitions;
 pub mod produce_codec;
+pub mod produce_nonflex;
 pub mod protocol;
 /// Unified protocol server lifecycle implementation (KafkaMockServer)
 pub mod server;

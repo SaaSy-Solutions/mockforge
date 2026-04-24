@@ -48,22 +48,26 @@ impl KafkaProtocolHandler {
     /// broker (node 1) as leader + sole replica + in-sync replica.
     pub fn with_topology(host: impl Into<String>, port: i32, topics: Vec<TopicMetadata>) -> Self {
         let mut api_versions = HashMap::new();
-        // Add supported API versions. Produce is capped at v9 because that's
-        // the newest flexible version our codec serializes; auto-negotiating
-        // clients will land on v9.
+        // Produce: non-flexible codec covers v3..=v8 (first RecordBatch-v2
+        // version through the last non-flexible one); flexible codec covers
+        // v9. Clients stuck on librdkafka 1.8.x (e.g. kcat 1.7.1) cap at
+        // v7 and land on the non-flexible codec; modern clients auto-
+        // negotiate to v9.
         api_versions.insert(
             0,
             ApiVersion {
-                min_version: 0,
+                min_version: 3,
                 max_version: 9,
             },
         ); // Produce
-           // Fetch capped at v12 — the first flexible version, which is the one
-           // our codec emits. Auto-negotiating clients land on v12.
+           // Fetch: non-flexible codec covers v4..=v11 (v4 is where
+           // isolation_level + last_stable_offset first appear); flexible
+           // codec covers v12. librdkafka 1.8.x sends v11, rdkafka 2.x
+           // sends v12.
         api_versions.insert(
             1,
             ApiVersion {
-                min_version: 0,
+                min_version: 4,
                 max_version: 12,
             },
         ); // Fetch
@@ -618,9 +622,12 @@ mod tests {
     #[test]
     fn test_is_api_version_supported_produce() {
         let handler = KafkaProtocolHandler::new();
-        // Produce API (key 0) supports versions 0-12
-        // Produce capped at v9 (first flexible version — see serialize path).
-        assert!(handler.is_api_version_supported(0, 0));
+        // Produce: non-flexible v3..=v8 + flexible v9. Versions below v3
+        // are rejected because those predate RecordBatch v2.
+        assert!(!handler.is_api_version_supported(0, 0));
+        assert!(!handler.is_api_version_supported(0, 2));
+        assert!(handler.is_api_version_supported(0, 3));
+        assert!(handler.is_api_version_supported(0, 7));
         assert!(handler.is_api_version_supported(0, 9));
         assert!(!handler.is_api_version_supported(0, 10));
         assert!(!handler.is_api_version_supported(0, -1));
@@ -629,9 +636,13 @@ mod tests {
     #[test]
     fn test_is_api_version_supported_fetch() {
         let handler = KafkaProtocolHandler::new();
-        // Fetch API (key 1) supports versions 0-16
-        // Fetch capped at v12 (first flexible version — what our codec emits).
-        assert!(handler.is_api_version_supported(1, 0));
+        // Fetch: non-flexible v4..=v11 + flexible v12. Versions below v4
+        // are rejected because those predate `isolation_level` +
+        // `last_stable_offset` (which v4+ responses always carry).
+        assert!(!handler.is_api_version_supported(1, 0));
+        assert!(!handler.is_api_version_supported(1, 3));
+        assert!(handler.is_api_version_supported(1, 4));
+        assert!(handler.is_api_version_supported(1, 11));
         assert!(handler.is_api_version_supported(1, 12));
         assert!(!handler.is_api_version_supported(1, 13));
     }
@@ -1125,8 +1136,8 @@ mod tests {
 
         // Test all configured API versions
         let api_configs = vec![
-            (0, 0, 9),  // Produce (capped at v9 — see serialize_response)
-            (1, 0, 12), // Fetch (capped at v12 — see serialize_response)
+            (0, 3, 9),  // Produce: non-flexible v3..=v8 + flexible v9
+            (1, 4, 12), // Fetch: non-flexible v4..=v11 + flexible v12
             (2, 0, 7),  // ListOffsets
             (3, 0, 4),  // Metadata (capped at v4 — see serialize_response)
             (8, 0, 7),  // OffsetCommit (v7 = last non-flexible)

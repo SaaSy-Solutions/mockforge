@@ -341,14 +341,13 @@ impl KafkaMockBroker {
         Ok(KafkaResponse::Metadata)
     }
 
-    /// Handle a Produce v9 request: parse the flexible body, decode each
-    /// RecordBatch v2, write decoded records into the corresponding topic
-    /// partition, and serialize a v9 response with real base_offsets.
+    /// Handle a Produce request: parse the body (flexible v9 or non-flexible
+    /// v3..=v8), decode each RecordBatch v2, write decoded records into the
+    /// corresponding topic partition, and serialize a version-matched
+    /// response with real base_offsets.
     ///
-    /// Currently only v9 is supported. Older Produce versions advertise
-    /// max=9 in ApiVersions, so auto-negotiating clients land here; if a
-    /// v8-or-older request does arrive it gets an error code per partition
-    /// rather than a crash.
+    /// librdkafka 1.8.x (e.g. kcat 1.7.1) caps at v7 — a non-flexible version.
+    /// Modern clients auto-negotiate to v9.
     async fn handle_produce(
         &self,
         message_buf: &[u8],
@@ -358,24 +357,22 @@ impl KafkaMockBroker {
             parse_produce_v9, serialize_produce_v9_response, PartitionProduceResult,
             TopicProduceResult,
         };
+        use crate::produce_nonflex::{parse_produce_v3_v8, serialize_produce_v3_v8_response};
 
         const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
         const ERR_UNSUPPORTED_COMPRESSION_TYPE: i16 = 74;
-        const ERR_UNSUPPORTED_VERSION: i16 = 35;
 
-        if request.api_version != 9 {
-            // Only v9 is implemented. Respond with per-topic UNSUPPORTED_VERSION
-            // so clients get a real error instead of a hang. Shape-wise the
-            // response still has to match v9 flexible since that's the version
-            // we advertised.
+        let version = request.api_version;
+        let is_flexible = version == 9;
+        let is_nonflex = (3..=8).contains(&version);
+        if !is_flexible && !is_nonflex {
+            // Outside the advertised range. Reply with an empty response in
+            // the shape of the most-compatible version we can. v9 flexible
+            // is what we advertise as max; use it so auto-negotiating
+            // clients fall back to a supported version on their next
+            // ApiVersions check.
             let body = serialize_produce_v9_response(request.correlation_id, &[]);
-            tracing::warn!("rejecting Produce v{} (only v9 supported)", request.api_version);
-            // Client will see zero topic results and a non-error response;
-            // better than nothing. (A full implementation returns
-            // UNSUPPORTED_VERSION at the partition level once we decode the
-            // request, but the body format differs per version so we can't
-            // parse a non-v9 request.)
-            let _ = ERR_UNSUPPORTED_VERSION;
+            tracing::warn!("rejecting Produce v{version} (supported: 3..=9)");
             return Ok(KafkaResponse::Preserialized(body));
         }
 
@@ -383,9 +380,15 @@ impl KafkaMockBroker {
             mockforge_core::Error::internal("produce request body_offset past end of buffer")
         })?;
 
-        let parsed = parse_produce_v9(body_slice).map_err(|e| {
-            mockforge_core::Error::internal(format!("failed to parse Produce v9: {e}"))
-        })?;
+        let parsed = if is_flexible {
+            parse_produce_v9(body_slice).map_err(|e| {
+                mockforge_core::Error::internal(format!("failed to parse Produce v9: {e}"))
+            })?
+        } else {
+            parse_produce_v3_v8(body_slice).map_err(|e| {
+                mockforge_core::Error::internal(format!("failed to parse Produce v{version}: {e}"))
+            })?
+        };
 
         let append_time_ms = chrono::Utc::now().timestamp_millis();
         let mut topic_results = Vec::with_capacity(parsed.topics.len());
@@ -466,14 +469,21 @@ impl KafkaMockBroker {
             });
         }
 
-        let body = serialize_produce_v9_response(request.correlation_id, &topic_results);
+        let body = if is_flexible {
+            serialize_produce_v9_response(request.correlation_id, &topic_results)
+        } else {
+            serialize_produce_v3_v8_response(request.correlation_id, version, &topic_results)
+        };
         Ok(KafkaResponse::Preserialized(body))
     }
 
-    /// Handle a Fetch v12 request: parse the flexible body, pull records
-    /// from topic/partition storage starting at each requested fetch_offset,
-    /// and serialize a v12 response with real RecordBatch v2 blobs
-    /// (CRC32C-validated so consumers accept them).
+    /// Handle a Fetch request: parse the body (flexible v12 or non-flexible
+    /// v4..=v11), pull records from topic/partition storage starting at each
+    /// requested fetch_offset, and serialize a version-matched response with
+    /// real RecordBatch v2 blobs (CRC32C-validated so consumers accept them).
+    ///
+    /// librdkafka 1.8.x / kcat 1.7.1 sends v11 (non-flexible); modern
+    /// clients auto-negotiate to v12.
     async fn handle_fetch(
         &self,
         message_buf: &[u8],
@@ -483,13 +493,17 @@ impl KafkaMockBroker {
             parse_fetch_v12, serialize_fetch_v12_response, serialize_record_batch_v2,
             FetchPartitionResponse, FetchTopicResponse,
         };
+        use crate::fetch_nonflex::{parse_fetch_v4_v11, serialize_fetch_v4_v11_response};
 
         const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
         const ERR_OFFSET_OUT_OF_RANGE: i16 = 1;
 
-        if request.api_version != 12 {
+        let version = request.api_version;
+        let is_flexible = version == 12;
+        let is_nonflex = (4..=11).contains(&version);
+        if !is_flexible && !is_nonflex {
             let body = serialize_fetch_v12_response(request.correlation_id, 0, &[]);
-            tracing::warn!("rejecting Fetch v{} (only v12 supported)", request.api_version);
+            tracing::warn!("rejecting Fetch v{version} (supported: 4..=12)");
             return Ok(KafkaResponse::Preserialized(body));
         }
 
@@ -497,9 +511,15 @@ impl KafkaMockBroker {
             mockforge_core::Error::internal("fetch request body_offset past end of buffer")
         })?;
 
-        let parsed = parse_fetch_v12(body_slice).map_err(|e| {
-            mockforge_core::Error::internal(format!("failed to parse Fetch v12: {e}"))
-        })?;
+        let parsed = if is_flexible {
+            parse_fetch_v12(body_slice).map_err(|e| {
+                mockforge_core::Error::internal(format!("failed to parse Fetch v12: {e}"))
+            })?
+        } else {
+            parse_fetch_v4_v11(version, body_slice).map_err(|e| {
+                mockforge_core::Error::internal(format!("failed to parse Fetch v{version}: {e}"))
+            })?
+        };
 
         let topics_guard = self.topics.read().await;
         let mut topic_responses = Vec::with_capacity(parsed.topics.len());
@@ -589,11 +609,20 @@ impl KafkaMockBroker {
             });
         }
 
-        let body = serialize_fetch_v12_response(
-            request.correlation_id,
-            parsed.session_id,
-            &topic_responses,
-        );
+        let body = if is_flexible {
+            serialize_fetch_v12_response(
+                request.correlation_id,
+                parsed.session_id,
+                &topic_responses,
+            )
+        } else {
+            serialize_fetch_v4_v11_response(
+                request.correlation_id,
+                version,
+                parsed.session_id,
+                &topic_responses,
+            )
+        };
         Ok(KafkaResponse::Preserialized(body))
     }
 
