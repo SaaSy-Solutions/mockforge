@@ -1,9 +1,16 @@
 name: Benchmarks
 
 on:
+  # PR trigger narrowed from `crates/**/*.rs` (fired on every Rust change) to
+  # just benchmark code + workspace deps. The PR signal we care about is
+  # "did this change regress benchmarks" — broader paths burned a 10-15 min
+  # self-hosted run per PR for output that wasn't driving review decisions.
+  # Main-push still runs the full bench so the baseline tracked in
+  # benches/baseline/ stays current.
   pull_request:
     paths:
-      - 'crates/**/*.rs'
+      - 'crates/*/benches/**'
+      - 'benches/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/benchmarks.yml'

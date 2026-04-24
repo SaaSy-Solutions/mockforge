@@ -1,6 +1,10 @@
 name: Docker Build and Push
 
 on:
+  # Main pushes + tags still build the full image — that's what ends up in
+  # GHCR and what `docker pull ghcr.io/saasy-solutions/mockforge` serves. The
+  # broad `crates/**` path is correct there because any code change affects
+  # the final binary that's shipped.
   push:
     branches: [main, develop]
     tags:
@@ -11,11 +15,12 @@ on:
       - 'Dockerfile*'
       - '.dockerignore'
       - '.github/workflows/docker-build.yml'
+  # PR trigger narrowed: per-PR builds are only useful to catch Dockerfile
+  # regressions — code-only PRs don't need a 5-8 min image rebuild, since
+  # main-push re-builds the image before it reaches users anyway.
   pull_request:
     branches: [main, develop]
     paths:
-      - 'Cargo.*'
-      - 'crates/**'
       - 'Dockerfile*'
       - '.dockerignore'
       - '.github/workflows/docker-build.yml'
