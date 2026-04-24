@@ -63,8 +63,6 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
     setIsSubmitting(true);
 
     try {
-      // In a real app, this would make an API call
-      // For now, we'll just update the local state
       await updateProfile({
         ...user,
         username: formData.username.trim(),
@@ -72,8 +70,9 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
       });
 
       onOpenChange(false);
-    } catch {
-      setErrors({ general: 'Failed to update profile. Please try again.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update profile. Please try again.';
+      setErrors({ general: message });
     } finally {
       setIsSubmitting(false);
     }

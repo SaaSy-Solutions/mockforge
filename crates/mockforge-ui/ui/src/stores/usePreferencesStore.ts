@@ -11,6 +11,7 @@ import type {
   SearchPreferences,
   UIBehaviorPreferences,
 } from '../types';
+import { authApi } from '../services/authApi';
 
 // Default preferences
 const defaultThemePreferences: UIThemePreferences = {
@@ -62,10 +63,37 @@ const defaultPreferences: UserPreferences = {
   ui: defaultUIBehaviorPreferences,
 };
 
+// Debounced server save — module-level so re-renders don't reset the timer.
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const SAVE_DEBOUNCE_MS = 800;
+
 interface PreferencesStore extends PreferencesState, PreferencesActions {}
 
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+function mergePartial(
+  current: UserPreferences,
+  partial: Partial<UserPreferences>,
+): UserPreferences {
+  return {
+    ...current,
+    ...partial,
+    theme: { ...current.theme, ...(partial.theme ?? {}) },
+    logs: { ...current.logs, ...(partial.logs ?? {}) },
+    notifications: { ...current.notifications, ...(partial.notifications ?? {}) },
+    search: { ...current.search, ...(partial.search ?? {}) },
+    ui: { ...current.ui, ...(partial.ui ?? {}) },
+  };
+}
+
+/** Schedule a best-effort server save after the user stops twiddling controls. */
+function scheduleSync(get: () => PreferencesStore) {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void get()
+      .savePreferences()
+      .catch((err) => logger.warn('Preference auto-save failed', err));
+  }, SAVE_DEBOUNCE_MS);
+}
 
 export const usePreferencesStore = create<PreferencesStore>()(
   persist(
@@ -75,83 +103,53 @@ export const usePreferencesStore = create<PreferencesStore>()(
       error: null,
 
       updatePreferences: (newPreferences) => {
-        const current = get().preferences;
         set({
-          preferences: { ...current, ...newPreferences },
+          preferences: mergePartial(get().preferences, newPreferences),
           error: null,
         });
+        scheduleSync(get);
       },
 
       updateTheme: (themeUpdates) => {
-        const current = get().preferences;
         set({
-          preferences: {
-            ...current,
-            theme: { ...current.theme, ...themeUpdates },
-          },
+          preferences: mergePartial(get().preferences, { theme: themeUpdates }),
           error: null,
         });
+        scheduleSync(get);
       },
 
       updateLogs: (logsUpdates) => {
-        const current = get().preferences;
         set({
-          preferences: {
-            ...current,
-            logs: { ...current.logs, ...logsUpdates },
-          },
+          preferences: mergePartial(get().preferences, { logs: logsUpdates }),
           error: null,
         });
+        scheduleSync(get);
       },
 
       updateNotifications: (notificationUpdates) => {
-        const current = get().preferences;
         set({
-          preferences: {
-            ...current,
-            notifications: { ...current.notifications, ...notificationUpdates },
-          },
+          preferences: mergePartial(get().preferences, {
+            notifications: notificationUpdates,
+          }),
           error: null,
         });
+        scheduleSync(get);
       },
 
       updateSearch: (searchUpdates) => {
-        const current = get().preferences;
         set({
-          preferences: {
-            ...current,
-            search: { ...current.search, ...searchUpdates },
-          },
+          preferences: mergePartial(get().preferences, { search: searchUpdates }),
           error: null,
         });
+        scheduleSync(get);
       },
 
       updateUI: (uiUpdates) => {
-        const current = get().preferences;
         set({
-          preferences: {
-            ...current,
-            ui: { ...current.ui, ...uiUpdates },
-          },
+          preferences: mergePartial(get().preferences, { ui: uiUpdates }),
           error: null,
         });
-      },
-
-      loadPreferences: async () => {
-        set({ loading: true, error: null });
-
-        try {
-          // Simulate API call to load preferences
-          await delay(800);
-          // In a real app, this would make an API call to load preferences
-          set({ loading: false });
-        } catch (error) {
-          set({
-            loading: false,
-            error: error instanceof Error ? error.message : 'Failed to load preferences',
-          });
-          throw error;
-        }
+        scheduleSync(get);
       },
 
       resetToDefaults: () => {
@@ -159,22 +157,50 @@ export const usePreferencesStore = create<PreferencesStore>()(
           preferences: defaultPreferences,
           error: null,
         });
+        scheduleSync(get);
+      },
+
+      loadPreferences: async () => {
+        if (!authApi.isCloud()) return; // local mode keeps localStorage only
+        set({ loading: true, error: null });
+        try {
+          const remote = (await authApi.getPreferences()) as Partial<UserPreferences>;
+          const hasRemote = remote && Object.keys(remote).length > 0;
+          if (hasRemote) {
+            set({
+              preferences: mergePartial(defaultPreferences, remote),
+              loading: false,
+            });
+          } else {
+            set({ loading: false });
+          }
+        } catch (err) {
+          set({
+            loading: false,
+            error: err instanceof Error ? err.message : 'Failed to load preferences',
+          });
+          logger.warn('Loading preferences from server failed', err);
+        }
       },
 
       savePreferences: async () => {
+        if (!authApi.isCloud()) return;
+        if (saveTimer) {
+          clearTimeout(saveTimer);
+          saveTimer = null;
+        }
         set({ loading: true, error: null });
-
         try {
-          // Simulate API call to save preferences
-          await delay(800);
-          // In a real app, this would make an API call
+          await authApi.updatePreferences(
+            get().preferences as unknown as Record<string, unknown>,
+          );
           set({ loading: false });
-        } catch (error) {
+        } catch (err) {
           set({
             loading: false,
-            error: error instanceof Error ? error.message : 'Failed to save preferences',
+            error: err instanceof Error ? err.message : 'Failed to save preferences',
           });
-          throw error;
+          throw err;
         }
       },
     }),

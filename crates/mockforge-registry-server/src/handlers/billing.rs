@@ -403,11 +403,14 @@ async fn handle_checkout_completed(
     Ok(())
 }
 
-/// Get organization owner's email for sending notifications
+/// Get organization owner's email for sending notifications.
+///
+/// Returns `(email, username, email_notifications)`. Callers should skip
+/// non-critical sends when `email_notifications` is false.
 async fn get_org_owner_email(
     pool: &sqlx::PgPool,
     org_id: Uuid,
-) -> Result<(String, String), ApiError> {
+) -> Result<(String, String, bool), ApiError> {
     // Get organization
     let org = Organization::find_by_id(pool, org_id)
         .await
@@ -420,7 +423,7 @@ async fn get_org_owner_email(
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Organization owner not found".to_string()))?;
 
-    Ok((owner.email, owner.username))
+    Ok((owner.email, owner.username, owner.email_notifications))
 }
 
 async fn handle_subscription_event(
@@ -549,31 +552,34 @@ async fn handle_subscription_event(
         .await;
     }
 
-    // Send subscription confirmation email (non-blocking)
-    if let Ok((email_addr, username)) = get_org_owner_email(pool, org_id).await {
-        if let Ok(email_service) = EmailService::from_env() {
-            let amount = subscription
-                .items
-                .data
-                .first()
-                .and_then(|item| item.price.as_ref())
-                .and_then(|price| price.unit_amount)
-                .map(|amount| amount as f64 / 100.0); // Convert cents to dollars
+    // Send subscription confirmation email (non-blocking, gated on owner pref)
+    if let Ok((email_addr, username, email_notifications)) = get_org_owner_email(pool, org_id).await
+    {
+        if email_notifications {
+            if let Ok(email_service) = EmailService::from_env() {
+                let amount = subscription
+                    .items
+                    .data
+                    .first()
+                    .and_then(|item| item.price.as_ref())
+                    .and_then(|price| price.unit_amount)
+                    .map(|amount| amount as f64 / 100.0); // Convert cents to dollars
 
-            let plan_str = plan.to_string();
-            let email_msg = EmailService::generate_subscription_confirmation(
-                &username,
-                &email_addr,
-                &plan_str,
-                amount,
-                Some(current_period_end),
-            );
+                let plan_str = plan.to_string();
+                let email_msg = EmailService::generate_subscription_confirmation(
+                    &username,
+                    &email_addr,
+                    &plan_str,
+                    amount,
+                    Some(current_period_end),
+                );
 
-            tokio::spawn(async move {
-                if let Err(e) = email_service.send(email_msg).await {
-                    tracing::warn!("Failed to send subscription confirmation email: {}", e);
-                }
-            });
+                tokio::spawn(async move {
+                    if let Err(e) = email_service.send(email_msg).await {
+                        tracing::warn!("Failed to send subscription confirmation email: {}", e);
+                    }
+                });
+            }
         }
     }
 
@@ -629,23 +635,26 @@ async fn handle_subscription_deleted(
     )
     .await;
 
-    // Send subscription canceled email (non-blocking)
-    if let Ok((email_addr, username)) = get_org_owner_email(pool, subscription_record.org_id).await
+    // Send subscription canceled email (non-blocking, gated on owner pref)
+    if let Ok((email_addr, username, email_notifications)) =
+        get_org_owner_email(pool, subscription_record.org_id).await
     {
-        if let Ok(email_service) = EmailService::from_env() {
-            let plan_str = old_plan.to_string();
-            let email_msg = EmailService::generate_subscription_canceled(
-                &username,
-                &email_addr,
-                &plan_str,
-                Some(subscription_record.current_period_end),
-            );
+        if email_notifications {
+            if let Ok(email_service) = EmailService::from_env() {
+                let plan_str = old_plan.to_string();
+                let email_msg = EmailService::generate_subscription_canceled(
+                    &username,
+                    &email_addr,
+                    &plan_str,
+                    Some(subscription_record.current_period_end),
+                );
 
-            tokio::spawn(async move {
-                if let Err(e) = email_service.send(email_msg).await {
-                    tracing::warn!("Failed to send subscription canceled email: {}", e);
-                }
-            });
+                tokio::spawn(async move {
+                    if let Err(e) = email_service.send(email_msg).await {
+                        tracing::warn!("Failed to send subscription canceled email: {}", e);
+                    }
+                });
+            }
         }
     }
 
@@ -729,33 +738,39 @@ async fn handle_payment_failed(
     )
     .await;
 
-    // Send payment failed email (non-blocking)
-    if let Ok((email_addr, username)) = get_org_owner_email(pool, subscription.org_id).await {
-        if let Ok(email_service) = EmailService::from_env() {
-            let org = Organization::find_by_id(pool, subscription.org_id)
-                .await
-                .map_err(ApiError::Database)?
-                .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    // Send payment failed email (non-blocking, gated on owner pref)
+    if let Ok((email_addr, username, email_notifications)) =
+        get_org_owner_email(pool, subscription.org_id).await
+    {
+        if email_notifications {
+            if let Ok(email_service) = EmailService::from_env() {
+                let org = Organization::find_by_id(pool, subscription.org_id)
+                    .await
+                    .map_err(ApiError::Database)?
+                    .ok_or_else(|| {
+                        ApiError::InvalidRequest("Organization not found".to_string())
+                    })?;
 
-            let amount = invoice.amount_due.map(|a| a as f64 / 100.0).unwrap_or(0.0); // Convert cents to dollars
-            let retry_date = invoice
-                .next_payment_attempt
-                .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
+                let amount = invoice.amount_due.map(|a| a as f64 / 100.0).unwrap_or(0.0);
+                let retry_date = invoice
+                    .next_payment_attempt
+                    .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
 
-            let plan_str = org.plan().to_string();
-            let email_msg = EmailService::generate_payment_failed(
-                &username,
-                &email_addr,
-                &plan_str,
-                amount,
-                retry_date,
-            );
+                let plan_str = org.plan().to_string();
+                let email_msg = EmailService::generate_payment_failed(
+                    &username,
+                    &email_addr,
+                    &plan_str,
+                    amount,
+                    retry_date,
+                );
 
-            tokio::spawn(async move {
-                if let Err(e) = email_service.send(email_msg).await {
-                    tracing::warn!("Failed to send payment failed email: {}", e);
-                }
-            });
+                tokio::spawn(async move {
+                    if let Err(e) = email_service.send(email_msg).await {
+                        tracing::warn!("Failed to send payment failed email: {}", e);
+                    }
+                });
+            }
         }
     }
 

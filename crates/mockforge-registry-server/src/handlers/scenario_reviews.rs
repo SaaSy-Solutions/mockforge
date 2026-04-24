@@ -35,22 +35,11 @@ pub async fn get_scenario_reviews(
 
     let mut review_responses = Vec::new();
     for review in reviews {
-        let reviewer =
-            state.store.find_user_by_id(review.reviewer_id).await?.unwrap_or_else(|| User {
-                id: review.reviewer_id,
-                username: "unknown".to_string(),
-                email: "unknown@example.com".to_string(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                two_factor_enabled: false,
-                two_factor_secret: None,
-                two_factor_backup_codes: None,
-                two_factor_verified_at: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            });
+        let reviewer = state
+            .store
+            .find_user_by_id(review.reviewer_id)
+            .await?
+            .unwrap_or_else(|| User::placeholder(review.reviewer_id));
 
         review_responses.push(ScenarioReviewResponse {
             id: review.id.to_string(),

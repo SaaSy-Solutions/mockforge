@@ -1,18 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useHelpStore } from '../../stores/useHelpStore';
 import { AccountSettings } from './AccountSettings';
 import { ProfileSettings } from './ProfileSettings';
 import { Preferences } from './Preferences';
-import { HelpSupport } from './HelpSupport';
 
 export function UserProfile() {
   const { user, logout } = useAuthStore();
+  const openHelp = useHelpStore(state => state.open);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
-  const [showHelpSupport, setShowHelpSupport] = useState(false);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDropdown(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [showDropdown]);
 
   if (!user) return null;
 
@@ -38,9 +47,9 @@ export function UserProfile() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
     setShowDropdown(false);
+    await logout();
   };
 
   return (
@@ -148,7 +157,7 @@ export function UserProfile() {
                   className="w-full text-left px-3 py-2 text-sm hover:bg-accent rounded-md transition-colors"
                   onClick={() => {
                     setShowDropdown(false);
-                    setShowHelpSupport(true);
+                    openHelp();
                   }}
                 >
                   Help & Support
@@ -182,11 +191,6 @@ export function UserProfile() {
       <Preferences
         open={showPreferences}
         onOpenChange={setShowPreferences}
-      />
-
-      <HelpSupport
-        open={showHelpSupport}
-        onOpenChange={setShowHelpSupport}
       />
     </div>
   );

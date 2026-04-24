@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { useState } from 'react';
 import { Button } from '../ui/button';
 import {
@@ -39,7 +38,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
   const shortcuts = [
     { keys: `${modKey} + K`, description: 'Focus global search' },
     { keys: 'Esc', description: 'Clear search / Close dialogs' },
-    { keys: `${modKey} + /`, description: 'Show keyboard shortcuts' },
+    { keys: 'Shift + ?', description: 'Open Help & Support' },
   ];
 
   const faqs = [

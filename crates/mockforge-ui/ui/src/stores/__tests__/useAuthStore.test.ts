@@ -13,6 +13,8 @@ vi.mock('../../services/authApi', () => ({
     login: vi.fn(),
     logout: vi.fn(),
     refreshToken: vi.fn(),
+    isCloud: vi.fn(() => false),
+    updateProfile: vi.fn(),
   },
 }));
 

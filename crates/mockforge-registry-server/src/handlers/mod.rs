@@ -31,6 +31,7 @@ pub mod support;
 pub mod tokens;
 pub mod two_factor;
 pub mod usage;
+pub mod users_me;
 pub mod verification;
 
 // Marketplace, settings, security, GDPR, and audit handlers

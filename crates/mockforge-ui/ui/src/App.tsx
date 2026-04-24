@@ -7,6 +7,7 @@ import { ToastProvider } from './components/ui/ToastProvider';
 import { useStartupPrefetch } from './hooks/usePrefetch';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
 import { useAuthStore } from './stores/useAuthStore';
+import { usePreferencesStore } from './stores/usePreferencesStore';
 import { useI18n } from './i18n/I18nProvider';
 import { routes } from './routes';
 
@@ -42,6 +43,7 @@ function App() {
   const navigate = useNavigate();
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const loadPreferences = usePreferencesStore(state => state.loadPreferences);
 
   // Prefetch data on startup for better performance
   useStartupPrefetch();
@@ -52,8 +54,10 @@ function App() {
   useEffect(() => {
     if (isAuthenticated) {
       loadWorkspaces();
+      // Hydrate preferences from the server; merges over the localStorage cache.
+      void loadPreferences();
     }
-  }, [isAuthenticated, loadWorkspaces]);
+  }, [isAuthenticated, loadWorkspaces, loadPreferences]);
 
   // Handle deep-link navigation events (e.g., from RealityTracePanel)
   useEffect(() => {

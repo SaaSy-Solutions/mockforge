@@ -113,25 +113,7 @@ pub async fn search_plugins(
         let author = User::find_by_id(pool, plugin.author_id)
             .await
             .map_err(ApiError::Database)?
-            .unwrap_or_else(|| {
-                // Create a minimal user struct for display purposes
-                // This should not happen in production, but handle gracefully
-                User {
-                    id: plugin.author_id,
-                    username: "Unknown".to_string(),
-                    email: String::new(),
-                    password_hash: String::new(),
-                    api_token: None,
-                    is_verified: false,
-                    is_admin: false,
-                    two_factor_enabled: false,
-                    two_factor_secret: None,
-                    two_factor_backup_codes: None,
-                    two_factor_verified_at: None,
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                }
-            });
+            .unwrap_or_else(|| User::placeholder(plugin.author_id));
 
         let security_score = derive_security_score(&plugin);
         let language = plugin.language.clone();
@@ -220,21 +202,11 @@ pub async fn get_plugin(
     }
 
     // Fetch author information
-    let author = state.store.find_user_by_id(plugin.author_id).await?.unwrap_or_else(|| User {
-        id: plugin.author_id,
-        username: "Unknown".to_string(),
-        email: String::new(),
-        password_hash: String::new(),
-        api_token: None,
-        is_verified: false,
-        is_admin: false,
-        two_factor_enabled: false,
-        two_factor_secret: None,
-        two_factor_backup_codes: None,
-        two_factor_verified_at: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    });
+    let author = state
+        .store
+        .find_user_by_id(plugin.author_id)
+        .await?
+        .unwrap_or_else(|| User::placeholder(plugin.author_id));
 
     let security_score = derive_security_score(&plugin);
     let language = plugin.language.clone();
