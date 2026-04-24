@@ -12,9 +12,11 @@
 //!     existing `KafkaSpecRegistry` so nothing else has to change to keep
 //!     working.
 //!
-//! Unknown fields are silently ignored so advanced YAML sections (scenarios,
-//! state_machine triggers, relationships, failure_simulation, monitoring)
-//! don't break the load — they'll be implemented in later PRs.
+//! Unknown fields are silently ignored so advanced YAML sections
+//! (failure_simulation, monitoring) don't break the load. The three
+//! trigger sections the issue calls for — state_machine, scenarios, and
+//! relationships — are now first-class: they deserialize into concrete
+//! structs that `fixture_executor` consumes at broker startup.
 
 use crate::fixtures::{AutoProduceConfig, KafkaFixture};
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,15 @@ pub struct KafkaFixtureFile {
     /// Topics described by this file.
     #[serde(default)]
     pub topics: Vec<KafkaTopicSpec>,
+    /// Scenario-based sequences of topic emissions. Each scenario fires
+    /// once on startup if `enabled` and survives random sampling against
+    /// `probability`.
+    #[serde(default)]
+    pub scenarios: Vec<ScenarioSpec>,
+    /// Causal links — producing to `from_topic` triggers a dependent
+    /// emission on `to_topic` with correlated keys.
+    #[serde(default)]
+    pub relationships: Vec<RelationshipSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -89,10 +100,9 @@ pub struct KafkaMessageSpec {
     pub auto_produce: Option<MessageAutoProduce>,
 }
 
-/// A superset of `AutoProduceConfig`. Simple rate-limited auto-produce fields
-/// are first-class; advanced trigger configs (state_machine, scenarios) are
-/// parsed but not yet executed — preserved so a later PR can wire them up
-/// without another schema change.
+/// A superset of `AutoProduceConfig`. Simple rate-limited auto-produce
+/// fields are first-class; `state_machine` drives the probabilistic state
+/// graph executor when `trigger == "state_machine"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageAutoProduce {
     #[serde(default)]
@@ -105,10 +115,96 @@ pub struct MessageAutoProduce {
     pub total_count: Option<usize>,
     #[serde(default)]
     pub partition: Option<i32>,
-    /// "rate" (default), "state_machine", or custom triggers. Only "rate" is
-    /// honored today; other values flow through without causing a load error.
+    /// `"rate"` (default) drives the rate-based `AutoProducer`.
+    /// `"state_machine"` drives `fixture_executor::StateMachineExecutor`.
+    /// Other values deserialize cleanly but don't hook anything up.
     #[serde(default)]
     pub trigger: Option<String>,
+    /// Graph definition used by the `"state_machine"` trigger.
+    #[serde(default)]
+    pub state_machine: Option<StateMachineSpec>,
+}
+
+/// A probabilistic state graph that emits one message per state visit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateMachineSpec {
+    pub initial_state: String,
+    #[serde(default)]
+    pub states: Vec<StateSpec>,
+}
+
+/// One node in a `StateMachineSpec`.
+///
+/// Terminal states have `next_states` empty — the executor stops when it
+/// reaches one. When `next_states` has entries, `probability` (same length)
+/// selects which one to visit next, and `delay_ms` (a `[min, max]` pair)
+/// controls how long before the transition fires.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateSpec {
+    pub name: String,
+    #[serde(default)]
+    pub next_states: Vec<String>,
+    #[serde(default)]
+    pub probability: Vec<f64>,
+    /// `[min_ms, max_ms]` — sampled uniformly. Absent = fire immediately.
+    #[serde(default)]
+    pub delay_ms: Vec<u64>,
+}
+
+/// One top-level scenario: a sequence of topic emissions fired once when
+/// the broker starts, gated by `enabled` and `probability`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioSpec {
+    pub name: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// 0.0–1.0 chance the scenario actually runs. Absent = always run.
+    #[serde(default)]
+    pub probability: Option<f64>,
+    #[serde(default)]
+    pub sequence: Vec<ScenarioStep>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// One step inside a scenario: emit a message on `topic` after
+/// `delay_ms[0]..=delay_ms[1]` ms (absent = fire immediately).
+///
+/// `message` is a free-form identifier in the fixture file (e.g.
+/// `"order_created_template"`). Today it's informational — the executor
+/// emits the first known message template for the referenced topic. A
+/// later PR can make `message` select among the topic's templates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioStep {
+    pub topic: String,
+    #[serde(default)]
+    pub message: Option<String>,
+    /// `[min_ms, max_ms]` — sampled uniformly. Absent = fire immediately.
+    #[serde(default)]
+    pub delay_ms: Vec<u64>,
+}
+
+/// A causal link: when a record lands on `from_topic`, emit a record on
+/// `to_topic` using `key_mapping` to correlate identifiers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipSpec {
+    pub from_topic: String,
+    pub to_topic: String,
+    /// `"one_to_one"` / `"one_to_many"` — informational; the executor
+    /// always emits exactly one `to_topic` record per `from_topic` record,
+    /// and 1-to-many fan-out is expressed through multiple relationships
+    /// or through the rate/state-machine triggers on `to_topic`.
+    #[serde(default)]
+    pub relationship: Option<String>,
+    /// Map of `source_field -> target_field`. For each entry, the
+    /// executor pulls `source_field` out of the source record's JSON
+    /// value and puts it in the rendering context under `target_field`.
+    /// If the source value isn't valid JSON, the raw message key is used
+    /// as the value for every mapping entry.
+    #[serde(default)]
+    pub key_mapping: HashMap<String, String>,
 }
 
 /// Result of expanding a `KafkaFixtureFile` for consumption downstream.
@@ -118,6 +214,16 @@ pub struct FlattenedFixtures {
     pub topics: Vec<KafkaTopicSpec>,
     /// Message-level fixtures — stored in `KafkaSpecRegistry` keyed by topic.
     pub fixtures: Vec<KafkaFixture>,
+    /// Scenarios aggregated from every fixture file. Executed once on
+    /// broker startup by `fixture_executor`.
+    pub scenarios: Vec<ScenarioSpec>,
+    /// Relationships aggregated from every fixture file. Fire on every
+    /// successful produce.
+    pub relationships: Vec<RelationshipSpec>,
+    /// State-machine definitions keyed by the fixture identifier
+    /// (`{topic}#{index}`) that owns them. Drives the state-machine
+    /// executor.
+    pub state_machines: Vec<(String, StateMachineSpec)>,
 }
 
 impl KafkaFixtureFile {
@@ -129,14 +235,25 @@ impl KafkaFixtureFile {
     /// messages load cleanly but don't emit an `AutoProduceConfig`.
     pub fn flatten(self) -> FlattenedFixtures {
         let mut fixtures = Vec::new();
+        let mut state_machines = Vec::new();
         for topic in &self.topics {
             for (i, msg) in topic.messages.iter().enumerate() {
                 fixtures.push(message_to_fixture(topic, i, msg));
+                if let Some(ap) = &msg.auto_produce {
+                    if ap.enabled && ap.trigger.as_deref() == Some("state_machine") {
+                        if let Some(sm) = &ap.state_machine {
+                            state_machines.push((format!("{}#{}", topic.name, i), sm.clone()));
+                        }
+                    }
+                }
             }
         }
         FlattenedFixtures {
             topics: self.topics,
             fixtures,
+            scenarios: self.scenarios,
+            relationships: self.relationships,
+            state_machines,
         }
     }
 }
@@ -267,6 +384,84 @@ topics:
         assert_eq!(file.topics[0].partitions, 1);
         assert_eq!(file.topics[0].replication_factor, 1);
         assert!(file.topics[0].messages[0].key_template.is_none());
+    }
+
+    #[test]
+    fn flattens_state_machine_spec_into_index() {
+        let yaml = r#"
+topics:
+  - name: "orders.status-updated"
+    messages:
+      - value: { event_type: "order.status_updated" }
+        auto_produce:
+          enabled: true
+          trigger: "state_machine"
+          state_machine:
+            initial_state: "pending"
+            states:
+              - name: "pending"
+                next_states: ["processing"]
+                probability: [1.0]
+                delay_ms: [1000, 2000]
+              - name: "processing"
+                next_states: ["shipped", "cancelled"]
+                probability: [0.9, 0.1]
+                delay_ms: [2000, 5000]
+              - name: "shipped"
+                next_states: []
+              - name: "cancelled"
+                next_states: []
+"#;
+        let file: KafkaFixtureFile = serde_yaml::from_str(yaml).unwrap();
+        let flat = file.flatten();
+        assert_eq!(flat.state_machines.len(), 1);
+        let (id, sm) = &flat.state_machines[0];
+        assert_eq!(id, "orders.status-updated#0");
+        assert_eq!(sm.initial_state, "pending");
+        assert_eq!(sm.states.len(), 4);
+        assert_eq!(sm.states[1].next_states, vec!["shipped", "cancelled"]);
+        assert_eq!(sm.states[1].probability, vec![0.9, 0.1]);
+        assert_eq!(sm.states[2].next_states, Vec::<String>::new());
+    }
+
+    #[test]
+    fn parses_scenarios_and_relationships_sections() {
+        let yaml = r#"
+topics:
+  - name: "orders.created"
+    messages:
+      - value: { k: "v" }
+scenarios:
+  - name: "Successful Order"
+    enabled: true
+    probability: 0.85
+    sequence:
+      - topic: "orders.created"
+      - topic: "payments.processed"
+        delay_ms: [1000, 3000]
+relationships:
+  - from_topic: "orders.created"
+    to_topic: "payments.processed"
+    relationship: "one_to_one"
+    key_mapping:
+      order_id: "order_id"
+"#;
+        let file: KafkaFixtureFile = serde_yaml::from_str(yaml).unwrap();
+        let flat = file.flatten();
+        assert_eq!(flat.scenarios.len(), 1);
+        assert_eq!(flat.scenarios[0].name, "Successful Order");
+        assert_eq!(flat.scenarios[0].probability, Some(0.85));
+        assert_eq!(flat.scenarios[0].sequence.len(), 2);
+        assert_eq!(flat.scenarios[0].sequence[1].topic, "payments.processed");
+        assert_eq!(flat.scenarios[0].sequence[1].delay_ms, vec![1000, 3000]);
+
+        assert_eq!(flat.relationships.len(), 1);
+        assert_eq!(flat.relationships[0].from_topic, "orders.created");
+        assert_eq!(flat.relationships[0].to_topic, "payments.processed");
+        assert_eq!(
+            flat.relationships[0].key_mapping.get("order_id"),
+            Some(&"order_id".to_string())
+        );
     }
 
     #[test]

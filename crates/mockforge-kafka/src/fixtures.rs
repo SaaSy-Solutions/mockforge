@@ -193,6 +193,9 @@ pub fn load_kafka_fixtures_from_dir(dir: &Path) -> mockforge_core::Result<Flatte
                 let flat = file.flatten();
                 merged.topics.extend(flat.topics);
                 merged.fixtures.extend(flat.fixtures);
+                merged.scenarios.extend(flat.scenarios);
+                merged.relationships.extend(flat.relationships);
+                merged.state_machines.extend(flat.state_machines);
             }
             _ => match serde_yaml::from_str::<Vec<KafkaFixture>>(&content) {
                 Ok(fixtures) => merged.fixtures.extend(fixtures),
