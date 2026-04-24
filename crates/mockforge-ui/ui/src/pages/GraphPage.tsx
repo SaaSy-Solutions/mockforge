@@ -20,7 +20,7 @@ import { apiService } from '../services/api';
 import type { GraphData, GraphNode, GraphEdge } from '../types/graph';
 import { EndpointNode } from '../components/graph/EndpointNode';
 import { ServiceNode } from '../components/graph/ServiceNode';
-import { GraphControls, LayoutType, FilterType, ProtocolFilter } from '../components/graph/GraphControls';
+import { GraphControls, type LayoutType, type FilterType, type ProtocolFilter } from '../components/graph/GraphControls';
 import { GraphDetailsPanel } from '../components/graph/GraphDetailsPanel';
 import { applyLayout } from '../utils/graphLayouts';
 import { applyClusterLayout } from '../utils/graphClustering';

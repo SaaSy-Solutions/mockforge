@@ -3,7 +3,7 @@
  * Provides integration with scenario usage, persona CI hits, endpoint coverage, etc.
  */
 
-import { useQuery, UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
 // API Base URL
 const API_BASE = '/api/v2/analytics';

@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { FederationList } from './FederationList';
 import { FederationDetail } from './FederationDetail';
 import { FederationForm } from './FederationForm';
-import { Federation } from '../../hooks/useFederation';
+import type { Federation } from '../../hooks/useFederation';
 
 export interface FederationDashboardProps {
   orgId: string;

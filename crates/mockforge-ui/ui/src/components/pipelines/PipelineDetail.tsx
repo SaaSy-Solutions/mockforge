@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { usePipeline, useTriggerPipeline, Pipeline } from '../../hooks/usePipelines';
+import { usePipeline, useTriggerPipeline, type Pipeline } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
 import { ArrowLeft, Edit, Play, CheckCircle, XCircle, Clock, Settings } from 'lucide-react';
 

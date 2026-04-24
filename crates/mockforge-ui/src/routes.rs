@@ -467,6 +467,7 @@ pub fn create_admin_router(
         let coverage_state = CoverageMetricsState { db: coverage_db };
 
         // Add routes directly to main router to avoid state type conflicts
+        use crate::handlers::analytics_v2;
         use crate::handlers::coverage_metrics;
         use crate::handlers::pillar_analytics::{self, PillarAnalyticsState};
         router = router
@@ -484,6 +485,19 @@ pub fn create_admin_router(
                 "/api/v2/analytics/drift/percentage",
                 get(coverage_metrics::get_drift_percentage),
             )
+            // Dashboard analytics (share the same CoverageMetricsState / OnceCell)
+            .route("/api/v2/analytics/overview", get(analytics_v2::get_overview))
+            .route("/api/v2/analytics/requests", get(analytics_v2::get_requests_timeseries))
+            .route("/api/v2/analytics/latency", get(analytics_v2::get_latency_trends))
+            .route("/api/v2/analytics/errors", get(analytics_v2::get_error_summary))
+            .route("/api/v2/analytics/endpoints", get(analytics_v2::get_top_endpoints))
+            .route("/api/v2/analytics/protocols", get(analytics_v2::get_protocol_breakdown))
+            .route(
+                "/api/v2/analytics/traffic-patterns",
+                get(analytics_v2::get_traffic_patterns),
+            )
+            .route("/api/v2/analytics/export/csv", get(analytics_v2::export_csv))
+            .route("/api/v2/analytics/export/json", get(analytics_v2::export_json))
             // Pillar usage analytics (shares the same AnalyticsDatabase OnceCell)
             .route(
                 "/api/v2/analytics/pillars/workspace/{workspace_id}",

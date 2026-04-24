@@ -113,6 +113,7 @@ const navSections = [
       { id: 'logs', labelKey: 'tab.logs', icon: FileText },
       { id: 'traces', labelKey: 'tab.traces', icon: Network },
       { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
+      { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
       { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
       { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
       { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },

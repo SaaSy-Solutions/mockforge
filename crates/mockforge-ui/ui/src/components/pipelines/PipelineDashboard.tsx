@@ -10,7 +10,7 @@ import { PipelineDetail } from './PipelineDetail';
 import { PipelineForm } from './PipelineForm';
 import { PipelineExecutions } from './PipelineExecutions';
 import { Card } from '../ui/Card';
-import { Pipeline } from '../../hooks/usePipelines';
+import type { Pipeline } from '../../hooks/usePipelines';
 
 export interface PipelineDashboardProps {
   workspaceId?: string;
