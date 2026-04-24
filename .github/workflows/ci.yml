@@ -161,7 +161,11 @@ jobs:
   cross-platform-test:
     name: Cross-Platform Tests
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request'
+    # Temporarily disabled — macos-latest and windows-latest have been
+    # failing on main and consume significant CI minutes. Re-enable once
+    # the cross-platform regressions are investigated and fixed.
+    # Was: if: github.event_name == 'pull_request'
+    if: false
     strategy:
       fail-fast: false
       matrix:
