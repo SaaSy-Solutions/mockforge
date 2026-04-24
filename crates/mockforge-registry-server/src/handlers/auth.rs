@@ -461,6 +461,9 @@ pub struct MeResponse {
     pub is_verified: bool,
     pub is_admin: bool,
     pub two_factor_enabled: bool,
+    pub email_notifications: bool,
+    pub security_alerts: bool,
+    pub preferences: serde_json::Value,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -482,6 +485,90 @@ pub async fn me(
         is_verified: user.is_verified,
         is_admin: user.is_admin,
         two_factor_enabled: user.two_factor_enabled,
+        email_notifications: user.email_notifications,
+        security_alerts: user.security_alerts,
+        preferences: user.preferences,
         created_at: user.created_at,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChangePasswordResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Change password for the authenticated user.
+///
+/// Verifies the user's current password, stores the new hash, revokes any
+/// outstanding refresh tokens (so other sessions are cut off), and — when
+/// the user has opted in to security alerts — sends a notification email.
+pub async fn change_password(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Json(request): Json<ChangePasswordRequest>,
+) -> ApiResult<Json<ChangePasswordResponse>> {
+    if request.new_password.len() < 8 {
+        return Err(ApiError::InvalidRequest("Password must be at least 8 characters".to_string()));
+    }
+    if request.new_password == request.current_password {
+        return Err(ApiError::InvalidRequest(
+            "New password must differ from the current password".to_string(),
+        ));
+    }
+
+    let user = state
+        .store
+        .find_user_by_id(user_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
+
+    if !verify_password(&request.current_password, &user.password_hash)
+        .map_err(ApiError::Internal)?
+    {
+        return Err(ApiError::InvalidRequest("Current password is incorrect".to_string()));
+    }
+
+    let password_hash = hash_password(&request.new_password).map_err(ApiError::Internal)?;
+    state.store.update_user_password_hash(user.id, &password_hash).await?;
+
+    let revoked_count = state
+        .db
+        .revoke_all_user_tokens(user.id, "password_changed")
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to revoke user tokens on password change: {}", e);
+            ApiError::Internal(e)
+        })?;
+    tracing::info!(
+        "Password changed: user_id={}, revoked {} refresh tokens",
+        user.id,
+        revoked_count
+    );
+
+    // Best-effort security-alert email. Never fails the request.
+    if user.security_alerts {
+        if let Ok(email_service) = EmailService::from_env() {
+            let msg = EmailService::generate_security_alert_email(
+                &user.username,
+                &user.email,
+                "Your password was changed",
+                "If you did not perform this change, reset your password immediately and contact support.",
+            );
+            if let Err(e) = email_service.send(msg).await {
+                tracing::warn!("Failed to send password-change security alert: {}", e);
+            }
+        }
+    }
+
+    Ok(Json(ChangePasswordResponse {
+        success: true,
+        message: "Password changed successfully. Other sessions have been signed out.".to_string(),
     }))
 }

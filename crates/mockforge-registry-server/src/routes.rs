@@ -89,6 +89,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/auth/2fa/verify-setup", post(handlers::two_factor::verify_2fa_setup_with_secret))
         .route("/api/v1/auth/2fa/disable", post(handlers::two_factor::disable_2fa))
         .route("/api/v1/auth/2fa/status", get(handlers::two_factor::get_2fa_status))
+        // Authenticated password change
+        .route("/api/v1/auth/change-password", post(handlers::auth::change_password))
+        // Current-user profile, notification toggles, preferences
+        .route("/api/v1/users/me", get(handlers::users_me::get_me))
+        .route("/api/v1/users/me", patch(handlers::users_me::update_me))
+        .route("/api/v1/users/me/notifications", patch(handlers::users_me::update_notifications))
+        .route("/api/v1/users/me/preferences", get(handlers::users_me::get_preferences))
+        .route("/api/v1/users/me/preferences", patch(handlers::users_me::update_preferences))
         // Organization routes
         .route("/api/v1/organizations", get(handlers::organizations::list_organizations))
         .route("/api/v1/organizations", post(handlers::organizations::create_organization))

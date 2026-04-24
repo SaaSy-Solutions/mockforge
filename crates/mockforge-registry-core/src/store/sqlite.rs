@@ -494,6 +494,9 @@ fn row_to_user(row: &sqlx::sqlite::SqliteRow) -> StoreResult<User> {
     let two_factor_verified_at_str: Option<String> = row.try_get("two_factor_verified_at")?;
     let created_at_str: String = row.try_get("created_at")?;
     let updated_at_str: String = row.try_get("updated_at")?;
+    let preferences_str: String = row.try_get("preferences").unwrap_or_else(|_| "{}".to_string());
+    let preferences: serde_json::Value = serde_json::from_str(&preferences_str)
+        .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
 
     Ok(User {
         id: parse_uuid(&id_str)?,
@@ -509,6 +512,9 @@ fn row_to_user(row: &sqlx::sqlite::SqliteRow) -> StoreResult<User> {
         // loading them for now. A future commit can JSON-decode the column.
         two_factor_backup_codes: None,
         two_factor_verified_at: two_factor_verified_at_str.as_deref().map(parse_dt).transpose()?,
+        email_notifications: row.try_get("email_notifications").unwrap_or(true),
+        security_alerts: row.try_get("security_alerts").unwrap_or(true),
+        preferences,
         created_at: parse_dt(&created_at_str)?,
         updated_at: parse_dt(&updated_at_str)?,
     })
@@ -1170,6 +1176,67 @@ impl RegistryStore for SqliteRegistryStore {
 
     async fn mark_user_verified(&self, user_id: Uuid) -> StoreResult<()> {
         sqlx::query("UPDATE users SET is_verified = 1, updated_at = ? WHERE id = ?")
+            .bind(Utc::now().to_rfc3339())
+            .bind(user_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        username: Option<&str>,
+        email: Option<&str>,
+    ) -> StoreResult<User> {
+        let now = Utc::now().to_rfc3339();
+        sqlx::query(
+            "UPDATE users
+             SET username = COALESCE(?, username),
+                 email    = COALESCE(?, email),
+                 updated_at = ?
+             WHERE id = ?",
+        )
+        .bind(username)
+        .bind(email)
+        .bind(&now)
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        self.find_user_by_id(user_id).await?.ok_or(StoreError::NotFound)
+    }
+
+    async fn update_user_notification_prefs(
+        &self,
+        user_id: Uuid,
+        email_notifications: bool,
+        security_alerts: bool,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE users
+             SET email_notifications = ?,
+                 security_alerts     = ?,
+                 updated_at          = ?
+             WHERE id = ?",
+        )
+        .bind(email_notifications)
+        .bind(security_alerts)
+        .bind(Utc::now().to_rfc3339())
+        .bind(user_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn update_user_preferences(
+        &self,
+        user_id: Uuid,
+        preferences: &serde_json::Value,
+    ) -> StoreResult<()> {
+        let encoded = serde_json::to_string(preferences)
+            .map_err(|e| StoreError::Hash(format!("encode preferences: {}", e)))?;
+        sqlx::query("UPDATE users SET preferences = ?, updated_at = ? WHERE id = ?")
+            .bind(&encoded)
             .bind(Utc::now().to_rfc3339())
             .bind(user_id.to_string())
             .execute(&self.pool)

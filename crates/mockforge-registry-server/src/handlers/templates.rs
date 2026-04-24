@@ -82,22 +82,11 @@ pub async fn search_templates(
             .await
             .map_err(ApiError::Database)?;
 
-        let author =
-            state.store.find_user_by_id(template.author_id).await?.unwrap_or_else(|| User {
-                id: template.author_id,
-                username: "unknown".to_string(),
-                email: "unknown@example.com".to_string(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                two_factor_enabled: false,
-                two_factor_secret: None,
-                two_factor_backup_codes: None,
-                two_factor_verified_at: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            });
+        let author = state
+            .store
+            .find_user_by_id(template.author_id)
+            .await?
+            .unwrap_or_else(|| User::placeholder(template.author_id));
 
         let stats = template.stats_json.clone();
         let compatibility = template.compatibility_json.clone();
@@ -172,21 +161,11 @@ pub async fn get_template(
         .await?
         .ok_or_else(|| ApiError::TemplateNotFound(format!("{}@{}", name, version)))?;
 
-    let author = state.store.find_user_by_id(template.author_id).await?.unwrap_or_else(|| User {
-        id: template.author_id,
-        username: "unknown".to_string(),
-        email: "unknown@example.com".to_string(),
-        password_hash: String::new(),
-        api_token: None,
-        is_verified: false,
-        is_admin: false,
-        two_factor_enabled: false,
-        two_factor_secret: None,
-        two_factor_backup_codes: None,
-        two_factor_verified_at: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    });
+    let author = state
+        .store
+        .find_user_by_id(template.author_id)
+        .await?
+        .unwrap_or_else(|| User::placeholder(template.author_id));
 
     let stats = template.stats_json.clone();
     let compatibility = template.compatibility_json.clone();

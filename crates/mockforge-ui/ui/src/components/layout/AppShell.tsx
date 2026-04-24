@@ -4,10 +4,12 @@ import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
 import { SimpleThemeToggle } from '../ui/ThemeToggle';
 import { UserProfile } from '../auth/UserProfile';
+import { HelpSupport } from '../auth/HelpSupport';
 import { Logo } from '../ui/Logo';
 import { Input } from '../ui/input';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
+import { useHelpStore } from '../../stores/useHelpStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -239,6 +241,10 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const [globalQuery, setGlobalQuery] = useState('');
   const [isMac, setIsMac] = useState(false);
 
+  const helpOpen = useHelpStore(state => state.isOpen);
+  const openHelp = useHelpStore(state => state.open);
+  const setHelpOpen = useHelpStore(state => state.setOpen);
+
   // Setup keyboard shortcuts
   useAppShortcuts({
     onSearch: () => {
@@ -248,6 +254,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
         searchInput.select();
       }
     },
+    onHelp: () => openHelp(),
   });
 
   // Skip links functionality
@@ -463,6 +470,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
           </main>
         </div>
       </div>
+
+      {/* Shared Help & Support modal — opened by Shift+? or the avatar menu. */}
+      <HelpSupport open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }
