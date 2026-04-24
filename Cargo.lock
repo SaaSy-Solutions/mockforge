@@ -7073,10 +7073,13 @@ dependencies = [
  "nom 8.0.0",
  "percent-encoding",
  "quoted_printable",
+ "rustls 0.23.37",
  "socket2 0.6.2",
  "tokio",
  "tokio-native-tls",
+ "tokio-rustls 0.26.4",
  "url",
+ "webpki-roots 1.0.6",
 ]
 
 [[package]]
@@ -8929,6 +8932,7 @@ dependencies = [
  "lettre",
  "mail-parser",
  "mockforge-core",
+ "rcgen",
  "regex",
  "rustls 0.23.37",
  "rustls-pemfile 1.0.4",

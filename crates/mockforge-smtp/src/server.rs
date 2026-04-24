@@ -7,11 +7,67 @@ use mockforge_core::protocol_abstraction::{
 use mockforge_core::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::task::{Context, Poll};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::{rustls, TlsAcceptor};
+use tokio_rustls::{rustls, server::TlsStream, TlsAcceptor};
 use tracing::{debug, error, info, warn};
+
+/// Stream wrapper that can be either plaintext TCP or TLS-upgraded.
+/// The session handler starts each connection as `Plain` and swaps to
+/// `Tls` mid-stream when the client sends STARTTLS (RFC 3207). The
+/// enum-plus-manual-AsyncRead/Write-impl pattern is what lets us put
+/// the upgraded stream back into the existing `BufReader` without
+/// rewriting the whole session loop.
+pub enum SmtpStream {
+    /// Plaintext TCP before STARTTLS (or when STARTTLS is disabled).
+    Plain(TcpStream),
+    /// TLS-encrypted after STARTTLS completes. Boxed to keep the
+    /// enum size manageable — `TlsStream` is large.
+    Tls(Box<TlsStream<TcpStream>>),
+}
+
+impl AsyncRead for SmtpStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            SmtpStream::Plain(s) => Pin::new(s).poll_read(cx, buf),
+            SmtpStream::Tls(s) => Pin::new(s.as_mut()).poll_read(cx, buf),
+        }
+    }
+}
+
+impl AsyncWrite for SmtpStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        match self.get_mut() {
+            SmtpStream::Plain(s) => Pin::new(s).poll_write(cx, buf),
+            SmtpStream::Tls(s) => Pin::new(s.as_mut()).poll_write(cx, buf),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            SmtpStream::Plain(s) => Pin::new(s).poll_flush(cx),
+            SmtpStream::Tls(s) => Pin::new(s.as_mut()).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        match self.get_mut() {
+            SmtpStream::Plain(s) => Pin::new(s).poll_shutdown(cx),
+            SmtpStream::Tls(s) => Pin::new(s.as_mut()).poll_shutdown(cx),
+        }
+    }
+}
 
 /// SMTP server
 pub struct SmtpServer {
@@ -117,11 +173,18 @@ impl SmtpServer {
                     let registry = self.spec_registry.clone();
                     let middleware = self.middleware_chain.clone();
                     let hostname = self.config.hostname.clone();
+                    let tls_acceptor = self.tls_acceptor.clone();
 
                     tokio::spawn(async move {
-                        if let Err(e) =
-                            handle_smtp_session(stream, peer_addr, registry, middleware, hostname)
-                                .await
+                        if let Err(e) = handle_smtp_session(
+                            SmtpStream::Plain(stream),
+                            peer_addr,
+                            registry,
+                            middleware,
+                            hostname,
+                            tls_acceptor,
+                        )
+                        .await
                         {
                             error!("SMTP session error from {}: {}", peer_addr, e);
                         }
@@ -135,20 +198,25 @@ impl SmtpServer {
     }
 }
 
-/// Handle a single SMTP session
+/// Handle a single SMTP session. Accepts an `SmtpStream` (plaintext
+/// or TLS) so a STARTTLS mid-session upgrade can swap the underlying
+/// transport without tearing down the connection.
 async fn handle_smtp_session(
-    stream: TcpStream,
+    stream: SmtpStream,
     peer_addr: SocketAddr,
     registry: Arc<SmtpSpecRegistry>,
     middleware: Arc<MiddlewareChain>,
     hostname: String,
+    tls_acceptor: Option<TlsAcceptor>,
 ) -> Result<()> {
-    let (reader, mut writer) = stream.into_split();
-    let mut reader = BufReader::new(reader);
+    // Keep read + write on the same `SmtpStream` so STARTTLS can
+    // upgrade both halves atomically. Writes go through
+    // `reader.get_mut()` to avoid an extra split.
+    let mut reader = BufReader::new(stream);
 
     // Send greeting
     let greeting = format!("220 {} ESMTP MockForge SMTP Server\r\n", hostname);
-    writer.write_all(greeting.as_bytes()).await?;
+    reader.get_mut().write_all(greeting.as_bytes()).await?;
 
     let mut session_state = SessionState::new();
     // Byte-level accumulator so 8BITMIME bodies (Latin-1, UTF-8 with
@@ -172,7 +240,7 @@ async fn handle_smtp_session(
                 session_state.in_data_mode = false;
                 let response =
                     process_email(&session_state, &registry, &middleware, peer_addr).await?;
-                writer.write_all(response.as_bytes()).await?;
+                reader.get_mut().write_all(response.as_bytes()).await?;
                 session_state.reset();
             } else {
                 session_state.data.extend_from_slice(trimmed);
@@ -194,7 +262,7 @@ async fn handle_smtp_session(
         // SMTP verb. Handle it here before the verb table would send
         // back "502 Command not implemented".
         if let Some(stage) = session_state.pending_auth.clone() {
-            handle_auth_continuation(stage, command, &mut session_state, &mut writer).await?;
+            handle_auth_continuation(stage, command, &mut session_state, reader.get_mut()).await?;
             line.clear();
             continue;
         }
@@ -206,11 +274,48 @@ async fn handle_smtp_session(
             continue;
         }
 
+        // STARTTLS is handled at this outer level (not in the verb
+        // table) because we need to swap out the BufReader's owned
+        // stream. Only fires when (a) client asked for STARTTLS,
+        // (b) we're still plaintext, and (c) a TLS acceptor is
+        // configured. Per RFC 3207, the upgraded session starts
+        // completely fresh — the client MUST re-EHLO.
+        if command.eq_ignore_ascii_case("STARTTLS") {
+            if !matches!(reader.get_ref(), SmtpStream::Plain(_)) {
+                // Already TLS — refuse per spec.
+                reader.get_mut().write_all(b"503 Command not allowed\r\n").await?;
+            } else if let Some(acceptor) = tls_acceptor.clone() {
+                reader.get_mut().write_all(b"220 Ready to start TLS\r\n").await?;
+                reader.get_mut().flush().await?;
+
+                let inner = reader.into_inner();
+                let tcp = match inner {
+                    SmtpStream::Plain(t) => t,
+                    SmtpStream::Tls(_) => unreachable!("checked is Plain above"),
+                };
+                let tls_stream = acceptor.accept(tcp).await.map_err(|e| {
+                    mockforge_core::Error::internal(format!("TLS accept failed: {e}"))
+                })?;
+                reader = BufReader::new(SmtpStream::Tls(Box::new(tls_stream)));
+                session_state = SessionState::new();
+                line.clear();
+                continue;
+            } else {
+                // STARTTLS requested but no cert configured.
+                reader
+                    .get_mut()
+                    .write_all(b"454 TLS not available due to temporary reason\r\n")
+                    .await?;
+            }
+            line.clear();
+            continue;
+        }
+
         // Parse and handle SMTP command
         match handle_smtp_command(
             command,
             &mut session_state,
-            &mut writer,
+            reader.get_mut(),
             &hostname,
             &registry,
             &middleware,
@@ -227,7 +332,7 @@ async fn handle_smtp_session(
             Err(e) => {
                 error!("Error handling SMTP command: {}", e);
                 let error_response = "500 Internal server error\r\n";
-                writer.write_all(error_response.as_bytes()).await?;
+                reader.get_mut().write_all(error_response.as_bytes()).await?;
             }
         }
 

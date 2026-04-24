@@ -431,3 +431,165 @@ async fn smtp_raw_client_auth_login_two_step_challenge() {
 
     server_handle.abort();
 }
+
+/// Generate a short-lived self-signed cert + key on disk. Returns
+/// (cert_path, key_path) — the caller is responsible for deleting
+/// them (we lean on `tempfile::TempDir` for that via the caller's
+/// drop).
+fn write_self_signed_cert(dir: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    use rcgen::{generate_simple_self_signed, CertifiedKey};
+    let CertifiedKey { cert, key_pair } =
+        generate_simple_self_signed(vec!["127.0.0.1".into(), "localhost".into()]).expect("rcgen");
+    let cert_path = dir.join("cert.pem");
+    let key_path = dir.join("key.pem");
+    std::fs::write(&cert_path, cert.pem()).expect("write cert");
+    std::fs::write(&key_path, key_pair.serialize_pem()).expect("write key");
+    (cert_path, key_path)
+}
+
+/// STARTTLS: client opens a plaintext connection, issues EHLO,
+/// upgrades the socket via STARTTLS, then repeats EHLO over TLS
+/// before sending any mail command. Before this fix the broker
+/// replied `220 Ready to start TLS` and kept the socket plaintext —
+/// which makes any TLS client's handshake fail with "garbage" bytes.
+///
+/// The test drives a raw TcpStream through the plaintext + TLS halves
+/// of the session using `tokio_rustls` as a dangerous-trust client,
+/// since lettre's STARTTLS transport would refuse the self-signed
+/// cert without extra plumbing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn smtp_raw_client_starttls_actually_upgrades_socket() {
+    use tokio_rustls::rustls::{Certificate, ClientConfig, RootCertStore, ServerName};
+    use tokio_rustls::TlsConnector;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let (cert_path, key_path) = write_self_signed_cert(tmp.path());
+
+    let port = free_port().await;
+    let config = SmtpConfig {
+        port,
+        host: "127.0.0.1".into(),
+        enable_starttls: true,
+        tls_cert_path: Some(cert_path.clone()),
+        tls_key_path: Some(key_path),
+        fixtures_dir: None,
+        ..SmtpConfig::default()
+    };
+    let spec_registry = Arc::new(SmtpSpecRegistry::new());
+    let server = SmtpServer::new(config, spec_registry.clone()).expect("server builds");
+    let server_handle = tokio::spawn(async move {
+        server.start().await.unwrap();
+    });
+    wait_for_port(port, Duration::from_secs(5)).await;
+
+    // --- Plaintext phase: greeting → EHLO → STARTTLS → 220 Ready ----
+    let plain = TcpStream::connect(("127.0.0.1", port)).await.expect("tcp connect");
+    let (pread, mut pwrite) = plain.into_split();
+    let mut preader = BufReader::new(pread);
+
+    let line = {
+        let mut s = String::new();
+        preader.read_line(&mut s).await.unwrap();
+        s
+    };
+    assert!(line.starts_with("220"), "unexpected greeting: {line:?}");
+
+    pwrite.write_all(b"EHLO test-client\r\n").await.unwrap();
+    // Drain EHLO multiline response until we see a " " after the code.
+    let mut saw_starttls = false;
+    loop {
+        let mut s = String::new();
+        preader.read_line(&mut s).await.unwrap();
+        if s.to_ascii_uppercase().contains("STARTTLS") {
+            saw_starttls = true;
+        }
+        if s.len() >= 4 && &s[3..4] == " " {
+            break;
+        }
+    }
+    assert!(saw_starttls, "server must advertise STARTTLS when enable_starttls=true");
+
+    pwrite.write_all(b"STARTTLS\r\n").await.unwrap();
+    let mut tls_ready = String::new();
+    preader.read_line(&mut tls_ready).await.unwrap();
+    assert!(
+        tls_ready.starts_with("220"),
+        "STARTTLS must be accepted with 220 Ready, got: {tls_ready:?}"
+    );
+
+    // --- Reassemble and negotiate TLS -------------------------------
+    let tcp = preader.into_inner().reunite(pwrite).expect("reunite");
+
+    // Trust the server's self-signed cert for this test only. In
+    // production lettre/others would verify against the system root
+    // store; here we add the test cert directly so the handshake
+    // succeeds. rustls 0.21 API (via tokio-rustls 0.24) takes raw
+    // `Certificate(Vec<u8>)` rather than the newer `CertificateDer`.
+    let cert_bytes = std::fs::read(&cert_path).unwrap();
+    let der_certs = rustls_pemfile::certs(&mut cert_bytes.as_slice()).expect("parse PEM");
+    let mut root_store = RootCertStore::empty();
+    for der in der_certs {
+        root_store.add(&Certificate(der)).expect("add cert");
+    }
+    let client_cfg = ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let connector = TlsConnector::from(Arc::new(client_cfg));
+    let server_name = ServerName::try_from("localhost").unwrap();
+    let mut tls = tokio::time::timeout(Duration::from_secs(5), connector.connect(server_name, tcp))
+        .await
+        .expect("TLS handshake completes within 5s")
+        .expect("TLS handshake succeeds");
+
+    // --- Over TLS: full mail transaction ---------------------------
+    // Per RFC 3207 the client MUST re-EHLO after a successful upgrade.
+    tls.write_all(b"EHLO test-client\r\n").await.unwrap();
+    // Drain EHLO again.
+    let mut buf = [0u8; 1024];
+    loop {
+        let n = tls.read(&mut buf).await.unwrap();
+        let chunk = std::str::from_utf8(&buf[..n]).unwrap_or("");
+        if chunk.contains("250 ") {
+            break;
+        }
+    }
+
+    tls.write_all(b"MAIL FROM:<sender@example.test>\r\n").await.unwrap();
+    let mut r = [0u8; 64];
+    let n = tls.read(&mut r).await.unwrap();
+    assert!(std::str::from_utf8(&r[..n]).unwrap().starts_with("250"));
+
+    tls.write_all(b"RCPT TO:<receiver@example.test>\r\n").await.unwrap();
+    let n = tls.read(&mut r).await.unwrap();
+    assert!(std::str::from_utf8(&r[..n]).unwrap().starts_with("250"));
+
+    tls.write_all(b"DATA\r\n").await.unwrap();
+    let n = tls.read(&mut r).await.unwrap();
+    assert!(std::str::from_utf8(&r[..n]).unwrap().starts_with("354"));
+
+    tls.write_all(b"Subject: TLS only\r\n\r\nTLS body\r\n.\r\n").await.unwrap();
+    let n = tls.read(&mut r).await.unwrap();
+    assert!(std::str::from_utf8(&r[..n]).unwrap().starts_with("250"));
+
+    tls.write_all(b"QUIT\r\n").await.unwrap();
+
+    // Mailbox check — message must have been captured over the TLS
+    // leg, proving the upgrade was real.
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let captured = loop {
+        let emails = spec_registry.get_emails().expect("mailbox read");
+        if !emails.is_empty() {
+            break emails;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("STARTTLS-delivered message never made it into the mailbox");
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    assert_eq!(captured.len(), 1);
+    assert_eq!(captured[0].subject, "TLS only");
+    assert!(captured[0].body.contains("TLS body"));
+
+    server_handle.abort();
+}
