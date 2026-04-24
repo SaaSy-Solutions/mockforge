@@ -76,12 +76,14 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
     { value: 'system', label: 'System', icon: Monitor },
   ];
 
+  // Hex values mirror the HSL palettes in useThemeSync.ts so the swatches
+  // preview the actual applied accent (no Tailwind named color guesswork).
   const accentColors = [
-    { value: 'blue', label: 'Blue' },
-    { value: 'green', label: 'Green' },
-    { value: 'purple', label: 'Purple' },
-    { value: 'orange', label: 'Orange' },
-    { value: 'red', label: 'Red' },
+    { value: 'blue', label: 'Blue', swatch: '#3B82F6' },
+    { value: 'green', label: 'Green', swatch: '#16A34A' },
+    { value: 'purple', label: 'Purple', swatch: '#9333EA' },
+    { value: 'orange', label: 'Orange', swatch: '#C2410C' },
+    { value: 'red', label: 'Red', swatch: '#DC2626' },
   ];
 
   return (
@@ -155,7 +157,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     Accent Color
                   </label>
                   <div className="flex gap-2">
-                    {accentColors.map(({ value, label }) => (
+                    {accentColors.map(({ value, label, swatch }) => (
                       <button
                         key={value}
                         onClick={() => updateTheme({ accentColor: value as string })}
@@ -164,8 +166,9 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                             ? 'border-gray-900 dark:border-gray-100 scale-110 shadow-lg'
                             : 'border-gray-300 dark:border-gray-600 hover:scale-105'
                         }`}
-                        style={{ backgroundColor: value }}
+                        style={{ backgroundColor: swatch }}
                         title={label}
+                        aria-label={label}
                       />
                     ))}
                   </div>

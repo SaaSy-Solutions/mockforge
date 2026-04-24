@@ -9,6 +9,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../ui/Conte
 import { ModernCard, ContextMenuItem } from '../ui/DesignSystem';
 import type { EnvironmentSummary, CreateEnvironmentRequest, UpdateEnvironmentRequest, EnvironmentColor } from '../../types';
 import { toast } from '../ui/Toast';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 
 interface EnvironmentManagerProps {
   workspaceId: string;
@@ -27,6 +28,7 @@ const PREDEFINED_COLORS = [
 ];
 
 export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: EnvironmentManagerProps) {
+  const confirmDelete = useConfirmDelete();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingEnvironment, setEditingEnvironment] = useState<EnvironmentSummary | null>(null);
   const [createForm, setCreateForm] = useState<CreateEnvironmentRequest>({ name: '', description: '' });
@@ -81,7 +83,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete "${environment.name}"? This action cannot be undone.`)) {
+    if (!confirmDelete(`Are you sure you want to delete "${environment.name}"? This action cannot be undone.`)) {
       return;
     }
 

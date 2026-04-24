@@ -54,7 +54,10 @@ interface WorkspaceFormData {
   description?: string;
 }
 
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
+
 const WorkspaceManagement: React.FC = () => {
+  const confirmDelete = useConfirmDelete();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,7 +140,7 @@ const WorkspaceManagement: React.FC = () => {
 
   // Delete workspace
   const handleDelete = async (workspaceId: string) => {
-    if (!confirm(`Are you sure you want to delete workspace "${workspaceId}"?`)) {
+    if (!confirmDelete(`Are you sure you want to delete workspace "${workspaceId}"?`)) {
       return;
     }
 
