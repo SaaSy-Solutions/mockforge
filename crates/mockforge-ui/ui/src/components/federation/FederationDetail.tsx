@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { useFederation, useRouteRequest, Federation } from '../../hooks/useFederation';
+import { useFederation, useRouteRequest, type Federation } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
 import { ActiveScenarioPanel } from './ActiveScenarioPanel';
 import { ArrowLeft, Edit, Network, Play, CheckCircle } from 'lucide-react';

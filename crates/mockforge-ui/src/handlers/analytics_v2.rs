@@ -5,30 +5,18 @@
 //! - Historical data from the analytics database
 //! - Advanced queries (time-series, trends, patterns)
 
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Query, http::StatusCode, Json};
 use chrono::Utc;
-use mockforge_analytics::{AnalyticsDatabase, AnalyticsFilter, Granularity, OverviewMetrics};
+use mockforge_analytics::{AnalyticsFilter, Granularity, OverviewMetrics};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::{debug, error};
 
+use crate::handlers::coverage_metrics::CoverageMetricsState;
 use crate::models::ApiResponse;
 
-/// Enhanced analytics state with both Prometheus and database access
-#[derive(Clone)]
-pub struct AnalyticsV2State {
-    pub db: Arc<AnalyticsDatabase>,
-}
-
-impl AnalyticsV2State {
-    pub fn new(db: AnalyticsDatabase) -> Self {
-        Self { db: Arc::new(db) }
-    }
-}
+// Note: These handlers share the lazily-initialized AnalyticsDatabase with
+// coverage_metrics / pillar_analytics via CoverageMetricsState. Routes are
+// mounted in routes.rs alongside the other /api/v2/analytics/* endpoints.
 
 /// Query parameters for analytics endpoints
 #[derive(Debug, Deserialize)]
@@ -120,12 +108,13 @@ impl AnalyticsQuery {
 /// - Active connections, throughput
 /// - Top protocols and endpoints
 pub async fn get_overview(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<OverviewMetrics>>, StatusCode> {
     debug!("Fetching analytics overview for duration: {}s", query.duration);
 
-    match state.db.get_overview_metrics(query.duration).await {
+    let db = state.get_db().await?;
+    match db.get_overview_metrics(query.duration).await {
         Ok(overview) => Ok(Json(ApiResponse::success(overview))),
         Err(e) => {
             error!("Failed to get overview metrics: {}", e);
@@ -155,7 +144,7 @@ pub struct DataPoint {
 }
 
 pub async fn get_requests_timeseries(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<TimeSeriesResponse>>, StatusCode> {
     debug!("Fetching request time-series");
@@ -163,7 +152,8 @@ pub async fn get_requests_timeseries(
     let filter = query.to_filter();
     let granularity = query.get_granularity();
 
-    match state.db.get_request_time_series(&filter, granularity).await {
+    let db = state.get_db().await?;
+    match db.get_request_time_series(&filter, granularity).await {
         Ok(time_series) => {
             let series = time_series
                 .into_iter()
@@ -209,14 +199,15 @@ pub struct LatencyTrendData {
 }
 
 pub async fn get_latency_trends(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<LatencyResponse>>, StatusCode> {
     debug!("Fetching latency trends");
 
     let filter = query.to_filter();
 
-    match state.db.get_latency_trends(&filter).await {
+    let db = state.get_db().await?;
+    match db.get_latency_trends(&filter).await {
         Ok(trends) => {
             let trend_data = trends
                 .into_iter()
@@ -258,14 +249,15 @@ pub struct ErrorSummaryData {
 }
 
 pub async fn get_error_summary(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<ErrorResponse>>, StatusCode> {
     debug!("Fetching error summary");
 
     let filter = query.to_filter();
 
-    match state.db.get_error_summary(&filter, query.limit).await {
+    let db = state.get_db().await?;
+    match db.get_error_summary(&filter, query.limit).await {
         Ok(errors) => {
             let error_data = errors
                 .into_iter()
@@ -310,12 +302,13 @@ pub struct EndpointData {
 }
 
 pub async fn get_top_endpoints(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<EndpointsResponse>>, StatusCode> {
     debug!("Fetching top {} endpoints", query.limit);
 
-    match state.db.get_top_endpoints(query.limit, query.workspace_id.as_deref()).await {
+    let db = state.get_db().await?;
+    match db.get_top_endpoints(query.limit, query.workspace_id.as_deref()).await {
         Ok(endpoints) => {
             let endpoint_data = endpoints
                 .into_iter()
@@ -369,12 +362,13 @@ pub struct ProtocolData {
 }
 
 pub async fn get_protocol_breakdown(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<ApiResponse<ProtocolsResponse>>, StatusCode> {
     debug!("Fetching protocol breakdown");
 
-    match state.db.get_top_protocols(10, query.workspace_id.as_deref()).await {
+    let db = state.get_db().await?;
+    match db.get_top_protocols(10, query.workspace_id.as_deref()).await {
         Ok(protocols) => {
             let protocol_data = protocols
                 .into_iter()
@@ -427,12 +421,13 @@ fn default_pattern_days() -> i64 {
 }
 
 pub async fn get_traffic_patterns(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<TrafficPatternsQuery>,
 ) -> Result<Json<ApiResponse<TrafficPatternsResponse>>, StatusCode> {
     debug!("Fetching traffic patterns for {} days", query.days);
 
-    match state.db.get_traffic_patterns(query.days, query.workspace_id.as_deref()).await {
+    let db = state.get_db().await?;
+    match db.get_traffic_patterns(query.days, query.workspace_id.as_deref()).await {
         Ok(patterns) => {
             let pattern_data = patterns
                 .into_iter()
@@ -461,7 +456,7 @@ pub async fn get_traffic_patterns(
 ///
 /// Export analytics data to CSV format
 pub async fn export_csv(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<(StatusCode, String), StatusCode> {
     debug!("Exporting analytics to CSV");
@@ -469,7 +464,8 @@ pub async fn export_csv(
     let filter = query.to_filter();
     let mut buffer = Vec::new();
 
-    match state.db.export_to_csv(&mut buffer, &filter).await {
+    let db = state.get_db().await?;
+    match db.export_to_csv(&mut buffer, &filter).await {
         Ok(_) => {
             let csv_data = String::from_utf8(buffer).unwrap_or_default();
             Ok((StatusCode::OK, csv_data))
@@ -485,14 +481,15 @@ pub async fn export_csv(
 ///
 /// Export analytics data to JSON format
 pub async fn export_json(
-    State(state): State<AnalyticsV2State>,
+    axum::extract::Extension(state): axum::extract::Extension<CoverageMetricsState>,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<(StatusCode, String), StatusCode> {
     debug!("Exporting analytics to JSON");
 
     let filter = query.to_filter();
 
-    match state.db.export_to_json(&filter).await {
+    let db = state.get_db().await?;
+    match db.export_to_json(&filter).await {
         Ok(json) => Ok((StatusCode::OK, json)),
         Err(e) => {
             error!("Failed to export to JSON: {}", e);

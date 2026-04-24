@@ -10,6 +10,7 @@ mod tests {
     };
     use mockforge_analytics::AnalyticsDatabase;
     use mockforge_ui::handlers::analytics_v2::*;
+    use mockforge_ui::handlers::coverage_metrics::CoverageMetricsState;
     use std::path::PathBuf;
     use tower::ServiceExt; // for `oneshot`
 
@@ -22,7 +23,7 @@ mod tests {
     }
 
     fn create_test_router(db: AnalyticsDatabase) -> Router {
-        let state = AnalyticsV2State::new(db);
+        let state = CoverageMetricsState::new(db);
 
         Router::new()
             .route("/overview", axum::routing::get(get_overview))
@@ -32,7 +33,7 @@ mod tests {
             .route("/endpoints", axum::routing::get(get_top_endpoints))
             .route("/protocols", axum::routing::get(get_protocol_breakdown))
             .route("/export/csv", axum::routing::get(export_csv))
-            .with_state(state)
+            .layer(axum::extract::Extension(state))
     }
 
     #[tokio::test]

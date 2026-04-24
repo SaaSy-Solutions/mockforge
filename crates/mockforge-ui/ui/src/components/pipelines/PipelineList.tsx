@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { usePipelines, useDeletePipeline, Pipeline } from '../../hooks/usePipelines';
+import { usePipelines, useDeletePipeline, type Pipeline } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
 import { Play, Edit, Trash2, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
 

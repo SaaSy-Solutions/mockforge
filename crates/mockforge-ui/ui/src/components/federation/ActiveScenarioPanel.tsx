@@ -8,10 +8,10 @@
 
 import React, { useMemo, useState } from 'react';
 import {
-  Federation,
-  FederationService,
-  PerServiceActivationState,
-  ServiceScenarioOverride,
+  type Federation,
+  type FederationService,
+  type PerServiceActivationState,
+  type ServiceScenarioOverride,
   useActivateFederationScenario,
   useActiveFederationScenario,
   useDeactivateFederationScenario,

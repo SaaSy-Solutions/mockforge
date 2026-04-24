@@ -4,11 +4,11 @@
 //! natural language voice commands powered by LLM.
 
 import React, { useState } from 'react';
-import { VoiceInput, VoiceCommandResult } from '../components/voice/VoiceInput';
-import { NLHookEditor, HookResult } from '../components/hooks/NLHookEditor';
+import { VoiceInput, type VoiceCommandResult } from '../components/voice/VoiceInput';
+import { NLHookEditor, type HookResult } from '../components/hooks/NLHookEditor';
 import {
   WorkspaceScenarioCreator,
-  WorkspaceScenarioResult,
+  type WorkspaceScenarioResult,
 } from '../components/workspace/WorkspaceScenarioCreator';
 import { Card } from '../components/ui/Card';
 import { Mic, Sparkles, FileCode, Code2, Building2 } from 'lucide-react';

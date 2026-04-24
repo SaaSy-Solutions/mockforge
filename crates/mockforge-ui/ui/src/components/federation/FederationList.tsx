@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { useFederations, useDeleteFederation, Federation } from '../../hooks/useFederation';
+import { useFederations, useDeleteFederation, type Federation } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
 import { Edit, Trash2, Plus, Network, ArrowRight } from 'lucide-react';
 
