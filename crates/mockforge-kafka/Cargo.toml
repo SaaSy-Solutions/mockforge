@@ -30,6 +30,14 @@ chrono = { workspace = true }
 # batch CRC and drops batches where it doesn't match, so Fetch responses
 # need an accurate implementation.
 crc32c = "0.6"
+# RecordBatch v2 compression codecs. librdkafka and confluent-kafka-python
+# both default to `compression.type=none` but real producers often flip
+# snappy/zstd on by default, so we need the 4 codecs the attributes bits
+# 0–2 can encode.
+flate2 = "1.0"       # gzip
+snap = "1.1"         # snappy
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "frame"] }
+zstd = "0.13"
 
 [[bench]]
 name = "kafka_benchmarks"

@@ -34,9 +34,12 @@ pub struct DecodedRecord {
 pub struct PartitionProduceData {
     pub partition_index: i32,
     pub records: Vec<DecodedRecord>,
-    /// Raw attributes of the incoming batch. Bits 0-2 = compression codec.
-    /// Non-zero compression means we couldn't decode `records` and the
-    /// broker should respond with `UNSUPPORTED_COMPRESSION_TYPE` (74).
+    /// Low 3 bits of the incoming batch's attributes field — i.e. the
+    /// compression codec as it arrived on the wire. `records` is always
+    /// the uncompressed form regardless of this value; unknown codecs
+    /// (bits 5-7) surface as a parse error upstream instead of reaching
+    /// this struct. Kept around for observability and for any future
+    /// policy that wants to honor a "respond with same compression" rule.
     pub compression_codec: i8,
 }
 
@@ -237,13 +240,18 @@ pub(crate) fn push_empty_tag_buffer(buf: &mut Vec<u8>) {
 // =========================================================================
 
 /// Parse one RecordBatch v2 out of `batch_bytes` and return the decoded
-/// records. Batches with non-zero compression are rejected so the caller
-/// can surface an `UNSUPPORTED_COMPRESSION_TYPE`; transactional / control
-/// batches are also rejected for now.
+/// records. Supports the 4 standard compression codecs (gzip / snappy /
+/// lz4 / zstd) — the records blob is decompressed inline before the
+/// framed-record iteration, so callers don't need to distinguish.
+/// Unknown codecs (attributes bits 5–7) are surfaced as a parse error so
+/// the broker can respond with `UNSUPPORTED_COMPRESSION_TYPE` (74).
 ///
-/// Returns `Ok((records, attributes, records_count))`. The caller reads the
-/// compression codec from `attributes & 0x7`.
+/// Returns `Ok((records, attributes))`. The caller reads the compression
+/// codec from `attributes & 0x7` if it wants to, but the records vector
+/// is already uncompressed either way.
 pub fn parse_record_batch(batch_bytes: &[u8]) -> Result<(Vec<DecodedRecord>, i16), String> {
+    use crate::record_compression::{decompress, CompressionCodec};
+
     let mut cur = batch_bytes;
     // Fixed-width batch header (before records)
     let _base_offset = read_i64(&mut cur)?;
@@ -255,12 +263,8 @@ pub fn parse_record_batch(batch_bytes: &[u8]) -> Result<(Vec<DecodedRecord>, i16
     }
     let _crc = read_i32(&mut cur)?;
     let attributes = read_i16(&mut cur)?;
-    let compression_codec = (attributes & 0x7) as i8;
-    if compression_codec != 0 {
-        // We can't decode compressed records yet; hand the raw attributes
-        // back so the broker can translate to UNSUPPORTED_COMPRESSION_TYPE.
-        return Ok((Vec::new(), attributes));
-    }
+    let codec = CompressionCodec::from_attributes_bits((attributes & 0x7) as i8)
+        .ok_or_else(|| format!("unknown compression codec: {}", attributes & 0x7))?;
     let _last_offset_delta = read_i32(&mut cur)?;
     let base_timestamp = read_i64(&mut cur)?;
     let _max_timestamp = read_i64(&mut cur)?;
@@ -272,18 +276,31 @@ pub fn parse_record_batch(batch_bytes: &[u8]) -> Result<(Vec<DecodedRecord>, i16
         return Err(format!("negative records count: {records_count}"));
     }
 
+    // For compressed batches, the remaining bytes are the compressed
+    // records blob. Decompress into an owned Vec and iterate against
+    // that slice; for `None`, fall through with the original borrow.
+    let decompressed_blob: Option<Vec<u8>> = if codec == CompressionCodec::None {
+        None
+    } else {
+        Some(decompress(codec, cur)?)
+    };
+    let mut records_cur: &[u8] = match &decompressed_blob {
+        Some(v) => v.as_slice(),
+        None => cur,
+    };
+
     let mut records = Vec::with_capacity(records_count as usize);
     for _ in 0..records_count {
-        let record_len = read_signed_varint(&mut cur)?;
+        let record_len = read_signed_varint(&mut records_cur)?;
         if record_len < 0 {
             return Err(format!("negative record length: {record_len}"));
         }
         // Bound the record body so a bogus length can't read past the batch.
-        if (record_len as usize) > cur.len() {
+        if (record_len as usize) > records_cur.len() {
             return Err("record length overruns batch".into());
         }
-        let mut body = &cur[..record_len as usize];
-        cur = &cur[record_len as usize..];
+        let mut body = &records_cur[..record_len as usize];
+        records_cur = &records_cur[record_len as usize..];
 
         let _attributes = read_i8(&mut body)?;
         let timestamp_delta = read_signed_varint(&mut body)?;
@@ -547,16 +564,96 @@ mod tests {
     }
 
     #[test]
-    fn detects_compressed_batch() {
+    fn rejects_unknown_compression_codec() {
         let mut batch = one_record_batch(None, b"x");
         // Attributes are an i16 at offset 21 (after the 17-byte fixed
         // prefix: base_offset(8) + batch_length(4) + leader_epoch(4) +
-        // magic(1) + crc(4)). Set bit 0 = gzip.
+        // magic(1) + crc(4)). Codec 5 is unassigned.
         batch[21] = 0;
-        batch[22] = 1;
+        batch[22] = 5;
+        let err = parse_record_batch(&batch).unwrap_err();
+        assert!(err.contains("unknown compression codec"), "unexpected error: {err}");
+    }
+
+    fn swap_records_for_compressed(
+        batch: &[u8],
+        codec: crate::record_compression::CompressionCodec,
+    ) -> Vec<u8> {
+        // Uncompressed batch layout:
+        //   [0..21]: base_offset(8), batch_length(4), leader_epoch(4), magic(1), crc(4)
+        //   [21..23]: attributes(2)
+        //   [23..27]: last_offset_delta(4)
+        //   [27..35]: base_timestamp(8)
+        //   [35..43]: max_timestamp(8)
+        //   [43..51]: producer_id(8)
+        //   [51..53]: producer_epoch(2)
+        //   [53..57]: base_sequence(4)
+        //   [57..61]: records_count(4)
+        //   [61..]:  raw records blob
+        //
+        // Rebuild the batch with the blob compressed + attributes bits set.
+        assert!(batch.len() >= 61);
+        let records_blob = &batch[61..];
+        let compressed = crate::record_compression::compress(codec, records_blob).unwrap();
+
+        let mut out = Vec::with_capacity(61 + compressed.len());
+        out.extend_from_slice(&batch[..21]);
+        let attributes = codec.attributes_bits();
+        out.extend_from_slice(&attributes.to_be_bytes());
+        out.extend_from_slice(&batch[23..61]);
+        out.extend_from_slice(&compressed);
+        out
+    }
+
+    #[test]
+    fn decompresses_gzip_and_yields_records() {
+        let uncompressed = one_record_batch(Some(b"k"), b"gzipped-hello");
+        let batch = swap_records_for_compressed(
+            &uncompressed,
+            crate::record_compression::CompressionCodec::Gzip,
+        );
         let (records, attrs) = parse_record_batch(&batch).unwrap();
-        assert_eq!(records.len(), 0);
         assert_eq!(attrs & 0x7, 1);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].value, b"gzipped-hello");
+        assert_eq!(records[0].key.as_deref(), Some(b"k".as_ref()));
+    }
+
+    #[test]
+    fn decompresses_snappy_and_yields_records() {
+        let uncompressed = one_record_batch(None, b"snappy-hello");
+        let batch = swap_records_for_compressed(
+            &uncompressed,
+            crate::record_compression::CompressionCodec::Snappy,
+        );
+        let (records, attrs) = parse_record_batch(&batch).unwrap();
+        assert_eq!(attrs & 0x7, 2);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].value, b"snappy-hello");
+    }
+
+    #[test]
+    fn decompresses_lz4_and_yields_records() {
+        let uncompressed = one_record_batch(None, b"lz4-hello");
+        let batch = swap_records_for_compressed(
+            &uncompressed,
+            crate::record_compression::CompressionCodec::Lz4,
+        );
+        let (records, attrs) = parse_record_batch(&batch).unwrap();
+        assert_eq!(attrs & 0x7, 3);
+        assert_eq!(records[0].value, b"lz4-hello");
+    }
+
+    #[test]
+    fn decompresses_zstd_and_yields_records() {
+        let uncompressed = one_record_batch(None, b"zstd-hello");
+        let batch = swap_records_for_compressed(
+            &uncompressed,
+            crate::record_compression::CompressionCodec::Zstd,
+        );
+        let (records, attrs) = parse_record_batch(&batch).unwrap();
+        assert_eq!(attrs & 0x7, 4);
+        assert_eq!(records[0].value, b"zstd-hello");
     }
 
     #[test]

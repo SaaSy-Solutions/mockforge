@@ -360,7 +360,6 @@ impl KafkaMockBroker {
         use crate::produce_nonflex::{parse_produce_v3_v8, serialize_produce_v3_v8_response};
 
         const ERR_UNKNOWN_TOPIC_OR_PARTITION: i16 = 3;
-        const ERR_UNSUPPORTED_COMPRESSION_TYPE: i16 = 74;
 
         let version = request.api_version;
         let is_flexible = version == 9;
@@ -405,16 +404,10 @@ impl KafkaMockBroker {
                         Topic::new(topic_data.name.clone(), crate::topics::TopicConfig::default())
                     });
 
-                if part.compression_codec != 0 {
-                    partition_results.push(PartitionProduceResult {
-                        partition_index: part.partition_index,
-                        error_code: ERR_UNSUPPORTED_COMPRESSION_TYPE,
-                        base_offset: -1,
-                        log_append_time_ms: -1,
-                        log_start_offset: 0,
-                    });
-                    continue;
-                }
+                // `produce_codec::parse_record_batch` already decompresses the
+                // 4 standard codecs, so `part.compression_codec` is only
+                // informational here. The `part.records` vector always holds
+                // the uncompressed records regardless of the incoming codec.
 
                 // Empty batches still need a response entry. base_offset of
                 // an empty batch is -1 per the Kafka convention.
