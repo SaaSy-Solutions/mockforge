@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useHelpStore } from '../../stores/useHelpStore';
+import { usePreferencesStore } from '../../stores/usePreferencesStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -64,6 +65,8 @@ import {
   Wifi,
   Share2,
   Lock as LockIcon,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { GlobalConnectionStatus } from './ConnectionStatus';
 import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
@@ -244,8 +247,32 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const helpOpen = useHelpStore(state => state.isOpen);
   const openHelp = useHelpStore(state => state.open);
   const setHelpOpen = useHelpStore(state => state.setOpen);
+  const keyboardShortcutsEnabled = usePreferencesStore(
+    state => state.preferences.ui.keyboardShortcuts,
+  );
+  const sidebarCollapsed = usePreferencesStore(state => state.preferences.ui.sidebarCollapsed);
+  const updateUI = usePreferencesStore(state => state.updateUI);
+  const defaultSearchScope = usePreferencesStore(
+    state => state.preferences.search.defaultScope,
+  );
+  type SearchScope = 'all' | 'current' | 'logs' | 'services';
+  const [searchScope, setSearchScope] = useState<SearchScope>(
+    (defaultSearchScope as SearchScope) ?? 'all',
+  );
+  // Keep local scope state aligned with the default when the preference changes.
+  React.useEffect(() => {
+    setSearchScope((defaultSearchScope as SearchScope) ?? 'all');
+  }, [defaultSearchScope]);
 
-  // Setup keyboard shortcuts
+  const dispatchSearch = (q: string | undefined) => {
+    const wantLogs = searchScope === 'all' || searchScope === 'logs' || searchScope === 'current';
+    const wantServices =
+      searchScope === 'all' || searchScope === 'services' || searchScope === 'current';
+    setLogFilter({ path_pattern: wantLogs ? q : undefined });
+    setGlobalSearch(wantServices ? q : undefined);
+  };
+
+  // Setup keyboard shortcuts (user-disablable via preferences.ui.keyboardShortcuts)
   useAppShortcuts({
     onSearch: () => {
       const searchInput = document.getElementById('global-search-input') as HTMLInputElement;
@@ -255,6 +282,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
       }
     },
     onHelp: () => openHelp(),
+    enabled: keyboardShortcutsEnabled,
   });
 
   // Skip links functionality
@@ -346,31 +374,60 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
       )}
 
       <div className="flex">
-        {/* Desktop Sidebar - Always visible on md and larger screens */}
-        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:z-50 overflow-hidden">
+        {/* Desktop Sidebar - Always visible on md and larger screens; width
+            driven by preferences.ui.sidebarCollapsed. */}
+        <aside
+          className={cn(
+            'hidden md:flex md:flex-col md:fixed md:inset-y-0 md:z-50 overflow-hidden transition-[width] duration-200',
+            sidebarCollapsed ? 'md:w-16' : 'md:w-64',
+          )}
+        >
           <div className="flex flex-col flex-grow overflow-hidden bg-bg-primary border-r border-border">
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-shrink-0">
+            <div className="flex items-center gap-3 px-4 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
-              <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
+              {!sidebarCollapsed && (
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-7 w-7 p-0"
+                onClick={() => updateUI({ sidebarCollapsed: !sidebarCollapsed })}
+                aria-label={sidebarCollapsed ? t('a11y.expandSidebar') : t('a11y.collapseSidebar')}
+                title={sidebarCollapsed ? t('a11y.expandSidebar') : t('a11y.collapseSidebar')}
+              >
+                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+              </Button>
             </div>
-            <nav id="main-navigation" className="flex-1 px-4 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
+            <nav id="main-navigation" className="flex-1 px-2 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
               {effectiveNavSections.map((section) => (
                 <div key={section.titleKey} className="space-y-2">
-                  <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {t(section.titleKey)}
-                  </h3>
+                  {!sidebarCollapsed && (
+                    <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {t(section.titleKey)}
+                    </h3>
+                  )}
                   <div className="space-y-1">
                     {section.items.map((item) => {
                       const Icon = item.icon;
                       const isLocalOnly = item.localOnly;
+                      const label = t(item.labelKey);
                       return (
                         <Button
                           key={item.id}
                           variant={activeTab === item.id ? 'default' : 'ghost'}
                           disabled={isLocalOnly}
-                          title={isLocalOnly ? t('nav.localOnly.tooltip') : undefined}
+                          title={
+                            isLocalOnly
+                              ? t('nav.localOnly.tooltip')
+                              : sidebarCollapsed
+                              ? label
+                              : undefined
+                          }
+                          aria-label={sidebarCollapsed ? label : undefined}
                           className={cn(
-                            'w-full justify-start gap-3 h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
+                            'w-full h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
+                            sidebarCollapsed ? 'justify-center px-0' : 'justify-start gap-3',
                             isLocalOnly
                               ? 'text-muted-foreground/60 cursor-not-allowed opacity-70'
                               : activeTab === item.id
@@ -383,12 +440,16 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                           }}
                         >
                           <Icon className="h-4 w-4" />
-                          <span className="flex-1 text-left">{t(item.labelKey)}</span>
-                          {isLocalOnly && (
-                            <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              <LockIcon className="h-3 w-3" />
-                              {t('nav.localOnly.badge')}
-                            </span>
+                          {!sidebarCollapsed && (
+                            <>
+                              <span className="flex-1 text-left">{label}</span>
+                              {isLocalOnly && (
+                                <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  <LockIcon className="h-3 w-3" />
+                                  {t('nav.localOnly.badge')}
+                                </span>
+                              )}
+                            </>
                           )}
                         </Button>
                       );
@@ -400,7 +461,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
           </div>
         </aside>
 
-        <div className="md:pl-64 flex flex-col flex-1 min-h-screen">
+        <div className={cn('flex flex-col flex-1 min-h-screen', sidebarCollapsed ? 'md:pl-16' : 'md:pl-64')}>
           <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center border-b border-border bg-bg-primary shadow-sm">
             <div className="w-full max-w-[1400px] mx-auto flex items-center gap-x-4 px-4 sm:gap-x-6 sm:px-6 lg:px-8">
               <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setSidebarOpen(true)}>
@@ -414,30 +475,50 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                 </span>
               </div>
               <div className="flex flex-1" />
-              <div className="hidden sm:flex w-72 relative items-center">
-                <Input
-                  placeholder={t('app.searchPlaceholder')}
-                  id="global-search-input"
-                  value={globalQuery}
+              <div className="hidden sm:flex w-80 relative items-center gap-1">
+                <select
+                  value={searchScope}
                   onChange={(e) => {
-                    const q = e.target.value;
-                    setGlobalQuery(q);
-                    // lightweight sync across stores
-                    setLogFilter({ path_pattern: q || undefined });
-                    setGlobalSearch(q || undefined);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setGlobalQuery('');
-                      setLogFilter({ path_pattern: undefined });
-                      setGlobalSearch(undefined);
-                      (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
+                    const next = e.target.value as SearchScope;
+                    setSearchScope(next);
+                    if (globalQuery) {
+                      // Re-dispatch with the new scope so stale filters clear.
+                      const wantLogs = next === 'all' || next === 'logs' || next === 'current';
+                      const wantServices = next === 'all' || next === 'services' || next === 'current';
+                      setLogFilter({ path_pattern: wantLogs ? globalQuery : undefined });
+                      setGlobalSearch(wantServices ? globalQuery : undefined);
                     }
                   }}
-                />
-                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
-                  {isMac ? '⌘K' : 'Ctrl K'}
-                </span>
+                  aria-label={t('a11y.searchScope')}
+                  className="h-9 rounded-md border border-border bg-bg-primary px-1.5 text-xs text-foreground"
+                >
+                  <option value="all">{t('search.scope.all')}</option>
+                  <option value="current">{t('search.scope.current')}</option>
+                  <option value="logs">{t('search.scope.logs')}</option>
+                  <option value="services">{t('search.scope.services')}</option>
+                </select>
+                <div className="relative flex-1">
+                  <Input
+                    placeholder={t('app.searchPlaceholder')}
+                    id="global-search-input"
+                    value={globalQuery}
+                    onChange={(e) => {
+                      const q = e.target.value;
+                      setGlobalQuery(q);
+                      dispatchSearch(q || undefined);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setGlobalQuery('');
+                        dispatchSearch(undefined);
+                        (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
+                      }
+                    }}
+                  />
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
+                    {isMac ? '⌘K' : 'Ctrl K'}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-x-4 lg:gap-x-6">
                 <GlobalConnectionStatus className="hidden sm:flex" />

@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { useFederations, useDeleteFederation, type Federation } from '../../hooks/useFederation';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import { Card } from '../ui/Card';
 import { Edit, Trash2, Plus, Network, ArrowRight } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export const FederationList: React.FC<FederationListProps> = ({
 }) => {
   const { data: federations, isLoading, error } = useFederations(orgId);
   const deleteFederation = useDeleteFederation();
+  const confirmDelete = useConfirmDelete();
 
   if (isLoading) {
     return (
@@ -42,7 +44,7 @@ export const FederationList: React.FC<FederationListProps> = ({
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete federation "${name}"?`)) {
+    if (confirmDelete(`Are you sure you want to delete federation "${name}"?`)) {
       try {
         await deleteFederation.mutateAsync(id);
       } catch (err) {

@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { usePreferencesStore } from '../stores/usePreferencesStore';
 
 export interface AutosaveOptions {
   /** Debounce delay in milliseconds (default: 2000) */
   delay?: number;
-  /** Whether autosave is enabled (default: true) */
+  /**
+   * Whether autosave is enabled. When omitted, the value of
+   * `preferences.ui.autoSave` is used so users can globally opt out.
+   */
   enabled?: boolean;
   /** Callback when save starts */
   onSaveStart?: () => void;
@@ -18,7 +22,7 @@ export interface AutosaveOptions {
 
 /**
  * Hook for automatic form saving with debouncing
- * 
+ *
  * @example
  * ```tsx
  * const { save, isSaving, hasUnsavedChanges } = useAutosave({
@@ -28,7 +32,7 @@ export interface AutosaveOptions {
  *   },
  *   storageKey: 'config-form'
  * });
- * 
+ *
  * // Call save whenever form data changes
  * useEffect(() => {
  *   save(formData);
@@ -39,9 +43,12 @@ export function useAutosave<T>(
   onSave: (data: T) => Promise<void> | void,
   options: AutosaveOptions = {}
 ) {
+  const globalAutoSave = usePreferencesStore((s) => s.preferences.ui.autoSave);
   const {
     delay = 2000,
-    enabled = true,
+    // Caller can force an explicit boolean; otherwise defer to the user's
+    // global preferences.ui.autoSave toggle.
+    enabled = globalAutoSave,
     onSaveStart,
     onSaveSuccess,
     onSaveError,

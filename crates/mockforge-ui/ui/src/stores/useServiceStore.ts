@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { ServiceInfo, RouteInfo } from '../types';
 import { authenticatedFetch } from '../utils/apiClient';
 import { cloudServicesApi } from '../services/api';
+import { usePreferencesStore } from './usePreferencesStore';
 import type {
   CloudService,
   CloudServiceCreatePayload,
@@ -177,11 +178,30 @@ const mockServices: ServiceInfo[] = [
 const filterRoutes = (services: ServiceInfo[], query?: string): RouteInfo[] => {
   const allRoutes = services.flatMap(s => s.routes.map(r => ({ ...r })));
   if (!query) return allRoutes;
-  const q = query.toLowerCase();
-  return allRoutes.filter(r =>
-    (r.method ? r.method.toLowerCase().includes(q) : false) ||
-    r.path.toLowerCase().includes(q) ||
-    (r.tags && r.tags.some(t => t.toLowerCase().includes(q)))
+
+  // Respect search preferences. Pulled at filter time so a live change to
+  // caseSensitive/regex rerenders via the setGlobalSearch re-dispatch.
+  const { caseSensitive, regexEnabled } = usePreferencesStore.getState().preferences.search;
+
+  let matcher: (s: string) => boolean;
+  if (regexEnabled) {
+    try {
+      const re = new RegExp(query, caseSensitive ? '' : 'i');
+      matcher = (s) => re.test(s);
+    } catch {
+      // Malformed regex — fall back to a case-aware substring match.
+      const needle = caseSensitive ? query : query.toLowerCase();
+      matcher = (s) => (caseSensitive ? s : s.toLowerCase()).includes(needle);
+    }
+  } else {
+    const needle = caseSensitive ? query : query.toLowerCase();
+    matcher = (s) => (caseSensitive ? s : s.toLowerCase()).includes(needle);
+  }
+
+  return allRoutes.filter((r) =>
+    (r.method ? matcher(r.method) : false) ||
+    matcher(r.path) ||
+    (r.tags ? r.tags.some((t) => matcher(t)) : false)
   );
 };
 

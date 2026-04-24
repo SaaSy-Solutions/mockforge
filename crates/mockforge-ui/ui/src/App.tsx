@@ -8,6 +8,7 @@ import { useStartupPrefetch } from './hooks/usePrefetch';
 import { useWorkspaceStore } from './stores/useWorkspaceStore';
 import { useAuthStore } from './stores/useAuthStore';
 import { usePreferencesStore } from './stores/usePreferencesStore';
+import { useThemeSync } from './hooks/useThemeSync';
 import { useI18n } from './i18n/I18nProvider';
 import { routes } from './routes';
 
@@ -44,6 +45,11 @@ function App() {
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const loadPreferences = usePreferencesStore(state => state.loadPreferences);
+  const defaultPage = usePreferencesStore(state => state.preferences.ui.defaultPage);
+  const rootRedirect = defaultPage && defaultPage !== '' ? `/${defaultPage}` : '/dashboard';
+
+  // Apply theme preferences (accent color, font size, high contrast) to <html>
+  useThemeSync();
 
   // Prefetch data on startup for better performance
   useStartupPrefetch();
@@ -144,8 +150,8 @@ function App() {
                 </div>
               }>
                 <Routes>
-                  {/* Redirect root to dashboard */}
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  {/* Redirect root to the user's preferred default page (falls back to /dashboard). */}
+                  <Route path="/" element={<Navigate to={rootRedirect} replace />} />
 
                   {/* All page routes */}
                   {routes.map((route) => (

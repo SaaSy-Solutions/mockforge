@@ -6,6 +6,7 @@ import { FixtureDiffViewer } from './FixtureDiffViewer';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useFixtureStore } from '../../stores/useFixtureStore';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import type { FixtureDiff } from '../../types';
 
 export function FixturesPanel() {
@@ -21,6 +22,7 @@ export function FixturesPanel() {
     clearSelection,
     generateDiff
   } = useFixtureStore();
+  const confirmDelete = useConfirmDelete();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showDiff, setShowDiff] = useState<FixtureDiff | null>(null);
@@ -55,7 +57,7 @@ export function FixturesPanel() {
   };
 
   const handleDeleteFixture = (fixtureId: string) => {
-    if (window.confirm('Are you sure you want to delete this fixture?')) {
+    if (confirmDelete('Are you sure you want to delete this fixture?')) {
       deleteFixture(fixtureId);
     }
   };
