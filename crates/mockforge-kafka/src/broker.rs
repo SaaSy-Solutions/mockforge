@@ -5,6 +5,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 
 use crate::consumer_groups::ConsumerGroupManager;
+use crate::fixture_executor::FixtureRuntime;
 use crate::metrics::KafkaMetrics;
 use crate::partitions::KafkaMessage;
 use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaRequestType, KafkaResponse};
@@ -12,6 +13,7 @@ use crate::spec_registry::KafkaSpecRegistry;
 use crate::topics::Topic;
 use mockforge_core::config::KafkaConfig;
 use mockforge_core::Result;
+use std::sync::OnceLock;
 
 /// Mock Kafka broker implementation
 ///
@@ -69,6 +71,12 @@ pub struct KafkaMockBroker {
     pub group_coordinator: Arc<RwLock<crate::group_coordinator::GroupCoordinator>>,
     /// Specification registry for fixture-based responses
     spec_registry: Arc<KafkaSpecRegistry>,
+    /// Runtime data for the fixture-trigger executors
+    /// (state-machine / scenarios / relationships). Installed on first
+    /// call to `start()`; `None` until then. Shared across every clone
+    /// of the broker, so accepting-loop and per-connection handlers
+    /// observe the same runtime.
+    fixture_runtime: Arc<OnceLock<Arc<FixtureRuntime>>>,
     /// Metrics collection and reporting
     metrics: Arc<KafkaMetrics>,
 }
@@ -113,6 +121,7 @@ impl KafkaMockBroker {
                 crate::group_coordinator::GroupCoordinator::new(),
             )),
             spec_registry: Arc::new(spec_registry),
+            fixture_runtime: Arc::new(OnceLock::new()),
             metrics,
         })
     }
@@ -150,6 +159,11 @@ impl KafkaMockBroker {
 
         tracing::info!("Starting Kafka mock broker on {}", addr);
 
+        // Install the fixture-trigger runtime on first start. Idempotent
+        // across reconnects because `OnceLock::set` returns `Err` when
+        // already populated and we just discard that.
+        self.install_fixture_runtime().await;
+
         loop {
             let (socket, _) = listener.accept().await?;
             let broker = Arc::new(self.clone());
@@ -160,6 +174,43 @@ impl KafkaMockBroker {
                 }
             });
         }
+    }
+
+    /// Build the `FixtureRuntime` from the spec registry and stash it on
+    /// the broker. Idempotent — safe to call on every `start()` cycle;
+    /// the first call wins, later calls are no-ops. Exposed for tests
+    /// that want the fixture executors to run without binding a real
+    /// TCP listener.
+    pub async fn install_fixture_runtime(&self) {
+        if self.fixture_runtime.get().is_some() {
+            return;
+        }
+        let fixtures = self.spec_registry.all_fixtures().to_vec();
+        let relationships = self.spec_registry.relationships().to_vec();
+        let state_machines = self.spec_registry.state_machines().to_vec();
+        let scenarios = self.spec_registry.scenarios().to_vec();
+
+        let broker_arc = Arc::new(self.clone());
+        let runtime = crate::fixture_executor::install(
+            Arc::clone(&broker_arc),
+            &fixtures,
+            &state_machines,
+            &scenarios,
+            &relationships,
+        )
+        .await;
+
+        // Setting the OnceLock can only fail if something raced us; in
+        // that case the other winner's runtime is just as valid.
+        let _ = self.fixture_runtime.set(runtime);
+    }
+
+    /// Read-side accessor for the fixture runtime. Returns `None` before
+    /// `start()` has run. Produce-path code path uses this to fire
+    /// relationships; tests bypass `start()` and use
+    /// `install_fixture_runtime` directly.
+    pub fn fixture_runtime(&self) -> Option<Arc<FixtureRuntime>> {
+        self.fixture_runtime.get().cloned()
     }
 
     /// Handle a client connection
@@ -394,6 +445,11 @@ impl KafkaMockBroker {
 
         for topic_data in parsed.topics {
             let mut partition_results = Vec::with_capacity(topic_data.partitions.len());
+            // Records that landed in this topic — handed to the fixture
+            // runtime after the per-topic loop so relationships see the
+            // whole batch that was just written.
+            let mut accepted_for_relationships: Vec<KafkaMessage> = Vec::new();
+            let topic_name = topic_data.name.clone();
             for part in topic_data.partitions {
                 let mut topics_guard = self.topics.write().await;
                 // Auto-create the topic if a client produces to a name we
@@ -442,6 +498,9 @@ impl KafkaMockBroker {
                         value: rec.value,
                         headers: rec.headers,
                     };
+                    // Snapshot the record for downstream relationship
+                    // fan-out. Cheap — a handful of bytes per message.
+                    accepted_for_relationships.push(msg.clone());
                     let offset = topic_entry.produce(part.partition_index, msg).await?;
                     if i == 0 {
                         base_offset = offset;
@@ -460,6 +519,24 @@ impl KafkaMockBroker {
                 name: topic_data.name,
                 partitions: partition_results,
             });
+
+            // Fire any relationships whose `from_topic` matches this
+            // topic — one dependent emission per source record. This
+            // runs outside the topics guard (which we already dropped
+            // at the end of the partition loop), so the relationship
+            // emitter can acquire the write lock itself to produce.
+            if !accepted_for_relationships.is_empty() {
+                if let Some(runtime) = self.fixture_runtime() {
+                    let broker_arc = Arc::new(self.clone());
+                    crate::fixture_executor::on_produced_records(
+                        &broker_arc,
+                        &runtime,
+                        &topic_name,
+                        &accepted_for_relationships,
+                    )
+                    .await;
+                }
+            }
         }
 
         let body = if is_flexible {
