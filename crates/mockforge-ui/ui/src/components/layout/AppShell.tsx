@@ -113,7 +113,6 @@ const navSections = [
       { id: 'logs', labelKey: 'tab.logs', icon: FileText },
       { id: 'traces', labelKey: 'tab.traces', icon: Network },
       { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
-      { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
       { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
       { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
       { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
@@ -201,6 +200,7 @@ const cloudNavItemIds = new Set([
   'scenario-marketplace',
   'plugin-registry',
   'pillar-analytics',
+  'status',
   'config',
   'organization',
   'billing',
@@ -210,14 +210,16 @@ const cloudNavItemIds = new Set([
   'usage',
 ]);
 
-const effectiveNavSections = isCloudMode
-  ? navSections
-      .map(section => ({
-        ...section,
-        items: section.items.filter(item => cloudNavItemIds.has(item.id)),
-      }))
-      .filter(section => section.items.length > 0)
-  : navSections;
+// In cloud mode, items outside the allowlist are shown as disabled "Local only"
+// entries so users can discover the full product surface and understand what
+// requires a local MockForge instance. In self-hosted mode every item is active.
+const effectiveNavSections = navSections.map(section => ({
+  ...section,
+  items: section.items.map(item => ({
+    ...item,
+    localOnly: isCloudMode && !cloudNavItemIds.has(item.id),
+  })),
+}));
 
 // Flattened items for title lookup (includes non-sidebar pages for breadcrumb resolution)
 const allNavItems = [
@@ -293,25 +295,37 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                   <div className="space-y-1">
                     {section.items.map((item, itemIndex) => {
                       const Icon = item.icon;
+                      const isLocalOnly = item.localOnly;
                       return (
                         <Button
                           key={item.id}
                           variant={activeTab === item.id ? 'default' : 'ghost'}
+                          disabled={isLocalOnly}
+                          title={isLocalOnly ? t('nav.localOnly.tooltip') : undefined}
                           className={cn(
                             'w-full justify-start gap-4 h-10 text-sm nav-item-hover focus-ring spring-hover',
                             'animate-slide-in-up',
-                            activeTab === item.id
+                            isLocalOnly
+                              ? 'text-muted-foreground/60 cursor-not-allowed opacity-70'
+                              : activeTab === item.id
                               ? 'bg-brand-500 text-white shadow-md hover:bg-brand-600'
                               : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
                           )}
                           style={{ animationDelay: `${(sectionIndex * 5 + itemIndex) * 20}ms` }}
                           onClick={() => {
+                            if (isLocalOnly) return;
                             navigate('/' + item.id);
                             setSidebarOpen(false);
                           }}
                         >
                           <Icon className="h-4 w-4" />
-                          {t(item.labelKey)}
+                          <span className="flex-1 text-left">{t(item.labelKey)}</span>
+                          {isLocalOnly && (
+                            <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <LockIcon className="h-3 w-3" />
+                              {t('nav.localOnly.badge')}
+                            </span>
+                          )}
                         </Button>
                       );
                     })}
@@ -340,20 +354,34 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                   <div className="space-y-1">
                     {section.items.map((item) => {
                       const Icon = item.icon;
+                      const isLocalOnly = item.localOnly;
                       return (
                         <Button
                           key={item.id}
                           variant={activeTab === item.id ? 'default' : 'ghost'}
+                          disabled={isLocalOnly}
+                          title={isLocalOnly ? t('nav.localOnly.tooltip') : undefined}
                           className={cn(
                             'w-full justify-start gap-3 h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
-                            activeTab === item.id
+                            isLocalOnly
+                              ? 'text-muted-foreground/60 cursor-not-allowed opacity-70'
+                              : activeTab === item.id
                               ? 'bg-brand-600 text-white shadow-lg ring-1 ring-brand-200/60 dark:ring-brand-600/70 hover:bg-brand-700'
                               : 'text-foreground/80 dark:text-gray-200 hover:text-foreground dark:hover:text-white hover:bg-muted/50 dark:hover:bg-white/5'
                           )}
-                          onClick={() => navigate('/' + item.id)}
+                          onClick={() => {
+                            if (isLocalOnly) return;
+                            navigate('/' + item.id);
+                          }}
                         >
                           <Icon className="h-4 w-4" />
-                          {t(item.labelKey)}
+                          <span className="flex-1 text-left">{t(item.labelKey)}</span>
+                          {isLocalOnly && (
+                            <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <LockIcon className="h-3 w-3" />
+                              {t('nav.localOnly.badge')}
+                            </span>
+                          )}
                         </Button>
                       );
                     })}

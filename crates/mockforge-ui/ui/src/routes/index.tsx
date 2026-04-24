@@ -37,7 +37,6 @@ const WorldStatePage = lazy(() => import('../pages/WorldStatePage').then(m => ({
 const PerformancePage = lazy(() => import('../pages/PerformancePage').then(m => ({ default: m.default })));
 const ScenarioStateMachineEditor = lazy(() => import('../pages/ScenarioStateMachineEditor').then(m => ({ default: m.ScenarioStateMachineEditor })));
 const ScenarioStudioPage = lazy(() => import('../pages/ScenarioStudioPage').then(m => ({ default: m.ScenarioStudioPage })));
-const AnalyticsPage = lazy(() => import('../pages/AnalyticsPage'));
 const PillarAnalyticsPage = lazy(() => import('../pages/PillarAnalyticsPage').then(m => ({ default: m.PillarAnalyticsPage })));
 const HostedMocksPage = lazy(() => import('../pages/HostedMocksPage').then(m => ({ default: m.HostedMocksPage })));
 const ApiExplorerPage = lazy(() => import('../pages/ApiExplorerPage').then(m => ({ default: m.ApiExplorerPage })));
@@ -146,7 +145,6 @@ export const routes: RouteConfig[] = [
   { path: '/logs', element: <LogsPage /> },
   { path: '/traces', element: <TracesPage /> },
   { path: '/metrics', element: <MetricsPage /> },
-  { path: '/analytics', element: <AnalyticsPage /> },
   { path: '/pillar-analytics', element: <PillarAnalyticsPage /> },
   { path: '/verification', element: <VerificationPage /> },
   { path: '/contract-diff', element: <ContractDiffPage /> },
