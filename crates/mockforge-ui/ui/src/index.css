@@ -333,3 +333,25 @@
     background-color: hsl(var(--muted-foreground));
   }
 }
+
+/* High-contrast mode — triggered by preferences.theme.highContrast. Pushes
+   muted text and borders to full contrast for improved legibility. */
+.high-contrast {
+  --muted-foreground: 220 10% 20%;
+  --text-secondary: 220 10% 20%;
+  --text-tertiary: 220 10% 25%;
+  --border: 220 15% 40%;
+  --input: 220 15% 40%;
+}
+.high-contrast.dark,
+.dark.high-contrast {
+  --muted-foreground: 210 25% 92%;
+  --text-secondary: 210 25% 92%;
+  --text-tertiary: 210 20% 82%;
+  --border: 215 20% 65%;
+  --input: 215 20% 65%;
+}
+.high-contrast *:focus-visible {
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

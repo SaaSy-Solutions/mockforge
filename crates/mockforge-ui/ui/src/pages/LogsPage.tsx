@@ -2,6 +2,7 @@ import { logger } from '@/utils/logger';
 import React, { useState, useMemo } from 'react';
 import { FileText, Search, Download, RefreshCw, ChevronDown, Eye } from 'lucide-react';
 import { useLogs } from '../hooks/useApi';
+import { usePreferencesStore } from '../stores/usePreferencesStore';
 import type { RequestLog } from '../types';
 import {
   PageHeader,
@@ -51,11 +52,13 @@ function formatTimestamp(timestamp: string): string {
 }
 
 export function LogsPage() {
+  const logPrefs = usePreferencesStore((s) => s.preferences.logs);
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<MethodFilter>('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [limit, setLimit] = useState(100);
-  const [displayLimit, setDisplayLimit] = useState(50);
+  // `itemsPerPage` is the initial display slice; users can still "load more".
+  const [displayLimit, setDisplayLimit] = useState(logPrefs.itemsPerPage);
   const [selectedTraceRequestId, setSelectedTraceRequestId] = useState<string | null>(null);
 
   const { data: logs, isLoading, error, refetch } = useLogs({
@@ -64,10 +67,10 @@ export function LogsPage() {
     limit,
   });
 
-  // Reset display limit when filters change
+  // Reset display limit when filters or the preference change.
   React.useEffect(() => {
-    setDisplayLimit(50);
-  }, [searchTerm, methodFilter, statusFilter, limit]);
+    setDisplayLimit(logPrefs.itemsPerPage);
+  }, [searchTerm, methodFilter, statusFilter, limit, logPrefs.itemsPerPage]);
 
   const filteredLogs = useMemo(() => {
     if (!logs) return [];
@@ -81,9 +84,18 @@ export function LogsPage() {
       filtered = filtered.filter((log: RequestLog) => log.status_code >= start && log.status_code <= end);
     }
 
+    // Apply user's default time-range window (hours).
+    if (logPrefs.defaultTimeRange > 0) {
+      const cutoff = Date.now() - logPrefs.defaultTimeRange * 3600 * 1000;
+      filtered = filtered.filter((log: RequestLog) => {
+        const ts = Date.parse(log.timestamp);
+        return Number.isFinite(ts) ? ts >= cutoff : true;
+      });
+    }
+
     // Apply display limit for progressive loading
     return filtered.slice(0, displayLimit);
-  }, [logs, displayLimit, statusFilter]);
+  }, [logs, displayLimit, statusFilter, logPrefs.defaultTimeRange]);
 
   const hasMoreToShow = useMemo(() => {
     if (!logs) return false;
@@ -93,8 +105,15 @@ export function LogsPage() {
       const end = start + 99;
       filtered = filtered.filter((log: RequestLog) => log.status_code >= start && log.status_code <= end);
     }
+    if (logPrefs.defaultTimeRange > 0) {
+      const cutoff = Date.now() - logPrefs.defaultTimeRange * 3600 * 1000;
+      filtered = filtered.filter((log: RequestLog) => {
+        const ts = Date.parse(log.timestamp);
+        return Number.isFinite(ts) ? ts >= cutoff : true;
+      });
+    }
     return filteredLogs.length < filtered.length;
-  }, [logs, filteredLogs.length, statusFilter]);
+  }, [logs, filteredLogs.length, statusFilter, logPrefs.defaultTimeRange]);
 
   const handleExport = () => {
     if (!filteredLogs.length) return;
@@ -293,9 +312,11 @@ export function LogsPage() {
                 {filteredLogs.map((log: RequestLog) => (
                 <div
                   key={log.id}
-                  className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  className={`flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                    logPrefs.compactView ? 'p-2' : 'p-4'
+                  }`}
                 >
-                  <div className="flex items-center gap-4">
+                  <div className={`flex items-center ${logPrefs.compactView ? 'gap-2' : 'gap-4'}`}>
                     {/* Method Badge */}
                     <div className={`px-3 py-1 rounded-full text-xs font-semibold ${methodColors[log.method as keyof typeof methodColors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'}`}>
                       {log.method}
@@ -306,13 +327,18 @@ export function LogsPage() {
                       <div className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate">
                         {log.path}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {formatTimestamp(log.timestamp)}
-                        {log.client_ip && (
-                          <span className="ml-2">• {log.client_ip}</span>
-                        )}
-                      </div>
-                      {log.user_agent && (
+                      {(logPrefs.showTimestamps || log.client_ip) && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {logPrefs.showTimestamps && formatTimestamp(log.timestamp)}
+                          {log.client_ip && (
+                            <span className={logPrefs.showTimestamps ? 'ml-2' : ''}>
+                              {logPrefs.showTimestamps ? '• ' : ''}
+                              {log.client_ip}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {log.user_agent && !logPrefs.compactView && (
                         <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">
                           {log.user_agent}
                         </div>
