@@ -89,6 +89,9 @@ const en: Dictionary = {
   'tab.usage': 'Plan & Usage',
   'tab.userManagement': 'User Management',
 
+  'nav.localOnly.badge': 'Local',
+  'nav.localOnly.tooltip': 'Requires a local MockForge instance',
+
   'page.config.title': 'Configuration',
   'page.config.subtitle': 'Manage MockForge settings and preferences',
   'page.plugins.title': 'Plugin Management',
@@ -132,6 +135,9 @@ const es: Dictionary = {
   'nav.community': 'Comunidad',
   'nav.plugins': 'Plugins',
   'nav.configuration': 'Configuracion',
+
+  'nav.localOnly.badge': 'Local',
+  'nav.localOnly.tooltip': 'Requiere una instancia local de MockForge',
 };
 
 export const translations: Record<Locale, Dictionary> = { en, es };
