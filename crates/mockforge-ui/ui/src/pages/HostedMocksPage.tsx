@@ -307,11 +307,16 @@ export const HostedMocksPage: React.FC = () => {
   const [selectedCaptureResponse, setSelectedCaptureResponse] =
     useState<DeploymentCaptureResponse | null>(null);
   const [captureResponseLoading, setCaptureResponseLoading] = useState(false);
+  const [replayResult, setReplayResult] = useState<unknown | null>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState<string | null>(null);
 
   const openCapture = useCallback(
     async (capture: DeploymentCapture) => {
       setSelectedCapture(capture);
       setSelectedCaptureResponse(null);
+      setReplayResult(null);
+      setReplayError(null);
       if (!selectedDeployment) return;
       setCaptureResponseLoading(true);
       try {
@@ -323,6 +328,31 @@ export const HostedMocksPage: React.FC = () => {
     },
     [selectedDeployment],
   );
+
+  const replaySelectedCapture = useCallback(async () => {
+    if (!selectedDeployment || !selectedCapture) return;
+    setReplayLoading(true);
+    setReplayError(null);
+    setReplayResult(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const url = `/api/v1/hosted-mocks/${encodeURIComponent(selectedDeployment.id)}/captures/${encodeURIComponent(selectedCapture.id)}/replay`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const contentType = resp.headers.get('content-type') ?? '';
+      const data = contentType.includes('application/json') ? await resp.json() : await resp.text();
+      setReplayResult(data);
+    } catch (err) {
+      setReplayError(err instanceof Error ? err.message : 'Replay failed');
+    } finally {
+      setReplayLoading(false);
+    }
+  }, [selectedDeployment, selectedCapture]);
 
   useEffect(() => {
     loadDeployments();
@@ -2162,12 +2192,58 @@ export const HostedMocksPage: React.FC = () => {
                   this protocol.
                 </Alert>
               )}
+
+              {(replayResult !== null || replayError || replayLoading) && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Replay result
+                  </Typography>
+                  {replayLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={20} />
+                    </Box>
+                  ) : replayError ? (
+                    <Alert severity="error">{replayError}</Alert>
+                  ) : (
+                    <Box
+                      component="pre"
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        bgcolor: 'background.default',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        p: 1.5,
+                        maxHeight: 240,
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        m: 0,
+                      }}
+                    >
+                      {typeof replayResult === 'string'
+                        ? replayResult
+                        : JSON.stringify(replayResult, null, 2)}
+                    </Box>
+                  )}
+                </Box>
+              )}
             </DialogContent>
             <DialogActions>
+              <Button
+                onClick={replaySelectedCapture}
+                disabled={replayLoading || !selectedDeployment}
+              >
+                Replay
+              </Button>
+              <Box sx={{ flex: 1 }} />
               <Button
                 onClick={() => {
                   setSelectedCapture(null);
                   setSelectedCaptureResponse(null);
+                  setReplayResult(null);
+                  setReplayError(null);
                 }}
               >
                 Close

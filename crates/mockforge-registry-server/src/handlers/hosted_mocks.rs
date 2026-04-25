@@ -1710,6 +1710,24 @@ pub async fn clear_recorder(
     })
 }
 
+/// Replay a captured request against the deployment. The recorder
+/// records the request envelope; replay re-executes it and returns the
+/// fresh response — useful for "did the bug we captured get fixed yet"
+/// or "check whether a chaos rule still triggers."
+pub async fn replay_recorder_capture(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+    let path = format!("/api/recorder/replay/{}", urlencoding::encode(&capture_id));
+    proxy_post_to_deployment_recorder(&deployment, &path).await
+}
+
 /// Export the deployment's recorder captures as HAR. Proxies the
 /// recorder's existing `/api/recorder/export/har` endpoint and forwards
 /// the response unchanged. The browser handles the download via a blob
