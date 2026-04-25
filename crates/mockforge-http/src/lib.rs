@@ -210,6 +210,9 @@ pub mod replay_listing;
 pub mod request_logging;
 /// Runtime route-scoped chaos rules API
 pub mod route_chaos_runtime;
+/// Runtime named-scenario activation API
+#[cfg(feature = "scenario-engine")]
+pub mod scenarios_runtime;
 /// Specification import API for OpenAPI and AsyncAPI
 pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
@@ -2709,6 +2712,42 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Add consistency API endpoints
         app = app.merge(consistency_router(consistency_state));
         debug!("Consistency engine initialized and endpoints mounted at /api/v1/consistency");
+
+        // Runtime named-scenario activation API. Locally-installed
+        // scenarios (from `~/.mockforge/scenario-metadata/*.json`) become
+        // listable + activatable via HTTP; activation writes through to
+        // the consistency engine's active_scenario slot for the chosen
+        // workspace. Failure to load the scenario index is non-fatal —
+        // the API just shows an empty list, which matches the natural
+        // state of a fresh deployment with no scenarios installed yet.
+        #[cfg(feature = "scenario-engine")]
+        {
+            use crate::scenarios_runtime::{scenarios_api_router, ScenarioRuntimeState};
+            let mut scenario_storage = match mockforge_scenarios::ScenarioStorage::new() {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to init scenario storage; runtime scenarios API will list empty"
+                    );
+                    // Construct an isolated tempdir-backed storage so the
+                    // API still mounts but lists nothing.
+                    let tmp = std::env::temp_dir().join("mockforge-empty-scenarios");
+                    mockforge_scenarios::ScenarioStorage::with_dir(&tmp)
+                        .expect("temp scenario storage")
+                }
+            };
+            if let Err(e) = scenario_storage.load().await {
+                tracing::warn!(
+                    error = %e,
+                    "Failed to load installed scenarios; API will list empty until scenarios are installed"
+                );
+            }
+            let scenarios_state =
+                ScenarioRuntimeState::new(scenario_storage, consistency_engine.clone());
+            app = app.nest("/__mockforge/api/scenarios", scenarios_api_router(scenarios_state));
+            debug!("Scenario runtime API mounted at /__mockforge/api/scenarios");
+        }
 
         // Add fidelity score endpoints
         {
