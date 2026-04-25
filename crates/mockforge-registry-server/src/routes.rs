@@ -178,6 +178,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}", get(handlers::hosted_mocks::get_recorder_capture))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/response", get(handlers::hosted_mocks::get_recorder_capture_response))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/export/har", get(handlers::hosted_mocks::export_recorder_captures_har))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/export/jsonl", get(handlers::hosted_mocks::export_recorder_captures_jsonl))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/enable", post(handlers::hosted_mocks::enable_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/disable", post(handlers::hosted_mocks::disable_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/clear", post(handlers::hosted_mocks::clear_recorder))

@@ -1814,6 +1814,17 @@ export const HostedMocksPage: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
+                      disabled={capturesLoading || recorderCaptures.length === 0 || !selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await downloadCapturesJsonl(selectedDeployment.id, selectedDeployment.slug);
+                      }}
+                    >
+                      Export JSONL
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
                       onClick={refetchCaptures}
                       disabled={capturesLoading}
                     >
@@ -2606,12 +2617,24 @@ async function toggleRecorder(
 }
 
 async function downloadCapturesHar(deploymentId: string, slug: string): Promise<void> {
+  return downloadCaptures(deploymentId, slug, 'har');
+}
+
+async function downloadCapturesJsonl(deploymentId: string, slug: string): Promise<void> {
+  return downloadCaptures(deploymentId, slug, 'jsonl');
+}
+
+async function downloadCaptures(
+  deploymentId: string,
+  slug: string,
+  format: 'har' | 'jsonl',
+): Promise<void> {
   const token = localStorage.getItem('auth_token');
   if (!token) {
     alert('Not authenticated');
     return;
   }
-  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/export/har`;
+  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/export/${format}`;
   try {
     const resp = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
@@ -2624,13 +2647,13 @@ async function downloadCapturesHar(deploymentId: string, slug: string): Promise<
     const a = document.createElement('a');
     a.href = objectUrl;
     const date = new Date().toISOString().split('T')[0];
-    a.download = `${slug}-captures-${date}.har`;
+    a.download = `${slug}-captures-${date}.${format}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(objectUrl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Download failed';
-    alert(`HAR export failed: ${msg}`);
+    alert(`${format.toUpperCase()} export failed: ${msg}`);
   }
 }

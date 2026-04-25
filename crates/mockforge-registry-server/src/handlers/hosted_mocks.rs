@@ -1759,6 +1759,21 @@ pub async fn export_recorder_captures_har(
     proxy_to_deployment_recorder(&deployment, "/api/recorder/export/har").await
 }
 
+/// Export the deployment's recorder captures as JSONL — one
+/// `RecordedExchange` per line, all protocols. Companion to the HAR
+/// export. JSONL is the format the local `mockforge-cli replay` reads,
+/// so this is the round-trip path: capture in cloud → download → replay
+/// locally.
+pub async fn export_recorder_captures_jsonl(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_to_deployment_recorder(&deployment, "/api/recorder/export/jsonl").await
+}
+
 /// Get deployment metrics
 pub async fn get_deployment_metrics(
     State(state): State<AppState>,
