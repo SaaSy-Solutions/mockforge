@@ -206,6 +206,8 @@ pub mod reality_proxy;
 /// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
+/// Runtime route-scoped chaos rules API
+pub mod route_chaos_runtime;
 /// Specification import API for OpenAPI and AsyncAPI
 pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
@@ -2067,6 +2069,23 @@ pub async fn build_router_with_chains_and_multi_tenant(
             "/__mockforge/chains",
             chains_router(create_chain_state(chain_registry, chain_engine)),
         );
+    }
+
+    // Runtime route-chaos rules API + middleware. This sits in front of
+    // the static per-route handlers so operators can add/remove fault and
+    // latency rules without redeploying. Static rules from the YAML
+    // config still apply to their routes; runtime rules are additive.
+    {
+        use crate::route_chaos_runtime::{
+            route_chaos_api_router, runtime_route_chaos_middleware, RuntimeRouteChaosState,
+        };
+        let runtime_state = RuntimeRouteChaosState::new(Vec::new());
+        let middleware_state = runtime_state.clone();
+        app = app.layer(axum::middleware::from_fn_with_state(
+            middleware_state,
+            runtime_route_chaos_middleware,
+        ));
+        app = app.nest("/__mockforge/api/route-chaos", route_chaos_api_router(runtime_state));
     }
 
     // Add OIDC well-known endpoints
