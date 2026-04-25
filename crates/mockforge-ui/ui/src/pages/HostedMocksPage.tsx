@@ -21,6 +21,7 @@ import {
   type TraceSummary,
   type TraceSpan,
 } from '@/hooks/useDeploymentTraces';
+import { useDeploymentStateMachines } from '@/hooks/useDeploymentStateMachines';
 import {
   Box,
   Card,
@@ -333,6 +334,19 @@ export const HostedMocksPage: React.FC = () => {
   const [selectedTrace, setSelectedTrace] = useState<TraceSummary | null>(null);
   const [selectedTraceSpans, setSelectedTraceSpans] = useState<TraceSpan[]>([]);
   const [traceSpansLoading, setTraceSpansLoading] = useState(false);
+
+  // State-machine definitions + instances on the deployment, via the
+  // cloud-side proxy. Polled because the data is small and changes are
+  // user-driven (no SSE needed).
+  const {
+    machines: deploymentStateMachines,
+    instances: deploymentStateMachineInstances,
+    loading: stateMachinesLoading,
+    error: stateMachinesError,
+    refetch: refetchStateMachines,
+  } = useDeploymentStateMachines(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
+  });
 
   const openTrace = useCallback(
     async (trace: TraceSummary) => {
@@ -1306,6 +1320,7 @@ export const HostedMocksPage: React.FC = () => {
                 <Tab icon={<ViewIcon />} label="Captures" />
                 <Tab icon={<ViewIcon />} label="Traces" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
+                <Tab icon={<ViewIcon />} label="State Machines" />
               </Tabs>
 
               {detailsTab === 0 && (
@@ -2219,6 +2234,119 @@ export const HostedMocksPage: React.FC = () => {
                       </Grid>
                     </Box>
                   ) : null}
+                </Box>
+              )}
+
+              {detailsTab === 7 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      State machines configured on this deployment via the management API.
+                      Live instances reflect requests that have driven state transitions.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchStateMachines}
+                      disabled={stateMachinesLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {stateMachinesError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {stateMachinesError}. The state-machine API may not be available on
+                      this deployment image yet.
+                    </Alert>
+                  )}
+
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Definitions ({deploymentStateMachines.length})
+                  </Typography>
+                  {deploymentStateMachines.length === 0 ? (
+                    <Alert severity="info" sx={{ mb: 3 }}>
+                      No state machines defined on this deployment. Define one by POSTing
+                      to <code>/__mockforge/api/state-machines</code> against the deployment URL.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 3 }}
+                    >
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Resource type</TableCell>
+                            <TableCell align="right">States</TableCell>
+                            <TableCell align="right">Transitions</TableCell>
+                            <TableCell align="right">Sub-scenarios</TableCell>
+                            <TableCell>Visual layout</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {deploymentStateMachines.map((m) => (
+                            <TableRow key={m.resource_type} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {m.resource_type}
+                              </TableCell>
+                              <TableCell align="right">{m.state_count}</TableCell>
+                              <TableCell align="right">{m.transition_count}</TableCell>
+                              <TableCell align="right">{m.sub_scenario_count}</TableCell>
+                              <TableCell>
+                                {m.has_visual_layout ? (
+                                  <Chip label="yes" size="small" color="success" />
+                                ) : (
+                                  <Chip label="no" size="small" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Live instances ({deploymentStateMachineInstances.length})
+                  </Typography>
+                  {deploymentStateMachineInstances.length === 0 ? (
+                    <Alert severity="info">
+                      No instances yet. They appear once requests drive state transitions.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}
+                    >
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Resource ID</TableCell>
+                            <TableCell>Resource type</TableCell>
+                            <TableCell>Current state</TableCell>
+                            <TableCell align="right">History</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {deploymentStateMachineInstances.map((inst) => (
+                            <TableRow key={inst.resource_id} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {inst.resource_id}
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {inst.resource_type}
+                              </TableCell>
+                              <TableCell>
+                                <Chip label={inst.current_state} size="small" color="primary" />
+                              </TableCell>
+                              <TableCell align="right">{inst.history_count}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
                 </Box>
               )}
             </DialogContent>

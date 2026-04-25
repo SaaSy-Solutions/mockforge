@@ -1630,6 +1630,84 @@ async fn proxy_to_deployment_recorder(
     })
 }
 
+/// Proxy a list/get to the deployment's state-machine API. Mirrors
+/// `proxy_to_deployment_recorder` exactly — the only difference is the
+/// upstream path is `/__mockforge/api/state-machines/*`. Kept as a thin
+/// wrapper so the call sites read the same way as the recorder ones.
+async fn proxy_to_deployment_state_machines(
+    deployment: &HostedMock,
+    path_and_query: &str,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}{}", base.trim_end_matches('/'), path_and_query);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+
+    let resp = client.get(&url).send().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("State-machine proxy fetch failed: {}", e))
+    })?;
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("State-machine proxy read body failed: {}", e))
+    })?;
+
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(ct) = headers.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, ct);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("State-machine proxy response build failed: {}", e))
+    })
+}
+
+/// List state machines configured on a hosted-mock deployment. Proxies
+/// `GET /__mockforge/api/state-machines` on the deployed instance.
+pub async fn list_deployment_state_machines(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_to_deployment_state_machines(&deployment, "/__mockforge/api/state-machines").await
+}
+
+/// Get a single state machine definition. Proxies the deployment's
+/// `GET /__mockforge/api/state-machines/{resource_type}`.
+pub async fn get_deployment_state_machine(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, resource_type)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    if resource_type.contains('/') || resource_type.contains('?') || resource_type.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid resource type".to_string()));
+    }
+    let path = format!("/__mockforge/api/state-machines/{}", urlencoding::encode(&resource_type));
+    proxy_to_deployment_state_machines(&deployment, &path).await
+}
+
+/// List instances of state machines on the deployment. Proxies
+/// `GET /__mockforge/api/state-machines/instances`.
+pub async fn list_deployment_state_machine_instances(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_to_deployment_state_machines(&deployment, "/__mockforge/api/state-machines/instances")
+        .await
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RecorderCapturesQuery {
     pub limit: Option<u32>,
