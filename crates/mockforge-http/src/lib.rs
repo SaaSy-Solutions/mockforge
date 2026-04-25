@@ -183,6 +183,8 @@ pub mod database;
 pub mod file_generator;
 /// File serving for generated mock files
 pub mod file_server;
+/// Fixtures management API for hosted-mock deployments
+pub mod fixtures_api;
 /// Kubernetes-native health check endpoints (liveness, readiness, startup probes)
 pub mod health;
 pub mod http_tracing_middleware;
@@ -2086,6 +2088,18 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::contract_diff_api::{contract_diff_api_router, ContractDiffApiState};
         let cd_state = Arc::new(ContractDiffApiState::new(spec_path.clone()));
         app = app.nest("/__mockforge/api/contract-diff", contract_diff_api_router(cd_state));
+    }
+
+    // Fixtures management API. Lives on the admin server too (port 9080),
+    // but hosted-mock Fly machines only expose port 3000 publicly — so
+    // we mount the same surface on the main HTTP app. Newly-uploaded
+    // fixtures land in `MOCKFORGE_FIXTURES_DIR` and are picked up by
+    // the startup-time loader on the next deploy/restart; live reload
+    // is a separate concern.
+    {
+        use crate::fixtures_api::{fixtures_api_router, FixturesApiState};
+        let fx_state = FixturesApiState::from_env();
+        app = app.nest("/__mockforge/fixtures", fixtures_api_router(fx_state));
     }
 
     // Runtime route-chaos rules API + middleware. This sits in front of
