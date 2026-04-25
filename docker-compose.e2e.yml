@@ -1,0 +1,59 @@
+# Bring up Postgres + MinIO for the registry-server E2E suite.
+#
+# Usage:
+#   docker compose -f docker-compose.e2e.yml up -d
+#   # ... run registry-server against these ports, then run `cargo test -- --ignored` ...
+#   docker compose -f docker-compose.e2e.yml down -v
+#
+# Ports are deliberately non-default so this stack can co-exist with a developer's own
+# Postgres/MinIO on the same host without collisions. The CI workflow binds the same ports.
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mockforge-e2e-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mockforge_registry
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mockforge_registry"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data  # Ephemeral; every CI run starts fresh.
+
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: mockforge-e2e-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":59001"
+    ports:
+      - "59000:9000"
+      - "59001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /data
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    container_name: mockforge-e2e-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/mockforge-plugins &&
+        mc mb --ignore-existing local/mockforge-specs &&
+        echo 'buckets ready'
+      "

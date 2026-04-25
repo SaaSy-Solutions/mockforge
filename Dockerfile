@@ -58,8 +58,10 @@ COPY config.example.yaml ./
 COPY --from=ui-builder /ui/dist/ crates/mockforge-ui/ui/dist/
 RUN rm -f crates/mockforge-ui/build_ui.sh
 
-# Build the application in release mode
-RUN cargo build --release --bin mockforge
+# Build the application in release mode with the `cloud` feature set.
+# `cloud` rolls up default features + the protocol crates we expose on hosted
+# mocks (ws, graphql, grpc, smtp, mqtt, kafka, amqp, tcp). FTP is excluded.
+RUN cargo build --release --bin mockforge --no-default-features --features cloud --package mockforge-cli
 
 # Stage 2: Create the runtime image
 # Use debian:trixie-slim to match builder's GLIBC version (2.39+)
@@ -95,8 +97,10 @@ RUN chown -R mockforge:mockforge /app
 # Switch to the non-root user
 USER mockforge
 
-# Expose ports (HTTP, WebSocket, gRPC, Admin UI)
-EXPOSE 3000 3001 50051 9080
+# Expose ports. Hosted deployments only surface 3000 today (HTTP + merged WS/GraphQL).
+# Other protocol ports are listed for local `docker run` usage and for Fly service
+# configs added later (see issues #226–#231).
+EXPOSE 3000 3001 50051 9080 1025 1883 9092 5672 9999
 
 # Set default environment variables
 ENV MOCKFORGE_LATENCY_ENABLED=true

@@ -8345,9 +8345,11 @@ name = "mockforge-observability"
 version = "0.3.118"
 dependencies = [
  "axum 0.8.8",
+ "chrono",
  "mockforge-tracing",
  "once_cell",
  "prometheus",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sysinfo",

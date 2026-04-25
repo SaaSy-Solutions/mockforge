@@ -367,6 +367,55 @@ Privacy: https://mockforge.dev/privacy
         }
     }
 
+    /// Generate a security-alert email for an account-level event (password
+    /// change, 2FA enabled/disabled, etc). Gated by `users.security_alerts`
+    /// at the call site.
+    pub fn generate_security_alert_email(
+        username: &str,
+        email: &str,
+        headline: &str,
+        detail: &str,
+    ) -> EmailMessage {
+        let year = chrono::Utc::now().year();
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: #dc2626; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; }}
+        .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }}
+        .detail {{ background: #fef3f2; border-left: 4px solid #dc2626; padding: 12px 16px; margin: 16px 0; }}
+    </style>
+</head>
+<body>
+    <div class="header"><h1>🔒 Security Alert</h1></div>
+    <div class="content">
+        <p>Hi {username},</p>
+        <p><strong>{headline}</strong></p>
+        <div class="detail">{detail}</div>
+        <p>You're receiving this because you have security alerts enabled. You can manage this preference in <a href="https://app.mockforge.dev">your account settings</a>.</p>
+        <p>— The MockForge Team</p>
+    </div>
+    <div class="footer"><p>© {year} MockForge</p></div>
+</body>
+</html>"#,
+        );
+
+        let text_body = format!(
+            "Security Alert — {headline}\n\nHi {username},\n\n{detail}\n\nYou're receiving this because you have security alerts enabled. Manage this preference at https://app.mockforge.dev.\n\n— The MockForge Team\n© {year} MockForge\n",
+        );
+
+        EmailMessage {
+            to: email.to_string(),
+            subject: format!("[MockForge] {}", headline),
+            html_body,
+            text_body,
+        }
+    }
+
     /// Generate subscription confirmation email
     pub fn generate_subscription_confirmation(
         username: &str,

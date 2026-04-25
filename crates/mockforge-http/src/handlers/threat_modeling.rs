@@ -1,5 +1,10 @@
 //! HTTP handlers for contract threat modeling
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for automated security pipelines and external threat-modeling
+//! tools. Do not build speculative UI for these routes without a
+//! stakeholder-defined use case.
+//!
 //! This module provides endpoints for security threat assessments.
 
 // ThreatAnalyzer stays in core (OpenApiSpec + LLM dep).

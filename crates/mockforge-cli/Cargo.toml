@@ -94,6 +94,29 @@ hound = { version = "3.5", optional = true }
 default = ["http", "admin", "bench", "chaos", "recorder", "scenarios", "tracing", "federation", "tunnel", "vbr"]
 full = ["default", "all-protocols", "pipelines", "tui", "stt-all", "studio-packs"]
 all-protocols = ["http", "mqtt", "ws", "grpc", "graphql", "ftp", "amqp", "kafka", "smtp", "tcp"]
+# Cloud / hosted-mocks build target. Rolls up the default SaaS feature set:
+# everything in `default` plus the protocols we expose on hosted deployments.
+# FTP is intentionally excluded (passive port range doesn't play well with Fly).
+cloud = [
+    "http",
+    "admin",
+    "bench",
+    "chaos",
+    "recorder",
+    "scenarios",
+    "tracing",
+    "federation",
+    "tunnel",
+    "vbr",
+    "ws",
+    "graphql",
+    "grpc",
+    "smtp",
+    "mqtt",
+    "kafka",
+    "amqp",
+    "tcp",
+]
 # Feature-gated CLI subsystems
 admin = ["dep:mockforge-ui"]
 bench = ["dep:mockforge-bench"]

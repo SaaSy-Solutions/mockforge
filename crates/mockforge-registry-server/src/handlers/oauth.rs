@@ -209,10 +209,11 @@ pub async fn oauth_callback(
     // Create personal organization if it doesn't exist
     let _personal_org = state.store.get_or_create_personal_org(user.id, &user.username).await?;
 
-    // Send welcome email for new OAuth users (non-blocking)
-    // Check if this is a new user by checking if they were just created
+    // Send welcome email for new OAuth users (non-blocking). Gated on the
+    // user's `email_notifications` preference — new accounts default to
+    // opted-in so a brand-new signup still gets the welcome.
     let is_new_user = user.created_at > chrono::Utc::now() - chrono::Duration::minutes(1);
-    if is_new_user {
+    if is_new_user && user.email_notifications {
         if let Ok(email_service) = crate::email::EmailService::from_env() {
             let welcome_email =
                 crate::email::EmailService::generate_welcome_email(&user.username, &user.email);

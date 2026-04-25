@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { apiService } from '../../services/api';
+import { IS_CLOUD } from '../../utils/mode';
 import type {
   EncryptionStatus,
   AutoEncryptionConfig,
@@ -305,10 +306,10 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className={IS_CLOUD ? 'grid w-full grid-cols-3' : 'grid w-full grid-cols-4'}>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="export">Export/Import</TabsTrigger>
+          {!IS_CLOUD && <TabsTrigger value="export">Export/Import</TabsTrigger>}
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
@@ -486,7 +487,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
           </Card>
         </TabsContent>
 
-        <TabsContent value="export" className="space-y-4">
+        {!IS_CLOUD && (<TabsContent value="export" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Export */}
             <Card>
@@ -605,7 +606,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </TabsContent>)}
 
         <TabsContent value="settings" className="space-y-4">
           <Card>

@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
+import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
 import {
   Box,
   Card,
@@ -78,6 +79,17 @@ const FLY_REGIONS: { code: string; label: string }[] = [
   { code: 'gru', label: 'São Paulo, Brazil' },
 ];
 
+type DeploymentProtocol =
+  | 'http'
+  | 'websocket'
+  | 'graphql'
+  | 'grpc'
+  | 'smtp'
+  | 'mqtt'
+  | 'kafka'
+  | 'amqp'
+  | 'tcp';
+
 interface Deployment {
   id: string;
   org_id: string;
@@ -92,6 +104,7 @@ interface Deployment {
   instance_type?: string;
   health_status: 'healthy' | 'unhealthy' | 'unknown';
   error_message?: string;
+  enabled_protocols?: DeploymentProtocol[];
   created_at: string;
   updated_at: string;
 }
@@ -157,6 +170,28 @@ export const HostedMocksPage: React.FC = () => {
     region: 'iad',
     project_id: '',
   });
+
+  // Optional protocols beyond HTTP. HTTP is implicit (always present);
+  // WebSocket and GraphQL ride on the HTTP listener so toggling them is a
+  // no-op — they're available unconditionally on Pro+ and don't show in the
+  // picker. The picker covers protocols that need their own Fly service.
+  type OptionalProtocol = 'grpc' | 'smtp' | 'mqtt' | 'kafka' | 'amqp' | 'tcp';
+  const [enabledOptionalProtocols, setEnabledOptionalProtocols] = useState<OptionalProtocol[]>([]);
+
+  const protocolOptions: Array<{ id: OptionalProtocol; label: string; minPlan: 'pro' | 'team'; hint: string }> = [
+    { id: 'grpc', label: 'gRPC', minPlan: 'pro', hint: 'HTTP/2 service on port 50051' },
+    { id: 'smtp', label: 'SMTP', minPlan: 'team', hint: 'Mock SMTP server on port 2525' },
+    { id: 'mqtt', label: 'MQTT', minPlan: 'team', hint: 'MQTT broker on port 1883' },
+    { id: 'kafka', label: 'Kafka', minPlan: 'team', hint: 'Kafka broker on port 9092' },
+    { id: 'amqp', label: 'AMQP', minPlan: 'team', hint: 'AMQP broker on port 5672' },
+    { id: 'tcp', label: 'Raw TCP', minPlan: 'team', hint: 'Custom TCP server on port 9999' },
+  ];
+
+  const toggleOptionalProtocol = (id: OptionalProtocol) => {
+    setEnabledOptionalProtocols((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
+  };
   const [creating, setCreating] = useState(false);
   const [uploadingSpec, setUploadingSpec] = useState(false);
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
@@ -166,7 +201,9 @@ export const HostedMocksPage: React.FC = () => {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [projectsLoadError, setProjectsLoadError] = useState<string | null>(null);
 
-  // Real-time stream for the selected hosted mock deployment
+  // Real-time stream for the selected hosted mock deployment.
+  // This goes direct to the deployment's `/__mockforge/ws` and gives
+  // structured request log events (method/path/status/latency).
   const streamEnabled = detailsOpen && selectedDeployment?.status === 'active';
   const streamUrl = streamEnabled ? selectedDeployment?.deployment_url : undefined;
   const {
@@ -174,6 +211,19 @@ export const HostedMocksPage: React.FC = () => {
     logs: streamLogs,
     metrics: streamMetrics,
   } = useHostedMockStream(streamUrl, { enabled: !!streamEnabled });
+
+  // Fly runtime logs (container stdout/stderr) via the registry server's SSE
+  // proxy. Complementary to the deployment WS stream above: works even when
+  // the app's WS endpoint isn't reachable, captures startup logs, etc.
+  const flyLogsEnabled = detailsOpen && !!selectedDeployment;
+  const {
+    entries: flyLogEntries,
+    connected: flyLogsConnected,
+    notConfigured: flyLogsNotConfigured,
+    error: flyLogsError,
+  } = useFlyRuntimeLogs(flyLogsEnabled ? selectedDeployment?.id : undefined, {
+    enabled: flyLogsEnabled,
+  });
 
   useEffect(() => {
     loadDeployments();
@@ -276,6 +326,11 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
+      // HTTP is always implicit. The picker only adds protocols that need
+      // their own Fly service entry; the backend rejects with a clear error
+      // if the org's plan can't accommodate the request.
+      const enabledProtocols = ['http', ...enabledOptionalProtocols];
+
       const request = {
         name: formData.name,
         slug: formData.slug || undefined,
@@ -284,6 +339,7 @@ export const HostedMocksPage: React.FC = () => {
         openapi_spec_url: formData.openapi_spec_url || undefined,
         region: formData.region || undefined,
         project_id: formData.project_id || undefined,
+        enabled_protocols: enabledProtocols,
       };
 
       const response = await fetch('/api/v1/hosted-mocks', {
@@ -321,6 +377,7 @@ export const HostedMocksPage: React.FC = () => {
         region: 'iad',
         project_id: '',
       });
+      setEnabledOptionalProtocols([]);
       loadDeployments();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create deployment');
@@ -957,6 +1014,50 @@ export const HostedMocksPage: React.FC = () => {
               </Button>
             </Box>
 
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                Protocols
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                HTTP, WebSocket, and GraphQL are always available on port 3000. Enable additional
+                protocols below to expose them on dedicated Fly ports. Plan-gated — the backend
+                will reject the request if your plan doesn't cover what you select.
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {protocolOptions.map((opt) => {
+                  const checked = enabledOptionalProtocols.includes(opt.id);
+                  return (
+                    <Chip
+                      key={opt.id}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <span>{opt.label}</span>
+                          <Box
+                            component="span"
+                            sx={{
+                              fontSize: 10,
+                              px: 0.75,
+                              py: 0.1,
+                              borderRadius: 1,
+                              bgcolor: opt.minPlan === 'team' ? 'secondary.main' : 'primary.main',
+                              color: 'common.white',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {opt.minPlan}
+                          </Box>
+                        </Box>
+                      }
+                      onClick={() => toggleOptionalProtocol(opt.id)}
+                      color={checked ? 'primary' : 'default'}
+                      variant={checked ? 'filled' : 'outlined'}
+                      title={opt.hint}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+
             <TextField
               label="Configuration (JSON)"
               required
@@ -1019,6 +1120,7 @@ export const HostedMocksPage: React.FC = () => {
             <DialogContent>
               <Tabs value={detailsTab} onChange={(_, v) => setDetailsTab(v)} sx={{ mb: 3 }}>
                 <Tab icon={<CodeIcon />} label="Overview" />
+                <Tab icon={<ViewIcon />} label="Events" />
                 <Tab icon={<ViewIcon />} label="Logs" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
               </Tabs>
@@ -1145,17 +1247,140 @@ export const HostedMocksPage: React.FC = () => {
                 </Box>
               )}
 
+              {/* Events tab: deployment lifecycle history (created → deploying → active / failed). */}
               {detailsTab === 1 && (
                 <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Deployment lifecycle events. For runtime container output, see the Logs tab.
+                  </Typography>
+                  {logsLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : logs.length === 0 ? (
+                    <Alert severity="info">No lifecycle events recorded yet.</Alert>
+                  ) : (
+                    <List>
+                      {logs.map((log, index) => (
+                        <React.Fragment key={log.id}>
+                          <ListItem>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                  <Chip
+                                    label={log.level}
+                                    size="small"
+                                    color={
+                                      log.level === 'error'
+                                        ? 'error'
+                                        : log.level === 'warning'
+                                        ? 'warning'
+                                        : 'default'
+                                    }
+                                  />
+                                  <Typography variant="body2">{log.message}</Typography>
+                                </Box>
+                              }
+                              secondary={new Date(log.created_at).toLocaleString()}
+                            />
+                          </ListItem>
+                          {index < logs.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              )}
+
+              {/* Logs tab: runtime container logs (Fly SSE) + live request stream from the deployment WS. */}
+              {detailsTab === 2 && (
+                <Box>
+                  {flyLogsNotConfigured && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Fly runtime log streaming isn't configured on this MockForge Cloud instance
+                      (FLYIO_API_TOKEN unset). Container stdout/stderr won't appear here, but live
+                      request events from the deployment WebSocket will.
+                    </Alert>
+                  )}
+                  {flyLogsError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      Fly logs error: {flyLogsError}
+                    </Alert>
+                  )}
+                  {flyLogsConnected && !flyLogsNotConfigured && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Streaming runtime logs from Fly
+                    </Alert>
+                  )}
+
+                  {flyLogEntries.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        Container logs ({flyLogEntries.length})
+                      </Typography>
+                      <Box
+                        sx={{
+                          maxHeight: 320,
+                          overflow: 'auto',
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          bgcolor: 'background.default',
+                          border: 1,
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          p: 1.5,
+                        }}
+                      >
+                        {flyLogEntries.map((entry, index) => (
+                          <Box
+                            key={`fly-${index}-${entry.timestamp}`}
+                            sx={{ display: 'flex', gap: 1, py: 0.25 }}
+                          >
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ minWidth: 160 }}
+                            >
+                              {new Date(entry.timestamp).toLocaleTimeString()}
+                            </Typography>
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              sx={{
+                                minWidth: 50,
+                                color:
+                                  entry.level === 'error'
+                                    ? 'error.main'
+                                    : entry.level === 'warning'
+                                    ? 'warning.main'
+                                    : 'text.secondary',
+                              }}
+                            >
+                              {entry.level}
+                            </Typography>
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              sx={{ flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                            >
+                              {entry.message}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
                   {streamConnected && (
                     <Alert severity="success" sx={{ mb: 2 }}>
                       Live streaming connected — new requests will appear automatically
                     </Alert>
                   )}
                   {streamLogs.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
+                    <Box>
                       <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                        Live Requests
+                        Live requests
                       </Typography>
                       <List dense>
                         {streamLogs.slice(0, 50).map((entry, index) => (
@@ -1192,53 +1417,17 @@ export const HostedMocksPage: React.FC = () => {
                       </List>
                     </Box>
                   )}
-                  {logsLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                      <CircularProgress />
-                    </Box>
-                  ) : logs.length === 0 && streamLogs.length === 0 ? (
+
+                  {flyLogEntries.length === 0 && streamLogs.length === 0 && (
                     <Alert severity="info">
-                      {streamConnected ? 'Waiting for requests...' : 'No logs available'}
+                      Waiting for log output. Container logs appear here as Fly emits them; request
+                      logs appear when the deployment is reachable and traffic arrives.
                     </Alert>
-                  ) : logs.length > 0 ? (
-                    <>
-                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                        Historical Logs
-                      </Typography>
-                      <List>
-                        {logs.map((log, index) => (
-                          <React.Fragment key={log.id}>
-                            <ListItem>
-                              <ListItemText
-                                primary={
-                                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                    <Chip
-                                      label={log.level}
-                                      size="small"
-                                      color={
-                                        log.level === 'error'
-                                          ? 'error'
-                                          : log.level === 'warning'
-                                          ? 'warning'
-                                          : 'default'
-                                      }
-                                    />
-                                    <Typography variant="body2">{log.message}</Typography>
-                                  </Box>
-                                }
-                                secondary={new Date(log.created_at).toLocaleString()}
-                              />
-                            </ListItem>
-                            {index < logs.length - 1 && <Divider />}
-                          </React.Fragment>
-                        ))}
-                      </List>
-                    </>
-                  ) : null}
+                  )}
                 </Box>
               )}
 
-              {detailsTab === 2 && (
+              {detailsTab === 3 && (
                 <Box>
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>

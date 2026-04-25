@@ -21,8 +21,45 @@ pub struct User {
     #[serde(skip_serializing)]
     pub two_factor_backup_codes: Option<Vec<String>>, // Array of hashed backup codes
     pub two_factor_verified_at: Option<DateTime<Utc>>,
+    #[serde(default = "default_true")]
+    pub email_notifications: bool,
+    #[serde(default = "default_true")]
+    pub security_alerts: bool,
+    #[serde(default)]
+    pub preferences: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl User {
+    /// Build an "unknown user" placeholder for the given id. Used by read
+    /// handlers when the referenced user has been deleted but we still need
+    /// to render the surrounding record (reviews, plugins, templates, etc.).
+    pub fn placeholder(id: Uuid) -> Self {
+        let now = Utc::now();
+        Self {
+            id,
+            username: "Unknown".to_string(),
+            email: String::new(),
+            password_hash: String::new(),
+            api_token: None,
+            is_verified: false,
+            is_admin: false,
+            two_factor_enabled: false,
+            two_factor_secret: None,
+            two_factor_backup_codes: None,
+            two_factor_verified_at: None,
+            email_notifications: true,
+            security_alerts: true,
+            preferences: serde_json::Value::Object(Default::default()),
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 #[cfg(feature = "postgres")]

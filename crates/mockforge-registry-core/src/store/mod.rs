@@ -1017,6 +1017,30 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// Mark a user's email as verified.
     async fn mark_user_verified(&self, user_id: Uuid) -> StoreResult<()>;
 
+    /// Update a user's username and/or email. Pass `None` to leave a field unchanged.
+    /// Returns the updated user.
+    async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        username: Option<&str>,
+        email: Option<&str>,
+    ) -> StoreResult<User>;
+
+    /// Update a user's notification-preference flags.
+    async fn update_user_notification_prefs(
+        &self,
+        user_id: Uuid,
+        email_notifications: bool,
+        security_alerts: bool,
+    ) -> StoreResult<()>;
+
+    /// Replace a user's UI preferences JSON blob.
+    async fn update_user_preferences(
+        &self,
+        user_id: Uuid,
+        preferences: &serde_json::Value,
+    ) -> StoreResult<()>;
+
     // ---------------------------------------------------------------------
     // Verification / password-reset tokens
     // ---------------------------------------------------------------------

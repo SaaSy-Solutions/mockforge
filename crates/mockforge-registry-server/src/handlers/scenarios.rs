@@ -91,21 +91,7 @@ pub async fn search_scenarios(
         let author = User::find_by_id(pool, scenario.author_id)
             .await
             .map_err(ApiError::Database)?
-            .unwrap_or_else(|| User {
-                id: scenario.author_id,
-                username: "unknown".to_string(),
-                email: "unknown@example.com".to_string(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                two_factor_enabled: false,
-                two_factor_secret: None,
-                two_factor_backup_codes: None,
-                two_factor_verified_at: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            });
+            .unwrap_or_else(|| User::placeholder(scenario.author_id));
 
         let version_entries: Vec<ScenarioVersionEntry> = versions
             .into_iter()
@@ -142,22 +128,10 @@ pub async fn search_scenarios(
         let review_responses: Vec<ScenarioReviewResponse> = reviews
             .into_iter()
             .map(|review| {
-                let reviewer =
-                    reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
-                        id: review.reviewer_id,
-                        username: "unknown".to_string(),
-                        email: "unknown@example.com".to_string(),
-                        password_hash: String::new(),
-                        api_token: None,
-                        is_verified: false,
-                        is_admin: false,
-                        two_factor_enabled: false,
-                        two_factor_secret: None,
-                        two_factor_backup_codes: None,
-                        two_factor_verified_at: None,
-                        created_at: chrono::Utc::now(),
-                        updated_at: chrono::Utc::now(),
-                    });
+                let reviewer = reviewers
+                    .get(&review.reviewer_id)
+                    .cloned()
+                    .unwrap_or_else(|| User::placeholder(review.reviewer_id));
 
                 ScenarioReviewResponse {
                     id: review.id.to_string(),
@@ -223,21 +197,11 @@ pub async fn get_scenario(
         .await
         .map_err(ApiError::Database)?;
 
-    let author = state.store.find_user_by_id(scenario.author_id).await?.unwrap_or_else(|| User {
-        id: scenario.author_id,
-        username: "unknown".to_string(),
-        email: "unknown@example.com".to_string(),
-        password_hash: String::new(),
-        api_token: None,
-        is_verified: false,
-        is_admin: false,
-        two_factor_enabled: false,
-        two_factor_secret: None,
-        two_factor_backup_codes: None,
-        two_factor_verified_at: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    });
+    let author = state
+        .store
+        .find_user_by_id(scenario.author_id)
+        .await?
+        .unwrap_or_else(|| User::placeholder(scenario.author_id));
 
     let version_entries: Vec<ScenarioVersionEntry> = versions
         .into_iter()
@@ -273,21 +237,10 @@ pub async fn get_scenario(
     let review_responses: Vec<ScenarioReviewResponse> = reviews
         .into_iter()
         .map(|review| {
-            let reviewer = reviewers.get(&review.reviewer_id).cloned().unwrap_or_else(|| User {
-                id: review.reviewer_id,
-                username: "unknown".to_string(),
-                email: "unknown@example.com".to_string(),
-                password_hash: String::new(),
-                api_token: None,
-                is_verified: false,
-                is_admin: false,
-                two_factor_enabled: false,
-                two_factor_secret: None,
-                two_factor_backup_codes: None,
-                two_factor_verified_at: None,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            });
+            let reviewer = reviewers
+                .get(&review.reviewer_id)
+                .cloned()
+                .unwrap_or_else(|| User::placeholder(review.reviewer_id));
 
             ScenarioReviewResponse {
                 id: review.id.to_string(),

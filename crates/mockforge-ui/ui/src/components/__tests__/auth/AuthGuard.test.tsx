@@ -5,6 +5,7 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { AuthGuard } from '../../auth/AuthGuard';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
@@ -12,6 +13,10 @@ import { useAuthStore } from '../../../stores/useAuthStore';
 vi.mock('../../../stores/useAuthStore');
 
 const mockUseAuthStore = vi.mocked(useAuthStore);
+
+function renderWithRouter(ui: React.ReactElement, initialEntries: string[] = ['/dashboard']) {
+  return render(<MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>);
+}
 
 describe('AuthGuard', () => {
   beforeEach(() => {
@@ -36,7 +41,7 @@ describe('AuthGuard', () => {
       stopTokenRefresh: vi.fn(),
     });
 
-    render(
+    renderWithRouter(
       <AuthGuard>
         <div data-testid="protected-content">Protected Content</div>
       </AuthGuard>
@@ -65,7 +70,7 @@ describe('AuthGuard', () => {
       stopTokenRefresh: vi.fn(),
     });
 
-    render(
+    renderWithRouter(
       <AuthGuard>
         <div data-testid="protected-content">Protected Content</div>
       </AuthGuard>
@@ -97,7 +102,7 @@ describe('AuthGuard', () => {
       stopTokenRefresh: vi.fn(),
     });
 
-    render(
+    renderWithRouter(
       <AuthGuard>
         <div data-testid="protected-content">Protected Content</div>
       </AuthGuard>
@@ -126,7 +131,7 @@ describe('AuthGuard', () => {
       stopTokenRefresh: vi.fn(),
     });
 
-    render(
+    renderWithRouter(
       <AuthGuard>
         <div data-testid="protected-content">Protected Content</div>
       </AuthGuard>
@@ -155,7 +160,7 @@ describe('AuthGuard', () => {
       stopTokenRefresh: vi.fn(),
     });
 
-    render(
+    renderWithRouter(
       <AuthGuard>
         <div data-testid="protected-content">Protected Content</div>
       </AuthGuard>

@@ -181,18 +181,29 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          // Update local state immediately for responsive UI
-          // Note: Profile persistence would require a backend API endpoint
-          // For now, profile updates are stored in local state only
+          const current = get().user;
+          const patch: { username?: string; email?: string } = {};
+          if (current?.username !== userData.username) patch.username = userData.username;
+          if (current?.email !== userData.email) patch.email = userData.email;
+
+          let updatedUser = userData;
+
+          // Cloud mode persists to the registry; local mode keeps client-side state
+          // since the OSS admin doesn't back users with a mutable profile store.
+          if (authApi.isCloud() && Object.keys(patch).length > 0) {
+            const profile = await authApi.updateProfile(patch);
+            updatedUser = {
+              ...userData,
+              id: profile.user_id,
+              username: profile.username,
+              email: profile.email,
+            };
+          }
+
           set({
-            user: userData,
+            user: updatedUser,
             isLoading: false,
           });
-
-          // Optionally persist to localStorage as backup
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('mockforge-user-profile', JSON.stringify(userData));
-          }
         } catch (error) {
           set({ isLoading: false });
           const errorMessage = error instanceof Error ? error.message : 'Profile update failed';

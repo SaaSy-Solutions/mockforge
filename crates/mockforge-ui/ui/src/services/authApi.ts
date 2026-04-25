@@ -33,6 +33,11 @@ const isCloudMode = (): boolean => {
 class AuthApiService {
   private cloud = isCloudMode();
 
+  private authHeader(): Record<string, string> {
+    const token = localStorage.getItem('auth_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
   private async fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     const response = await fetch(url, {
       ...options,
@@ -58,6 +63,23 @@ class AuthApiService {
       }
       return json.data;
     }
+  }
+
+  private async authedFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.authHeader(),
+        ...options.headers,
+      },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(apiErrorMessage(response, body, `HTTP ${response.status}`));
+    }
+    if (response.status === 204) return undefined as unknown as T;
+    return response.json();
   }
 
   async login(usernameOrEmail: string, password: string): Promise<LoginResponse> {
@@ -168,9 +190,141 @@ class AuthApiService {
     }
   }
 
+  /**
+   * Fetch the full profile of the currently-authenticated user.
+   * Cloud-mode only — local admin mode doesn't persist user state.
+   */
+  async getMe(): Promise<UserProfile> {
+    return this.authedFetch<UserProfile>('/api/v1/users/me');
+  }
+
+  async updateProfile(patch: UpdateProfilePayload): Promise<UserProfile> {
+    return this.authedFetch<UserProfile>('/api/v1/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.authedFetch<{ success: boolean; message: string }>(
+      '/api/v1/auth/change-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      },
+    );
+  }
+
+  async updateNotifications(
+    patch: UpdateNotificationsPayload,
+  ): Promise<NotificationsPrefs> {
+    return this.authedFetch<NotificationsPrefs>(
+      '/api/v1/users/me/notifications',
+      {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      },
+    );
+  }
+
+  async getPreferences(): Promise<Record<string, unknown>> {
+    const res = await this.authedFetch<{ preferences: Record<string, unknown> }>(
+      '/api/v1/users/me/preferences',
+    );
+    return res.preferences ?? {};
+  }
+
+  async updatePreferences(
+    patch: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const res = await this.authedFetch<{ preferences: Record<string, unknown> }>(
+      '/api/v1/users/me/preferences',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ preferences: patch }),
+      },
+    );
+    return res.preferences ?? {};
+  }
+
+  async setup2FA(): Promise<TwoFactorSetup> {
+    return this.authedFetch<TwoFactorSetup>('/api/v1/auth/2fa/setup');
+  }
+
+  async verify2FASetup(
+    secret: string,
+    code: string,
+    backupCodes: string[],
+  ): Promise<{ success: boolean; message: string }> {
+    return this.authedFetch<{ success: boolean; message: string }>(
+      '/api/v1/auth/2fa/verify-setup',
+      {
+        method: 'POST',
+        body: JSON.stringify({ secret, code, backup_codes: backupCodes }),
+      },
+    );
+  }
+
+  async disable2FA(password: string): Promise<{ success: boolean; message: string }> {
+    return this.authedFetch<{ success: boolean; message: string }>(
+      '/api/v1/auth/2fa/disable',
+      {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      },
+    );
+  }
+
+  async get2FAStatus(): Promise<{ enabled: boolean; verified_at: string | null }> {
+    return this.authedFetch<{ enabled: boolean; verified_at: string | null }>(
+      '/api/v1/auth/2fa/status',
+    );
+  }
+
   isCloud(): boolean {
     return this.cloud;
   }
+}
+
+export interface UserProfile {
+  user_id: string;
+  username: string;
+  email: string;
+  is_verified: boolean;
+  is_admin: boolean;
+  two_factor_enabled: boolean;
+  email_notifications: boolean;
+  security_alerts: boolean;
+  preferences: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpdateProfilePayload {
+  username?: string;
+  email?: string;
+}
+
+export interface UpdateNotificationsPayload {
+  email_notifications?: boolean;
+  security_alerts?: boolean;
+}
+
+export interface NotificationsPrefs {
+  email_notifications: boolean;
+  security_alerts: boolean;
+}
+
+export interface TwoFactorSetup {
+  secret: string;
+  qr_code_url: string;
+  backup_codes: string[];
 }
 
 export const authApi = new AuthApiService();

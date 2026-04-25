@@ -203,6 +203,16 @@ pub async fn send_rotation_reminders(
             .await?
             .ok_or_else(|| anyhow::anyhow!("User not found"))?;
 
+        // Respect the user's opt-out — this is a non-critical reminder.
+        if !user.email_notifications {
+            tracing::debug!(
+                "Skipping rotation reminder for token {}: user {} has email notifications disabled",
+                token.id,
+                user.id
+            );
+            continue;
+        }
+
         // Build rotation URL
         let rotation_url = format!(
             "{}/settings/api-tokens/rotate/{}",

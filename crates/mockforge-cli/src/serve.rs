@@ -1744,6 +1744,153 @@ pub async fn handle_serve(
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
 
+    // Merge WebSocket router onto the HTTP app so `/ws` and `/ws/{*path}` are
+    // reachable on the same port as HTTP. This is required for hosted mocks,
+    // where Fly.io only exposes port 3000. The separate WS listener below
+    // (config.websocket.port) continues to run for local-dev convenience; set
+    // MOCKFORGE_WS_PORT=0 to skip it.
+    #[cfg(feature = "ws")]
+    {
+        http_app = http_app.merge(mockforge_ws::router());
+        println!("✅ WebSocket endpoint available at /ws (HTTP upgrade)");
+    }
+
+    // Mount the GraphQL router on the HTTP app at /graphql so it's reachable
+    // on the same port as HTTP. Uses the library's default schema generator;
+    // the schema_path config hook is wired separately.
+    #[cfg(feature = "graphql")]
+    {
+        match mockforge_graphql::create_router(None).await {
+            Ok(gql_router) => {
+                http_app = http_app.merge(gql_router);
+                println!(
+                    "✅ GraphQL endpoint available at /graphql (POST queries, GET playground)"
+                );
+            }
+            Err(e) => {
+                tracing::warn!("Failed to build GraphQL router; skipping: {}", e);
+            }
+        }
+    }
+
+    // Mount the recorder API on the public HTTP app so callers can list,
+    // search, replay, and export captured requests on hosted-mock deployments
+    // (where the admin port 9080 isn't exposed). The recorder is opt-in via
+    // `config.observability.recorder.enabled`; if disabled or DB init fails
+    // the recorder middleware doesn't capture and these endpoints aren't
+    // mounted, mirroring the existing behaviour on the admin server.
+    //
+    // Storage caveat: today the recorder writes to a local SQLite file
+    // (`recorder_config.database_path`). Fly machines don't have a volume
+    // mounted by default, so on hosted mocks the capture log is wiped on
+    // every machine restart. Persistence is tracked in #234 and is a
+    // companion to the in-container log shipper (#232).
+    // Initialise the cloud log shipper (#232). When the orchestrator has
+    // wired `MOCKFORGE_LOG_INGEST_URL` + `MOCKFORGE_LOG_INGEST_TOKEN` into
+    // the Fly machine env, this builds an active shipper; otherwise it's a
+    // no-op handle that drops events silently. Layer the capture middleware
+    // onto `http_app` unconditionally — the cost when disabled is one
+    // function call per request.
+    let log_shipper_handle = mockforge_observability::log_shipper::from_env();
+    if log_shipper_handle.is_active() {
+        println!("✅ Cloud log shipper active — request logs forwarded to MockForge Cloud");
+    }
+    {
+        use axum::extract::ConnectInfo;
+        use axum::extract::Request as AxumRequest;
+        use axum::middleware::{from_fn, Next};
+        use axum::response::Response as AxumResponse;
+        use mockforge_observability::log_shipper::{LogShipperHandle, RequestLogEvent};
+        use std::net::SocketAddr;
+
+        async fn shipper_layer(
+            shipper: LogShipperHandle,
+            connect_info: Option<ConnectInfo<SocketAddr>>,
+            req: AxumRequest,
+            next: Next,
+        ) -> AxumResponse {
+            if !shipper.is_active() {
+                return next.run(req).await;
+            }
+            let started = std::time::Instant::now();
+            let method = req.method().to_string();
+            let path = req.uri().path().to_string();
+            let user_agent = req
+                .headers()
+                .get("user-agent")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string());
+            let request_id = req
+                .headers()
+                .get("x-request-id")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string());
+            let bytes_in = req
+                .headers()
+                .get("content-length")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+            let client_ip = connect_info.map(|ci| ci.0.ip().to_string());
+
+            let response = next.run(req).await;
+            let status = response.status().as_u16();
+            let latency_ms = started.elapsed().as_millis().min(u32::MAX as u128) as u32;
+            let bytes_out = response
+                .headers()
+                .get("content-length")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+
+            shipper.enqueue(RequestLogEvent {
+                timestamp: chrono::Utc::now(),
+                method,
+                path,
+                status,
+                latency_ms,
+                matched_route: None,
+                client_ip,
+                user_agent,
+                request_id,
+                bytes_in,
+                bytes_out,
+            });
+
+            response
+        }
+
+        let shipper_clone = log_shipper_handle.clone();
+        http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+            let shipper = shipper_clone.clone();
+            async move {
+                let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
+                shipper_layer(shipper, connect_info, req, next).await
+            }
+        }));
+    }
+
+    #[cfg(feature = "recorder")]
+    if let Some(ref recorder_config) = config.observability.recorder {
+        if recorder_config.enabled {
+            match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path).await {
+                Ok(db) => {
+                    let recorder = std::sync::Arc::new(mockforge_recorder::Recorder::new(db));
+                    let recorder_router = mockforge_recorder::create_api_router(recorder, None);
+                    http_app = http_app.merge(recorder_router);
+                    println!(
+                        "✅ Recorder API available at /api/recorder/* (DB: {})",
+                        recorder_config.database_path
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Recorder DB init failed; /api/recorder routes will not be mounted: {}",
+                        e
+                    );
+                }
+            }
+        }
+    }
+
     // Store chaos_api_state for passing to admin server (Phase 3)
     let chaos_api_state_for_admin = chaos_api_state.clone();
 

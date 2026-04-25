@@ -4,10 +4,12 @@ import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
 import { SimpleThemeToggle } from '../ui/ThemeToggle';
 import { UserProfile } from '../auth/UserProfile';
+import { HelpSupport } from '../auth/HelpSupport';
 import { Logo } from '../ui/Logo';
 import { Input } from '../ui/input';
 import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
+import { useHelpStore } from '../../stores/useHelpStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -62,6 +64,10 @@ import {
   Wifi,
   Share2,
   Lock as LockIcon,
+  Mail,
+  Radio as RadioIcon,
+  MessageCircle as MessageCircleIcon,
+  LifeBuoy,
 } from 'lucide-react';
 import { GlobalConnectionStatus } from './ConnectionStatus';
 
@@ -88,6 +94,14 @@ const navSections = [
       { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
       { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
       { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
+    ]
+  },
+  {
+    titleKey: 'nav.protocolBrokers',
+    items: [
+      { id: 'smtp-mailbox', labelKey: 'tab.smtpMailbox', icon: Mail },
+      { id: 'mqtt-broker', labelKey: 'tab.mqttBroker', icon: RadioIcon },
+      { id: 'kafka-broker', labelKey: 'tab.kafkaBroker', icon: Database },
     ]
   },
   {
@@ -183,6 +197,13 @@ const navSections = [
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
       { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
     ]
+  },
+  {
+    titleKey: 'nav.help',
+    items: [
+      { id: 'faq', labelKey: 'tab.faq', icon: MessageCircleIcon },
+      { id: 'support', labelKey: 'tab.support', icon: LifeBuoy },
+    ]
   }
 ];
 
@@ -207,6 +228,8 @@ const cloudNavItemIds = new Set([
   'publisher-keys',
   'byok',
   'usage',
+  'faq',
+  'support',
 ]);
 
 const effectiveNavSections = isCloudMode
@@ -235,6 +258,10 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const [globalQuery, setGlobalQuery] = useState('');
   const [isMac, setIsMac] = useState(false);
 
+  const helpOpen = useHelpStore(state => state.isOpen);
+  const openHelp = useHelpStore(state => state.open);
+  const setHelpOpen = useHelpStore(state => state.setOpen);
+
   // Setup keyboard shortcuts
   useAppShortcuts({
     onSearch: () => {
@@ -244,6 +271,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
         searchInput.select();
       }
     },
+    onHelp: () => openHelp(),
   });
 
   // Skip links functionality
@@ -433,6 +461,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
           </main>
         </div>
       </div>
+
+      {/* Shared Help & Support modal — opened by Shift+? or the avatar menu. */}
+      <HelpSupport open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

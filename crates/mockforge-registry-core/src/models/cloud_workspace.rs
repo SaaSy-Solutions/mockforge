@@ -16,6 +16,26 @@ pub struct Workspace {
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Added in migration 20250101000038 (drag-reorder).
+    #[serde(default)]
+    pub sort_order: i32,
+    // Added in migration 20250101000039 (workspace encryption toggle).
+    #[serde(default)]
+    pub encryption_enabled: bool,
+    #[serde(default = "default_algorithm")]
+    pub encryption_algorithm: String,
+    #[serde(default = "default_enc_config")]
+    pub encryption_config: serde_json::Value,
+    #[serde(default)]
+    pub encryption_key_rotated_at: Option<DateTime<Utc>>,
+}
+
+fn default_algorithm() -> String {
+    "aes-256-gcm".to_string()
+}
+
+fn default_enc_config() -> serde_json::Value {
+    serde_json::json!({})
 }
 
 /// Summary response matching the frontend WorkspaceSummary interface
@@ -66,10 +86,12 @@ impl Workspace {
             .await
     }
 
-    /// Find all workspaces for an organization
+    /// Find all workspaces for an organization.
+    /// `sort_order` (added in migration 20250101000038) honors drag-to-reorder; ties fall back
+    /// to `created_at DESC` so new workspaces surface first until a user reorders.
     pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
-            "SELECT * FROM workspaces WHERE org_id = $1 ORDER BY created_at DESC",
+            "SELECT * FROM workspaces WHERE org_id = $1 ORDER BY sort_order ASC, created_at DESC",
         )
         .bind(org_id)
         .fetch_all(pool)
@@ -114,6 +136,47 @@ impl Workspace {
             .execute(pool)
             .await?;
         Ok(())
+    }
+
+    /// Flip encryption_enabled and stamp key_rotated_at when turning on.
+    pub async fn set_encryption_enabled(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        enabled: bool,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"UPDATE workspaces
+               SET encryption_enabled = $2,
+                   encryption_key_rotated_at = CASE
+                       WHEN $2 AND encryption_key_rotated_at IS NULL THEN NOW()
+                       ELSE encryption_key_rotated_at
+                   END,
+                   updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(enabled)
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Overwrite the JSONB encryption_config blob.
+    pub async fn set_encryption_config(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        config: &serde_json::Value,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"UPDATE workspaces
+               SET encryption_config = $2, updated_at = NOW()
+               WHERE id = $1
+               RETURNING *"#,
+        )
+        .bind(id)
+        .bind(config)
+        .fetch_optional(pool)
+        .await
     }
 
     /// Convert to summary response (frontend-compatible format)

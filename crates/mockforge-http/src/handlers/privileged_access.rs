@@ -1,5 +1,9 @@
 //! HTTP handlers for privileged access management
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for programmatic PAM integrations. Do not build speculative UI
+//! for these routes without a stakeholder-defined use case.
+//!
 //! This module provides REST API endpoints for managing privileged access requests,
 //! monitoring privileged actions, and managing privileged sessions.
 

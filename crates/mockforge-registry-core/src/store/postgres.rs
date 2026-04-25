@@ -522,6 +522,69 @@ impl RegistryStore for PgRegistryStore {
             .map_err(Into::into)
     }
 
+    async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        username: Option<&str>,
+        email: Option<&str>,
+    ) -> StoreResult<User> {
+        sqlx::query_as::<_, User>(
+            r#"
+            UPDATE users
+            SET
+                username = COALESCE($2, username),
+                email    = COALESCE($3, email),
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(user_id)
+        .bind(username)
+        .bind(email)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn update_user_notification_prefs(
+        &self,
+        user_id: Uuid,
+        email_notifications: bool,
+        security_alerts: bool,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE users
+            SET email_notifications = $2,
+                security_alerts     = $3,
+                updated_at          = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(user_id)
+        .bind(email_notifications)
+        .bind(security_alerts)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(Into::into)
+    }
+
+    async fn update_user_preferences(
+        &self,
+        user_id: Uuid,
+        preferences: &serde_json::Value,
+    ) -> StoreResult<()> {
+        sqlx::query("UPDATE users SET preferences = $2, updated_at = NOW() WHERE id = $1")
+            .bind(user_id)
+            .bind(preferences)
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+    }
+
     async fn create_verification_token(&self, user_id: Uuid) -> StoreResult<VerificationToken> {
         VerificationToken::create(&self.pool, user_id).await.map_err(Into::into)
     }

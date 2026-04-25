@@ -208,12 +208,45 @@ pub async fn verify_2fa_setup(
 
     tracing::info!("2FA enabled for user {}", user_id);
 
+    send_2fa_security_alert(&user, true).await;
+
     Ok(Json(Verify2FASetupResponse {
         success: true,
         message:
             "2FA has been enabled successfully. Please save your backup codes in a safe place."
                 .to_string(),
     }))
+}
+
+/// Send a best-effort security-alert email when 2FA is enabled or disabled.
+/// Gated on the user's `security_alerts` preference. Never fails the request.
+async fn send_2fa_security_alert(user: &mockforge_registry_core::models::User, enabled: bool) {
+    if !user.security_alerts {
+        return;
+    }
+    let Ok(email_service) = crate::email::EmailService::from_env() else {
+        return;
+    };
+    let (headline, detail) = if enabled {
+        (
+            "Two-factor authentication was enabled",
+            "If you did not enable 2FA, contact support immediately — your account may be compromised.",
+        )
+    } else {
+        (
+            "Two-factor authentication was disabled",
+            "If you did not disable 2FA, reset your password immediately and contact support.",
+        )
+    };
+    let msg = crate::email::EmailService::generate_security_alert_email(
+        &user.username,
+        &user.email,
+        headline,
+        detail,
+    );
+    if let Err(e) = email_service.send(msg).await {
+        tracing::warn!("Failed to send 2FA security alert: {}", e);
+    }
 }
 
 /// Simplified verify_2fa_setup that accepts secret
@@ -277,6 +310,8 @@ pub async fn verify_2fa_setup_with_secret(
         )
         .await;
 
+    send_2fa_security_alert(&user, true).await;
+
     Ok(Json(Verify2FASetupResponse {
         success: true,
         message:
@@ -338,6 +373,8 @@ pub async fn disable_2fa(
             None,
         )
         .await;
+
+    send_2fa_security_alert(&user, false).await;
 
     Ok(Json(Disable2FAResponse {
         success: true,

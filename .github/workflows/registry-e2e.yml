@@ -1,0 +1,167 @@
+name: Registry E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'crates/mockforge-registry-server/**'
+      - 'crates/mockforge-registry-core/**'
+      - 'docker-compose.e2e.yml'
+      - '.github/workflows/registry-e2e.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'crates/mockforge-registry-server/**'
+      - 'crates/mockforge-registry-core/**'
+      - 'docker-compose.e2e.yml'
+      - '.github/workflows/registry-e2e.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Shared self-hosted runner: cap parallelism + isolate CARGO_HOME per run to avoid
+  # registry/lockfile churn from sibling runners. Same pattern as integration-tests.yml.
+  CARGO_BUILD_JOBS: "4"
+  CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ github.run_id }}
+  RUSTUP_TOOLCHAIN: stable
+
+concurrency:
+  group: registry-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  registry-e2e:
+    name: Registry E2E (Postgres + MinIO)
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 45
+
+    env:
+      # Bound ports on the compose file. Kept non-default so multiple runners on the
+      # same host could in principle parallelize by overriding these.
+      PG_PORT: "55432"
+      MINIO_PORT: "59000"
+      REGISTRY_PORT: "58080"
+
+      # Wired into both registry-server and the E2E reqwest clients. No untrusted
+      # input flows into these — every value is a literal string controlled by this file.
+      DATABASE_URL: "postgres://postgres:password@localhost:55432/mockforge_registry"
+      JWT_SECRET: "e2e-jwt-secret-do-not-use-in-prod"
+      S3_BUCKET: "mockforge-plugins"
+      S3_REGION: "us-east-1"
+      S3_ENDPOINT: "http://localhost:59000"
+      AWS_ACCESS_KEY_ID: "minioadmin"
+      AWS_SECRET_ACCESS_KEY: "minioadmin"
+      REGISTRY_URL: "http://localhost:58080"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Ensure rustup default = stable
+        run: rustup default stable
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      # Same target/ guard as integration-tests.yml — keeps the shared NVMe from
+      # filling up across sibling runners.
+      - name: Guard target/ size
+        run: |
+          if [ -d target ] && [ "$(du -sb target | awk '{print $1}')" -gt 32212254720 ]; then
+            echo "target/ exceeds 30GB — wiping"
+            rm -rf target
+          fi
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build registry-server
+        # Retry once under shared-runner resource pressure, same as the sibling workflow.
+        run: |
+          cargo build -p mockforge-registry-server --release \
+            || (echo "::warning::first build failed, retrying once" \
+                && cargo build -p mockforge-registry-server --release)
+
+      - name: Start Postgres + MinIO
+        run: |
+          docker compose -f docker-compose.e2e.yml up -d
+          echo "Waiting for Postgres to be healthy..."
+          for i in {1..60}; do
+            if docker inspect --format='{{.State.Health.Status}}' mockforge-e2e-db 2>/dev/null | grep -q healthy; then
+              echo "Postgres healthy"
+              break
+            fi
+            sleep 1
+          done
+          echo "Waiting for MinIO to be healthy..."
+          for i in {1..60}; do
+            if docker inspect --format='{{.State.Health.Status}}' mockforge-e2e-minio 2>/dev/null | grep -q healthy; then
+              echo "MinIO healthy"
+              break
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.e2e.yml logs minio-init || true
+
+      - name: Start registry-server (background)
+        env:
+          # Make sure the server binds to the same port the tests expect.
+          PORT: "58080"
+          HOST: "0.0.0.0"
+        run: |
+          nohup ./target/release/mockforge-registry-server \
+            > registry-server.log 2>&1 &
+          echo $! > registry-server.pid
+          echo "Waiting for registry-server on :${REGISTRY_PORT}..."
+          for i in {1..60}; do
+            if curl -sfS "http://localhost:${REGISTRY_PORT}/health" >/dev/null 2>&1; then
+              echo "registry-server healthy"
+              break
+            fi
+            sleep 1
+          done
+          if ! curl -sfS "http://localhost:${REGISTRY_PORT}/health" >/dev/null 2>&1; then
+            echo "::error::registry-server never became healthy"
+            tail -100 registry-server.log || true
+            exit 1
+          fi
+
+      - name: Run E2E tests
+        # The three E2E targets each gate on `#[ignore]`. Pass `--ignored` to unlock them.
+        # `--test-threads=1` keeps the tests serial; many of them create/delete orgs with
+        # generated-but-occasionally-colliding slugs if two run at the same millisecond.
+        run: |
+          cargo test -p mockforge-registry-server \
+            --test workspace_content_e2e \
+            --test signup_flow_e2e \
+            --test marketplace_e2e \
+            -- --ignored --nocapture --test-threads=1
+
+      - name: Dump registry-server log on failure
+        if: failure()
+        run: |
+          echo "===== registry-server.log (tail) ====="
+          tail -500 registry-server.log || true
+
+      - name: Stop registry-server
+        if: always()
+        run: |
+          if [ -f registry-server.pid ]; then
+            kill "$(cat registry-server.pid)" 2>/dev/null || true
+          fi
+
+      - name: Tear down Postgres + MinIO
+        if: always()
+        run: docker compose -f docker-compose.e2e.yml down -v
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: registry-server-log
+          path: registry-server.log
+          if-no-files-found: ignore

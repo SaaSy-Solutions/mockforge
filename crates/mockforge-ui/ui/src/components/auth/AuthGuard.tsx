@@ -20,6 +20,20 @@ interface AuthGuardProps {
 const isCloud = !!import.meta.env.VITE_API_BASE_URL;
 const SELF_AUTHED_PREFIXES = isCloud ? [] : ['/registry-login', '/registry-admin'];
 
+// Public pages that render without any auth check — legal docs, pricing, support,
+// verification landings. These render the same shell (via AuthGuard passing through)
+// but don't require an authenticated user.
+const PUBLIC_PREFIXES = [
+  '/terms',
+  '/privacy',
+  '/dpa',
+  '/pricing',
+  '/faq',
+  '/support',
+  '/verify-email',
+  '/waitlist',
+];
+
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
   const location = useLocation();
   const { isAuthenticated, user, isLoading, checkAuth } = useAuthStore();
@@ -30,20 +44,25 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     location.pathname.startsWith(p),
   );
 
+  // Public pages (legal, pricing, etc.) render without requiring auth.
+  const isPublic = PUBLIC_PREFIXES.some((p) =>
+    location.pathname.startsWith(p),
+  );
+
   // Check authentication on mount (always called — React hooks
   // must not be conditional). The check is skipped for self-authed
   // paths in the render logic below, not here.
   useEffect(() => {
-    if (!isSelfAuthed) {
+    if (!isSelfAuthed && !isPublic) {
       checkAuth().finally(() => setHasCheckedAuth(true));
     } else {
       setHasCheckedAuth(true);
     }
-  }, [checkAuth, isSelfAuthed]);
+  }, [checkAuth, isSelfAuthed, isPublic]);
 
   // Registry-admin pages carry their own JWT auth — render them
   // directly without waiting for the SaaS auth check.
-  if (isSelfAuthed) {
+  if (isSelfAuthed || isPublic) {
     return <>{children}</>;
   }
 

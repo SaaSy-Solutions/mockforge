@@ -38,6 +38,8 @@ import {
   ToggleRight,
   Brain,
   Link,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
 
@@ -261,6 +263,46 @@ const updateOrgAISettings = (orgId: string, data: Partial<OrgAiSettings>) =>
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+
+// Suspicious activity / security events
+interface SuspiciousActivity {
+  id: string;
+  org_id?: string;
+  user_id?: string;
+  activity_type: string;
+  severity: string;
+  description: string;
+  metadata?: Record<string, unknown>;
+  ip_address?: string;
+  user_agent?: string;
+  resolved: boolean;
+  resolved_at?: string;
+  created_at: string;
+}
+
+interface SuspiciousActivityListResponse {
+  activities: SuspiciousActivity[];
+  total: number;
+}
+
+const fetchSuspiciousActivities = (
+  orgId: string,
+  params: { severity?: string; limit?: number } = {},
+) => {
+  const qs = new URLSearchParams();
+  if (params.severity) qs.set('severity', params.severity);
+  if (params.limit) qs.set('limit', String(params.limit));
+  return apiFetch<SuspiciousActivityListResponse>(
+    `${API_BASE}/security/suspicious-activities${qs.toString() ? `?${qs}` : ''}`,
+    { headers: { 'X-Organization-Id': orgId } },
+  );
+};
+
+const resolveSuspiciousActivity = (orgId: string, activityId: string) =>
+  apiFetch<{ success: boolean; message: string }>(
+    `${API_BASE}/security/suspicious-activities/${activityId}/resolve`,
+    { method: 'POST', headers: { 'X-Organization-Id': orgId } },
+  );
 
 // ─── Helper Components ──────────────────────────────────────────────────────
 
@@ -744,6 +786,118 @@ function AuditLogTab({ org }: { org: Organization }) {
         </>
       ) : (
         <div className="text-center py-8 text-muted-foreground">No audit logs found</div>
+      )}
+    </div>
+  );
+}
+
+function SecurityActivityTab({ org }: { org: Organization }) {
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const [severityFilter, setSeverityFilter] = useState('');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['suspicious-activities', org.id, severityFilter],
+    queryFn: () =>
+      fetchSuspiciousActivities(org.id, {
+        severity: severityFilter || undefined,
+        limit: 100,
+      }),
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: (activityId: string) => resolveSuspiciousActivity(org.id, activityId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suspicious-activities', org.id] });
+      showToast('Marked as resolved', 'success');
+    },
+    onError: (err: Error) => showToast(err.message, 'error'),
+  });
+
+  const severityBadge = (severity: string) => {
+    const s = severity.toLowerCase();
+    if (s === 'critical' || s === 'high') {
+      return (
+        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+          {severity}
+        </Badge>
+      );
+    }
+    if (s === 'medium') {
+      return (
+        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+          {severity}
+        </Badge>
+      );
+    }
+    return <Badge variant="secondary">{severity}</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Label className="text-sm">Severity:</Label>
+        <select
+          className="border rounded px-2 py-1 text-sm bg-background"
+          value={severityFilter}
+          onChange={(e) => setSeverityFilter(e.target.value)}
+        >
+          <option value="">All severities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {data ? `${data.total} unresolved` : ''}
+        </span>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-4 text-muted-foreground">Loading security events…</div>
+      ) : data && data.activities.length > 0 ? (
+        <div className="space-y-2">
+          {data.activities.map((activity) => (
+            <div key={activity.id} className="p-3 border rounded-lg text-sm">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                  <Badge variant="secondary" className="text-xs">
+                    {activity.activity_type}
+                  </Badge>
+                  {severityBadge(activity.severity)}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(activity.created_at).toLocaleString()}
+                </span>
+              </div>
+              <p className="text-muted-foreground">{activity.description}</p>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                {activity.ip_address && <span>IP: {activity.ip_address}</span>}
+                {activity.user_agent && (
+                  <span className="truncate max-w-md" title={activity.user_agent}>
+                    UA: {activity.user_agent}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resolveMutation.isPending}
+                  onClick={() => resolveMutation.mutate(activity.id)}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Mark resolved
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          No unresolved suspicious activities.
+        </div>
       )}
     </div>
   );
@@ -1547,6 +1701,10 @@ export function OrganizationPage() {
                     <Brain className="w-4 h-4 mr-1" />
                     AI
                   </TabsTrigger>
+                  <TabsTrigger value="security">
+                    <AlertTriangle className="w-4 h-4 mr-1" />
+                    Security
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="members" className="mt-4">
@@ -1579,6 +1737,10 @@ export function OrganizationPage() {
 
                 <TabsContent value="ai" className="mt-4">
                   <AISettingsTab org={selectedOrg} />
+                </TabsContent>
+
+                <TabsContent value="security" className="mt-4">
+                  <SecurityActivityTab org={selectedOrg} />
                 </TabsContent>
               </Tabs>
             </CardContent>

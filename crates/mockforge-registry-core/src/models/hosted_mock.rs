@@ -78,6 +78,200 @@ impl HealthStatus {
     }
 }
 
+/// Protocols that can be enabled on a hosted mock deployment.
+///
+/// Tracks two things at once: what protocol crate the deployed
+/// `mockforge-cli` will serve, and how Fly.io should expose it. Some
+/// protocols ride on the HTTP port (WS upgrade / GraphQL POST) so the Fly
+/// service config doesn't change; others need their own TCP service entry
+/// and may need TLS handlers.
+///
+/// Plan gating in [`Protocol::min_plan`] keeps Free deployments to HTTP-only,
+/// Pro adds gRPC, and Team unlocks the full broker set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Protocol {
+    Http,
+    #[serde(alias = "ws")]
+    WebSocket,
+    #[serde(alias = "gql")]
+    GraphQL,
+    #[serde(alias = "grpc")]
+    Grpc,
+    Smtp,
+    Mqtt,
+    Kafka,
+    Amqp,
+    Tcp,
+}
+
+impl Protocol {
+    /// Lowest plan tier that may enable this protocol.
+    pub fn min_plan(self) -> &'static str {
+        match self {
+            Protocol::Http | Protocol::WebSocket | Protocol::GraphQL => "free",
+            Protocol::Grpc => "pro",
+            Protocol::Smtp | Protocol::Mqtt | Protocol::Kafka | Protocol::Amqp | Protocol::Tcp => {
+                "team"
+            }
+        }
+    }
+
+    /// Internal port the protocol binds inside the container.
+    /// `None` for protocols that share the HTTP listener (handled by the
+    /// in-process router merge done in mockforge-cli's `serve` command).
+    pub fn internal_port(self) -> Option<u16> {
+        match self {
+            Protocol::Http | Protocol::WebSocket | Protocol::GraphQL => None,
+            Protocol::Grpc => Some(50051),
+            Protocol::Smtp => Some(1025),
+            Protocol::Mqtt => Some(1883),
+            Protocol::Kafka => Some(9092),
+            Protocol::Amqp => Some(5672),
+            Protocol::Tcp => Some(9999),
+        }
+    }
+
+    /// Public port to expose on Fly. Same as `internal_port` by default;
+    /// SMTP runs on 2525 publicly because many ISPs block outbound 25.
+    pub fn public_port(self) -> Option<u16> {
+        match self {
+            Protocol::Smtp => Some(2525),
+            other => other.internal_port(),
+        }
+    }
+
+    /// Fly TLS handlers to attach. `["tls"]` for binary protocols that
+    /// terminate TLS at Fly's edge; `[]` for plain TCP; `["h2"]` for gRPC.
+    pub fn fly_handlers(self) -> &'static [&'static str] {
+        match self {
+            Protocol::Grpc => &["tls", "h2"],
+            Protocol::Smtp | Protocol::Mqtt | Protocol::Amqp => &["tls"],
+            Protocol::Kafka | Protocol::Tcp => &[],
+            Protocol::Http | Protocol::WebSocket | Protocol::GraphQL => &[],
+        }
+    }
+
+    /// Env var pair set on the Fly machine to enable this protocol in the
+    /// `mockforge-cli serve` runtime. `None` for protocols that are always
+    /// on (HTTP) or merged into HTTP (WS/GraphQL).
+    pub fn enable_env(self) -> Option<(&'static str, String)> {
+        match self {
+            Protocol::Grpc => Some(("MOCKFORGE_GRPC_ENABLED", "true".to_string())),
+            Protocol::Smtp => Some(("MOCKFORGE_SMTP_ENABLED", "true".to_string())),
+            Protocol::Mqtt => Some(("MOCKFORGE_MQTT_ENABLED", "true".to_string())),
+            Protocol::Kafka => Some(("MOCKFORGE_KAFKA_ENABLED", "true".to_string())),
+            Protocol::Amqp => Some(("MOCKFORGE_AMQP_ENABLED", "true".to_string())),
+            Protocol::Tcp => Some(("MOCKFORGE_TCP_ENABLED", "true".to_string())),
+            Protocol::Http | Protocol::WebSocket | Protocol::GraphQL => None,
+        }
+    }
+}
+
+/// `true` if every protocol in `requested` is allowed on the given plan.
+/// Plan ordering is `free < pro < team`.
+pub fn protocols_allowed_on_plan(requested: &[Protocol], plan: &str) -> bool {
+    let plan_rank = plan_rank(plan);
+    requested.iter().all(|p| plan_rank >= plan_rank_str(p.min_plan()))
+}
+
+fn plan_rank(plan: &str) -> u8 {
+    plan_rank_str(plan)
+}
+
+fn plan_rank_str(plan: &str) -> u8 {
+    match plan {
+        "team" | "enterprise" => 3,
+        "pro" => 2,
+        "free" => 1,
+        _ => 1,
+    }
+}
+
+#[cfg(test)]
+mod protocol_tests {
+    use super::*;
+
+    #[test]
+    fn http_is_free_tier() {
+        assert_eq!(Protocol::Http.min_plan(), "free");
+        assert_eq!(Protocol::WebSocket.min_plan(), "free");
+        assert_eq!(Protocol::GraphQL.min_plan(), "free");
+    }
+
+    #[test]
+    fn grpc_is_pro_tier() {
+        assert_eq!(Protocol::Grpc.min_plan(), "pro");
+    }
+
+    #[test]
+    fn brokers_are_team_tier() {
+        for p in [
+            Protocol::Smtp,
+            Protocol::Mqtt,
+            Protocol::Kafka,
+            Protocol::Amqp,
+            Protocol::Tcp,
+        ] {
+            assert_eq!(p.min_plan(), "team", "{:?} should be team-tier", p);
+        }
+    }
+
+    #[test]
+    fn plan_gate_rejects_lower_tier() {
+        // Free user requesting gRPC → blocked.
+        assert!(!protocols_allowed_on_plan(&[Protocol::Grpc], "free"));
+        // Free user with HTTP only → fine.
+        assert!(protocols_allowed_on_plan(&[Protocol::Http], "free"));
+        // Pro user with gRPC → fine.
+        assert!(protocols_allowed_on_plan(&[Protocol::Http, Protocol::Grpc], "pro"));
+        // Pro user with Kafka (team-only) → blocked.
+        assert!(!protocols_allowed_on_plan(&[Protocol::Kafka], "pro"));
+        // Team user with everything → fine.
+        assert!(protocols_allowed_on_plan(
+            &[
+                Protocol::Http,
+                Protocol::Grpc,
+                Protocol::Kafka,
+                Protocol::Smtp
+            ],
+            "team"
+        ));
+    }
+
+    #[test]
+    fn http_merged_protocols_have_no_internal_port() {
+        assert!(Protocol::Http.internal_port().is_none());
+        assert!(Protocol::WebSocket.internal_port().is_none());
+        assert!(Protocol::GraphQL.internal_port().is_none());
+    }
+
+    #[test]
+    fn smtp_public_port_dodges_isp_blocks() {
+        // Public port should be 2525 (not 25/465) to avoid outbound-25 blocks.
+        assert_eq!(Protocol::Smtp.public_port(), Some(2525));
+        // Internal port stays 1025 because that's what mockforge-smtp binds.
+        assert_eq!(Protocol::Smtp.internal_port(), Some(1025));
+    }
+
+    #[test]
+    fn grpc_uses_h2_handler() {
+        assert!(Protocol::Grpc.fly_handlers().contains(&"h2"));
+        assert!(Protocol::Grpc.fly_handlers().contains(&"tls"));
+    }
+
+    #[test]
+    fn enable_env_skips_http_family() {
+        assert!(Protocol::Http.enable_env().is_none());
+        assert!(Protocol::WebSocket.enable_env().is_none());
+        assert!(Protocol::GraphQL.enable_env().is_none());
+        assert_eq!(
+            Protocol::Grpc.enable_env(),
+            Some(("MOCKFORGE_GRPC_ENABLED", "true".to_string()))
+        );
+    }
+}
+
 /// Hosted mock deployment
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct HostedMock {
@@ -114,6 +308,40 @@ impl HostedMock {
     /// Get health status as enum
     pub fn health_status(&self) -> HealthStatus {
         HealthStatus::from_str(&self.health_status).unwrap_or(HealthStatus::Unknown)
+    }
+
+    /// Protocols enabled on this deployment. Persisted inside `config_json`
+    /// (under the `"enabled_protocols"` key) so we don't need a schema
+    /// migration on first land. Defaults to `[Protocol::Http]` when missing
+    /// or malformed — every deployment gets HTTP, and that's the only
+    /// protocol guaranteed today.
+    pub fn enabled_protocols(&self) -> Vec<Protocol> {
+        self.config_json
+            .get("enabled_protocols")
+            .and_then(|v| serde_json::from_value::<Vec<Protocol>>(v.clone()).ok())
+            .filter(|v| !v.is_empty())
+            .map(|mut v| {
+                if !v.contains(&Protocol::Http) {
+                    v.insert(0, Protocol::Http);
+                }
+                v
+            })
+            .unwrap_or_else(|| vec![Protocol::Http])
+    }
+
+    /// Compute the Fly.io app name used at deploy time.
+    ///
+    /// Mirrors the format built in
+    /// `mockforge-registry-server::deployment::orchestrator` — the orchestrator
+    /// is the single source of truth for the on-wire name, but we need the
+    /// same value in other subsystems (e.g. Fly Prometheus metric queries in
+    /// `fly_metrics`). Keep this method in lockstep with the orchestrator.
+    pub fn fly_app_name(&self) -> String {
+        format!(
+            "mockforge-{}-{}",
+            self.org_id.to_string().replace('-', "").chars().take(8).collect::<String>(),
+            self.slug
+        )
     }
 
     /// Create a new hosted mock deployment

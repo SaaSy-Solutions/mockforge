@@ -1,5 +1,5 @@
-import { logger } from '@/utils/logger';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -39,7 +39,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
   const shortcuts = [
     { keys: `${modKey} + K`, description: 'Focus global search' },
     { keys: 'Esc', description: 'Clear search / Close dialogs' },
-    { keys: `${modKey} + /`, description: 'Show keyboard shortcuts' },
+    { keys: 'Shift + ?', description: 'Open Help & Support' },
   ];
 
   const faqs = [
@@ -222,8 +222,38 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
           </Tabs>
         </TabsProvider>
 
-        <DialogFooter className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-          <div className="flex items-center gap-4 text-sm">
+        <DialogFooter className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 flex-wrap gap-y-2">
+          <div className="flex items-center gap-4 text-sm flex-wrap">
+            <Link
+              to="/faq"
+              onClick={() => onOpenChange(false)}
+              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Full FAQ
+            </Link>
+            <Link
+              to="/support"
+              onClick={() => onOpenChange(false)}
+              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Contact support
+            </Link>
+            <Link
+              to="/terms"
+              onClick={() => onOpenChange(false)}
+              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            >
+              Terms
+            </Link>
+            <Link
+              to="/privacy"
+              onClick={() => onOpenChange(false)}
+              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            >
+              Privacy
+            </Link>
             <a
               href="https://github.com/SaaSy-Solutions/mockforge"
               target="_blank"

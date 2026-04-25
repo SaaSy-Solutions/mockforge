@@ -17,6 +17,7 @@ pub mod oauth;
 pub mod org_templates;
 pub mod organization_settings;
 pub mod organizations;
+pub mod otlp;
 pub mod password_reset;
 pub mod pillar_analytics;
 pub mod plugins;
@@ -31,6 +32,7 @@ pub mod support;
 pub mod tokens;
 pub mod two_factor;
 pub mod usage;
+pub mod users_me;
 pub mod verification;
 
 // Marketplace, settings, security, GDPR, and audit handlers
@@ -44,3 +46,11 @@ pub mod template_reviews;
 pub mod templates;
 pub mod token_rotation;
 pub mod waitlist;
+
+// Workspace content (environments, variables, folders, requests, import, activate/reorder)
+pub mod workspace_encryption;
+pub mod workspace_environments;
+pub mod workspace_folders;
+pub mod workspace_import;
+pub mod workspace_ordering;
+pub mod workspace_request_execute;
