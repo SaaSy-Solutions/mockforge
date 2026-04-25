@@ -4,7 +4,32 @@ This guide covers how to run MockForge using Docker and Docker Compose for both 
 
 ## 🚀 Quick Start
 
-### Using Docker Compose (Recommended)
+### Pull the prebuilt image (fastest)
+
+Images are published to GitHub Container Registry on every push to
+`main` and on every semver tag. Currently `linux/amd64` only; arm64
+builds are on the roadmap. No auth is needed to pull.
+
+```bash
+# Latest main build
+docker pull ghcr.io/saasy-solutions/mockforge:latest
+
+# Or pin a release
+docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
+
+# Run with the default example spec + admin UI
+docker run --rm -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
+  -e MOCKFORGE_ADMIN_ENABLED=true \
+  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  ghcr.io/saasy-solutions/mockforge:latest
+```
+
+Admin UI: <http://localhost:9080> — log in with `admin` / `admin123`
+(or `editor` / `editor123`, `viewer` / `viewer123`).
+
+### Build from source with Docker Compose
+
+Use this if you're iterating on MockForge itself.
 
 ```bash
 # Clone the repository

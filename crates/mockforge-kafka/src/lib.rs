@@ -126,10 +126,20 @@
 
 pub mod broker;
 pub mod consumer_groups;
+pub mod fetch_codec;
+pub mod fetch_nonflex;
+pub mod fixture_executor;
+pub mod fixture_file;
 pub mod fixtures;
+pub mod group_codec;
+pub mod group_coordinator;
+pub mod listoffsets_codec;
 pub mod metrics;
 pub mod partitions;
+pub mod produce_codec;
+pub mod produce_nonflex;
 pub mod protocol;
+pub mod record_compression;
 /// Unified protocol server lifecycle implementation (KafkaMockServer)
 pub mod server;
 pub mod spec_registry;
@@ -138,6 +148,9 @@ pub mod topics;
 // Re-export main types
 pub use broker::KafkaMockBroker;
 pub use consumer_groups::{ConsumerGroup, ConsumerGroupManager};
+pub use fixture_file::{
+    FlattenedFixtures, KafkaFixtureFile, KafkaMessageSpec, KafkaTopicSpec, MessageAutoProduce,
+};
 pub use fixtures::{AutoProduceConfig, KafkaFixture};
 pub use metrics::{KafkaMetrics, MetricsExporter, MetricsSnapshot};
 pub use partitions::{KafkaMessage, Partition};

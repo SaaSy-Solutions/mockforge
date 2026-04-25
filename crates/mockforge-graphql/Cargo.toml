@@ -18,6 +18,9 @@ missing_docs = "deny"
 # GraphQL implementation - simplified for basic functionality
 async-graphql = { version = "7.0", features = ["apollo_tracing"] }
 async-graphql-axum = "7.0"
+# Streams for the Subscription root (`tick` emits a stream of ints).
+futures = { workspace = true }
+async-stream = "0.3"
 
 # Workspace dependencies
 tokio = { workspace = true }
@@ -53,7 +56,12 @@ default = ["data-faker"]
 data-faker = ["mockforge-data"]
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
 tower = { workspace = true }
 opentelemetry_sdk = "0.22"
 tempfile = "3.8"
+# Real GraphQL-over-WebSocket client for the subscriptions e2e test.
+tokio-tungstenite = "0.24"
+reqwest = { workspace = true, features = ["json"] }
+futures = { workspace = true }
+url = "2"

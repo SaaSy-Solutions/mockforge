@@ -57,9 +57,10 @@ const updateFixtureMutate = vi.fn().mockResolvedValue(mockFixtures[0]);
 const deleteFixtureMutate = vi.fn().mockResolvedValue(undefined);
 const renameFixtureMutate = vi.fn().mockResolvedValue(undefined);
 const moveFixtureMutate = vi.fn().mockResolvedValue(undefined);
-const downloadFixtureMutate = vi
-  .fn()
-  .mockResolvedValue({ blob: new Blob(['{}'], { type: 'application/json' }), filename: 'f.json' });
+const downloadFixtureMutate = vi.fn().mockResolvedValue({
+  blob: new Blob(['{}'], { type: 'application/json' }),
+  filename: 'f.json',
+});
 
 vi.mock('../../hooks/api', () => ({
   useFixtures: vi.fn(() => ({
@@ -133,8 +134,6 @@ describe('FixturesPage', () => {
     expect(screen.getByText('Path: /api/users')).toBeInTheDocument();
     expect(screen.getByText('Path: /api/posts')).toBeInTheDocument();
     expect(screen.getByText('User listing')).toBeInTheDocument();
-    // Tags render both as per-fixture badges and in the tag-filter panel,
-    // so "auth"/"users" legitimately appear multiple times.
     expect(screen.getAllByText('auth').length).toBeGreaterThan(0);
     expect(screen.getAllByText('users').length).toBeGreaterThan(0);
   });

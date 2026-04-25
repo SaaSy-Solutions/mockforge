@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* Map CSS variables defined in :root / .dark below into Tailwind v4 utilities.
+   `inline` keeps the var() reference so `.dark` class swaps work automatically. */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
 /* Modern design tokens via CSS variables */
 @layer base {
   :root {
@@ -332,4 +356,26 @@
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--muted-foreground));
   }
+}
+
+/* High-contrast mode — triggered by preferences.theme.highContrast. Pushes
+   muted text and borders to full contrast for improved legibility. */
+.high-contrast {
+  --muted-foreground: 220 10% 20%;
+  --text-secondary: 220 10% 20%;
+  --text-tertiary: 220 10% 25%;
+  --border: 220 15% 40%;
+  --input: 220 15% 40%;
+}
+.high-contrast.dark,
+.dark.high-contrast {
+  --muted-foreground: 210 25% 92%;
+  --text-secondary: 210 25% 92%;
+  --text-tertiary: 210 20% 82%;
+  --border: 215 20% 65%;
+  --input: 215 20% 65%;
+}
+.high-contrast *:focus-visible {
+  outline: 3px solid hsl(var(--ring));
+  outline-offset: 2px;
 }

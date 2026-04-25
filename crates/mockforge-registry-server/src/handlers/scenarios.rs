@@ -632,3 +632,91 @@ pub struct PublishScenarioResponse {
     pub download_url: String,
     pub published_at: String,
 }
+
+/// Slim scenario entry returned by the org-scoped list / lookup endpoints.
+///
+/// Excludes marketplace-only fields (rating, downloads, verification) that
+/// aren't useful to the federation-activation picker.
+#[derive(Debug, Serialize)]
+pub struct OrgScenarioEntry {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub description: String,
+    pub current_version: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub manifest_json: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl OrgScenarioEntry {
+    fn from_model(s: crate::models::Scenario) -> Self {
+        Self {
+            id: s.id,
+            name: s.name,
+            slug: s.slug,
+            description: s.description,
+            current_version: s.current_version,
+            category: s.category,
+            tags: s.tags,
+            manifest_json: s.manifest_json,
+            created_at: s.created_at.to_rfc3339(),
+            updated_at: s.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// `GET /api/v1/scenarios` — list scenarios belonging to the caller's org.
+///
+/// Backs the federation "Activate Scenario" picker. Only scenarios whose
+/// `org_id` matches the caller's resolved org context are returned; public
+/// marketplace scenarios (with `org_id = NULL`) are excluded — use the
+/// marketplace search endpoint for those.
+pub async fn list_org_scenarios(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<OrgScenarioEntry>>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let scenarios = state.store.list_scenarios_by_org(org_ctx.org_id).await?;
+    Ok(Json(scenarios.into_iter().map(OrgScenarioEntry::from_model).collect()))
+}
+
+/// `GET /api/v1/scenarios/{id}` — fetch one scenario by UUID, org-scoped.
+///
+/// Returns 400 if the scenario isn't visible to the caller's org (either
+/// missing entirely or owned by another org). Marketplace scenarios
+/// (`org_id = NULL`) are allowed — they're readable by anyone.
+pub async fn get_org_scenario_by_id(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<OrgScenarioEntry>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let scenario = state
+        .store
+        .find_scenario_by_id(id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Scenario not found".to_string()))?;
+
+    match scenario.org_id {
+        None => {} // public marketplace scenario; everyone can read
+        Some(sid) if sid == org_ctx.org_id => {}
+        Some(_) => {
+            return Err(ApiError::InvalidRequest(
+                "Scenario does not belong to this organization".to_string(),
+            ));
+        }
+    }
+
+    Ok(Json(OrgScenarioEntry::from_model(scenario)))
+}

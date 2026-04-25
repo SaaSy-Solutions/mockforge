@@ -34,11 +34,20 @@ regex = { workspace = true }
 tokio-rustls = "0.24"
 rustls-pemfile = "1.0"
 rustls = "0.23"
+base64 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
 tempfile = "3.0"
 criterion = { workspace = true }
+# Real SMTP client for the end-to-end regression test — sends a message
+# via the mock server and we then inspect the captured mailbox.
+# `rustls-tls` enables lettre's TLS support against the STARTTLS-upgraded
+# mock; `dangerous-tls` (via rustls crate below) lets tests accept the
+# self-signed cert we generate with `rcgen` at test setup.
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1", "tokio1-rustls-tls", "pool"] }
+# Generate a self-signed cert/key for the STARTTLS test.
+rcgen = "0.13"
 
 [[bench]]
 name = "smtp_benchmarks"

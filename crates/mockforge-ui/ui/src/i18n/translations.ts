@@ -16,6 +16,13 @@ const en: Dictionary = {
   'a11y.skipSearch': 'Skip to search',
   'a11y.mainNavigation': 'Main navigation',
   'a11y.mainContent': 'Main content',
+  'a11y.collapseSidebar': 'Collapse sidebar',
+  'a11y.expandSidebar': 'Expand sidebar',
+  'a11y.searchScope': 'Search scope',
+  'search.scope.all': 'All',
+  'search.scope.current': 'Current page',
+  'search.scope.logs': 'Logs only',
+  'search.scope.services': 'Services only',
 
   'nav.core': 'Core',
   'nav.servicesData': 'Services & Data',
@@ -96,6 +103,9 @@ const en: Dictionary = {
   'tab.usage': 'Plan & Usage',
   'tab.userManagement': 'User Management',
 
+  'nav.localOnly.badge': 'Local',
+  'nav.localOnly.tooltip': 'Requires a local MockForge instance',
+
   'page.config.title': 'Configuration',
   'page.config.subtitle': 'Manage MockForge settings and preferences',
   'page.plugins.title': 'Plugin Management',
@@ -127,6 +137,13 @@ const es: Dictionary = {
   'a11y.skipSearch': 'Saltar a busqueda',
   'a11y.mainNavigation': 'Navegacion principal',
   'a11y.mainContent': 'Contenido principal',
+  'a11y.collapseSidebar': 'Contraer barra lateral',
+  'a11y.expandSidebar': 'Expandir barra lateral',
+  'a11y.searchScope': 'Ambito de busqueda',
+  'search.scope.all': 'Todo',
+  'search.scope.current': 'Pagina actual',
+  'search.scope.logs': 'Solo registros',
+  'search.scope.services': 'Solo servicios',
 
   'nav.core': 'Nucleo',
   'nav.servicesData': 'Servicios y Datos',
@@ -141,6 +158,9 @@ const es: Dictionary = {
   'nav.plugins': 'Plugins',
   'nav.configuration': 'Configuracion',
   'nav.help': 'Ayuda',
+
+  'nav.localOnly.badge': 'Local',
+  'nav.localOnly.tooltip': 'Requiere una instancia local de MockForge',
 };
 
 export const translations: Record<Locale, Dictionary> = { en, es };

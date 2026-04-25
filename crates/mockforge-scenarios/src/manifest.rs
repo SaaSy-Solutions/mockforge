@@ -106,6 +106,93 @@ pub struct ScenarioManifest {
     /// config when the scenario is applied to a workspace.
     #[serde(default)]
     pub mockai_config: Option<crate::mockai_integration::MockAIConfigDefinition>,
+
+    /// Per-service overrides applied when this scenario is activated on a
+    /// federation.
+    ///
+    /// Keyed by the `ServiceBoundary.name` of services in the federation.
+    /// Services absent from this map receive no overrides — they observe
+    /// only the scenario's global settings.
+    ///
+    /// Empty / missing when the manifest is activated on a single workspace
+    /// (outside of a federation). Federation activation merges these on top
+    /// of the workspace's defaults.
+    #[serde(default)]
+    pub service_overrides: std::collections::HashMap<String, ServiceScenarioOverride>,
+}
+
+/// Per-service knobs a scenario can adjust at activation time.
+///
+/// Every field is optional — an override only touches the dimensions the
+/// scenario author actually wants to change, and leaves the workspace's
+/// existing settings alone otherwise. The runtime poller reads these and
+/// applies them to the matching actuator (chaos engine, reality-level
+/// resolver, latency injector).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ServiceScenarioOverride {
+    /// Swap the service's reality level while the scenario is active. Valid
+    /// values match `mockforge_federation::ServiceRealityLevel::from_str`:
+    /// `real`, `mock_v3`, `blended`, `chaos_driven`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reality_level: Option<String>,
+
+    /// Chaos intensity in `[0.0, 1.0]`. `0.0` disables chaos for this
+    /// service regardless of global settings; `1.0` means maximum chaos.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chaos_level: Option<f64>,
+
+    /// Forced failure rate in `[0.0, 1.0]` — fraction of requests that
+    /// should return an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_rate: Option<f64>,
+
+    /// Extra latency (milliseconds) added to every response.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+
+    /// Human-readable note surfaced in the UI alongside the override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+
+    /// Plugin-specific or forward-compatible extensions.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl ServiceScenarioOverride {
+    /// Validate the override's numeric fields are in range.
+    ///
+    /// Returns a human-readable error describing the first offending field.
+    /// Called by the registry handler before persisting an activation so bad
+    /// values surface as a 400 rather than confusing runtime behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if any of `chaos_level`, `failure_rate`, or
+    /// `reality_level` is outside its valid domain.
+    pub fn validate(&self) -> std::result::Result<(), String> {
+        if let Some(level) = self.chaos_level {
+            if !(0.0..=1.0).contains(&level) {
+                return Err(format!("chaos_level must be in [0.0, 1.0], got {level}"));
+            }
+        }
+        if let Some(rate) = self.failure_rate {
+            if !(0.0..=1.0).contains(&rate) {
+                return Err(format!("failure_rate must be in [0.0, 1.0], got {rate}"));
+            }
+        }
+        if let Some(ref level) = self.reality_level {
+            match level.as_str() {
+                "real" | "mock_v3" | "blended" | "chaos_driven" => {}
+                other => {
+                    return Err(format!(
+                        "reality_level must be one of real|mock_v3|blended|chaos_driven, got '{other}'"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn default_timestamp() -> DateTime<Utc> {
@@ -138,6 +225,7 @@ impl ScenarioManifest {
             state_machine_graphs: HashMap::new(),
             vbr_entities: None,
             mockai_config: None,
+            service_overrides: HashMap::new(),
         }
     }
 

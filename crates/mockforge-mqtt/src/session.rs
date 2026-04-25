@@ -214,6 +214,12 @@ pub struct ActiveClient {
     pub session: ClientSession,
     /// Channel to send packets to the client
     pub sender: ClientSender,
+    /// Last-will-and-testament declared on CONNECT. The broker stores it
+    /// here until the client either disconnects gracefully (in which
+    /// case the will is dropped) or the TCP connection goes away without
+    /// a DISCONNECT packet (in which case the will is published per
+    /// MQTT spec §3.1.2.5).
+    pub will: Option<crate::protocol::Will>,
 }
 
 /// Session manager for tracking all client sessions
@@ -249,6 +255,7 @@ impl SessionManager {
         clean_session: bool,
         keep_alive: u16,
         sender: ClientSender,
+        will: Option<crate::protocol::Will>,
     ) -> Result<(bool, ConnackCode), ConnackCode> {
         let active = self.active_clients.read().await;
         if active.len() >= self.max_connections {
@@ -290,7 +297,14 @@ impl SessionManager {
             (ClientSession::new(client_id.clone(), false, keep_alive), false)
         };
 
-        active.insert(client_id.clone(), ActiveClient { session, sender });
+        active.insert(
+            client_id.clone(),
+            ActiveClient {
+                session,
+                sender,
+                will,
+            },
+        );
 
         if let Some(metrics) = &self.metrics {
             metrics.record_connection();
@@ -304,30 +318,99 @@ impl SessionManager {
         Ok((session_present, ConnackCode::Accepted))
     }
 
-    /// Handle client disconnect
-    pub async fn disconnect(&self, client_id: &str) {
+    /// Handle client disconnect.
+    ///
+    /// `graceful = true` means a DISCONNECT packet was received: the
+    /// client is leaving cleanly and the Last Will is discarded per
+    /// MQTT spec. `graceful = false` means the TCP connection closed
+    /// without a DISCONNECT (process crash, network drop, etc.) — in
+    /// that case, if the client declared a will on CONNECT, the broker
+    /// publishes it on behalf of the departed client.
+    pub async fn disconnect(&self, client_id: &str, graceful: bool) {
         let mut active = self.active_clients.write().await;
-        if let Some(client) = active.remove(client_id) {
-            if !client.session.clean_session {
-                // Persist session for later reconnection
-                let mut persistent = self.persistent_sessions.write().await;
-                persistent.insert(client_id.to_string(), client.session);
-                info!("Persisted session for client {}", client_id);
-            } else {
-                // Clean session - remove subscriptions
-                let mut topics = self.topics.write().await;
-                for filter in client.session.subscriptions.keys() {
-                    topics.unsubscribe(filter, client_id);
+        let client = match active.remove(client_id) {
+            Some(c) => c,
+            None => return,
+        };
 
+        // Capture the will before we decide whether to persist the
+        // session. If the disconnect was ungraceful and a will is set,
+        // we publish it after releasing `active` to avoid recursive
+        // lock acquisition via `handle_publish`.
+        let will_to_fire = if graceful { None } else { client.will.clone() };
+
+        if !client.session.clean_session {
+            // Persist session for later reconnection
+            let mut persistent = self.persistent_sessions.write().await;
+            persistent.insert(client_id.to_string(), client.session);
+            info!("Persisted session for client {}", client_id);
+        } else {
+            // Clean session - remove subscriptions
+            let mut topics = self.topics.write().await;
+            for filter in client.session.subscriptions.keys() {
+                topics.unsubscribe(filter, client_id);
+
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_unsubscription();
+                }
+            }
+            info!("Cleaned up session for client {}", client_id);
+        }
+
+        if let Some(metrics) = &self.metrics {
+            metrics.record_connection_closed();
+        }
+
+        drop(active);
+
+        if let Some(will) = will_to_fire {
+            info!(
+                "Publishing Last Will for disconnected client {} on topic {}",
+                client_id, will.topic
+            );
+            self.publish_will(client_id, will).await;
+        }
+    }
+
+    /// Publish a Last Will. Delivered to current subscribers of the
+    /// topic and — if the will's `retain` flag is set — stored as the
+    /// topic's retained message so future subscribers see it too.
+    async fn publish_will(&self, client_id: &str, will: crate::protocol::Will) {
+        // Persist retained first, so a subscribe that races with the
+        // will publish still sees it through the retained-delivery path.
+        if will.retain {
+            let mut topics = self.topics.write().await;
+            topics.retain_message(&will.topic, will.message.clone(), will.qos as u8);
+            if let Some(metrics) = &self.metrics {
+                metrics.record_retained_message();
+            }
+        }
+
+        // Forward to every current subscriber, matching the regular
+        // PUBLISH path's QoS rules.
+        let topics = self.topics.read().await;
+        let subscribers = topics.match_topic(&will.topic);
+        let active = self.active_clients.read().await;
+        for sub in subscribers {
+            if sub.client_id == client_id {
+                continue; // Don't send back to the dead client
+            }
+            if let Some(c) = active.get(&sub.client_id) {
+                let delivery_qos = std::cmp::min(will.qos as u8, sub.qos);
+                let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
+                let packet = Packet::Publish(PublishPacket {
+                    dup: false,
+                    qos: delivery_qos,
+                    retain: false, // not a retained delivery — live forwarding
+                    topic: will.topic.clone(),
+                    packet_id: None,
+                    payload: will.message.clone(),
+                });
+                if c.sender.send(packet).await.is_ok() {
                     if let Some(metrics) = &self.metrics {
-                        metrics.record_unsubscription();
+                        metrics.record_delivery();
                     }
                 }
-                info!("Cleaned up session for client {}", client_id);
-            }
-
-            if let Some(metrics) = &self.metrics {
-                metrics.record_connection_closed();
             }
         }
     }
@@ -340,9 +423,16 @@ impl SessionManager {
     ) -> Option<Vec<SubackReturnCode>> {
         let mut active = self.active_clients.write().await;
         let client = active.get_mut(client_id)?;
+        let sender = client.sender.clone();
 
         let mut topics = self.topics.write().await;
         let mut return_codes = Vec::new();
+        // Snapshot every retained PUBLISH that matches one of the new
+        // subscriptions so we can deliver after releasing the `topics`
+        // write lock. MQTT spec: retained messages MUST be delivered
+        // with the retain flag set, and the delivery QoS is the minimum
+        // of the retained QoS and the subscription QoS.
+        let mut retained_to_deliver: Vec<(String, Vec<u8>, u8, QoS)> = Vec::new();
 
         for (filter, requested_qos) in subscriptions {
             // Add to topic tree
@@ -358,7 +448,46 @@ impl SessionManager {
                 metrics.record_subscription();
             }
 
+            // Collect any retained PUBLISH matching this filter.
+            for (topic, retained) in topics.get_retained_for_filter(&filter) {
+                retained_to_deliver.push((
+                    topic.to_string(),
+                    retained.payload.clone(),
+                    retained.qos,
+                    requested_qos,
+                ));
+            }
+
             debug!("Client {} subscribed to {} with QoS {:?}", client_id, filter, requested_qos);
+        }
+
+        drop(topics);
+        drop(active);
+
+        // Deliver retained messages. Done *after* the locks are released
+        // so a backpressured `sender.send` can't deadlock against another
+        // handler that takes these same locks.
+        for (topic, payload, retained_qos, sub_qos) in retained_to_deliver {
+            let delivery_qos = std::cmp::min(retained_qos, sub_qos as u8);
+            let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
+            let packet = Packet::Publish(PublishPacket {
+                dup: false,
+                qos: delivery_qos,
+                retain: true, // spec: set on delivery to a new subscriber
+                topic: topic.clone(),
+                // Leave packet_id = None for QoS > 0; the writer task
+                // assigns it from the subscriber's session to avoid the
+                // packet_id=0 wire error (same invariant as regular
+                // publishes, see handle_publish).
+                packet_id: None,
+                payload,
+            });
+            if sender.send(packet).await.is_ok() {
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_delivery();
+                }
+                debug!("Delivered retained message to {} on topic {}", client_id, topic);
+            }
         }
 
         Some(return_codes)
@@ -430,16 +559,20 @@ impl SessionManager {
                 let delivery_qos = std::cmp::min(publish.qos as u8, sub.qos);
                 let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
 
+                // Leave `packet_id = None` for QoS > 0 forwards — the writer
+                // task picks up `is_none()` and calls `assign_packet_id`
+                // against the subscriber's session. A previous version set
+                // this to `Some(0)` expecting the writer to overwrite it,
+                // but the writer only fills `is_none()`, so the PUBLISH
+                // shipped with packet_id=0 on the wire, which MQTT spec
+                // forbids for QoS > 0 (librdkafka/rumqttc clients reject
+                // with "Packet id Zero" and drop the connection).
                 let packet = Packet::Publish(PublishPacket {
                     dup: false,
                     qos: delivery_qos,
                     retain: false, // Only first delivery can have retain
                     topic: publish.topic.clone(),
-                    packet_id: if delivery_qos != QoS::AtMostOnce {
-                        Some(0) // Will be assigned by receiver
-                    } else {
-                        None
-                    },
+                    packet_id: None,
                     payload: publish.payload.clone(),
                 });
 
@@ -563,7 +696,10 @@ impl SessionManager {
 
         for client_id in &expired {
             warn!("Disconnecting expired session: {}", client_id);
-            self.disconnect(client_id).await;
+            // Keep-alive timeout is an ungraceful disconnect per MQTT
+            // spec — the client didn't send a DISCONNECT, so fire its
+            // Last Will if one was declared.
+            self.disconnect(client_id, /* graceful */ false).await;
         }
 
         expired
@@ -573,6 +709,19 @@ impl SessionManager {
     pub async fn assign_packet_id(&self, client_id: &str) -> Option<u16> {
         let mut active = self.active_clients.write().await;
         active.get_mut(client_id).map(|c| c.session.next_packet_id())
+    }
+
+    /// Atomically assign a packet id *and* register the QoS 2 outbound
+    /// state so the subscriber's PUBREC lands in `handle_pubrec` with a
+    /// matching entry. If these two steps are separate, a racing PUBREC
+    /// from a very fast subscriber could arrive between them and get
+    /// silently dropped.
+    pub async fn assign_packet_id_qos2(&self, client_id: &str) -> Option<u16> {
+        let mut active = self.active_clients.write().await;
+        let client = active.get_mut(client_id)?;
+        let id = client.session.next_packet_id();
+        client.session.start_qos2_outbound(id);
+        Some(id)
     }
 
     /// Get a client's subscriptions
@@ -781,7 +930,7 @@ mod tests {
         let manager = SessionManager::new(100, None);
         let (tx, _rx) = mpsc::channel(10);
 
-        let result = manager.connect("client-1".to_string(), true, 60, tx).await;
+        let result = manager.connect("client-1".to_string(), true, 60, tx, None).await;
         assert!(result.is_ok());
         let (session_present, code) = result.unwrap();
         assert!(!session_present);
@@ -795,8 +944,8 @@ mod tests {
         let manager = SessionManager::new(100, None);
         let (tx, _rx) = mpsc::channel(10);
 
-        manager.connect("client-1".to_string(), true, 60, tx).await.unwrap();
-        manager.disconnect("client-1").await;
+        manager.connect("client-1".to_string(), true, 60, tx, None).await.unwrap();
+        manager.disconnect("client-1", true).await;
 
         assert_eq!(manager.connection_count().await, 0);
     }
@@ -807,7 +956,7 @@ mod tests {
 
         // First connection with clean_session=false
         let (tx1, _rx1) = mpsc::channel(10);
-        manager.connect("client-1".to_string(), false, 60, tx1).await.unwrap();
+        manager.connect("client-1".to_string(), false, 60, tx1, None).await.unwrap();
 
         // Subscribe
         manager
@@ -815,11 +964,11 @@ mod tests {
             .await;
 
         // Disconnect
-        manager.disconnect("client-1").await;
+        manager.disconnect("client-1", true).await;
 
         // Reconnect - should have session
         let (tx2, _rx2) = mpsc::channel(10);
-        let result = manager.connect("client-1".to_string(), false, 60, tx2).await;
+        let result = manager.connect("client-1".to_string(), false, 60, tx2, None).await;
         let (session_present, _) = result.unwrap();
         assert!(session_present);
     }
@@ -829,7 +978,7 @@ mod tests {
         let manager = SessionManager::new(100, None);
         let (tx, _rx) = mpsc::channel(10);
 
-        manager.connect("client-1".to_string(), true, 60, tx).await.unwrap();
+        manager.connect("client-1".to_string(), true, 60, tx, None).await.unwrap();
 
         let result = manager
             .subscribe(
@@ -853,7 +1002,7 @@ mod tests {
         let manager = SessionManager::new(100, None);
         let (tx, _rx) = mpsc::channel(10);
 
-        manager.connect("client-1".to_string(), true, 60, tx).await.unwrap();
+        manager.connect("client-1".to_string(), true, 60, tx, None).await.unwrap();
 
         manager
             .subscribe("client-1", vec![("topic/a".to_string(), QoS::AtMostOnce)])
@@ -871,10 +1020,10 @@ mod tests {
         let (tx2, _rx2) = mpsc::channel(10);
         let (tx3, _rx3) = mpsc::channel(10);
 
-        manager.connect("client-1".to_string(), true, 60, tx1).await.unwrap();
-        manager.connect("client-2".to_string(), true, 60, tx2).await.unwrap();
+        manager.connect("client-1".to_string(), true, 60, tx1, None).await.unwrap();
+        manager.connect("client-2".to_string(), true, 60, tx2, None).await.unwrap();
 
-        let result = manager.connect("client-3".to_string(), true, 60, tx3).await;
+        let result = manager.connect("client-3".to_string(), true, 60, tx3, None).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), ConnackCode::ServerUnavailable);
     }

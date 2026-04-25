@@ -465,9 +465,16 @@ async fn handle_tls_connection(
     // Create channel for sending packets to this client
     let (tx, mut rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
 
-    // Register with session manager
+    // Register with session manager (also hands over the Last Will,
+    // which the broker fires on abrupt disconnect).
     let connect_result = session_manager
-        .connect(cid.clone(), connect_packet.clean_session, connect_packet.keep_alive, tx)
+        .connect(
+            cid.clone(),
+            connect_packet.clean_session,
+            connect_packet.keep_alive,
+            tx,
+            connect_packet.will.clone(),
+        )
         .await;
 
     let session_present = match connect_result {
@@ -525,15 +532,20 @@ async fn handle_tls_connection(
     )
     .await;
 
-    // Clean up on disconnect
-    session_manager.disconnect(&cid).await;
+    // `Ok(true)`  = graceful DISCONNECT; `Ok(false)` = TCP EOF;
+    // `Err(_)`    = transport error. Will fires unless graceful.
+    let graceful = matches!(result, Ok(true));
+    session_manager.disconnect(&cid, graceful).await;
     info!("TLS client {} disconnected", cid);
 
-    result
+    result.map(|_| ())
 }
 
 /// Handle the main TLS client message loop
 #[allow(clippy::too_many_arguments)]
+/// TLS counterpart of `handle_client_loop`. Returns `Ok(true)` for a
+/// graceful DISCONNECT packet, `Ok(false)` for TCP EOF — only the
+/// `true` case suppresses the Last Will.
 async fn handle_tls_client_loop<R, W>(
     reader: &mut tokio::io::BufReader<R>,
     writer: &mut W,
@@ -544,7 +556,7 @@ async fn handle_tls_client_loop<R, W>(
     buffer: &mut [u8],
     buf_len: &mut usize,
     max_packet_size: usize,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
@@ -555,8 +567,8 @@ where
             read_result = reader.read(&mut buffer[*buf_len..]) => {
                 match read_result {
                     Ok(0) => {
-                        debug!("TLS client {} closed connection", client_id);
-                        return Ok(());
+                        debug!("TLS client {} closed connection (EOF)", client_id);
+                        return Ok(false);
                     }
                     Ok(n) => {
                         *buf_len += n;
@@ -583,7 +595,7 @@ where
                                 metrics,
                             ).await {
                                 Ok(true) => continue,
-                                Ok(false) => return Ok(()), // Disconnect requested
+                                Ok(false) => return Ok(true), // DISCONNECT packet
                                 Err(e) => {
                                     warn!("Error handling packet from TLS client {}: {}", client_id, e);
                                     metrics.record_error(&e.to_string());
@@ -602,13 +614,27 @@ where
                 match packet {
                     Some(Packet::Disconnect) => {
                         debug!("Sending disconnect to TLS client {}", client_id);
-                        return Ok(());
+                        return Ok(true);
                     }
                     Some(mut packet) => {
-                        // Assign packet ID for QoS > 0 publish packets
+                        // Assign packet ID for QoS > 0 publish packets.
+                        // For QoS 2 we also need to register outbound
+                        // state up-front so the subscriber's PUBREC
+                        // has a matching entry to match against — the
+                        // "atomic" helper assigns the id and inserts
+                        // into pending_qos2_out in the same lock scope.
                         if let Packet::Publish(ref mut publish) = packet {
-                            if publish.qos != QoS::AtMostOnce && publish.packet_id.is_none() {
-                                if let Some(id) = session_manager.assign_packet_id(client_id).await {
+                            if publish.packet_id.is_none() {
+                                let maybe_id = match publish.qos {
+                                    QoS::AtMostOnce => None,
+                                    QoS::AtLeastOnce => {
+                                        session_manager.assign_packet_id(client_id).await
+                                    }
+                                    QoS::ExactlyOnce => {
+                                        session_manager.assign_packet_id_qos2(client_id).await
+                                    }
+                                };
+                                if let Some(id) = maybe_id {
                                     publish.packet_id = Some(id);
                                 }
                             }
@@ -619,7 +645,7 @@ where
                     }
                     None => {
                         debug!("Channel closed for TLS client {}", client_id);
-                        return Ok(());
+                        return Ok(true);
                     }
                 }
             }
@@ -844,9 +870,16 @@ async fn handle_connection(
     // Create channel for sending packets to this client
     let (tx, mut rx) = mpsc::channel(CLIENT_CHANNEL_CAPACITY);
 
-    // Register with session manager
+    // Register with session manager (also hands over the Last Will,
+    // which the broker fires on abrupt disconnect).
     let connect_result = session_manager
-        .connect(cid.clone(), connect_packet.clean_session, connect_packet.keep_alive, tx)
+        .connect(
+            cid.clone(),
+            connect_packet.clean_session,
+            connect_packet.keep_alive,
+            tx,
+            connect_packet.will.clone(),
+        )
         .await;
 
     let session_present = match connect_result {
@@ -906,14 +939,23 @@ async fn handle_connection(
     )
     .await;
 
-    // Clean up on disconnect
-    session_manager.disconnect(&cid).await;
+    // `Ok(true)`  = graceful DISCONNECT packet received.
+    // `Ok(false)` = TCP EOF without a DISCONNECT (ungraceful).
+    // `Err(_)`    = transport error (also ungraceful).
+    // The Last Will fires in the ungraceful cases per MQTT §3.1.2.5.
+    let graceful = matches!(result, Ok(true));
+    session_manager.disconnect(&cid, graceful).await;
     info!("Client {} disconnected", cid);
 
-    result
+    result.map(|_| ())
 }
 
-/// Handle the main client message loop
+/// Handle the main client message loop.
+///
+/// Returns `Ok(true)` when the client sent a graceful DISCONNECT
+/// packet, `Ok(false)` when the TCP stream was closed without one
+/// (EOF). Both are "normal" exits from the broker's perspective; only
+/// the `Ok(true)` variant should suppress the Last Will.
 #[allow(clippy::too_many_arguments)]
 async fn handle_client_loop(
     reader: &mut tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
@@ -925,15 +967,17 @@ async fn handle_client_loop(
     buffer: &mut [u8],
     buf_len: &mut usize,
     max_packet_size: usize,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
     loop {
         tokio::select! {
             // Handle incoming packets from client
             read_result = reader.read(&mut buffer[*buf_len..]) => {
                 match read_result {
                     Ok(0) => {
-                        debug!("Client {} closed connection", client_id);
-                        return Ok(());
+                        debug!("Client {} closed connection (EOF)", client_id);
+                        // EOF without a DISCONNECT packet is ungraceful
+                        // — publish the Last Will.
+                        return Ok(false);
                     }
                     Ok(n) => {
                         *buf_len += n;
@@ -960,7 +1004,7 @@ async fn handle_client_loop(
                                 metrics,
                             ).await {
                                 Ok(true) => continue,
-                                Ok(false) => return Ok(()), // Disconnect requested
+                                Ok(false) => return Ok(true), // DISCONNECT packet = graceful
                                 Err(e) => {
                                     warn!("Error handling packet from {}: {}", client_id, e);
                                     metrics.record_error(&e.to_string());
@@ -978,14 +1022,32 @@ async fn handle_client_loop(
             packet = packet_rx.recv() => {
                 match packet {
                     Some(Packet::Disconnect) => {
+                        // Server-initiated disconnect (takeover from a
+                        // newer connection with the same client_id).
+                        // Treat as graceful so we don't fire the will
+                        // against a client that didn't actually crash.
                         debug!("Sending disconnect to {}", client_id);
-                        return Ok(());
+                        return Ok(true);
                     }
                     Some(mut packet) => {
-                        // Assign packet ID for QoS > 0 publish packets
+                        // Assign packet ID for QoS > 0 publish packets.
+                        // For QoS 2 we also need to register outbound
+                        // state up-front so the subscriber's PUBREC
+                        // has a matching entry to match against — the
+                        // "atomic" helper assigns the id and inserts
+                        // into pending_qos2_out in the same lock scope.
                         if let Packet::Publish(ref mut publish) = packet {
-                            if publish.qos != QoS::AtMostOnce && publish.packet_id.is_none() {
-                                if let Some(id) = session_manager.assign_packet_id(client_id).await {
+                            if publish.packet_id.is_none() {
+                                let maybe_id = match publish.qos {
+                                    QoS::AtMostOnce => None,
+                                    QoS::AtLeastOnce => {
+                                        session_manager.assign_packet_id(client_id).await
+                                    }
+                                    QoS::ExactlyOnce => {
+                                        session_manager.assign_packet_id_qos2(client_id).await
+                                    }
+                                };
+                                if let Some(id) = maybe_id {
                                     publish.packet_id = Some(id);
                                 }
                             }
@@ -995,8 +1057,10 @@ async fn handle_client_loop(
                         writer.write_all(&bytes).await?;
                     }
                     None => {
+                        // Sender dropped — broker shutting down. Don't
+                        // fire the will in that case either.
                         debug!("Channel closed for {}", client_id);
-                        return Ok(());
+                        return Ok(true);
                     }
                 }
             }
@@ -1296,8 +1360,10 @@ mod tests {
         let server = MqttServer::new(&config, metrics);
 
         let (tx, _rx) = mpsc::channel(10);
-        let result =
-            server.session_manager().connect("test-client".to_string(), true, 60, tx).await;
+        let result = server
+            .session_manager()
+            .connect("test-client".to_string(), true, 60, tx, None)
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(server.session_manager().connection_count().await, 1);

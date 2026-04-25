@@ -140,6 +140,18 @@ impl QueueManager {
         }
     }
 
+    /// Declare a queue. AMQP spec: declaring a queue that already
+    /// exists with the same flags is a no-op — it MUST NOT clear
+    /// the queue's state or drop pending messages. Previously this
+    /// method replaced the existing queue on every call, so a
+    /// durable queue's contents evaporated the moment a second
+    /// client redeclared it on reconnect.
+    ///
+    /// We use `entry(...).or_insert_with(...)` so the existing
+    /// queue (and its messages) survives. Callers that need strict
+    /// AMQP conformance around mismatched flags can layer a
+    /// channel-error response on top; for this PR's scope
+    /// (durability) we just preserve the existing queue.
     pub fn declare_queue(
         &mut self,
         name: String,
@@ -147,8 +159,35 @@ impl QueueManager {
         exclusive: bool,
         auto_delete: bool,
     ) {
-        let queue = Queue::new(name.clone(), durable, exclusive, auto_delete);
-        self.queues.insert(name, queue);
+        self.queues
+            .entry(name.clone())
+            .or_insert_with(|| Queue::new(name, durable, exclusive, auto_delete));
+    }
+
+    /// Variant of `declare_queue` that also applies `x-message-ttl`,
+    /// `x-dead-letter-exchange`, and `x-dead-letter-routing-key`
+    /// derived from the queue's declare-time field-table. Applied
+    /// only when the queue is freshly created — redeclarations
+    /// preserve the existing properties to match AMQP spec
+    /// idempotence.
+    #[allow(clippy::too_many_arguments)]
+    pub fn declare_queue_with_args(
+        &mut self,
+        name: String,
+        durable: bool,
+        exclusive: bool,
+        auto_delete: bool,
+        message_ttl: Option<Duration>,
+        dead_letter_exchange: Option<String>,
+        dead_letter_routing_key: Option<String>,
+    ) {
+        self.queues.entry(name.clone()).or_insert_with(|| {
+            let mut q = Queue::new(name, durable, exclusive, auto_delete);
+            q.properties.message_ttl = message_ttl;
+            q.properties.dead_letter_exchange = dead_letter_exchange;
+            q.properties.dead_letter_routing_key = dead_letter_routing_key;
+            q
+        });
     }
 
     pub fn get_queue(&self, name: &str) -> Option<&Queue> {

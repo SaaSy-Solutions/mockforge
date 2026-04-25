@@ -4,6 +4,7 @@
 
 import type { User } from '../types';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { isCloudMode } from '../utils/cloudMode';
 
 export interface LoginResponse {
   token: string;
@@ -24,18 +25,29 @@ interface LocalApiResponse<T> {
   timestamp: string;
 }
 
-// Detect cloud mode: VITE_API_BASE_URL is set in .env.production
-const isCloudMode = (): boolean => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL;
-  return !!apiBase && apiBase !== '';
-};
-
 class AuthApiService {
   private cloud = isCloudMode();
 
   private authHeader(): Record<string, string> {
     const token = localStorage.getItem('auth_token');
     return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  private async authedFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const response = await fetch(path, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.authHeader(),
+        ...options.headers,
+      },
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(apiErrorMessage(response, body, `HTTP ${response.status}`));
+    }
+    if (response.status === 204) return undefined as unknown as T;
+    return response.json();
   }
 
   private async fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -63,23 +75,6 @@ class AuthApiService {
       }
       return json.data;
     }
-  }
-
-  private async authedFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(path, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.authHeader(),
-        ...options.headers,
-      },
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(apiErrorMessage(response, body, `HTTP ${response.status}`));
-    }
-    if (response.status === 204) return undefined as unknown as T;
-    return response.json();
   }
 
   async login(usernameOrEmail: string, password: string): Promise<LoginResponse> {

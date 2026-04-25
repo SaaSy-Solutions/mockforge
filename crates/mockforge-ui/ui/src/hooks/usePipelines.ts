@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/utils/errorHandling';
 
 const API_BASE = '/api/v1/pipelines';

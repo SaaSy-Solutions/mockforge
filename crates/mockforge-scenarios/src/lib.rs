@@ -45,6 +45,7 @@
 
 pub mod domain_pack;
 pub mod error;
+pub mod federation_runtime;
 pub mod installer;
 pub mod manifest;
 pub mod mockai_integration;
@@ -68,8 +69,16 @@ pub use domain_pack::{
     StudioChaosRule, StudioContractDiff, StudioPersona, StudioRealityBlend,
 };
 pub use error::{Result, ScenarioError};
+pub use federation_runtime::{
+    spawn_from_env as spawn_federation_scenario_poller, ApplyOutcome, ApplyStatus,
+    FederationScenarioPoller, LoggingApplicator, PollError, PollTransport, ReqwestPollTransport,
+    ScenarioApplicator, WorkspaceActiveScenarioEntry, WorkspaceActiveScenariosResponse,
+};
 pub use installer::{InstallOptions, ScenarioInstaller};
-pub use manifest::{CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest};
+pub use manifest::{
+    CompatibilityInfo, PluginDependency, ScenarioCategory, ScenarioManifest,
+    ServiceScenarioOverride,
+};
 pub use mockai_integration::{
     apply_mockai_config, MockAIConfigDefinition, MockAIIntegrationConfig, MockAIMergeMode,
 };

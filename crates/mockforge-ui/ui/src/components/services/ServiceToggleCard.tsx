@@ -1,5 +1,6 @@
 import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { Switch } from '../ui/switch';
 import { Button } from '../ui/button';
 import { ContextMenuWithItems, type ContextMenuItem } from '../ui/ContextMenu';
@@ -10,9 +11,12 @@ import { generateCurlCommand, copyToClipboard } from '../../utils/curlGenerator'
 interface ServiceToggleCardProps {
   service: ServiceInfo;
   onToggleService: (serviceId: string, enabled: boolean) => void;
-  onToggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void;
+  onToggleRoute: (serviceId: string, routeId: string, enabled: boolean) => void | Promise<void>;
   expanded?: boolean;
   onToggleExpanded: (serviceId: string) => void;
+  showManagementActions?: boolean;
+  onEditService?: () => void;
+  onDeleteService?: () => void;
 }
 
 export function ServiceToggleCard({
@@ -20,7 +24,10 @@ export function ServiceToggleCard({
   onToggleService,
   onToggleRoute,
   expanded = false,
-  onToggleExpanded
+  onToggleExpanded,
+  showManagementActions = false,
+  onEditService,
+  onDeleteService,
 }: ServiceToggleCardProps) {
   const enabledRoutes = service.routes.filter(route => route.enabled !== false).length;
   const totalRoutes = service.routes.length;
@@ -94,6 +101,29 @@ export function ServiceToggleCard({
                 {tag}
               </span>
             ))}
+            {showManagementActions && onEditService && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Edit ${service.name}`}
+                title="Edit service"
+                onClick={onEditService}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            {showManagementActions && onDeleteService && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Delete ${service.name}`}
+                title="Delete service"
+                onClick={onDeleteService}
+                className="text-red-500 hover:text-red-600"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

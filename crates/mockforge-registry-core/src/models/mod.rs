@@ -8,6 +8,7 @@ pub mod cloud_service;
 pub mod cloud_workspace;
 pub mod feature_usage;
 pub mod federation;
+pub mod federation_scenario_activation;
 pub mod hosted_mock;
 pub mod login_attempt;
 pub mod mock_environment;
@@ -46,6 +47,9 @@ pub use audit_log::record_audit_event;
 pub use audit_log::AuditEventType;
 pub use cloud_workspace::Workspace as CloudWorkspace;
 pub use federation::Federation;
+pub use federation_scenario_activation::{
+    FederationScenarioActivation, FederationScenarioActivationStatus, PerServiceActivationState,
+};
 pub use hosted_mock::{
     protocols_allowed_on_plan, DeploymentStatus, HealthStatus, HostedMock, Protocol,
 };

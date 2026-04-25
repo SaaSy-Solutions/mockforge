@@ -194,7 +194,7 @@ export function FAQPage() {
               View Documentation
             </a>
             <a
-              href="https://discord.gg/mockforge"
+              href="https://discord.gg/vk22xwxug3"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 border border-border rounded-md hover:bg-muted transition-colors flex items-center gap-2"

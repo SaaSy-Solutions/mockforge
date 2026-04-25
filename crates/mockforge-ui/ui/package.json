@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:cloud": "VITE_MOCKFORGE_MODE=cloud VITE_API_BASE_URL=https://api.mockforge.dev vite build",
     "build:analyze": "vite build && open dist/stats.html",
+    "deploy:cloud": "pnpm build:cloud && wrangler pages deploy dist --project-name mockforge-admin-ui --branch main --commit-dirty=true",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -1,8 +1,8 @@
 # Pin hooks to the pre-commit stage only. Without this, any hook that doesn't
 # declare `stages:` runs at every installed git-hook type. When the commit-msg
 # hook is also installed (see `ls .git/hooks/`), that means the full hook set
-# (clippy + cargo-check included) runs twice per commit. All hooks below are
-# source-state checks, so pre-commit is the only stage that makes sense.
+# (clippy included) runs twice per commit. All hooks below are source-state
+# checks, so pre-commit is the only stage that makes sense.
 default_stages: [pre-commit]
 
 repos:
@@ -58,28 +58,31 @@ repos:
     entry: cargo clippy --all-targets --all-features --workspace --exclude mockforge-desktop
     language: system
     pass_filenames: false
-  - id: cargo-check
-    name: cargo-check
-    entry: cargo check --workspace --exclude mockforge-desktop
-    language: system
-    pass_filenames: false
+    # `cargo check` is intentionally NOT run here. `cargo clippy --all-targets
+    # --all-features` is a strict superset of `cargo check --workspace` (clippy
+    # type-checks everything check does, plus more targets/features). Running
+    # both back-to-back roughly doubles pre-commit time because clippy and check
+    # write incompatible metadata into target/ and invalidate each other's
+    # incremental cache (rust-lang/cargo#9307).
   - id: typos
     name: typos
     entry: typos
     language: system
     pass_filenames: false
-    exclude: ^(book/|target/|\.git/|crates/mockforge-ui/ui/dist/)
+    # Exclusions live in .typos.toml (`[files] extend-exclude`). A pre-commit
+    # `exclude:` here has no effect when pass_filenames is false.
   - id: rust-fmt
     name: rust fmt
     entry: cargo fmt --check --all
     language: system
     files: \.(rs)$
-    exclude: ^(target/|book/|crates/mockforge-registry-server/)
+    exclude: ^(target/|book/)
     pass_filenames: false
   - id: cargo-audit
     name: cargo audit
-    entry: cargo
-    args: [audit, --ignore, RUSTSEC-2023-0071, --ignore, RUSTSEC-2026-0020, --ignore, RUSTSEC-2026-0021, --ignore, RUSTSEC-2026-0037, --ignore, RUSTSEC-2026-0085, --ignore, RUSTSEC-2026-0086, --ignore, RUSTSEC-2026-0087, --ignore, RUSTSEC-2026-0088, --ignore, RUSTSEC-2026-0089, --ignore, RUSTSEC-2026-0091, --ignore, RUSTSEC-2026-0092, --ignore, RUSTSEC-2026-0094, --ignore, RUSTSEC-2026-0095, --ignore, RUSTSEC-2026-0096, --ignore, RUSTSEC-2026-0002, --ignore, RUSTSEC-2026-0093, --ignore, RUSTSEC-2026-0098, --ignore, RUSTSEC-2026-0099, --ignore, RUSTSEC-2026-0008, --ignore, RUSTSEC-2026-0104, --ignore, RUSTSEC-2026-0105]
+    # Wrapper reads ignores from audit.toml (single source of truth). See
+    # scripts/precommit/cargo_audit.py and the header of audit.toml.
+    entry: python3 scripts/precommit/cargo_audit.py
     language: system
     pass_filenames: false
-    files: ^Cargo\.(toml|lock)$
+    files: ^(Cargo\.(toml|lock)|audit\.toml)$

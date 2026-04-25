@@ -26,12 +26,24 @@ async-trait = { workspace = true }
 rand = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+# CRC-32/Castagnoli (CRC32C) for RecordBatch v2. librdkafka validates the
+# batch CRC and drops batches where it doesn't match, so Fetch responses
+# need an accurate implementation.
+crc32c = "0.6"
+# RecordBatch v2 compression codecs. librdkafka and confluent-kafka-python
+# both default to `compression.type=none` but real producers often flip
+# snappy/zstd on by default, so we need the 4 codecs the attributes bits
+# 0–2 can encode.
+flate2 = "1.0"       # gzip
+snap = "1.1"         # snappy
+lz4_flex = { version = "0.11", default-features = false, features = ["std", "frame"] }
+zstd = "0.13"
 
 [[bench]]
 name = "kafka_benchmarks"
 harness = false
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }

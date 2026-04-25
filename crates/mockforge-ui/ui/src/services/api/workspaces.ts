@@ -36,10 +36,10 @@ import {
   type WorkspaceSummary,
 } from '../../schemas/api';
 import { fetchJson, fetchJsonWithValidation } from './client';
-import { IS_CLOUD } from '../../utils/mode';
+import { isCloudMode } from '../../utils/cloudMode';
 
-const WORKSPACE_API_BASE = IS_CLOUD ? '/api/v1/workspaces' : '/__mockforge/workspaces';
-const IMPORT_API_BASE = IS_CLOUD ? '/api/v1/import' : '/__mockforge/import';
+const isCloud = isCloudMode();
+const WORKSPACE_API_BASE = isCloud ? '/api/v1/workspaces' : '/__mockforge/workspaces';
 
 class WorkspacesApiMixin {
   // ==================== WORKSPACE CRUD ====================
@@ -60,6 +60,14 @@ class WorkspacesApiMixin {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
+    }) as Promise<CreateWorkspaceResponse>;
+  }
+
+  async openWorkspaceFromDirectory(directory: string): Promise<CreateWorkspaceResponse> {
+    return fetchJson(`${WORKSPACE_API_BASE}/open-from-directory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory }),
     }) as Promise<CreateWorkspaceResponse>;
   }
 
@@ -106,7 +114,7 @@ class WorkspacesApiMixin {
   }
 
   async previewImport(request: ImportToWorkspaceRequest): Promise<ImportResponse> {
-    return fetchJson(`${IMPORT_API_BASE}/preview`, {
+    return fetchJson('/__mockforge/import/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

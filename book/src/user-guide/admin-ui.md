@@ -29,12 +29,18 @@ Access the interface at `http://localhost:9080/admin` (or your configured admin 
 
 ### Authentication
 
-The Admin UI includes secure authentication with two built-in roles:
+The Admin UI includes secure authentication with three built-in roles:
 
 #### Admin Role
 - **Username**: `admin`
 - **Password**: `admin123`
 - **Permissions**: Full access to all features
+
+#### Editor Role
+- **Username**: `editor`
+- **Password**: `editor123`
+- **Permissions**: Create/edit fixtures, routes, and configuration (no user
+  management)
 
 #### Viewer Role
 - **Username**: `viewer`
@@ -292,42 +298,39 @@ The Admin UI supports light and dark themes with CSS custom properties:
 
 The Admin UI communicates with MockForge through RESTful APIs:
 
+The embedded admin server exposes its API under `/__mockforge/*` (the
+hosted cloud registry uses a different `/api/v1/*` prefix; see the Cloud
+Workspaces guide for that surface).
+
 ```http
-# Service management
-GET    /api/v2/services
-PUT    /api/v2/services/{id}
-POST   /api/v2/services/bulk
+# Service & route listing
+GET    /__mockforge/routes
+GET    /__mockforge/server-info
 
 # Fixture management
-GET    /api/v2/fixtures
-POST   /api/v2/fixtures
-PUT    /api/v2/fixtures/{id}
-DELETE /api/v2/fixtures/{id}
+GET    /__mockforge/fixtures
+POST   /__mockforge/fixtures
+PUT    /__mockforge/fixtures/{id}
+DELETE /__mockforge/fixtures/{id}
 
 # Authentication
-POST   /api/v2/auth/login
-POST   /api/v2/auth/refresh
-POST   /api/v2/auth/logout
+POST   /__mockforge/auth/login
+POST   /__mockforge/auth/refresh
+POST   /__mockforge/auth/logout
+GET    /__mockforge/auth/me
 
 # Logs and metrics
-GET    /api/v2/logs
-GET    /api/v2/metrics/latency
-GET    /api/v2/metrics/failures
+GET    /__mockforge/logs
+GET    /__mockforge/metrics
 ```
 
-### WebSocket Endpoints
+### Server-Sent Events
 
-Real-time features use WebSocket connections:
+Real-time features stream over SSE:
 
 ```http
 # Live log streaming
-WS /api/v2/logs/stream
-
-# Metrics updates
-WS /api/v2/metrics/stream
-
-# Configuration changes
-WS /api/v2/config/stream
+GET /__mockforge/logs/sse
 ```
 
 ## Troubleshooting
@@ -339,19 +342,24 @@ WS /api/v2/config/stream
 # Check JWT secret configuration
 MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
 
-# Verify admin credentials
-curl -X POST http://localhost:9080/api/v2/auth/login \
+# Verify admin credentials against the embedded admin server
+curl -X POST http://localhost:9080/__mockforge/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin123"}'
 ```
 
-#### WebSocket Connection Issues
-```bash
-# Check WebSocket endpoint
-wscat -c ws://localhost:9080/api/v2/logs/stream
+If the curl above returns a token but the browser login page still fails,
+the UI bundle was built in *cloud* mode. The OSS docker image must ship a
+*local* bundle — see `crates/mockforge-ui/ui/.env.production.example`;
+`.env.production` is gitignored on purpose.
 
-# Verify proxy configuration if behind reverse proxy
-ProxyPass /api/v2/ ws://localhost:9080/api/v2/
+#### Log Stream Connection Issues
+```bash
+# Check the log SSE endpoint
+curl -N http://localhost:9080/__mockforge/logs/sse
+
+# Verify proxy configuration if behind a reverse proxy
+ProxyPass /__mockforge/ http://localhost:9080/__mockforge/
 ```
 
 #### Performance Issues

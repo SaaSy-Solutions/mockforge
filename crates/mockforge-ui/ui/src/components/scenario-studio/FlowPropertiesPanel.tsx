@@ -10,11 +10,11 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { X } from 'lucide-react';
 import { Node } from '@xyflow/react';
-import { ApiCallNodeData } from './ApiCallNode';
-import { ConditionNodeData } from './ConditionNode';
-import { DelayNodeData } from './DelayNode';
-import { LoopNodeData } from './LoopNode';
-import { ParallelNodeData } from './ParallelNode';
+import type { ApiCallNodeData } from './ApiCallNode';
+import type { ConditionNodeData } from './ConditionNode';
+import type { DelayNodeData } from './DelayNode';
+import type { LoopNodeData } from './LoopNode';
+import type { ParallelNodeData } from './ParallelNode';
 
 interface FlowPropertiesPanelProps {
   selectedNode: Node | null;

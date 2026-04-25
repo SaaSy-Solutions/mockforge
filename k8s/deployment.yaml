@@ -23,7 +23,7 @@ spec:
       serviceAccountName: mockforge
       containers:
       - name: mockforge
-        image: mockforge/mockforge:latest
+        image: ghcr.io/saasy-solutions/mockforge:latest
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

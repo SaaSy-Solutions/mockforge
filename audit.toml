@@ -1,33 +1,38 @@
+# Ignored advisories for `cargo audit`. Consumed by
+# `scripts/precommit/cargo_audit.py`, which reads this file and passes each
+# ID as `--ignore` to cargo-audit (the cargo-audit CLI has no native config
+# file support).
+#
+# When adding an entry, include a short reason explaining why it can't be
+# fixed by upgrading. Periodically re-check: `scripts/precommit/cargo_audit.py`
+# will still pass once an ignored advisory is resolved upstream, but the
+# entry should be removed to keep the list honest.
+
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2023-0071", reason = "rsa - Marvin Attack: no fixed upgrade available, affects unused MySQL feature in sqlx" },
-    # proc-macro-error is unmaintained but not a security vulnerability
-    # It's a transitive dependency of gtk-rs (desktop app only)
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained but not a security issue, only affects desktop app GUI dependencies" },
-    { id = "RUSTSEC-2026-0020", reason = "wasmtime WASI resource exhaustion - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0021", reason = "wasmtime wasi:http/types.fields panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0044", reason = "aws-lc-sys X.509 bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
-    { id = "RUSTSEC-2026-0045", reason = "aws-lc-sys AES-CCM timing - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
-    { id = "RUSTSEC-2026-0046", reason = "aws-lc-sys PKCS7 chain bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
-    { id = "RUSTSEC-2026-0047", reason = "aws-lc-sys PKCS7 sig bypass - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
-    { id = "RUSTSEC-2026-0048", reason = "aws-lc-sys CRL DP logic error - transitive dep via rustls, upgrade blocked by rustls-webpki version constraints" },
-    { id = "RUSTSEC-2026-0049", reason = "rustls-webpki CRL DP matching - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints" },
-    { id = "RUSTSEC-2026-0085", reason = "wasmtime flags panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0086", reason = "wasmtime host data leakage - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0087", reason = "wasmtime f64x2.splat segfault - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0088", reason = "wasmtime pooling allocator data leakage - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0089", reason = "wasmtime table.fill panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0091", reason = "wasmtime OOB write in string transcoding - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0092", reason = "wasmtime UTF-16 transcoding panic - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0094", reason = "wasmtime table.grow return masking - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0095", reason = "wasmtime Winch sandbox escape - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0096", reason = "wasmtime aarch64 Cranelift sandbox escape - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0093", reason = "wasmtime heap OOB read in UTF-16 transcoding - transitive dep of plugin-loader, upgrade blocked by wasmtime API breaking changes" },
-    { id = "RUSTSEC-2026-0002", reason = "lru IterMut Stacked Borrows violation - transitive dep of ratatui/aws-sdk, no fix available" },
-    { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS - transitive dep via hickory-resolver/dns, upgrade blocked by quinn API changes downstream" },
-    { id = "RUSTSEC-2026-0098", reason = "rustls-webpki URI name constraints accepted - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
-    { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints accepted - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
-    { id = "RUSTSEC-2026-0104", reason = "rustls-webpki reachable panic in CRL parsing - transitive dep via rustls 0.21, upgrade blocked by oauth2/reqwest 0.11 constraints (same chain as 2026-0049)" },
-    { id = "RUSTSEC-2026-0008", reason = "git2 Buf deref UB - transitive dep via mockforge-scenarios, no fixed upgrade available" },
-    { id = "RUSTSEC-2026-0105", reason = "core2 unmaintained/yanked - transitive dep, no direct replacement, low-impact binary-format crate" },
+    # quinn-proto (HTTP/3 / QUIC) — transitive via reqwest/hyper; no fix
+    # version published yet as of 2026-04.
+    { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS — transitive dep, no patched version available" },
+
+    # wasmtime 36.x is pinned by mockforge-plugin-loader's current API
+    # surface. Every one of these needs a major-version bump to resolve,
+    # which is a tracked follow-up (see plugin-loader).
+    { id = "RUSTSEC-2026-0085", reason = "wasmtime flags lifting panic — blocked by wasmtime major bump in plugin-loader" },
+    { id = "RUSTSEC-2026-0086", reason = "wasmtime 64-bit tables host data leakage — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0087", reason = "wasmtime f64x2.splat x86_64 segfault — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0088", reason = "wasmtime pooling allocator instance leakage — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0089", reason = "wasmtime Winch table.fill panic — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0091", reason = "wasmtime string transcoding OOB write — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0092", reason = "wasmtime UTF-16 misaligned transcoding panic — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0093", reason = "wasmtime UTF-16 to latin1+utf16 OOB read — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0094", reason = "wasmtime Winch table.grow return masking — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0095", reason = "wasmtime Winch sandbox-escaping memory access — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0096", reason = "wasmtime aarch64 Cranelift sandbox escape — blocked by wasmtime major bump" },
+
+    # rustls-webpki pinned at multiple versions by transitive deps
+    # (aws-sdk via rustls 0.21, rumqttc via rustls 0.22, axum-server via
+    # rustls 0.23). Can't resolve without coordinated upstream bumps.
+    { id = "RUSTSEC-2026-0098", reason = "rustls-webpki URI name constraints — pinned by transitive deps across 3 rustls majors" },
+    { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints — pinned by transitive deps across 3 rustls majors" },
+    { id = "RUSTSEC-2026-0104", reason = "rustls-webpki CRL parsing panic — pinned by transitive deps across 3 rustls majors" },
 ]

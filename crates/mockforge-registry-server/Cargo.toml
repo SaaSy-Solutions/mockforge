@@ -56,7 +56,7 @@ cache-redis = ["dep:redis"]
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["ws", "multipart", "macros"] }
-tokio = { version = "1.48", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-full"] }
 
@@ -140,6 +140,8 @@ mockforge-registry-core = { path = "../mockforge-registry-core", default-feature
 mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
+mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios" }
 mockforge-plugin-registry = { version = "0.3.70", path = "../mockforge-plugin-registry" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
 

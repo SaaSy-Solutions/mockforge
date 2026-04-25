@@ -5,6 +5,7 @@ import type {
   ConformanceProgress,
 } from '../types/conformance';
 import { authenticatedFetch } from '../utils/apiClient';
+import { isCloudMode } from '../utils/cloudMode';
 
 const BASE_URL = '/api/conformance';
 
@@ -59,8 +60,7 @@ export function streamConformanceProgress(
   onEvent: (event: ConformanceProgress) => void,
   onError?: (error: Event) => void
 ): EventSource | null {
-  const isCloud = !!import.meta.env.VITE_API_BASE_URL;
-  if (isCloud) return null;
+  if (isCloudMode()) return null;
 
   // EventSource doesn't support Authorization headers natively.
   // The SSE endpoint is best-effort — we also poll via getConformanceRun.

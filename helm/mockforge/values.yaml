@@ -5,7 +5,7 @@
 replicaCount: 3
 
 image:
-  repository: mockforge/mockforge
+  repository: ghcr.io/saasy-solutions/mockforge
   pullPolicy: IfNotPresent
   tag: "latest"
 

@@ -868,7 +868,13 @@ async fn test_smtp_load_concurrent_connections() {
 }
 
 #[tokio::test]
-async fn test_smtp_starttls_command() {
+async fn test_smtp_starttls_without_cert_returns_454() {
+    // With `enable_starttls=false` (the default) we advertise
+    // STARTTLS in EHLO but reject the actual upgrade with 454 per
+    // RFC 3207. Previously we replied 220 Ready and kept the socket
+    // plaintext, which silently corrupted any real TLS client —
+    // `feat/smtp-starttls-upgrade` fixes that: when no cert is
+    // configured, we refuse the upgrade politely instead.
     let (server, port) = start_test_server().await;
 
     tokio::spawn(async move {
@@ -880,10 +886,12 @@ async fn test_smtp_starttls_command() {
     let (mut reader, mut writer, _greeting) = connect_and_read_greeting(port).await;
     let mut response = String::new();
 
-    // Test STARTTLS command
     writer.write_all(b"STARTTLS\r\n").await.expect("Failed to write STARTTLS");
     reader.read_line(&mut response).await.expect("Failed to read STARTTLS response");
-    assert!(response.contains("220"), "STARTTLS should return 220 Ready to start TLS");
+    assert!(
+        response.starts_with("454"),
+        "STARTTLS without a configured cert must return 454 TLS not available; got: {response:?}"
+    );
 
     // QUIT
     writer.write_all(b"QUIT\r\n").await.ok();

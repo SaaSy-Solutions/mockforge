@@ -131,6 +131,60 @@ impl VirtualFileSystem {
         Ok(())
     }
 
+    /// Async version of list_files — use from async contexts.
+    pub async fn list_files_async(&self, path: &Path) -> Vec<VirtualFile> {
+        let files = self.files.read().await;
+        files
+            .iter()
+            .filter(|(file_path, _)| file_path.starts_with(path))
+            .map(|(_, file)| file.clone())
+            .collect()
+    }
+
+    /// Async version of remove_file — use from async contexts.
+    pub async fn remove_file_async(&self, path: &Path) -> Result<()> {
+        let mut files = self.files.write().await;
+        files.remove(path);
+        Ok(())
+    }
+
+    /// Async version of directory_exists — use from async contexts.
+    pub async fn directory_exists_async(&self, path: &Path) -> bool {
+        let dirs = self.directories.read().await;
+        dirs.contains(path)
+    }
+
+    /// Async version of create_directory — use from async contexts.
+    pub async fn create_directory_async(&self, path: PathBuf) -> Result<()> {
+        let mut dirs = self.directories.write().await;
+        dirs.insert(path);
+        Ok(())
+    }
+
+    /// Async version of is_directory_empty — use from async contexts.
+    pub async fn is_directory_empty_async(&self, path: &Path) -> bool {
+        let files = self.files.read().await;
+        let has_files =
+            files.keys().any(|file_path| file_path != path && file_path.starts_with(path));
+        if has_files {
+            return false;
+        }
+
+        let dirs = self.directories.read().await;
+        !dirs.iter().any(|dir_path| dir_path != path && dir_path.starts_with(path))
+    }
+
+    /// Async version of remove_directory — use from async contexts.
+    pub async fn remove_directory_async(&self, path: &Path) -> Result<()> {
+        if self.is_directory_empty_async(path).await {
+            let mut dirs = self.directories.write().await;
+            dirs.remove(path);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Directory is not empty"))
+        }
+    }
+
     /// Async version of get_file - use this in async contexts
     pub async fn get_file_async(&self, path: &Path) -> Option<VirtualFile> {
         let files = self.files.read().await;

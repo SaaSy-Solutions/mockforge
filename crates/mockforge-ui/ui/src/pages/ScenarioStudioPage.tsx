@@ -37,11 +37,11 @@ import {
   Layers,
   Settings,
 } from 'lucide-react';
-import { ApiCallNode, ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
-import { ConditionNode, ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
-import { DelayNode, DelayNodeData } from '@/components/scenario-studio/DelayNode';
-import { LoopNode, LoopNodeData } from '@/components/scenario-studio/LoopNode';
-import { ParallelNode, ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
+import { ApiCallNode, type ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
+import { ConditionNode, type ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
+import { DelayNode, type DelayNodeData } from '@/components/scenario-studio/DelayNode';
+import { LoopNode, type LoopNodeData } from '@/components/scenario-studio/LoopNode';
+import { ParallelNode, type ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
 import { FlowPropertiesPanel } from '@/components/scenario-studio/FlowPropertiesPanel';
 import { FlowExecutor } from '@/components/scenario-studio/FlowExecutor';
 import { useHistory } from '@/hooks/useHistory';

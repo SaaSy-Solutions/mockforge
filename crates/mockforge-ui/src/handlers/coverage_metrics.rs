@@ -27,7 +27,7 @@ impl CoverageMetricsState {
         Self { db: Arc::new(cell) }
     }
 
-    async fn get_db(&self) -> Result<&AnalyticsDatabase, StatusCode> {
+    pub(crate) async fn get_db(&self) -> Result<&AnalyticsDatabase, StatusCode> {
         self.db.get().ok_or_else(|| {
             error!("Analytics database not initialized");
             StatusCode::SERVICE_UNAVAILABLE

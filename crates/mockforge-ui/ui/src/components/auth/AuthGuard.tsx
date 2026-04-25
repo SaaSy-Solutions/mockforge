@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { LoginForm } from './LoginForm';
+import { isCloudMode } from '../../utils/cloudMode';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -10,15 +11,14 @@ interface AuthGuardProps {
 
 /**
  * Paths that carry their own auth flow and must bypass the SaaS
- * AuthGuard entirely. In **self-hosted mode** (no VITE_API_BASE_URL),
+ * AuthGuard entirely. In **self-hosted mode** (isCloudMode() === false),
  * the registry-admin module uses a separate JWT signed against the
  * SqliteRegistryStore, so the SaaS auth check would block it. In
  * **cloud mode**, the registry-admin pages live inside the normal SaaS
  * auth flow — the user logs in once via the SaaS login, and the
  * RegistryAdminPage reuses that JWT. So we only bypass in self-hosted.
  */
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
-const SELF_AUTHED_PREFIXES = isCloud ? [] : ['/registry-login', '/registry-admin'];
+const SELF_AUTHED_PREFIXES = isCloudMode() ? [] : ['/registry-login', '/registry-admin'];
 
 // Public pages that render without any auth check — legal docs, pricing, support,
 // verification landings. These render the same shell (via AuthGuard passing through)

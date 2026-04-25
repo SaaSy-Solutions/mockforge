@@ -5,7 +5,8 @@
  */
 
 import React from 'react';
-import { usePipelines, useDeletePipeline, Pipeline } from '../../hooks/usePipelines';
+import { usePipelines, useDeletePipeline, type Pipeline } from '../../hooks/usePipelines';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import { Card } from '../ui/Card';
 import { Play, Edit, Trash2, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
 
@@ -24,6 +25,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
 }) => {
   const { data: pipelines, isLoading, error } = usePipelines({ workspace_id: workspaceId, org_id: orgId });
   const deletePipeline = useDeletePipeline();
+  const confirmDelete = useConfirmDelete();
 
   if (isLoading) {
     return (
@@ -44,7 +46,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete pipeline "${name}"?`)) {
+    if (confirmDelete(`Are you sure you want to delete pipeline "${name}"?`)) {
       try {
         await deletePipeline.mutateAsync(id);
       } catch (err) {

@@ -39,6 +39,7 @@ use crate::models::feature_usage::FeatureType;
 #[allow(unused_imports)]
 use crate::models::feature_usage::FeatureUsage;
 use crate::models::federation::Federation;
+use crate::models::federation_scenario_activation::FederationScenarioActivation;
 use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
@@ -353,6 +354,51 @@ fn row_to_federation(row: &sqlx::sqlite::SqliteRow) -> StoreResult<Federation> {
         created_by: parse_uuid(&created_by_str)?,
         created_at: parse_dt(&created_at_str)?,
         updated_at: parse_dt(&updated_at_str)?,
+    })
+}
+
+fn row_to_federation_scenario_activation(
+    row: &sqlx::sqlite::SqliteRow,
+) -> StoreResult<FederationScenarioActivation> {
+    use sqlx::Row;
+    let id_str: String = row.try_get("id")?;
+    let federation_id_str: String = row.try_get("federation_id")?;
+    let scenario_id_str: Option<String> = row.try_get("scenario_id")?;
+    let activated_by_str: String = row.try_get("activated_by")?;
+    let manifest_str: String = row.try_get("manifest_snapshot")?;
+    let overrides_str: String = row.try_get("service_overrides")?;
+    let per_service_str: String = row.try_get("per_service_state")?;
+    let activated_at_str: String = row.try_get("activated_at")?;
+    let deactivated_at_str: Option<String> = row.try_get("deactivated_at")?;
+
+    let manifest_snapshot = serde_json::from_str(&manifest_str)
+        .map_err(|e| StoreError::Hash(format!("bad manifest_snapshot: {e}")))?;
+    let service_overrides = serde_json::from_str(&overrides_str)
+        .map_err(|e| StoreError::Hash(format!("bad service_overrides: {e}")))?;
+    let per_service_state = serde_json::from_str(&per_service_str)
+        .map_err(|e| StoreError::Hash(format!("bad per_service_state: {e}")))?;
+
+    let scenario_id = match scenario_id_str {
+        Some(s) => Some(parse_uuid(&s)?),
+        None => None,
+    };
+    let deactivated_at = match deactivated_at_str {
+        Some(s) => Some(parse_dt(&s)?),
+        None => None,
+    };
+
+    Ok(FederationScenarioActivation {
+        id: parse_uuid(&id_str)?,
+        federation_id: parse_uuid(&federation_id_str)?,
+        scenario_id,
+        scenario_name: row.try_get("scenario_name")?,
+        manifest_snapshot,
+        service_overrides,
+        status: row.try_get("status")?,
+        per_service_state,
+        activated_by: parse_uuid(&activated_by_str)?,
+        activated_at: parse_dt(&activated_at_str)?,
+        deactivated_at,
     })
 }
 
@@ -1393,6 +1439,176 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(())
     }
 
+    async fn create_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+        scenario_id: Option<Uuid>,
+        scenario_name: &str,
+        manifest_snapshot: &serde_json::Value,
+        service_overrides: &serde_json::Value,
+        per_service_state: &serde_json::Value,
+        activated_by: Uuid,
+    ) -> StoreResult<FederationScenarioActivation> {
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+        let manifest_str = serde_json::to_string(manifest_snapshot)
+            .map_err(|e| StoreError::Hash(format!("encode manifest_snapshot: {e}")))?;
+        let overrides_str = serde_json::to_string(service_overrides)
+            .map_err(|e| StoreError::Hash(format!("encode service_overrides: {e}")))?;
+        let per_service_str = serde_json::to_string(per_service_state)
+            .map_err(|e| StoreError::Hash(format!("encode per_service_state: {e}")))?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO federation_scenario_activations
+                (id, federation_id, scenario_id, scenario_name,
+                 manifest_snapshot, service_overrides, per_service_state,
+                 status, activated_by, activated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+            "#,
+        )
+        .bind(id.to_string())
+        .bind(federation_id.to_string())
+        .bind(scenario_id.map(|s| s.to_string()))
+        .bind(scenario_name)
+        .bind(&manifest_str)
+        .bind(&overrides_str)
+        .bind(&per_service_str)
+        .bind(activated_by.to_string())
+        .bind(&now_str)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(FederationScenarioActivation {
+            id,
+            federation_id,
+            scenario_id,
+            scenario_name: scenario_name.to_string(),
+            manifest_snapshot: manifest_snapshot.clone(),
+            service_overrides: service_overrides.clone(),
+            status: "active".to_string(),
+            per_service_state: per_service_state.clone(),
+            activated_by,
+            activated_at: now,
+            deactivated_at: None,
+        })
+    }
+
+    async fn find_active_federation_scenario_activation(
+        &self,
+        federation_id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        let row = sqlx::query(
+            r#"
+            SELECT * FROM federation_scenario_activations
+            WHERE federation_id = ? AND status = 'active'
+            "#,
+        )
+        .bind(federation_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        match row {
+            Some(r) => Ok(Some(row_to_federation_scenario_activation(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn deactivate_federation_scenario_activation(
+        &self,
+        id: Uuid,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        let res = sqlx::query(
+            r#"
+            UPDATE federation_scenario_activations
+            SET status = 'deactivated', deactivated_at = datetime('now')
+            WHERE id = ? AND status = 'active'
+            "#,
+        )
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await?;
+        if res.rows_affected() == 0 {
+            return Ok(None);
+        }
+        let row = sqlx::query("SELECT * FROM federation_scenario_activations WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(Some(row_to_federation_scenario_activation(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn update_federation_scenario_per_service_state(
+        &self,
+        id: Uuid,
+        per_service_state: &serde_json::Value,
+    ) -> StoreResult<Option<FederationScenarioActivation>> {
+        let per_service_str = serde_json::to_string(per_service_state)
+            .map_err(|e| StoreError::Hash(format!("encode per_service_state: {e}")))?;
+        let res = sqlx::query(
+            "UPDATE federation_scenario_activations SET per_service_state = ? WHERE id = ?",
+        )
+        .bind(&per_service_str)
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await?;
+        if res.rows_affected() == 0 {
+            return Ok(None);
+        }
+        let row = sqlx::query("SELECT * FROM federation_scenario_activations WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(Some(row_to_federation_scenario_activation(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_active_federation_scenarios_for_workspace(
+        &self,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<FederationScenarioActivation>> {
+        // SQLite stores federation.services as a JSON TEXT blob, so there's no
+        // native containment operator. Load all active activations and filter
+        // in Rust — small N (one row per active federation) makes this cheap.
+        let rows = sqlx::query(
+            r#"
+            SELECT a.*, f.services AS federation_services
+            FROM federation_scenario_activations a
+            JOIN federations f ON f.id = a.federation_id
+            WHERE a.status = 'active'
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let workspace_str = workspace_id.to_string();
+        let mut out = Vec::new();
+        for row in rows.iter() {
+            use sqlx::Row;
+            let services_str: String = row.try_get("federation_services")?;
+            let services: serde_json::Value = serde_json::from_str(&services_str)
+                .map_err(|e| StoreError::Hash(format!("bad federation services: {e}")))?;
+            let matches = services
+                .as_array()
+                .map(|arr| {
+                    arr.iter().any(|svc| {
+                        svc.get("workspace_id").and_then(|v| v.as_str())
+                            == Some(workspace_str.as_str())
+                    })
+                })
+                .unwrap_or(false);
+            if matches {
+                out.push(row_to_federation_scenario_activation(row)?);
+            }
+        }
+        Ok(out)
+    }
+
     #[allow(unused_variables)]
     async fn list_unresolved_suspicious_activities(
         &self,
@@ -1460,6 +1676,7 @@ impl RegistryStore for SqliteRegistryStore {
     async fn create_cloud_service(
         &self,
         org_id: Uuid,
+        workspace_id: Option<Uuid>,
         created_by: Uuid,
         name: &str,
         description: &str,
@@ -1479,6 +1696,15 @@ impl RegistryStore for SqliteRegistryStore {
     }
 
     #[allow(unused_variables)]
+    async fn list_cloud_services_by_workspace(
+        &self,
+        org_id: Uuid,
+        workspace_id: Uuid,
+    ) -> StoreResult<Vec<CloudService>> {
+        Ok(Vec::new())
+    }
+
+    #[allow(unused_variables)]
     async fn update_cloud_service(
         &self,
         id: Uuid,
@@ -1488,6 +1714,7 @@ impl RegistryStore for SqliteRegistryStore {
         enabled: Option<bool>,
         tags: Option<&serde_json::Value>,
         routes: Option<&serde_json::Value>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudService>> {
         Ok(None)
     }
@@ -1947,6 +2174,17 @@ impl RegistryStore for SqliteRegistryStore {
     async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>> {
         let row = sqlx::query("SELECT * FROM scenarios WHERE name = ?")
             .bind(name)
+            .fetch_optional(&self.pool)
+            .await?;
+        match row {
+            Some(r) => Ok(Some(row_to_scenario(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>> {
+        let row = sqlx::query("SELECT * FROM scenarios WHERE id = ?")
+            .bind(id.to_string())
             .fetch_optional(&self.pool)
             .await?;
         match row {
@@ -3499,7 +3737,7 @@ mod tests {
         let batch = store.count_template_stars_batch(&[t1.id, t2.id, t3.id]).await.unwrap();
         assert_eq!(batch.get(&t1.id), Some(&2));
         assert_eq!(batch.get(&t2.id), Some(&1));
-        assert!(batch.get(&t3.id).is_none(), "zero-star templates omitted");
+        assert!(!batch.contains_key(&t3.id), "zero-star templates omitted");
 
         // Empty input → empty map (fast path, no SQL).
         let empty = store.count_template_stars_batch(&[]).await.unwrap();
@@ -3698,6 +3936,173 @@ mod tests {
         store.delete_federation(fed.id).await.unwrap();
         assert!(store.find_federation_by_id(fed.id).await.unwrap().is_none());
         assert!(store.list_federations_by_org(org_id).await.unwrap().is_empty());
+    }
+
+    /// Federation scenario activation round-trip. Exercises create →
+    /// find-active → update-per-service-state → deactivate → workspace
+    /// poll filter, and verifies the one-active-per-federation partial
+    /// unique index.
+    #[tokio::test]
+    async fn test_federation_scenario_activations_roundtrip() {
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+               VALUES (?, 'act-owner', 'act@example.com', 'x', datetime('now'), datetime('now'))"#,
+        )
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let org_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO organizations (id, name, slug, owner_id, plan, limits_json,
+                                          stripe_customer_id, created_at, updated_at)
+               VALUES (?, 'ActOrg', 'act-org', ?, 'free', '{}', NULL,
+                       datetime('now'), datetime('now'))"#,
+        )
+        .bind(org_id.to_string())
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let workspace_id = Uuid::new_v4();
+        let other_workspace_id = Uuid::new_v4();
+
+        // Build a federation where one service is bound to our target
+        // workspace and another service is bound to a different workspace
+        // — the poll query should only return the first one.
+        let services = serde_json::json!([
+            {
+                "name": "auth",
+                "workspace_id": workspace_id.to_string(),
+                "base_path": "/auth",
+                "reality_level": "real",
+            },
+            {
+                "name": "other",
+                "workspace_id": other_workspace_id.to_string(),
+                "base_path": "/other",
+                "reality_level": "real",
+            },
+        ]);
+        let fed = store.create_federation(org_id, user_id, "shop", "", &services).await.unwrap();
+
+        // Activate a scenario.
+        let manifest = serde_json::json!({
+            "manifest_version": "1.0",
+            "name": "payment-outage",
+            "version": "0.1.0",
+            "title": "Payment outage",
+            "description": "",
+            "author": "t",
+            "category": "Other",
+            "compatibility": {"min_version": "0.3.0"},
+            "files": [],
+        });
+        let overrides = serde_json::json!({ "auth": { "chaos_level": 0.5 } });
+        let per_service = serde_json::json!([
+            {"service_name": "auth", "workspace_id": workspace_id.to_string(), "status": "pending"},
+            {"service_name": "other", "workspace_id": other_workspace_id.to_string(), "status": "pending"},
+        ]);
+        let act = store
+            .create_federation_scenario_activation(
+                fed.id,
+                None,
+                "payment-outage",
+                &manifest,
+                &overrides,
+                &per_service,
+                user_id,
+            )
+            .await
+            .unwrap();
+        assert_eq!(act.status, "active");
+        assert_eq!(act.federation_id, fed.id);
+
+        // Partial unique index rejects a second active row for the same
+        // federation.
+        let dup = store
+            .create_federation_scenario_activation(
+                fed.id,
+                None,
+                "another",
+                &manifest,
+                &overrides,
+                &per_service,
+                user_id,
+            )
+            .await;
+        assert!(dup.is_err(), "second active activation must be rejected");
+
+        // find_active returns the same row.
+        let active =
+            store.find_active_federation_scenario_activation(fed.id).await.unwrap().unwrap();
+        assert_eq!(active.id, act.id);
+
+        // Per-service state update persists.
+        let new_state = serde_json::json!([
+            {"service_name": "auth", "workspace_id": workspace_id.to_string(), "status": "applied"},
+            {"service_name": "other", "workspace_id": other_workspace_id.to_string(), "status": "pending"},
+        ]);
+        let updated = store
+            .update_federation_scenario_per_service_state(act.id, &new_state)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.per_service_state, new_state);
+
+        // Workspace filter returns this activation for the matching
+        // workspace but not for an unrelated one.
+        let matches = store
+            .find_active_federation_scenarios_for_workspace(workspace_id)
+            .await
+            .unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].id, act.id);
+
+        let unrelated_workspace = Uuid::new_v4();
+        let none = store
+            .find_active_federation_scenarios_for_workspace(unrelated_workspace)
+            .await
+            .unwrap();
+        assert!(none.is_empty());
+
+        // Deactivate flips status and sets deactivated_at; poll filter
+        // stops returning the row.
+        let deactivated =
+            store.deactivate_federation_scenario_activation(act.id).await.unwrap().unwrap();
+        assert_eq!(deactivated.status, "deactivated");
+        assert!(deactivated.deactivated_at.is_some());
+        assert!(store
+            .find_active_federation_scenario_activation(fed.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store
+            .find_active_federation_scenarios_for_workspace(workspace_id)
+            .await
+            .unwrap()
+            .is_empty());
+
+        // After deactivation, a new activation may be created.
+        let act2 = store
+            .create_federation_scenario_activation(
+                fed.id,
+                None,
+                "another",
+                &manifest,
+                &overrides,
+                &per_service,
+                user_id,
+            )
+            .await
+            .unwrap();
+        assert_eq!(act2.scenario_name, "another");
     }
 
     /// Scenario + template reviews CRUD on SQLite. Exercises each

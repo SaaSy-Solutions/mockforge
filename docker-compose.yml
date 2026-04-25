@@ -10,6 +10,7 @@ services:
       - "8000:3000"   # HTTP server (mapped to 8000 to avoid conflicts)
       - "8001:3001"   # WebSocket server (mapped to 8001 to avoid conflicts)
       - "50051:50051" # gRPC server
+      - "9092:9092"   # Kafka broker
       - "9080:9080"   # Admin UI
     volumes:
       - ./examples:/app/examples:ro  # Mount examples as read-only
@@ -34,6 +35,11 @@ services:
 
       # gRPC configuration
       - MOCKFORGE_GRPC_PORT=50051
+
+      # Kafka broker (disabled by default in config; flip on + point at baked-in demo fixtures)
+      - MOCKFORGE_KAFKA_ENABLED=true
+      - MOCKFORGE_KAFKA_PORT=9092
+      - MOCKFORGE_KAFKA_FIXTURES_DIR=/app/examples/protocols/kafka
 
       # Admin UI configuration
       - MOCKFORGE_ADMIN_ENABLED=true

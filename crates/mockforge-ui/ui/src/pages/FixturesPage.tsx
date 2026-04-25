@@ -42,8 +42,9 @@ import {
   DialogClose,
 } from '../components/ui/Dialog';
 import { toast } from 'sonner';
+import { isCloudMode } from '../utils/cloudMode';
 
-const isCloud = !!import.meta.env.VITE_API_BASE_URL;
+const isCloud = isCloudMode();
 
 interface FixtureFormState {
   name: string;
@@ -79,7 +80,9 @@ function stringifyTags(tags: FixtureInfo['tags']): string[] {
   return [];
 }
 
-function parseContentText(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+function parseContentText(
+  text: string
+): { ok: true; value: unknown } | { ok: false; error: string } {
   const trimmed = text.trim();
   if (!trimmed) return { ok: true, value: null };
   try {
@@ -375,7 +378,9 @@ export function FixturesPage() {
         <Alert
           type="error"
           title="Failed to load fixtures"
-          message={error instanceof Error ? error.message : 'Unable to fetch fixture data. Please try again.'}
+          message={
+            error instanceof Error ? error.message : 'Unable to fetch fixture data. Please try again.'
+          }
         />
       </div>
     );
@@ -804,7 +809,7 @@ export function FixturesPage() {
                   onChange={(e) =>
                     setCreateForm({ ...createForm, contentText: e.target.value })
                   }
-                  placeholder='{\n  "users": []\n}'
+                  placeholder={'{\n  "users": []\n}'}
                   className="font-mono text-xs min-h-[180px]"
                   error={createContentError ?? undefined}
                 />

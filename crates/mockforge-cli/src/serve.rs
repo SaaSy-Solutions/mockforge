@@ -626,6 +626,25 @@ pub(crate) fn initialize_opentelemetry_tracing(
 pub async fn handle_serve(
     serve_args: ServeArgs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Opt-in federation scenario poller. If the four env vars
+    // (MOCKFORGE_FEDERATION_POLL_URL / WORKSPACE_ID / POLL_TOKEN /
+    // POLL_INTERVAL_SECS) aren't set this is a no-op; otherwise a tokio
+    // task runs for the lifetime of the serve process, observing federation
+    // scenario overrides applied to this workspace. The logging applicator
+    // emits tracing events but does not mutate chaos/latency actuators —
+    // embedders who want real application can replace `LoggingApplicator`
+    // with their own `ScenarioApplicator` implementation.
+    #[cfg(feature = "scenarios")]
+    let _federation_scenario_poller = match mockforge_scenarios::spawn_federation_scenario_poller(
+        mockforge_scenarios::LoggingApplicator,
+    ) {
+        Ok(handle) => handle,
+        Err(err) => {
+            tracing::warn!(error = %err, "Federation scenario poller disabled due to config error");
+            None
+        }
+    };
+
     // Auto-discover config file if not provided
     let effective_config_path = if serve_args.config_path.is_some() {
         serve_args.config_path.clone()
@@ -2078,6 +2097,16 @@ pub async fn handle_serve(
             let ws_port = config.websocket.port;
             let ws_host = config.websocket.host.clone();
             let ws_shutdown = shutdown_token.clone();
+            // The WS handler reads MOCKFORGE_WS_REPLAY_FILE at connection time
+            // to decide between replay mode and echo mode. Config is the
+            // source of truth — whether it was set by --ws-replay-file, a
+            // YAML file, or the env var itself, push the final value back
+            // into the env so the handler sees it. Without this, the CLI
+            // flag was silently ignored (it wrote to config but the handler
+            // only consulted the env var).
+            if let Some(path) = &config.websocket.replay_file {
+                std::env::set_var("MOCKFORGE_WS_REPLAY_FILE", path);
+            }
             tokio::spawn(async move {
                 println!("🔌 WebSocket server listening on ws://{}:{}", ws_host, ws_port);
                 tokio::select! {
@@ -2351,21 +2380,30 @@ pub async fn handle_serve(
 
             println!("📨 Kafka broker listening on {}:{}", kafka_config.host, kafka_config.port);
 
-            // Create and start the Kafka broker
-            match KafkaMockBroker::new(kafka_config.clone()).await {
-                Ok(broker) => {
-                    tokio::select! {
-                        result = broker.start() => {
-                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
-                        }
-                        _ = kafka_shutdown.cancelled() => {
-                            println!("🛑 Shutting down Kafka broker...");
-                            Ok(())
+            // Create and start the Kafka broker. The returned JoinHandle is
+            // never awaited, so silent Err would vanish — surface failures
+            // through tracing before returning them (otherwise a bad
+            // fixtures_dir etc. leaves the port unbound with no log at all).
+            let result: std::result::Result<(), String> =
+                match KafkaMockBroker::new(kafka_config.clone()).await {
+                    Ok(broker) => {
+                        tokio::select! {
+                            result = broker.start() => {
+                                result.map_err(|e| format!("Kafka broker error: {:?}", e))
+                            }
+                            _ = kafka_shutdown.cancelled() => {
+                                println!("🛑 Shutting down Kafka broker...");
+                                Ok(())
+                            }
                         }
                     }
-                }
-                Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+                    Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+                };
+
+            if let Err(msg) = &result {
+                tracing::error!("{}", msg);
             }
+            result
         }))
     } else {
         None

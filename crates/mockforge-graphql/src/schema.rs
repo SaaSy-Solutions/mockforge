@@ -1,6 +1,8 @@
 //! GraphQL schema parsing and generation
 
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
+use async_graphql::{Object, Schema, Subscription};
+use futures::stream::Stream;
+use std::time::Duration;
 
 /// Simple User type for GraphQL
 #[derive(async_graphql::SimpleObject, Clone)]
@@ -70,20 +72,72 @@ impl QueryRoot {
     }
 }
 
+/// Root mutation type. A single `createUser` mutation lets clients
+/// exercise the mutation dispatch path against the default schema
+/// without registering a custom SDL. The mutation is stateless — the
+/// "created" user is fabricated from the inputs plus a deterministic
+/// id derived from (name, email), so callers can assert on the shape
+/// of the return value without mocking storage.
+pub struct MutationRoot;
+
+#[Object]
+impl MutationRoot {
+    /// Create a new user. Returns a freshly-shaped `User` with the
+    /// supplied `name` / `email` and an id derived from them so the
+    /// output is deterministic for tests (`user-{12 hex chars}`).
+    async fn create_user(&self, name: String, email: String) -> User {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        name.hash(&mut hasher);
+        email.hash(&mut hasher);
+        // Mask to 48 bits so the hex suffix is always exactly 12 chars
+        // (tests can then pin the exact id length without depending on
+        // how the hasher happens to fill the high bits).
+        let id = format!("user-{:012x}", hasher.finish() & 0xffff_ffff_ffff);
+        User { id, name, email }
+    }
+}
+
+/// Root subscription type. A single `tick` subscription lets clients
+/// exercise the subscription dispatch path (WebSocket via
+/// `graphql-transport-ws` / `graphql-ws`, SSE, etc.) against the
+/// default schema without registering a custom SDL.
+///
+/// `tick` emits a monotonically increasing `i32` every 100ms, starting
+/// from 1, up to the requested `count`. Clients without a `count`
+/// argument get 5 ticks by default. The interval is short enough that
+/// multi-event tests complete in well under a second.
+pub struct SubscriptionRoot;
+
+#[Subscription]
+impl SubscriptionRoot {
+    /// Emit `count` ticks (default 5) at 100ms intervals.
+    async fn tick(&self, count: Option<i32>) -> impl Stream<Item = i32> {
+        let n = count.unwrap_or(5).max(1) as usize;
+        async_stream::stream! {
+            for i in 1..=n {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                yield i as i32;
+            }
+        }
+    }
+}
+
 /// GraphQL schema manager
 pub struct GraphQLSchema {
-    schema: Schema<QueryRoot, EmptyMutation, EmptySubscription>,
+    schema: Schema<QueryRoot, MutationRoot, SubscriptionRoot>,
 }
 
 impl GraphQLSchema {
     /// Create a new basic schema
     pub fn new() -> Self {
-        let schema = Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
+        let schema = Schema::build(QueryRoot, MutationRoot, SubscriptionRoot).finish();
         Self { schema }
     }
 
     /// Get the underlying schema
-    pub fn schema(&self) -> &Schema<QueryRoot, EmptyMutation, EmptySubscription> {
+    pub fn schema(&self) -> &Schema<QueryRoot, MutationRoot, SubscriptionRoot> {
         &self.schema
     }
 

@@ -139,7 +139,7 @@ spec:
       serviceAccountName: mockforge-vault
       containers:
         - name: mockforge
-          image: mockforge/mockforge:latest
+          image: ghcr.io/saasy-solutions/mockforge:latest
           volumeMounts:
             - name: vault-secrets
               mountPath: /vault/secrets

@@ -1,7 +1,7 @@
 //! GraphQL execution engine
 
 use async_graphql::http::GraphQLPlaygroundConfig;
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
@@ -62,11 +62,24 @@ pub async fn create_graphql_router(
 ) -> Result<Router, Box<dyn std::error::Error + Send + Sync>> {
     // Create a basic schema
     let schema = GraphQLSchema::generate_basic_schema();
+    // `async-graphql-axum`'s `GraphQLSubscription::new` wants the
+    // schema directly (not wrapped in our executor), so clone the
+    // inner async-graphql Schema for the /graphql/ws route before
+    // moving `schema` into the executor.
+    let schema_for_subscriptions = schema.schema().clone();
     let executor = GraphQLExecutor::new(schema);
 
     let mut app = Router::new()
         .route("/graphql", post(graphql_handler))
         .route("/graphql", get(graphql_playground))
+        // WebSocket endpoint for GraphQL subscriptions using the
+        // graphql-transport-ws protocol (the default in both
+        // async-graphql-axum and Apollo Sandbox). Clients that only
+        // support the older graphql-ws still work because the axum
+        // handler negotiates both subprotocols. `GraphQLSubscription`
+        // is a `tower::Service`, so we use `route_service` rather
+        // than `route` + a handler function.
+        .route_service("/graphql/ws", GraphQLSubscription::new(schema_for_subscriptions))
         .with_state(Arc::new(executor));
 
     // Add latency injection if configured
@@ -122,7 +135,7 @@ async fn graphql_playground() -> impl IntoResponse {
     Html(async_graphql::http::playground_source(
         GraphQLPlaygroundConfig::new("/graphql")
             .title("MockForge GraphQL Playground")
-            .subscription_endpoint("/graphql"),
+            .subscription_endpoint("/graphql/ws"),
     ))
 }
 

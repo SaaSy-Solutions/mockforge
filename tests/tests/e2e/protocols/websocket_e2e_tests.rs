@@ -5,7 +5,30 @@
 use futures_util::{SinkExt, StreamExt};
 use mockforge_test::MockForgeServer;
 use std::time::Duration;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+
+/// Open a WebSocket connection with retries.
+///
+/// `MockForgeServer::build()` only waits for HTTP `/health` to go ready.
+/// The WS task binds a moment later, so the first `connect_async` after
+/// build() can occasionally race the bind on slower CI runners (macOS in
+/// particular). Retry a handful of times before giving up.
+async fn connect_with_retries(
+    ws_url: &str,
+) -> WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>> {
+    let overall_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    let mut last_err = String::new();
+    while std::time::Instant::now() < overall_deadline {
+        match connect_async(ws_url).await {
+            Ok((stream, _)) => return stream,
+            Err(e) => {
+                last_err = format!("{e:?}");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+    panic!("Failed to connect to WebSocket {ws_url} after retries: {last_err}");
+}
 
 #[tokio::test]
 async fn test_websocket_connection() {
@@ -22,8 +45,8 @@ async fn test_websocket_connection() {
     let _ws_port = server.ws_port().expect("WebSocket port not assigned");
     let ws_url = server.ws_url().expect("WebSocket URL not available");
 
-    // Connect to WebSocket
-    let (mut ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
+    // Connect to WebSocket (retrying briefly so we don't race the bind)
+    let mut ws_stream = connect_with_retries(&ws_url).await;
 
     // Send a ping message
     ws_stream
@@ -66,9 +89,12 @@ async fn test_websocket_multiple_connections() {
 
     let ws_url = server.ws_url().expect("WebSocket URL not available");
 
-    // Connect multiple clients
+    // Connect multiple clients (retrying the first one to guard against
+    // the HTTP-ready-before-WS-bound race; once the first is up the rest
+    // should connect cleanly).
     let mut clients = Vec::new();
-    for _ in 0..3 {
+    clients.push(connect_with_retries(&ws_url).await);
+    for _ in 1..3 {
         let (ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
         clients.push(ws_stream);
     }
@@ -101,8 +127,8 @@ async fn test_websocket_binary_message() {
 
     let ws_url = server.ws_url().expect("WebSocket URL not available");
 
-    // Connect to WebSocket
-    let (mut ws_stream, _) = connect_async(&ws_url).await.expect("Failed to connect to WebSocket");
+    // Connect to WebSocket (retrying briefly so we don't race the bind)
+    let mut ws_stream = connect_with_retries(&ws_url).await;
 
     // Send binary message
     let binary_data = b"test binary data";

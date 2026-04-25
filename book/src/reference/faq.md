@@ -660,7 +660,7 @@ Please include:
 
 - **GitHub Discussions**: [Community Forum](https://github.com/SaaSy-Solutions/mockforge/discussions)
 - **GitHub Issues**: [Bug Reports & Feature Requests](https://github.com/SaaSy-Solutions/mockforge/issues)
-- **Discord**: [Join our community chat](https://discord.gg/2FxXqKpa)
+- **Discord**: [Join our community chat](https://discord.gg/vk22xwxug3)
 
 ---
 

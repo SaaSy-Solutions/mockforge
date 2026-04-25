@@ -13,6 +13,20 @@ use mockforge_core::{Protocol, Result};
 #[derive(Debug)]
 pub struct KafkaSpecRegistry {
     fixtures: Vec<Arc<crate::fixtures::KafkaFixture>>,
+    /// Topic-level specs loaded from the nested-topology YAML (partition
+    /// counts, replication factor, config). Empty when only the legacy
+    /// flat-array fixture form was provided. The Metadata v4 response reads
+    /// from here to advertise real topics to clients.
+    topic_specs: Vec<Arc<crate::fixture_file::KafkaTopicSpec>>,
+    /// Scenarios aggregated from every loaded fixture file. Consumed by
+    /// `fixture_executor` at broker startup.
+    scenarios: Vec<Arc<crate::fixture_file::ScenarioSpec>>,
+    /// Causal links aggregated from every loaded fixture file. Consumed
+    /// by `fixture_executor` on every successful produce.
+    relationships: Vec<Arc<crate::fixture_file::RelationshipSpec>>,
+    /// State-machine graphs keyed by fixture identifier (`{topic}#{index}`).
+    /// Consumed by `fixture_executor` at broker startup.
+    state_machines: Vec<(String, Arc<crate::fixture_file::StateMachineSpec>)>,
     template_engine: mockforge_core::templating::TemplateEngine,
     topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
 }
@@ -23,27 +37,82 @@ impl KafkaSpecRegistry {
         config: mockforge_core::config::KafkaConfig,
         topics: Arc<tokio::sync::RwLock<HashMap<String, crate::topics::Topic>>>,
     ) -> Result<Self> {
-        let fixtures = if let Some(fixtures_dir) = &config.fixtures_dir {
-            crate::fixtures::KafkaFixture::load_from_dir(fixtures_dir)?
-                .into_iter()
-                .map(Arc::new)
-                .collect()
-        } else {
-            vec![]
-        };
+        let (topic_specs, fixtures, scenarios, relationships, state_machines) =
+            if let Some(fixtures_dir) = &config.fixtures_dir {
+                let flat = crate::fixtures::load_kafka_fixtures_from_dir(fixtures_dir)?;
+                let specs: Vec<_> = flat.topics.into_iter().map(Arc::new).collect();
+                let fixtures: Vec<_> = flat.fixtures.into_iter().map(Arc::new).collect();
+                let scenarios: Vec<_> = flat.scenarios.into_iter().map(Arc::new).collect();
+                let relationships: Vec<_> = flat.relationships.into_iter().map(Arc::new).collect();
+                let state_machines: Vec<_> =
+                    flat.state_machines.into_iter().map(|(id, sm)| (id, Arc::new(sm))).collect();
+                (specs, fixtures, scenarios, relationships, state_machines)
+            } else {
+                (vec![], vec![], vec![], vec![], vec![])
+            };
+
+        // Pre-register every topic we know about from the fixture file so
+        // Produce/Fetch routing and Metadata responses see consistent state.
+        // (No messages are pre-populated — only the topic shell with the
+        // right partition count.)
+        {
+            let mut topic_map = topics.write().await;
+            for spec in &topic_specs {
+                topic_map.entry(spec.name.clone()).or_insert_with(|| {
+                    let cfg = crate::topics::TopicConfig {
+                        num_partitions: spec.partitions.max(1),
+                        replication_factor: spec.replication_factor.max(1),
+                        ..Default::default()
+                    };
+                    crate::topics::Topic::new(spec.name.clone(), cfg)
+                });
+            }
+        }
 
         let template_engine = mockforge_core::templating::TemplateEngine::new();
 
         Ok(Self {
             fixtures,
+            topic_specs,
+            scenarios,
+            relationships,
+            state_machines,
             template_engine,
             topics,
         })
     }
 
+    /// Every fixture loaded, in file order. Used by `fixture_executor` to
+    /// look up a template for the scenario/relationship target topic.
+    pub fn all_fixtures(&self) -> &[Arc<crate::fixtures::KafkaFixture>] {
+        &self.fixtures
+    }
+
+    /// Scenarios defined across every loaded fixture file.
+    pub fn scenarios(&self) -> &[Arc<crate::fixture_file::ScenarioSpec>] {
+        &self.scenarios
+    }
+
+    /// Relationships (causal produce → produce links) across every
+    /// loaded fixture file.
+    pub fn relationships(&self) -> &[Arc<crate::fixture_file::RelationshipSpec>] {
+        &self.relationships
+    }
+
+    /// State-machine graphs keyed by `{topic}#{index}` fixture identifier.
+    pub fn state_machines(&self) -> &[(String, Arc<crate::fixture_file::StateMachineSpec>)] {
+        &self.state_machines
+    }
+
     /// Find fixture by topic
     pub fn find_fixture_by_topic(&self, topic: &str) -> Option<Arc<crate::fixtures::KafkaFixture>> {
         self.fixtures.iter().find(|f| f.topic == topic).cloned()
+    }
+
+    /// Topic specs loaded from the nested-topology fixture file, in file
+    /// order. Consumed by the Metadata response wiring in a follow-up PR.
+    pub fn topic_specs(&self) -> &[Arc<crate::fixture_file::KafkaTopicSpec>] {
+        &self.topic_specs
     }
 
     /// Produce a message to a topic

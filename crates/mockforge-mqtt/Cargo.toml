@@ -33,6 +33,6 @@ rustls = "0.23"
 rustls-pemfile = "2"
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }

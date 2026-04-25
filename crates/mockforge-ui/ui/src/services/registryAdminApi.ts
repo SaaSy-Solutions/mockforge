@@ -1,21 +1,20 @@
 // Registry admin API client.
 //
-// In **cloud mode** (VITE_API_BASE_URL set): calls go to the SaaS
+// In **cloud mode** (VITE_MOCKFORGE_MODE=cloud): calls go to the SaaS
 // backend at /api/v1/* and use the existing SaaS JWT from useAuthStore
 // (stored under `auth_token` in localStorage).
 //
-// In **self-hosted mode** (no VITE_API_BASE_URL): calls go to the
-// embedded SQLite-backed endpoints at /api/admin/registry/* and use a
-// separate JWT stored under `mockforge_registry_admin_token`.
+// In **self-hosted mode** (default): calls go to the embedded
+// SQLite-backed endpoints at /api/admin/registry/* and use a separate
+// JWT stored under `mockforge_registry_admin_token`.
+
+import { isCloudMode as detectCloudMode } from '../utils/cloudMode';
 
 const TOKEN_STORAGE_KEY = 'mockforge_registry_admin_token';
 const SAAS_TOKEN_KEY = 'auth_token'; // matches useAuthStore's persist key
 
-/** True when the frontend is served by Vercel with a cloud API backend. */
-export const isCloudMode = (): boolean => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL;
-  return !!apiBase && apiBase !== '';
-};
+/** True when the frontend is built against a remote cloud API backend (VITE_MOCKFORGE_MODE=cloud). */
+export const isCloudMode = detectCloudMode;
 
 export interface RegistryUser {
   id: string;

@@ -4,16 +4,16 @@ FROM node:22-slim AS ui-builder
 
 WORKDIR /ui
 
-# Use pnpm via Corepack (pnpm-lock.yaml is the source of truth for the UI workspace)
+# pnpm via Corepack — pnpm-lock.yaml is the source of truth for the UI workspace
 RUN corepack enable
 
-# Install dependencies first for better layer caching. Skip Playwright browsers —
-# we only need build tooling (Vite/TS), not e2e runners.
+# Install deps first for layer caching. Skip the Playwright browser download —
+# the image only needs Vite/TS build tooling, not the e2e runner.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY crates/mockforge-ui/ui/package.json crates/mockforge-ui/ui/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-# Copy the rest of the UI source and build the production bundle
+# Copy UI source and build the production bundle (outputs to /ui/dist)
 COPY crates/mockforge-ui/ui/ ./
 RUN pnpm build
 
@@ -52,15 +52,20 @@ COPY examples/ ./examples/
 COPY proto/ ./proto/
 COPY config.example.yaml ./
 
-# Drop the real UI bundle into the expected dist/ path so build.rs embeds it.
-# build.rs also tries to invoke build_ui.sh — remove it here so it skips cleanly
-# (Node isn't installed in this stage and dist/ is already built).
+# Drop the real UI bundle from the ui-builder stage into the expected path so
+# build.rs embeds it via include_str!. Also remove build_ui.sh — build.rs
+# invokes it during cargo build, but Node isn't installed here and dist/ is
+# already built. build.rs only runs the script `if ui_build_script.exists()`.
 COPY --from=ui-builder /ui/dist/ crates/mockforge-ui/ui/dist/
 RUN rm -f crates/mockforge-ui/build_ui.sh
 
 # Build the application in release mode with the `cloud` feature set.
-# `cloud` rolls up default features + the protocol crates we expose on hosted
-# mocks (ws, graphql, grpc, smtp, mqtt, kafka, amqp, tcp). FTP is excluded.
+# `cloud` rolls up default features (admin, bench, chaos, recorder, scenarios,
+# tracing, federation, tunnel, vbr) plus the protocol crates we expose on
+# hosted mocks: ws, graphql, grpc, smtp, mqtt, kafka, amqp, tcp. FTP is
+# excluded — Fly's passive-port story is painful, revisit on demand.
+# This is preferred over `--features all-protocols`, which lacks the
+# default admin/bench/tracing bundle.
 RUN cargo build --release --bin mockforge --no-default-features --features cloud --package mockforge-cli
 
 # Stage 2: Create the runtime image

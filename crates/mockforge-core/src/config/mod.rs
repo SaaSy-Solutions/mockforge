@@ -426,6 +426,14 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         }
     }
 
+    if let Ok(host) = std::env::var("MOCKFORGE_WS_HOST") {
+        config.websocket.host = host;
+    }
+
+    if let Ok(replay) = std::env::var("MOCKFORGE_WS_REPLAY_FILE") {
+        config.websocket.replay_file = Some(replay);
+    }
+
     // gRPC server overrides
     if let Ok(port) = std::env::var("MOCKFORGE_GRPC_PORT") {
         if let Ok(port_num) = port.parse() {
@@ -465,6 +473,10 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
 
     if let Ok(enabled) = std::env::var("MOCKFORGE_KAFKA_ENABLED") {
         config.kafka.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
+    }
+
+    if let Ok(dir) = std::env::var("MOCKFORGE_KAFKA_FIXTURES_DIR") {
+        config.kafka.fixtures_dir = Some(std::path::PathBuf::from(dir));
     }
 
     // Kafka advertised-listener overrides. Required when the broker is

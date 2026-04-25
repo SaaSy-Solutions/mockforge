@@ -46,7 +46,13 @@ impl MockForgeServer {
             resolved_config.admin_port = Some(port);
             info!("Auto-assigned admin port: {}", port);
         }
-        if resolved_config.metrics_port == Some(0) {
+        // Prometheus metrics defaults to `enabled: true, port: 9090` in
+        // the CLI config. If we don't override, every subprocess races
+        // on 9090 and loses — and when the metrics handle errors out,
+        // the server's `tokio::select!` trips and the whole subprocess
+        // exits before HTTP health ever goes ready. Auto-assign whenever
+        // the caller didn't pin a port, so parallel tests never collide.
+        if resolved_config.metrics_port.is_none() || resolved_config.metrics_port == Some(0) {
             let port = find_available_port(32000)?;
             resolved_config.metrics_port = Some(port);
             info!("Auto-assigned metrics port: {}", port);

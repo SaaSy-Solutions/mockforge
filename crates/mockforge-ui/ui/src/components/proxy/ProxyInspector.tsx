@@ -14,6 +14,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from '../ui/ResponsiveTab
 import { SkeletonTable } from '../ui/Skeleton';
 import { DataErrorFallback } from '../error/ErrorFallbacks';
 import { useApiErrorHandling } from '../../hooks/useErrorHandling';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import {
   useProxyRules,
   useCreateProxyRule,
@@ -50,6 +51,7 @@ interface ProxyRuleFormData {
 }
 
 export function ProxyInspector() {
+  const confirmDelete = useConfirmDelete();
   const [activeTab, setActiveTab] = useState<'rules' | 'inspect'>('rules');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingRule, setEditingRule] = useState<ProxyRule | null>(null);
@@ -161,7 +163,7 @@ export function ProxyInspector() {
 
   // Handle delete rule
   const handleDeleteRule = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this proxy replacement rule?')) {
+    if (!confirmDelete('Are you sure you want to delete this proxy replacement rule?')) {
       return;
     }
 

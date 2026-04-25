@@ -130,7 +130,8 @@ For detailed use case examples and code samples, see [Ecosystem & Use Cases Guid
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
 
-- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), JWT-based authentication with Admin/Editor/Viewer roles
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures)
+- ⚠️ **Planned for v1.1**: Admin UI role-based authentication (frontend UI components are built, backend JWT/OAuth integration pending)
 
 All commands, options, and features documented in each protocol section (HTTP, gRPC, WebSocket, GraphQL, Plugins, Data Generation) have been verified to work as described.
 
@@ -284,7 +285,7 @@ MockForge comes with comprehensive examples to get you started quickly:
 make run-example
 
 # Or use the configuration file
-cargo run -p mockforge-cli -- serve --config config.example.yaml
+cargo run -p mockforge-cli -- serve --config demo-config.yaml
 
 # Or run manually with environment variables
 MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl \
@@ -497,34 +498,41 @@ See `examples/README.md` for detailed documentation on the example files.
 
 ### Docker (Alternative Installation)
 
-MockForge can also be run using Docker for easy deployment:
+Prebuilt images are published to GitHub Container Registry on every push
+to `main` and on every semver tag (currently `linux/amd64` only; arm64
+builds are on the roadmap). No authentication is needed to pull.
 
-#### Quick Docker Start
+#### Pull and run from GHCR
 
 ```bash
-# Using Docker Compose (recommended)
+# Latest main build
+docker pull ghcr.io/saasy-solutions/mockforge:latest
+
+# Pinned release (recommended for production)
+docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
+
+# Run with the bundled example spec + admin UI
+docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
+  -e MOCKFORGE_ADMIN_ENABLED=true \
+  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
+  ghcr.io/saasy-solutions/mockforge:latest
+```
+
+The admin UI is then at <http://localhost:9080> — sign in with the default
+local credentials (`admin` / `admin123`, or `editor` / `editor123` /
+`viewer` / `viewer123`).
+
+#### Build from source
+
+If you're iterating on MockForge itself, build the image locally:
+
+```bash
+# Using Docker Compose (recommended for dev)
 make docker-compose-up
 
-# Or using Docker directly
+# Or build + run directly
 make docker-build && make docker-run
 ```
-
-#### Manual Docker Commands
-
-```bash
-# Build the image
-docker build -t mockforge .
-
-# Run with examples (pass the spec path via MOCKFORGE_OPENAPI_SPEC_URL,
-# which accepts both URLs and local paths inside the container)
-docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
-  -v $(pwd)/examples:/app/examples:ro \
-  -e MOCKFORGE_ADMIN_ENABLED=true \
-  -e MOCKFORGE_OPENAPI_SPEC_URL=/app/examples/openapi-demo.json \
-  mockforge
-```
-
-> Note: `make docker-compose-up` uses the bundled `docker-compose.yml`, which maps HTTP/WS to host ports **8000** and **8001** (not 3000/3001) to avoid collisions with locally-running dev servers. Admin UI (9080) and gRPC (50051) are pass-through.
 
 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation and deployment options.
 
@@ -626,7 +634,7 @@ cargo run -p mockforge-cli -- data template user --rows 50 --output users.json
 cargo run -p mockforge-cli -- admin --port 9080
 
 # Start workspace synchronization daemon
-cargo run -p mockforge-cli -- sync --workspace-dir ./workspace-sync
+cargo run -p mockforge-cli -- sync start --directory ./workspace-sync
 
 # Access Admin Interface
 
@@ -1294,7 +1302,7 @@ The Admin UI provides:
 - **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
 
-> **Note**: JWT-based role-based access control (Admin, Editor, Viewer) is implemented end-to-end. In development mode the Admin UI allows unauthenticated access by default for convenience; enable auth enforcement by disabling the dev bypass via environment variables (see `crates/mockforge-ui/src/rbac.rs`).
+> **Note**: Role-based authentication (Admin/Viewer access control) is planned for v1.1. The frontend UI components are ready, but backend JWT/OAuth authentication is not yet implemented in v1.0. The Admin UI is currently accessible without authentication.
 
 ### Embedded Admin Mode
 
@@ -1473,37 +1481,24 @@ make book
 
 ### Project Structure
 
-MockForge is a Cargo workspace of 50+ crates. The table below highlights the most commonly touched crates — run `ls crates/` for the full list, or see [CLAUDE.md](CLAUDE.md) for a categorized inventory (foundation, protocol, plugin, observability, user-facing, infrastructure).
-
 ```text
 mockforge/
-├── crates/                     # Workspace crates (50+)
+├── crates/                     # Workspace crates
 │   ├── mockforge-cli/          # Command-line interface
 │   ├── mockforge-core/         # Shared logic (routing, validation, latency, proxy)
 │   ├── mockforge-http/         # HTTP mocking library
 │   ├── mockforge-ws/           # WebSocket mocking library
-│   ├── mockforge-grpc/         # gRPC mocking library (+ HTTP bridge)
-│   ├── mockforge-graphql/      # GraphQL mocking library
-│   ├── mockforge-kafka/        # Kafka mock broker
-│   ├── mockforge-mqtt/         # MQTT broker (3.1.1 and 5.0)
-│   ├── mockforge-amqp/         # AMQP 0.9.1 broker
-│   ├── mockforge-smtp/         # SMTP server
-│   ├── mockforge-ftp/          # FTP server
-│   ├── mockforge-tcp/          # Raw TCP mocking
+│   ├── mockforge-grpc/         # gRPC mocking library
 │   ├── mockforge-data/         # Synthetic data generation (faker + RAG)
-│   ├── mockforge-sdk/          # Rust SDK for embedding in tests
-│   ├── mockforge-plugin-*/     # Plugin core, loader, SDK, registry, CLI
-│   ├── mockforge-ui/           # Admin UI (Axum routes + static assets)
-│   └── mockforge-registry-*/   # Multi-tenant registry server & core
-├── sdk/                        # Non-Rust SDKs (nodejs, python, go, java, dotnet, browser)
+│   └── mockforge-ui/           # Admin UI (Axum routes + static assets)
 ├── config.example.yaml         # Configuration example
-├── config.template.yaml        # Fully-documented config template
 ├── docs/                       # Project documentation
 ├── book/                       # mdBook documentation
 ├── examples/                   # Example configurations and test files
-├── vscode-extension/           # VS Code extension
+├── tools/                      # Development tools
 ├── scripts/                    # Setup and utility scripts
-└── .github/                    # GitHub Actions and templates
+├── .github/                    # GitHub Actions and templates
+└── tools/                      # Development utilities
 ```
 
 ### Contributing
@@ -1618,33 +1613,30 @@ MockForge includes comprehensive performance benchmarks using Criterion.rs to me
 
 ### Benchmark Categories
 
-**Template Rendering** (`mockforge-core/benches/core_benchmarks.rs`)
-- Simple variable substitution (e.g. `{{uuid}}`)
-- Complex multi-variable templates
-- Array iteration
+**Template Rendering**
+- Simple variable substitution: `{{name}}`
+- Complex nested templates: `{{user.address.city}}`
+- Array iteration: `{{#each items}}`
 
 **JSON Schema Validation**
 - Simple schema validation (single object)
 - Complex nested schema validation
+- Large array validation (100+ items)
 
 **OpenAPI Spec Parsing**
-- Small specs (1 path)
-- Medium specs (10 paths)
-- Large specs (100 paths, in memory profile)
+- Small specs (1-5 paths)
+- Medium specs (10-50 paths)
+- Large specs (100+ paths with complex schemas)
 
 **Data Generation**
 - Single record generation
-
-**Encryption**
-- AES-256-GCM round-trip
-- ChaCha20-Poly1305 round-trip
+- Bulk data generation (1000+ records)
+- RAG-powered synthetic data
 
 **Memory Profiling**
-- Large OpenAPI spec parsing (100 paths)
+- Large OpenAPI spec parsing (100+ paths)
 - Deep template rendering (nested structures)
-- Large array validation (100 items)
-
-**Protocol brokers** (`mockforge-kafka`, `mockforge-mqtt`, `mockforge-amqp`, `mockforge-smtp`, `mockforge-ftp`) each ship their own Criterion bench files.
+- Bulk data validation
 
 ### Running Benchmarks
 
@@ -1664,22 +1656,19 @@ cargo bench -- --save-baseline main
 
 ### Benchmark Results
 
-Representative headline numbers (see [`docs/PERFORMANCE_BENCHMARKS.md`](docs/PERFORMANCE_BENCHMARKS.md) for the full, up-to-date table):
+Typical performance metrics on modern hardware (AMD Ryzen 9 / Intel i9):
 
-| Operation | Mean time |
-|-----------|-----------|
-| `json_validation/simple` | 105 ns |
-| `template_rendering/arrays` | 345 ns |
-| `template_rendering/complex` | 405 ns |
-| `data_generation/generate_single_record` | 748 ns |
-| `template_rendering/simple` (with UUID) | 941 ns |
-| `encryption/aes256_gcm` (round-trip) | 1.09 µs |
-| `encryption/chacha20_poly1305` (round-trip) | 4.2 µs |
-| `openapi_parsing/small_spec` (1 path) | 24 µs |
-| `openapi_parsing/medium_spec` (10 paths) | 172 µs |
-| `memory/large_spec_parsing` (100 paths) | 7.16 ms |
+| Operation | Throughput | Latency |
+|-----------|------------|---------|
+| Simple template rendering | ~500K ops/sec | ~2 µs |
+| Complex template rendering | ~100K ops/sec | ~10 µs |
+| JSON schema validation (simple) | ~1M ops/sec | ~1 µs |
+| JSON schema validation (complex) | ~200K ops/sec | ~5 µs |
+| OpenAPI spec parsing (small) | ~10K ops/sec | ~100 µs |
+| OpenAPI spec parsing (large) | ~500 ops/sec | ~2 ms |
+| Data generation (single record) | ~50K ops/sec | ~20 µs |
 
-*Numbers are from the criterion suite on a reference machine (last refreshed December 2025). Run `cargo bench` on your target hardware for environment-specific results.*
+*Note: Results vary based on hardware, spec complexity, and system load. Run benchmarks on your target hardware for accurate metrics.*
 
 ### Continuous Performance Monitoring
 
@@ -1691,23 +1680,6 @@ Benchmarks are run automatically in CI/CD:
 View the latest benchmark results in our [GitHub Actions](https://github.com/SaaSy-Solutions/mockforge/actions/workflows/benchmarks.yml).
 
 📊 **For detailed performance characteristics and current benchmark results, see [Performance Benchmarks Documentation](docs/PERFORMANCE_BENCHMARKS.md).**
-
-### Load Testing with k6
-
-In addition to criterion micro-benchmarks, the `mockforge-bench` crate generates and runs [k6](https://k6.io) load-test scripts directly from an OpenAPI spec, so you can stress a real target (your mock, a staging service, or production) without hand-writing scripts.
-
-```bash
-# Generate a k6 script from an OpenAPI spec
-mockforge generate-tests --format k6 --spec api.yaml --output load-test.js
-
-# Or generate + run against a target in one step
-mockforge bench --spec api.yaml --target http://localhost:3000 --duration 5m --vus 100
-
-# Built-in scenarios: baseline, spike, soak, stress
-mockforge bench --spec api.yaml --target http://localhost:3000 --scenario spike
-```
-
-Features include data-driven payloads (via k6 `SharedArray`), parameter overrides, CRUD-flow generation with dependency chaining, OWASP-style security fuzzing, and WAFBench integration. See `crates/mockforge-bench/` for the full generator and `mockforge bench --help` for every flag.
 
 ## 📚 Documentation
 
@@ -1736,7 +1708,7 @@ Features include data-driven payloads (via k6 `SharedArray`), parameter override
 | **Validation too strict** | `mockforge serve --validation warn` |
 | **Admin UI not loading** | `mockforge serve --admin --admin-port 9080` |
 | **Docker port conflicts** | `docker run -p 3001:3000 mockforge` |
-| **Docker permission issues** | Find the in-container UID: `docker run --rm mockforge id -u` → `sudo chown -R <uid>:<uid> fixtures/` (the image uses a `mockforge` system user, not UID 1000) |
+| **Docker permission issues** | `sudo chown -R 1000:1000 fixtures/` (Linux) |
 
 See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/troubleshooting.html) for detailed solutions.
 
@@ -1744,7 +1716,7 @@ See the [complete troubleshooting guide](https://docs.mockforge.dev/reference/tr
 
 - **[GitHub Issues](https://github.com/SaaSy-Solutions/mockforge/issues)** - Report bugs or request features
 - **[GitHub Discussions](https://github.com/SaaSy-Solutions/mockforge/discussions)** - Ask questions and share ideas
-- **[Discord](https://discord.gg/2FxXqKpa)** - Join our community chat
+- **[Discord](https://discord.gg/vk22xwxug3)** - Join our community chat
 - **[Contributing Guide](CONTRIBUTING.md)** - Contribute to MockForge development
 
 ### Need Help?

@@ -75,7 +75,7 @@ describe('ServicesPage', () => {
     expect(screen.getByRole('heading', { name: 'Services', level: 2 })).toBeInTheDocument();
   });
 
-  it('displays no services message when empty', () => {
+  it('displays no services message when empty (self-hosted mode)', () => {
     vi.mocked(serviceStore.useServiceStore).mockReturnValue({
       services: [],
       updateService: vi.fn(),
@@ -85,12 +85,45 @@ describe('ServicesPage', () => {
       error: null,
       fetchServices: vi.fn(),
       clearError: vi.fn(),
+      isCloud: false,
     } as any);
 
     render(<ServicesPage />);
 
     expect(screen.getByText('No Services')).toBeInTheDocument();
     expect(screen.getByText('No services configured. Add a service to get started.')).toBeInTheDocument();
+  });
+
+  it('renders Add Service control when empty in cloud mode', () => {
+    // Regression: before PR #143 the early-return rendered a static "No
+    // Services" card with no way to create anything. In cloud mode we must
+    // always render the full ServicesPanel so the Add Service button stays
+    // reachable.
+    vi.mocked(serviceStore.useServiceStore).mockReturnValue({
+      services: [],
+      updateService: vi.fn(),
+      toggleRoute: vi.fn(),
+      filteredRoutes: [],
+      isLoading: false,
+      error: null,
+      fetchServices: vi.fn(),
+      clearError: vi.fn(),
+      isCloud: true,
+      workspaceFilter: null,
+      setWorkspaceFilter: vi.fn(),
+      createService: vi.fn(),
+      removeService: vi.fn(),
+      mutationError: null,
+      clearMutationError: vi.fn(),
+    } as any);
+
+    render(<ServicesPage />);
+
+    expect(
+      screen.getByRole('button', { name: /Add Service/i })
+    ).toBeInTheDocument();
+    // The empty-state card must NOT short-circuit cloud mode.
+    expect(screen.queryByText('No services configured. Add a service to get started.')).not.toBeInTheDocument();
   });
 
   it('displays loading state', () => {
