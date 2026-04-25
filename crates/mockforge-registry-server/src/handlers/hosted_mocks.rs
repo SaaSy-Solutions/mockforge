@@ -1550,6 +1550,41 @@ pub async fn get_recorder_capture(
     proxy_to_deployment_recorder(&deployment, &path).await
 }
 
+/// Get the response body associated with a capture. Recorder splits the
+/// request and response on separate endpoints so callers can paginate
+/// requests cheaply without dragging response payloads along.
+pub async fn get_recorder_capture_response(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+
+    let path = format!("/api/recorder/requests/{}/response", urlencoding::encode(&capture_id));
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, &path).await
+}
+
 /// Get deployment metrics
 pub async fn get_deployment_metrics(
     State(state): State<AppState>,

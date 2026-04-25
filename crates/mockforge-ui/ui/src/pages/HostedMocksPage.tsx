@@ -10,6 +10,12 @@ import { useHostedMockStream } from '@/hooks/useHostedMockStream';
 import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
 import { useRuntimeRequests } from '@/hooks/useRuntimeRequests';
 import {
+  useDeploymentCaptures,
+  fetchCaptureResponse,
+  type DeploymentCapture,
+  type DeploymentCaptureResponse,
+} from '@/hooks/useDeploymentCaptures';
+import {
   Box,
   Card,
   CardContent,
@@ -237,6 +243,39 @@ export const HostedMocksPage: React.FC = () => {
   } = useRuntimeRequests(detailsOpen ? selectedDeployment?.id : undefined, {
     enabled: detailsOpen && !!selectedDeployment,
   });
+
+  // Recorder captures (#234) via the cloud proxy. The recorder library
+  // stores full request/response pairs on the deployment's local SQLite;
+  // the registry server proxies the read API so the data is reachable
+  // from the admin UI without exposing the deployment URL to the browser.
+  const {
+    captures: recorderCaptures,
+    loading: capturesLoading,
+    error: capturesError,
+    refetch: refetchCaptures,
+  } = useDeploymentCaptures(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
+  });
+  const [selectedCapture, setSelectedCapture] = useState<DeploymentCapture | null>(null);
+  const [selectedCaptureResponse, setSelectedCaptureResponse] =
+    useState<DeploymentCaptureResponse | null>(null);
+  const [captureResponseLoading, setCaptureResponseLoading] = useState(false);
+
+  const openCapture = useCallback(
+    async (capture: DeploymentCapture) => {
+      setSelectedCapture(capture);
+      setSelectedCaptureResponse(null);
+      if (!selectedDeployment) return;
+      setCaptureResponseLoading(true);
+      try {
+        const resp = await fetchCaptureResponse(selectedDeployment.id, capture.id);
+        setSelectedCaptureResponse(resp);
+      } finally {
+        setCaptureResponseLoading(false);
+      }
+    },
+    [selectedDeployment],
+  );
 
   useEffect(() => {
     loadDeployments();
@@ -1136,6 +1175,7 @@ export const HostedMocksPage: React.FC = () => {
                 <Tab icon={<ViewIcon />} label="Events" />
                 <Tab icon={<ViewIcon />} label="Logs" />
                 <Tab icon={<ViewIcon />} label="Requests" />
+                <Tab icon={<ViewIcon />} label="Captures" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
               </Tabs>
 
@@ -1541,7 +1581,113 @@ export const HostedMocksPage: React.FC = () => {
                 </Box>
               )}
 
+              {/* Captures tab: full request/response pairs from mockforge-recorder via the cloud proxy (#234). */}
               {detailsTab === 4 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      Full request/response pairs from the deployment's recorder. Captures live on
+                      the deployment's local storage and are wiped on machine restart.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchCaptures}
+                      disabled={capturesLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {capturesError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {capturesError}. The recorder may not be enabled on this deployment —
+                      configure <code>observability.recorder.enabled = true</code> in its config
+                      and redeploy.
+                    </Alert>
+                  )}
+
+                  {recorderCaptures.length === 0 ? (
+                    <Alert severity="info">
+                      No captures yet. Enable the recorder on the deployment, send traffic, and
+                      the captures will appear here within a few seconds.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        maxHeight: 480,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Protocol</TableCell>
+                            <TableCell>Method</TableCell>
+                            <TableCell>Path</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Duration</TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {recorderCaptures.map((capture) => (
+                            <TableRow key={capture.id} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {new Date(capture.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={String(capture.protocol).toLowerCase()}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell>{capture.method}</TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {capture.path}
+                              </TableCell>
+                              <TableCell>
+                                {capture.status_code != null ? (
+                                  <Chip
+                                    label={capture.status_code}
+                                    size="small"
+                                    color={
+                                      capture.status_code >= 500
+                                        ? 'error'
+                                        : capture.status_code >= 400
+                                          ? 'warning'
+                                          : 'success'
+                                    }
+                                  />
+                                ) : (
+                                  <Typography variant="caption" color="text.secondary">
+                                    —
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {capture.duration_ms != null ? `${capture.duration_ms}ms` : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Button size="small" onClick={() => openCapture(capture)}>
+                                  View
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {detailsTab === 5 && (
                 <Box>
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>
@@ -1713,6 +1859,127 @@ export const HostedMocksPage: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Capture detail dialog. Sibling to the deployment details dialog so
+          we don't have to nest dialogs (which MUI handles but produces
+          confusing focus behaviour). */}
+      <Dialog
+        open={!!selectedCapture}
+        onClose={() => {
+          setSelectedCapture(null);
+          setSelectedCaptureResponse(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        {selectedCapture && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip label={selectedCapture.method} size="small" variant="outlined" />
+                <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
+                  {selectedCapture.path}
+                </Typography>
+                {selectedCapture.status_code != null && (
+                  <Chip
+                    label={selectedCapture.status_code}
+                    size="small"
+                    color={
+                      selectedCapture.status_code >= 500
+                        ? 'error'
+                        : selectedCapture.status_code >= 400
+                          ? 'warning'
+                          : 'success'
+                    }
+                  />
+                )}
+              </Box>
+            </DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="subtitle2" gutterBottom>
+                Request
+              </Typography>
+              <Box
+                component="pre"
+                sx={{
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  bgcolor: 'background.default',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1.5,
+                  maxHeight: 240,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  m: 0,
+                }}
+              >
+                {`Headers:\n${formatJsonString(selectedCapture.headers)}\n\nBody (${selectedCapture.body_encoding}):\n${selectedCapture.body ?? '(empty)'}`}
+              </Box>
+
+              <Typography variant="subtitle2" sx={{ mt: 2 }} gutterBottom>
+                Response
+              </Typography>
+              {captureResponseLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : selectedCaptureResponse ? (
+                <Box
+                  component="pre"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    bgcolor: 'background.default',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    p: 1.5,
+                    maxHeight: 240,
+                    overflow: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    m: 0,
+                  }}
+                >
+                  {`Status: ${selectedCaptureResponse.status_code}\n\nHeaders:\n${formatJsonString(selectedCaptureResponse.headers)}\n\nBody (${selectedCaptureResponse.body_encoding}):\n${selectedCaptureResponse.body ?? '(empty)'}`}
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  No response body recorded. The deployment may have shut down before the
+                  response was committed, or the recorder may not capture response bodies for
+                  this protocol.
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => {
+                  setSelectedCapture(null);
+                  setSelectedCaptureResponse(null);
+                }}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };
+
+/**
+ * Pretty-print a JSON string. Recorder stores headers and query_params as
+ * JSON-encoded strings; if the parse fails we surface the raw text so a
+ * malformed entry is still readable.
+ */
+function formatJsonString(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
