@@ -1585,6 +1585,131 @@ pub async fn get_recorder_capture_response(
     proxy_to_deployment_recorder(&deployment, &path).await
 }
 
+/// Proxy a POST to the deployment's recorder API. Used by the
+/// enable/disable/clear mutations below — same auth model as the GET
+/// proxies (user JWT gates access; the deployment itself has no
+/// per-user auth on `/api/recorder/*`).
+async fn proxy_post_to_deployment_recorder(
+    deployment: &HostedMock,
+    path: &str,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}{}", base.trim_end_matches('/'), path);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+
+    let resp =
+        client.post(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder proxy POST failed: {}", e))
+        })?;
+
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy read body failed: {}", e))
+    })?;
+
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy response build failed: {}", e))
+    })
+}
+
+async fn check_org_access(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    deployment_id: Uuid,
+) -> ApiResult<HostedMock> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+    Ok(deployment)
+}
+
+/// Enable recording on the deployment. Proxies POST /api/recorder/enable.
+pub async fn enable_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_post_to_deployment_recorder(&deployment, "/api/recorder/enable").await
+}
+
+/// Disable recording on the deployment. Proxies POST /api/recorder/disable.
+pub async fn disable_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_post_to_deployment_recorder(&deployment, "/api/recorder/disable").await
+}
+
+/// Clear all captures on the deployment. Proxies DELETE /api/recorder/clear.
+/// Note: the deployment's clear endpoint is DELETE; we POST through to it
+/// here because typing the verb at the cloud layer doesn't change much
+/// and POST is friendlier for browser fetch without preflight.
+pub async fn clear_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    // Build a DELETE on the wire since that's what the recorder defines.
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}/api/recorder/clear", base.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let resp =
+        client.delete(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder clear proxy failed: {}", e))
+        })?;
+    let status = resp.status();
+    let headers_resp = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder clear read body failed: {}", e))
+    })?;
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers_resp.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder clear response build failed: {}", e))
+    })
+}
+
 /// Export the deployment's recorder captures as HAR. Proxies the
 /// recorder's existing `/api/recorder/export/har` endpoint and forwards
 /// the response unchanged. The browser handles the download via a blob

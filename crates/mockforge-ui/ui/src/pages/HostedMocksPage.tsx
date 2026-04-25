@@ -1688,11 +1688,49 @@ export const HostedMocksPage: React.FC = () => {
               {/* Captures tab: full request/response pairs from mockforge-recorder via the cloud proxy (#234). */}
               {detailsTab === 4 && (
                 <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
                       Full request/response pairs from the deployment's recorder. Captures live on
                       the deployment's local storage and are wiped on machine restart.
                     </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await toggleRecorder(selectedDeployment.id, 'enable');
+                        refetchCaptures();
+                      }}
+                    >
+                      Enable
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await toggleRecorder(selectedDeployment.id, 'disable');
+                        refetchCaptures();
+                      }}
+                    >
+                      Disable
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      disabled={!selectedDeployment || recorderCaptures.length === 0}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        if (!confirm('Clear all captures on this deployment?')) return;
+                        await toggleRecorder(selectedDeployment.id, 'clear');
+                        refetchCaptures();
+                      }}
+                    >
+                      Clear
+                    </Button>
                     <Button
                       size="small"
                       variant="outlined"
@@ -2165,6 +2203,36 @@ function formatJsonString(raw: string): string {
  * one-shot user action — silent failure would leave them wondering why
  * nothing downloaded.
  */
+/**
+ * Flip the deployment's recorder enable/disable/clear state via the
+ * cloud proxy. We surface server-side errors as alerts because each
+ * action is a deliberate user click — silent failure is worse than
+ * mildly noisy success.
+ */
+async function toggleRecorder(
+  deploymentId: string,
+  action: 'enable' | 'disable' | 'clear',
+): Promise<void> {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    alert('Not authenticated');
+    return;
+  }
+  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/${action}`;
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Recorder action failed';
+    alert(`Recorder ${action} failed: ${msg}`);
+  }
+}
+
 async function downloadCapturesHar(deploymentId: string, slug: string): Promise<void> {
   const token = localStorage.getItem('auth_token');
   if (!token) {
