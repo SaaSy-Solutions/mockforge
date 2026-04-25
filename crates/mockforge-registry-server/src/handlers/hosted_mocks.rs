@@ -1308,6 +1308,161 @@ pub async fn ingest_runtime_logs(
     Ok(Json(IngestResponse { accepted }))
 }
 
+// === Capture ingest (#234 part 2) ===
+//
+// The recorder ships completed exchanges (request + response) here. The
+// wire format mirrors `mockforge_recorder::models::RecordedExchange` —
+// we duplicate just the fields rather than depend on the recorder crate
+// directly, since the registry server doesn't need any of the recorder's
+// behaviour. Both sides round-trip through serde, so renames on the
+// recorder side stay compatible as long as the JSON field names match.
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureIngestRequest {
+    pub id: String,
+    pub protocol: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub method: String,
+    pub path: String,
+    #[serde(default)]
+    pub query_params: Option<String>,
+    pub headers: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    pub body_encoding: String,
+    #[serde(default)]
+    pub client_ip: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub span_id: Option<String>,
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    #[serde(default)]
+    pub status_code: Option<i32>,
+    #[serde(default)]
+    pub tags: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureIngestResponse {
+    pub status_code: i32,
+    pub headers: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    pub body_encoding: String,
+    pub size_bytes: i64,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureIngestExchange {
+    pub request: CaptureIngestRequest,
+    #[serde(default)]
+    pub response: Option<CaptureIngestResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CaptureIngestPayload {
+    pub exchanges: Vec<CaptureIngestExchange>,
+}
+
+/// Persist a batch of recorder captures shipped by an in-container
+/// `CaptureCloudSyncHandle`. Same deployment-scoped JWT contract as the
+/// log and OTLP ingest endpoints. Inserts use ON CONFLICT DO NOTHING so
+/// that re-shipped exchanges (retries, container restarts with cached
+/// buffer) don't produce duplicates.
+pub async fn ingest_runtime_captures(
+    State(state): State<AppState>,
+    Path(deployment_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(payload): Json<CaptureIngestPayload>,
+) -> ApiResult<Json<IngestResponse>> {
+    let auth = headers
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or_else(|| ApiError::InvalidRequest("Missing deployment ingest token".to_string()))?;
+
+    let token_deployment_id = mockforge_registry_core::auth::verify_deployment_ingest_token(
+        auth,
+        &state.config.jwt_secret,
+    )
+    .map_err(|e| {
+        tracing::warn!(error = %e, "Capture ingest token rejected");
+        ApiError::InvalidRequest("Invalid deployment ingest token".to_string())
+    })?;
+
+    if token_deployment_id != deployment_id {
+        return Err(ApiError::InvalidRequest(
+            "Token deployment id does not match URL path".to_string(),
+        ));
+    }
+
+    if payload.exchanges.is_empty() {
+        return Ok(Json(IngestResponse { accepted: 0 }));
+    }
+
+    // Capture rows are larger than log rows (full request + response
+    // bodies), so the cap is tighter — a runaway shipper shouldn't fill
+    // a single transaction with megabytes of payload.
+    const MAX_BATCH: usize = 100;
+    let exchanges: Vec<CaptureIngestExchange> =
+        payload.exchanges.into_iter().take(MAX_BATCH).collect();
+    let accepted = exchanges.len();
+
+    let pool = state.db.pool();
+    let mut tx = pool.begin().await.map_err(ApiError::Database)?;
+    for exchange in &exchanges {
+        let req = &exchange.request;
+        let resp = exchange.response.as_ref();
+        sqlx::query(
+            r#"
+            INSERT INTO runtime_captures (
+                deployment_id, capture_id, protocol, occurred_at, method, path,
+                query_params, request_headers, request_body, request_body_encoding,
+                client_ip, trace_id, span_id, duration_ms, status_code, tags,
+                response_status_code, response_headers, response_body,
+                response_body_encoding, response_size_bytes, response_timestamp
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $15, $16, $17, $18, $19, $20, $21, $22
+            )
+            ON CONFLICT (deployment_id, capture_id) DO NOTHING
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(&req.id)
+        .bind(&req.protocol)
+        .bind(req.timestamp)
+        .bind(&req.method)
+        .bind(&req.path)
+        .bind(req.query_params.as_ref())
+        .bind(&req.headers)
+        .bind(req.body.as_ref())
+        .bind(&req.body_encoding)
+        .bind(req.client_ip.as_ref())
+        .bind(req.trace_id.as_ref())
+        .bind(req.span_id.as_ref())
+        .bind(req.duration_ms)
+        .bind(req.status_code)
+        .bind(req.tags.as_ref())
+        .bind(resp.map(|r| r.status_code))
+        .bind(resp.map(|r| r.headers.as_str()))
+        .bind(resp.and_then(|r| r.body.as_deref()))
+        .bind(resp.map(|r| r.body_encoding.as_str()))
+        .bind(resp.map(|r| r.size_bytes))
+        .bind(resp.map(|r| r.timestamp))
+        .execute(&mut *tx)
+        .await
+        .map_err(ApiError::Database)?;
+    }
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    Ok(Json(IngestResponse { accepted }))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RuntimeRequestsQuery {
     /// Maximum entries to return. Capped at 500 server-side.

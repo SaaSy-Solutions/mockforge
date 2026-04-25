@@ -238,14 +238,15 @@ impl DeploymentOrchestrator {
             env.insert("MOCKFORGE_KAFKA_ADVERTISED_PORT".to_string(), "9092".to_string());
         }
 
-        // Wire the in-container request log shipper (#232) to forward every
-        // request to MockForge Cloud's ingest endpoint. We only set the
-        // env vars when:
+        // Wire the in-container request log shipper (#232) and the recorder
+        // capture cloud-sync (#234 part 2) to forward to MockForge Cloud.
+        // We only set the env vars when:
         //   * a JWT secret is available (production deploys always have one)
         //   * a public ingest base URL is configured via MOCKFORGE_LOG_INGEST_BASE_URL
-        // Otherwise the shipper auto-disables and the deployment runs
-        // without structured request log capture — same behaviour as before
-        // this issue.
+        // Both shippers reuse the same deployment-scoped JWT — they're
+        // ingest-only, so a single token with the deployment subject
+        // suffices for both. When the base URL is absent the shippers
+        // auto-disable and the deployment runs without cloud forwarding.
         if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
             if let Ok(ingest_base) = std::env::var("MOCKFORGE_LOG_INGEST_BASE_URL") {
                 let trimmed_base = ingest_base.trim_end_matches('/');
@@ -263,7 +264,15 @@ impl DeploymentOrchestrator {
                             trimmed_base, deployment.id
                         ),
                     );
-                    env.insert("MOCKFORGE_LOG_INGEST_TOKEN".to_string(), token);
+                    env.insert("MOCKFORGE_LOG_INGEST_TOKEN".to_string(), token.clone());
+                    env.insert(
+                        "MOCKFORGE_CAPTURE_INGEST_URL".to_string(),
+                        format!(
+                            "{}/api/v1/hosted-mocks/{}/captures/ingest",
+                            trimmed_base, deployment.id
+                        ),
+                    );
+                    env.insert("MOCKFORGE_CAPTURE_INGEST_TOKEN".to_string(), token);
                 }
             }
         }

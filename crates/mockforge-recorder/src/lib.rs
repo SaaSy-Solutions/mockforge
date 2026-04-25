@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod behavioral_cloning;
+pub mod cloud_sync;
 pub mod database;
 pub mod diff;
 pub mod har_export;
@@ -31,6 +32,7 @@ pub use behavioral_cloning::{
     FlowGroupingStrategy, FlowRecorder, FlowRecordingConfig, FlowStep, ReplayResponse,
     ScenarioInfo, ScenarioStorage, StateVariable,
 };
+pub use cloud_sync::{from_env as cloud_sync_from_env, CaptureCloudSyncHandle};
 pub use database::RecorderDatabase;
 pub use diff::{ComparisonResult, Difference, DifferenceType, ResponseComparator};
 pub use har_export::export_to_har;

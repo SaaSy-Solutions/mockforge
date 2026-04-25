@@ -57,6 +57,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/otlp/v1/traces",
             post(handlers::otlp::ingest_traces),
         )
+        // Recorder capture ingest (#234 part 2). Same deployment-scoped JWT
+        // contract. The in-container recorder ships every completed exchange
+        // here; rows land in runtime_captures and survive container restart.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/captures/ingest",
+            post(handlers::hosted_mocks::ingest_runtime_captures),
+        )
         // Waitlist signup (public)
         .route("/api/v1/waitlist/subscribe", post(handlers::waitlist::subscribe))
         .route("/api/v1/waitlist/unsubscribe", get(handlers::waitlist::unsubscribe))
