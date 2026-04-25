@@ -108,6 +108,7 @@ cloud = [
     "federation",
     "tunnel",
     "vbr",
+    "pipelines",
     "ws",
     "graphql",
     "grpc",
@@ -143,7 +144,7 @@ kafka = ["mockforge-kafka", "rdkafka"]
 amqp = ["mockforge-amqp", "lapin", "futures-lite"]
 smtp = ["mockforge-smtp", "mockforge-http/smtp"]
 tcp = ["mockforge-tcp"]
-pipelines = ["dep:mockforge-pipelines"]
+pipelines = ["dep:mockforge-pipelines", "mockforge-http/pipelines"]
 tui = ["dep:mockforge-tui"]
 vue = []
 

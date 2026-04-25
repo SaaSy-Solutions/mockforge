@@ -5,6 +5,8 @@
 
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::Router;
 use axum::{http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -31,6 +33,21 @@ pub fn create_chain_state(
     engine: Arc<ChainExecutionEngine>,
 ) -> ChainState {
     ChainState { registry, engine }
+}
+
+/// Build the chain management router. Endpoints are mounted under
+/// `/__mockforge/chains` by the caller; the UI's `chains.ts` API client
+/// expects exactly that prefix. Kept as a free function so callers can
+/// `nest("/chains", chains_router(state))` or merge with a different
+/// prefix.
+pub fn chains_router(state: ChainState) -> Router {
+    Router::new()
+        .route("/", get(list_chains).post(create_chain))
+        .route("/{chain_id}", get(get_chain).put(update_chain).delete(delete_chain))
+        .route("/{chain_id}/execute", post(execute_chain))
+        .route("/{chain_id}/validate", post(validate_chain))
+        .route("/{chain_id}/history", get(get_chain_history))
+        .with_state(state)
 }
 
 /// Request body for executing a request chain
