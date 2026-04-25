@@ -190,6 +190,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/disable", post(handlers::hosted_mocks::disable_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/clear", post(handlers::hosted_mocks::clear_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/replay", post(handlers::hosted_mocks::replay_recorder_capture))
+        // State machines (cloud-side proxy to the deployed instance).
+        // Mirrors the captures pattern: read-only proxy gated by org
+        // membership; writes go via the same management API as today
+        // (the deployed instance handles auth at the org boundary).
+        .route("/api/v1/hosted-mocks/{deployment_id}/state-machines", get(handlers::hosted_mocks::list_deployment_state_machines))
+        .route("/api/v1/hosted-mocks/{deployment_id}/state-machines/instances", get(handlers::hosted_mocks::list_deployment_state_machine_instances))
+        .route("/api/v1/hosted-mocks/{deployment_id}/state-machines/{resource_type}", get(handlers::hosted_mocks::get_deployment_state_machine))
         // Trace reads (#233). The ingest endpoint stays on the public router
         // since it authenticates with the deployment-scoped token; these are
         // user-facing reads gated by org membership.
