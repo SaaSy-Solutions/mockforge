@@ -50,9 +50,9 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/log-ingest",
             post(handlers::hosted_mocks::ingest_runtime_logs),
         )
-        // OTLP trace ingest scaffold (#233). Same deployment-scoped JWT
-        // contract as the log ingest above. Today this is a counter-only
-        // receiver; storage backend is a follow-up.
+        // OTLP trace ingest (#233). Same deployment-scoped JWT contract as
+        // the log ingest above. Spans are persisted into runtime_traces
+        // (Postgres-JSONB); read endpoints are on the authenticated router.
         .route(
             "/api/v1/hosted-mocks/{deployment_id}/otlp/v1/traces",
             post(handlers::otlp::ingest_traces),
@@ -182,6 +182,11 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/disable", post(handlers::hosted_mocks::disable_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/clear", post(handlers::hosted_mocks::clear_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/replay", post(handlers::hosted_mocks::replay_recorder_capture))
+        // Trace reads (#233). The ingest endpoint stays on the public router
+        // since it authenticates with the deployment-scoped token; these are
+        // user-facing reads gated by org membership.
+        .route("/api/v1/hosted-mocks/{deployment_id}/traces", get(handlers::otlp::list_traces))
+        .route("/api/v1/hosted-mocks/{deployment_id}/traces/{trace_id}", get(handlers::otlp::get_trace))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         // Projects list (for UI pickers)
         .route("/api/v1/projects", get(handlers::projects::list_projects))
