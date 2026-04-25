@@ -294,6 +294,15 @@ impl DeploymentOrchestrator {
             }
         }
 
+        // Reality-driven proxy upstream (#222). When set, the deployed
+        // mockforge-cli's `reality_proxy` middleware forwards a per-request
+        // probabilistic share of traffic to this URL based on the
+        // workspace's reality_continuum_ratio. Unset = always-mock,
+        // current behaviour preserved.
+        if let Some(upstream) = deployment.upstream_url() {
+            env.insert("MOCKFORGE_PROXY_UPSTREAM".to_string(), upstream);
+        }
+
         // Use MockForge Docker image
         let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
             .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());

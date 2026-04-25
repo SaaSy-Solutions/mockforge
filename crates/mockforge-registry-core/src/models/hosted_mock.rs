@@ -329,6 +329,17 @@ impl HostedMock {
             .unwrap_or_else(|| vec![Protocol::Http])
     }
 
+    /// Optional upstream URL the deployment proxies to when the reality
+    /// slider is > 0 (#222). Persisted inside `config_json` under the
+    /// `"upstream_url"` key so we don't need a schema migration.
+    /// Returns `None` when no upstream is configured — in that case the
+    /// reality slider is a no-op and responses always come from the mock.
+    pub fn upstream_url(&self) -> Option<String> {
+        self.config_json
+            .get("upstream_url")
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+    }
+
     /// Compute the Fly.io app name used at deploy time.
     ///
     /// Mirrors the format built in
