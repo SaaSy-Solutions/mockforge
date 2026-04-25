@@ -244,6 +244,28 @@ export const HostedMocksPage: React.FC = () => {
     enabled: detailsOpen && !!selectedDeployment,
   });
 
+  // Filters for the Requests tab. Pure client-side — the rows are
+  // already buffered by the hook so filtering doesn't trigger refetches.
+  type RequestsStatusFilter = 'all' | '2xx' | '4xx' | '5xx';
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState<RequestsStatusFilter>('all');
+  const [requestsPathFilter, setRequestsPathFilter] = useState('');
+
+  const filteredRequestRows = React.useMemo(() => {
+    const pathQuery = requestsPathFilter.trim().toLowerCase();
+    return runtimeRequestRows.filter((row) => {
+      if (requestsStatusFilter !== 'all') {
+        const bucket = Math.floor(row.status / 100);
+        if (requestsStatusFilter === '2xx' && bucket !== 2) return false;
+        if (requestsStatusFilter === '4xx' && bucket !== 4) return false;
+        if (requestsStatusFilter === '5xx' && bucket !== 5) return false;
+      }
+      if (pathQuery && !row.path.toLowerCase().includes(pathQuery)) {
+        return false;
+      }
+      return true;
+    });
+  }, [runtimeRequestRows, requestsStatusFilter, requestsPathFilter]);
+
   // Recorder captures (#234) via the cloud proxy. The recorder library
   // stores full request/response pairs on the deployment's local SQLite;
   // the registry server proxies the read API so the data is reachable
@@ -1499,6 +1521,46 @@ export const HostedMocksPage: React.FC = () => {
                     </Button>
                   </Box>
 
+                  {/* Filter toolbar: status bucket chips + path substring search. */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    {(['all', '2xx', '4xx', '5xx'] as const).map((bucket) => (
+                      <Chip
+                        key={bucket}
+                        label={bucket === 'all' ? 'All' : bucket}
+                        size="small"
+                        clickable
+                        onClick={() => setRequestsStatusFilter(bucket)}
+                        color={
+                          requestsStatusFilter !== bucket
+                            ? 'default'
+                            : bucket === '5xx'
+                              ? 'error'
+                              : bucket === '4xx'
+                                ? 'warning'
+                                : bucket === '2xx'
+                                  ? 'success'
+                                  : 'primary'
+                        }
+                        variant={requestsStatusFilter === bucket ? 'filled' : 'outlined'}
+                      />
+                    ))}
+                    <TextField
+                      size="small"
+                      placeholder="Filter by path…"
+                      value={requestsPathFilter}
+                      onChange={(e) => setRequestsPathFilter(e.target.value)}
+                      sx={{ minWidth: 240, ml: 'auto' }}
+                    />
+                  </Box>
+
                   {runtimeRequestsError && (
                     <Alert severity="warning" sx={{ mb: 2 }}>
                       Request feed error: {runtimeRequestsError}. The cloud may not have
@@ -1507,10 +1569,27 @@ export const HostedMocksPage: React.FC = () => {
                     </Alert>
                   )}
 
+                  {(requestsStatusFilter !== 'all' || requestsPathFilter.trim()) &&
+                    runtimeRequestRows.length > 0 && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1 }}
+                      >
+                        Showing {filteredRequestRows.length} of {runtimeRequestRows.length}{' '}
+                        captured requests.
+                      </Typography>
+                    )}
+
                   {runtimeRequestRows.length === 0 ? (
                     <Alert severity="info">
                       Waiting for requests. Send traffic to the deployment URL — captured
                       pairs will appear here within a few seconds.
+                    </Alert>
+                  ) : filteredRequestRows.length === 0 ? (
+                    <Alert severity="info">
+                      No requests match the active filter. Try widening the status bucket or
+                      clearing the path filter.
                     </Alert>
                   ) : (
                     <TableContainer
@@ -1534,7 +1613,7 @@ export const HostedMocksPage: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {runtimeRequestRows.map((row, idx) => (
+                          {filteredRequestRows.map((row, idx) => (
                             <TableRow
                               key={`req-${row.request_id || idx}-${row.timestamp}`}
                               hover
