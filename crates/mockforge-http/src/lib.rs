@@ -196,6 +196,8 @@ pub mod management;
 pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
+/// Standalone MockAI HTTP API
+pub mod mockai_api;
 /// Runtime network-profile switching API
 pub mod network_profile_runtime;
 pub mod op_middleware;
@@ -1606,7 +1608,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
     health_manager: Option<Arc<HealthManager>>,
-    _mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
+    mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
     proxy_config: Option<mockforge_proxy::config::ProxyConfig>,
 ) -> Router {
@@ -1723,7 +1725,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 }
 
                 // Use MockAI if available, otherwise use standard router
-                let spec_router = if let Some(ref mockai_instance) = _mockai {
+                let spec_router = if let Some(ref mockai_instance) = mockai {
                     tracing::debug!("Building router with MockAI support");
                     registry.build_router_with_mockai(Some(mockai_instance.clone()))
                 } else {
@@ -2100,6 +2102,18 @@ pub async fn build_router_with_chains_and_multi_tenant(
         use crate::fixtures_api::{fixtures_api_router, FixturesApiState};
         let fx_state = FixturesApiState::from_env();
         app = app.nest("/__mockforge/fixtures", fixtures_api_router(fx_state));
+    }
+
+    // Standalone MockAI API. Until now MockAI was only invoked from the
+    // OpenAPI route generator — so a hosted mock without a spec, or a
+    // user wanting to prototype an "AI persona" mock without registering
+    // routes, had no way to reach the engine. The endpoint surfaces 503
+    // when MockAI isn't configured (no API key) so callers get a clear
+    // signal rather than a silent failure.
+    {
+        use crate::mockai_api::{mockai_api_router, MockAiApiState};
+        let api_state = MockAiApiState::new(mockai.clone());
+        app = app.nest("/__mockforge/api/mockai", mockai_api_router(api_state));
     }
 
     // Runtime route-chaos rules API + middleware. This sits in front of
