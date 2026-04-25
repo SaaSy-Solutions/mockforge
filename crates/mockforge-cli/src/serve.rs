@@ -1890,9 +1890,46 @@ pub async fn handle_serve(
     #[cfg(feature = "recorder")]
     if let Some(ref recorder_config) = config.observability.recorder {
         if recorder_config.enabled {
+            use axum::extract::ConnectInfo;
+            use axum::extract::Request as AxumRequest;
+            use axum::middleware::{from_fn, Next};
+            use std::net::SocketAddr;
+
             match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path).await {
                 Ok(db) => {
-                    let recorder = std::sync::Arc::new(mockforge_recorder::Recorder::new(db));
+                    // Attach the cloud-sync handle when running on a hosted
+                    // mock (#234 part 2). On local / self-hosted runs the
+                    // env vars are absent and the handle is a no-op.
+                    let cloud_sync = mockforge_recorder::cloud_sync::from_env();
+                    if cloud_sync.is_active() {
+                        println!("✅ Recorder cloud-sync enabled — captures will mirror to MockForge Cloud");
+                    }
+                    let recorder = std::sync::Arc::new(
+                        mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync),
+                    );
+
+                    // Wire the recording middleware so HTTP requests actually
+                    // populate the recorder's database. Without this layer
+                    // the API mounts but `/api/recorder/requests` always
+                    // returns an empty list.
+                    let recorder_for_layer = recorder.clone();
+                    http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+                        let recorder = recorder_for_layer.clone();
+                        async move {
+                            let connect_info =
+                                req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
+                            match connect_info {
+                                Some(ci) => {
+                                    mockforge_recorder::recording_middleware(
+                                        recorder, ci, req, next,
+                                    )
+                                    .await
+                                }
+                                None => next.run(req).await,
+                            }
+                        }
+                    }));
+
                     let recorder_router = mockforge_recorder::create_api_router(recorder, None);
                     http_app = http_app.merge(recorder_router);
                     println!(

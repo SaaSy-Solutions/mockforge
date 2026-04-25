@@ -1,6 +1,8 @@
 //! Core recording functionality
 
-use crate::{database::RecorderDatabase, models::*, scrubbing::*, Result};
+use crate::{
+    cloud_sync::CaptureCloudSyncHandle, database::RecorderDatabase, models::*, scrubbing::*, Result,
+};
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -14,6 +16,7 @@ pub struct Recorder {
     enabled: Arc<RwLock<bool>>,
     scrubber: Arc<Scrubber>,
     filter: Arc<CaptureFilter>,
+    cloud_sync: CaptureCloudSyncHandle,
 }
 
 impl Recorder {
@@ -24,6 +27,7 @@ impl Recorder {
             enabled: Arc::new(RwLock::new(true)),
             scrubber: Scrubber::global(),
             filter: CaptureFilter::global(),
+            cloud_sync: CaptureCloudSyncHandle::disabled(),
         }
     }
 
@@ -34,7 +38,17 @@ impl Recorder {
             enabled: Arc::new(RwLock::new(true)),
             scrubber: Arc::new(scrubber),
             filter: Arc::new(filter),
+            cloud_sync: CaptureCloudSyncHandle::disabled(),
         }
+    }
+
+    /// Attach a cloud-sync handle. When configured, every completed
+    /// exchange (after `record_response`) is shipped to the cloud
+    /// ingest endpoint in addition to being stored locally. The local
+    /// SQLite stays the canonical store; cloud is the durable mirror.
+    pub fn with_cloud_sync(mut self, handle: CaptureCloudSyncHandle) -> Self {
+        self.cloud_sync = handle;
+        self
     }
 
     /// Get the scrubber
@@ -87,7 +101,22 @@ impl Recorder {
         // Apply scrubbing
         self.scrubber.scrub_response(&mut response);
 
+        let request_id = response.request_id.clone();
         self.db.insert_response(&response).await?;
+
+        // Ship the now-complete exchange to cloud Postgres if the handle
+        // is configured. Local SQLite stays canonical so a transient
+        // ship failure doesn't lose data — the cloud is a durable mirror,
+        // not the source of truth.
+        if self.cloud_sync.is_active() {
+            if let Ok(Some(request)) = self.db.get_request(&request_id).await {
+                self.cloud_sync.enqueue(RecordedExchange {
+                    request,
+                    response: Some(response),
+                });
+            }
+        }
+
         Ok(())
     }
 
