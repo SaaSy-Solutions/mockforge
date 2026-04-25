@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
 import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
+import { useRuntimeRequests } from '@/hooks/useRuntimeRequests';
 import {
   Box,
   Card,
@@ -223,6 +224,18 @@ export const HostedMocksPage: React.FC = () => {
     error: flyLogsError,
   } = useFlyRuntimeLogs(flyLogsEnabled ? selectedDeployment?.id : undefined, {
     enabled: flyLogsEnabled,
+  });
+
+  // Structured request log feed (#232). Polls the registry server's
+  // /runtime-requests endpoint, which is populated by the in-container log
+  // shipper. Surfaces in the new "Requests" tab below.
+  const {
+    rows: runtimeRequestRows,
+    loading: runtimeRequestsLoading,
+    error: runtimeRequestsError,
+    refetch: refetchRuntimeRequests,
+  } = useRuntimeRequests(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
   });
 
   useEffect(() => {
@@ -1122,6 +1135,7 @@ export const HostedMocksPage: React.FC = () => {
                 <Tab icon={<CodeIcon />} label="Overview" />
                 <Tab icon={<ViewIcon />} label="Events" />
                 <Tab icon={<ViewIcon />} label="Logs" />
+                <Tab icon={<ViewIcon />} label="Requests" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
               </Tabs>
 
@@ -1427,7 +1441,107 @@ export const HostedMocksPage: React.FC = () => {
                 </Box>
               )}
 
+              {/* Requests tab: structured request log feed from the in-container shipper (#232). */}
               {detailsTab === 3 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      Live request feed shipped from the deployed container. Polls every 4
+                      seconds.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchRuntimeRequests}
+                      disabled={runtimeRequestsLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {runtimeRequestsError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Request feed error: {runtimeRequestsError}. The cloud may not have
+                      MOCKFORGE_LOG_INGEST_BASE_URL configured, or the container hasn't
+                      shipped any batches yet.
+                    </Alert>
+                  )}
+
+                  {runtimeRequestRows.length === 0 ? (
+                    <Alert severity="info">
+                      Waiting for requests. Send traffic to the deployment URL — captured
+                      pairs will appear here within a few seconds.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        maxHeight: 480,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Method</TableCell>
+                            <TableCell>Path</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Latency</TableCell>
+                            <TableCell>IP</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {runtimeRequestRows.map((row, idx) => (
+                            <TableRow
+                              key={`req-${row.request_id || idx}-${row.timestamp}`}
+                              hover
+                            >
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {new Date(row.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={row.method}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.path}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={row.status}
+                                  size="small"
+                                  color={
+                                    row.status >= 500
+                                      ? 'error'
+                                      : row.status >= 400
+                                        ? 'warning'
+                                        : 'success'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.latency_ms}ms
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.client_ip ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {detailsTab === 4 && (
                 <Box>
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>
