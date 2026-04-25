@@ -15,6 +15,20 @@ use mockforge_core::config::KafkaConfig;
 use mockforge_core::Result;
 use std::sync::OnceLock;
 
+/// Resolve the (host, port) the broker advertises in its
+/// MetadataResponse. When the orchestrator sets
+/// `MOCKFORGE_KAFKA_ADVERTISED_HOST`/`PORT` (mockforge-core's loader
+/// feeds those into `KafkaConfig::advertised_*`), use them; otherwise
+/// fall back to the bind endpoint so local/dev behaviour is unchanged.
+///
+/// Pulled out as a free function so the resolution can be unit-tested
+/// without standing up a real broker.
+pub(crate) fn resolve_advertised_endpoint(config: &KafkaConfig) -> (String, i32) {
+    let host = config.advertised_host.clone().unwrap_or_else(|| config.host.clone());
+    let port = config.advertised_port.map(|p| p as i32).unwrap_or(config.port as i32);
+    (host, port)
+}
+
 /// Mock Kafka broker implementation
 ///
 /// The `KafkaMockBroker` simulates a complete Apache Kafka broker, handling
@@ -231,11 +245,13 @@ impl KafkaMockBroker {
                 })
                 .collect()
         };
-        let protocol_handler = KafkaProtocolHandler::with_topology(
-            self.config.host.clone(),
-            self.config.port as i32,
-            topics,
-        );
+        // The advertised endpoint (what we tell Kafka clients to connect
+        // to after bootstrap) may differ from the bind endpoint when
+        // running behind Fly: the bind host is 0.0.0.0:9092, but clients
+        // need <app>.fly.dev:9092. See `resolve_advertised_endpoint`.
+        let (advertised_host, advertised_port) = resolve_advertised_endpoint(&self.config);
+        let protocol_handler =
+            KafkaProtocolHandler::with_topology(advertised_host, advertised_port, topics);
         self.metrics.record_connection();
 
         // Ensure we decrement active connections when done
@@ -1264,6 +1280,47 @@ fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ==================== Advertised Endpoint Tests ====================
+
+    #[test]
+    fn advertised_falls_back_to_bind_when_unset() {
+        let config = KafkaConfig {
+            host: "127.0.0.1".to_string(),
+            port: 19092,
+            advertised_host: None,
+            advertised_port: None,
+            ..KafkaConfig::default()
+        };
+        assert_eq!(resolve_advertised_endpoint(&config), ("127.0.0.1".to_string(), 19092));
+    }
+
+    #[test]
+    fn advertised_overrides_bind_when_host_set() {
+        let config = KafkaConfig {
+            host: "0.0.0.0".to_string(),
+            port: 9092,
+            advertised_host: Some("hosted-mock-abc.fly.dev".to_string()),
+            advertised_port: None,
+            ..KafkaConfig::default()
+        };
+        assert_eq!(
+            resolve_advertised_endpoint(&config),
+            ("hosted-mock-abc.fly.dev".to_string(), 9092)
+        );
+    }
+
+    #[test]
+    fn advertised_overrides_bind_when_port_set() {
+        let config = KafkaConfig {
+            host: "0.0.0.0".to_string(),
+            port: 9092,
+            advertised_host: None,
+            advertised_port: Some(443),
+            ..KafkaConfig::default()
+        };
+        assert_eq!(resolve_advertised_endpoint(&config), ("0.0.0.0".to_string(), 443));
+    }
 
     // ==================== Record Tests ====================
 
