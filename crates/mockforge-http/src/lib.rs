@@ -173,6 +173,8 @@ pub mod auth;
 pub mod chain_handlers;
 /// Cross-protocol consistency engine integration for HTTP
 pub mod consistency;
+/// Contract diff retrieval API
+pub mod contract_diff_api;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
 pub mod coverage;
@@ -2074,6 +2076,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
             "/__mockforge/chains",
             chains_router(create_chain_state(chain_registry, chain_engine)),
         );
+    }
+
+    // Contract-diff retrieval API. The `capture_for_contract_diff`
+    // middleware (layered earlier) populates the global capture manager
+    // on every request; this surface lets operators read the captures
+    // and run the analyser against the current OpenAPI spec.
+    {
+        use crate::contract_diff_api::{contract_diff_api_router, ContractDiffApiState};
+        let cd_state = Arc::new(ContractDiffApiState::new(spec_path.clone()));
+        app = app.nest("/__mockforge/api/contract-diff", contract_diff_api_router(cd_state));
     }
 
     // Runtime route-chaos rules API + middleware. This sits in front of
