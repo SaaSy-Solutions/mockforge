@@ -1629,7 +1629,13 @@ pub struct RecorderCapturesQuery {
 }
 
 /// List recently captured request/response pairs for a deployment.
-/// Proxies through to the deployment's `/api/recorder/requests` endpoint.
+///
+/// Reads from the cloud-side `runtime_captures` mirror (#234 part 2)
+/// when the deployment has any synced rows; falls back to proxying the
+/// deployment's `/api/recorder/requests` for older deployments that
+/// haven't been redeployed onto the cloud-sync image. Once a deployment
+/// has shipped at least one capture, we never proxy again — the
+/// Postgres path is faster (no extra hop) and durable across restart.
 pub async fn list_recorder_captures(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -1654,6 +1660,35 @@ pub async fn list_recorder_captures(
         ));
     }
 
+    // If this deployment has synced any captures, always serve from
+    // Postgres. The EXISTS check is index-bound (single row probe on
+    // the `(deployment_id, occurred_at DESC)` index) and adds <1ms.
+    let has_synced: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM runtime_captures WHERE deployment_id = $1 LIMIT 1)",
+    )
+    .bind(deployment_id)
+    .fetch_one(pool)
+    .await
+    .map_err(ApiError::Database)?;
+
+    if has_synced {
+        let limit = params.limit.unwrap_or(100).min(500) as i64;
+        let since = params
+            .since
+            .as_deref()
+            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+            .map(|d| d.with_timezone(&chrono::Utc));
+        let captures = list_cloud_captures(pool, deployment_id, limit, since).await?;
+        let body = serde_json::to_vec(&captures).map_err(|e| {
+            ApiError::InvalidRequest(format!("Failed to serialize captures: {}", e))
+        })?;
+        return Ok(axum::http::Response::builder()
+            .status(axum::http::StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap());
+    }
+
     let mut qs = String::from("/api/recorder/requests");
     let mut sep = '?';
     if let Some(limit) = params.limit {
@@ -1666,11 +1701,100 @@ pub async fn list_recorder_captures(
         qs.push_str(&format!("since={}", urlencoding::encode(since)));
     }
 
-    let _ = state; // currently unused inside the proxy itself; kept for symmetry/future use
+    let _ = state;
     proxy_to_deployment_recorder(&deployment, &qs).await
 }
 
-/// Get a single capture by id.
+/// Cloud-Postgres list query mapped into the same shape the recorder
+/// proxy emits. Kept private — callers go through `list_recorder_captures`.
+async fn list_cloud_captures(
+    pool: &sqlx::PgPool,
+    deployment_id: Uuid,
+    limit: i64,
+    since: Option<chrono::DateTime<chrono::Utc>>,
+) -> ApiResult<Vec<serde_json::Value>> {
+    type Row = (
+        String,                        // capture_id
+        String,                        // protocol
+        chrono::DateTime<chrono::Utc>, // occurred_at
+        String,                        // method
+        String,                        // path
+        Option<String>,                // query_params
+        String,                        // request_headers
+        Option<String>,                // request_body
+        String,                        // request_body_encoding
+        Option<String>,                // client_ip
+        Option<String>,                // trace_id
+        Option<String>,                // span_id
+        Option<i64>,                   // duration_ms
+        Option<i32>,                   // status_code
+        Option<String>,                // tags
+    );
+
+    let rows: Vec<Row> = if let Some(since) = since {
+        sqlx::query_as(
+            r#"
+            SELECT capture_id, protocol, occurred_at, method, path, query_params,
+                   request_headers, request_body, request_body_encoding,
+                   client_ip, trace_id, span_id, duration_ms, status_code, tags
+            FROM runtime_captures
+            WHERE deployment_id = $1 AND occurred_at > $2
+            ORDER BY occurred_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(since)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::Database)?
+    } else {
+        sqlx::query_as(
+            r#"
+            SELECT capture_id, protocol, occurred_at, method, path, query_params,
+                   request_headers, request_body, request_body_encoding,
+                   client_ip, trace_id, span_id, duration_ms, status_code, tags
+            FROM runtime_captures
+            WHERE deployment_id = $1
+            ORDER BY occurred_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::Database)?
+    };
+
+    let captures = rows
+        .into_iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.0,
+                "protocol": r.1,
+                "timestamp": r.2,
+                "method": r.3,
+                "path": r.4,
+                "query_params": r.5,
+                "headers": r.6,
+                "body": r.7,
+                "body_encoding": r.8,
+                "client_ip": r.9,
+                "trace_id": r.10,
+                "span_id": r.11,
+                "duration_ms": r.12,
+                "status_code": r.13,
+                "tags": r.14,
+            })
+        })
+        .collect();
+    Ok(captures)
+}
+
+/// Get a single capture by id. Cloud-Postgres-first; falls through to
+/// the deployment proxy when the row hasn't synced.
 pub async fn get_recorder_capture(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -1700,9 +1824,79 @@ pub async fn get_recorder_capture(
         return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
     }
 
+    if let Some(row) = fetch_cloud_capture(pool, deployment_id, &capture_id).await? {
+        let body = serde_json::to_vec(&row)
+            .map_err(|e| ApiError::InvalidRequest(format!("Failed to serialize capture: {}", e)))?;
+        return Ok(axum::http::Response::builder()
+            .status(axum::http::StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap());
+    }
+
     let path = format!("/api/recorder/requests/{}", urlencoding::encode(&capture_id));
     let _ = state;
     proxy_to_deployment_recorder(&deployment, &path).await
+}
+
+/// Single-row counterpart to `list_cloud_captures`. Returns None when
+/// the capture isn't in cloud Postgres — caller can then proxy.
+async fn fetch_cloud_capture(
+    pool: &sqlx::PgPool,
+    deployment_id: Uuid,
+    capture_id: &str,
+) -> ApiResult<Option<serde_json::Value>> {
+    type Row = (
+        String,
+        String,
+        chrono::DateTime<chrono::Utc>,
+        String,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<i32>,
+        Option<String>,
+    );
+    let row: Option<Row> = sqlx::query_as(
+        r#"
+        SELECT capture_id, protocol, occurred_at, method, path, query_params,
+               request_headers, request_body, request_body_encoding,
+               client_ip, trace_id, span_id, duration_ms, status_code, tags
+        FROM runtime_captures
+        WHERE deployment_id = $1 AND capture_id = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(capture_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(row.map(|r| {
+        serde_json::json!({
+            "id": r.0,
+            "protocol": r.1,
+            "timestamp": r.2,
+            "method": r.3,
+            "path": r.4,
+            "query_params": r.5,
+            "headers": r.6,
+            "body": r.7,
+            "body_encoding": r.8,
+            "client_ip": r.9,
+            "trace_id": r.10,
+            "span_id": r.11,
+            "duration_ms": r.12,
+            "status_code": r.13,
+            "tags": r.14,
+        })
+    }))
 }
 
 /// Get the response body associated with a capture. Recorder splits the
@@ -1735,9 +1929,55 @@ pub async fn get_recorder_capture_response(
         return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
     }
 
+    if let Some(row) = fetch_cloud_capture_response(pool, deployment_id, &capture_id).await? {
+        let body = serde_json::to_vec(&row).map_err(|e| {
+            ApiError::InvalidRequest(format!("Failed to serialize response: {}", e))
+        })?;
+        return Ok(axum::http::Response::builder()
+            .status(axum::http::StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body))
+            .unwrap());
+    }
+
     let path = format!("/api/recorder/requests/{}/response", urlencoding::encode(&capture_id));
     let _ = state;
     proxy_to_deployment_recorder(&deployment, &path).await
+}
+
+/// Fetch the response side of a capture from cloud Postgres. Returns
+/// None when the row isn't synced or the response side hasn't been
+/// recorded yet (request-only exchanges).
+async fn fetch_cloud_capture_response(
+    pool: &sqlx::PgPool,
+    deployment_id: Uuid,
+    capture_id: &str,
+) -> ApiResult<Option<serde_json::Value>> {
+    type Row = (Option<i32>, Option<String>, Option<String>, Option<String>, Option<i64>);
+    let row: Option<Row> = sqlx::query_as(
+        r#"
+        SELECT response_status_code, response_headers, response_body,
+               response_body_encoding, response_size_bytes
+        FROM runtime_captures
+        WHERE deployment_id = $1 AND capture_id = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(deployment_id)
+    .bind(capture_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(row.and_then(|r| {
+        let status_code = r.0?;
+        Some(serde_json::json!({
+            "status_code": status_code,
+            "headers": r.1.unwrap_or_else(|| "{}".to_string()),
+            "body": r.2,
+            "body_encoding": r.3.unwrap_or_else(|| "utf8".to_string()),
+            "size_bytes": r.4.unwrap_or(0),
+        }))
+    }))
 }
 
 /// Proxy a POST to the deployment's recorder API. Used by the
