@@ -16,6 +16,12 @@ import {
   type DeploymentCaptureResponse,
 } from '@/hooks/useDeploymentCaptures';
 import {
+  useDeploymentTraces,
+  fetchTraceSpans,
+  type TraceSummary,
+  type TraceSpan,
+} from '@/hooks/useDeploymentTraces';
+import {
   Box,
   Card,
   CardContent,
@@ -310,6 +316,38 @@ export const HostedMocksPage: React.FC = () => {
   const [replayResult, setReplayResult] = useState<unknown | null>(null);
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayError, setReplayError] = useState<string | null>(null);
+
+  // OTLP traces (#233). Same proxy-pattern as captures: the deployment's
+  // mockforge-cli sends spans via OTLP/HTTP-JSON to the registry; we
+  // surface them here so the user can drill into a single request's
+  // span tree without leaving the admin UI.
+  const {
+    traces: deploymentTraces,
+    loading: tracesLoading,
+    error: tracesError,
+    refetch: refetchTraces,
+  } = useDeploymentTraces(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
+  });
+  const [selectedTrace, setSelectedTrace] = useState<TraceSummary | null>(null);
+  const [selectedTraceSpans, setSelectedTraceSpans] = useState<TraceSpan[]>([]);
+  const [traceSpansLoading, setTraceSpansLoading] = useState(false);
+
+  const openTrace = useCallback(
+    async (trace: TraceSummary) => {
+      setSelectedTrace(trace);
+      setSelectedTraceSpans([]);
+      if (!selectedDeployment) return;
+      setTraceSpansLoading(true);
+      try {
+        const spans = await fetchTraceSpans(selectedDeployment.id, trace.trace_id);
+        setSelectedTraceSpans(spans);
+      } finally {
+        setTraceSpansLoading(false);
+      }
+    },
+    [selectedDeployment],
+  );
 
   const openCapture = useCallback(
     async (capture: DeploymentCapture) => {
@@ -1253,6 +1291,7 @@ export const HostedMocksPage: React.FC = () => {
                 <Tab icon={<ViewIcon />} label="Logs" />
                 <Tab icon={<ViewIcon />} label="Requests" />
                 <Tab icon={<ViewIcon />} label="Captures" />
+                <Tab icon={<ViewIcon />} label="Traces" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
               </Tabs>
 
@@ -1928,6 +1967,96 @@ export const HostedMocksPage: React.FC = () => {
 
               {detailsTab === 5 && (
                 <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      Distributed traces from this deployment, ingested via OTLP. Spans are kept
+                      in the registry's Postgres store and pruned by the retention worker.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchTraces}
+                      disabled={tracesLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {tracesError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {tracesError}. The deployment may not have an OTLP exporter configured —
+                      enable <code>observability.tracing.enabled = true</code> with the registry as
+                      the OTLP endpoint and redeploy.
+                    </Alert>
+                  )}
+
+                  {deploymentTraces.length === 0 ? (
+                    <Alert severity="info">
+                      No traces yet. Once the deployment exports OTLP spans, they'll appear here
+                      within a few seconds.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        maxHeight: 480,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Service</TableCell>
+                            <TableCell>Root span</TableCell>
+                            <TableCell align="right">Spans</TableCell>
+                            <TableCell align="right">Duration</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {deploymentTraces.map((trace) => (
+                            <TableRow key={trace.trace_id} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {new Date(trace.start).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>{trace.service_name ?? '—'}</TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {trace.root_name}
+                              </TableCell>
+                              <TableCell align="right">{trace.span_count}</TableCell>
+                              <TableCell
+                                align="right"
+                                sx={{ fontFamily: 'monospace', fontSize: 12 }}
+                              >
+                                {trace.duration_ms.toFixed(1)}ms
+                              </TableCell>
+                              <TableCell>
+                                {trace.has_error ? (
+                                  <Chip label="error" size="small" color="error" />
+                                ) : (
+                                  <Chip label="ok" size="small" color="success" />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Button size="small" onClick={() => openTrace(trace)}>
+                                  View
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {detailsTab === 6 && (
+                <Box>
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>
                       <Alert severity="success" sx={{ mb: 2 }}>
@@ -2252,6 +2381,58 @@ export const HostedMocksPage: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Trace detail dialog — renders the full span list as an indented
+          waterfall. Sibling to the capture and deployment dialogs to keep
+          focus management simple. */}
+      <Dialog
+        open={!!selectedTrace}
+        onClose={() => {
+          setSelectedTrace(null);
+          setSelectedTraceSpans([]);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        {selectedTrace && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="body1">{selectedTrace.root_name}</Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontFamily: 'monospace' }}
+                >
+                  {selectedTrace.trace_id}
+                </Typography>
+                {selectedTrace.has_error && <Chip label="error" size="small" color="error" />}
+              </Box>
+            </DialogTitle>
+            <DialogContent>
+              {traceSpansLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : selectedTraceSpans.length === 0 ? (
+                <Alert severity="info">No spans found for this trace.</Alert>
+              ) : (
+                <SpanWaterfall spans={selectedTraceSpans} />
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => {
+                  setSelectedTrace(null);
+                  setSelectedTraceSpans([]);
+                }}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };
@@ -2267,6 +2448,121 @@ function formatJsonString(raw: string): string {
   } catch {
     return raw;
   }
+}
+
+/**
+ * Renders the spans of a single trace as a waterfall: each row sized and
+ * offset relative to the trace's wall-clock window. The visual encoding —
+ * colored bar proportional to duration, indented by parent depth — is
+ * the standard tracing-UI idiom; we don't try to compete with Jaeger here,
+ * just give the user a glanceable shape.
+ */
+function SpanWaterfall({ spans }: { spans: TraceSpan[] }): React.ReactElement {
+  const traceStart = Math.min(...spans.map((s) => s.start_unix_nano));
+  const traceEnd = Math.max(...spans.map((s) => s.end_unix_nano));
+  const traceDuration = Math.max(1, traceEnd - traceStart);
+
+  // Build parent → children index, then walk it depth-first so the table
+  // shows spans in causal order rather than wall-clock order. Falls back
+  // to the original list if no parent is identified (e.g. partial trace).
+  const childrenOf = new Map<string | null, TraceSpan[]>();
+  for (const span of spans) {
+    const key = span.parent_span_id ?? null;
+    const list = childrenOf.get(key) ?? [];
+    list.push(span);
+    childrenOf.set(key, list);
+  }
+  for (const list of childrenOf.values()) {
+    list.sort((a, b) => a.start_unix_nano - b.start_unix_nano);
+  }
+
+  const ordered: { span: TraceSpan; depth: number }[] = [];
+  const visited = new Set<string>();
+  const walk = (parentId: string | null, depth: number) => {
+    const kids = childrenOf.get(parentId) ?? [];
+    for (const span of kids) {
+      if (visited.has(span.span_id)) continue;
+      visited.add(span.span_id);
+      ordered.push({ span, depth });
+      walk(span.span_id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  // Pick up any orphans whose parent isn't in the result set.
+  for (const span of spans) {
+    if (!visited.has(span.span_id)) {
+      ordered.push({ span, depth: 0 });
+      visited.add(span.span_id);
+    }
+  }
+
+  return (
+    <TableContainer component={Box} sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Name</TableCell>
+            <TableCell align="right">Start</TableCell>
+            <TableCell align="right">Duration</TableCell>
+            <TableCell sx={{ width: '40%' }}>Timeline</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {ordered.map(({ span, depth }) => {
+            const startOffset = span.start_unix_nano - traceStart;
+            const duration = span.end_unix_nano - span.start_unix_nano;
+            const startPct = (startOffset / traceDuration) * 100;
+            const widthPct = Math.max(0.5, (duration / traceDuration) * 100);
+            const isError = span.status_code === 2;
+            return (
+              <TableRow key={span.span_id} hover>
+                <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                  <Box sx={{ pl: depth * 2 }}>
+                    {span.name}
+                    {isError && (
+                      <Chip
+                        label="error"
+                        size="small"
+                        color="error"
+                        sx={{ ml: 1, height: 16, fontSize: 10 }}
+                      />
+                    )}
+                  </Box>
+                </TableCell>
+                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                  {(startOffset / 1e6).toFixed(2)}ms
+                </TableCell>
+                <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                  {(duration / 1e6).toFixed(2)}ms
+                </TableCell>
+                <TableCell>
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      height: 14,
+                      bgcolor: 'action.hover',
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        left: `${startPct}%`,
+                        width: `${widthPct}%`,
+                        height: '100%',
+                        bgcolor: isError ? 'error.main' : 'primary.main',
+                        borderRadius: 0.5,
+                      }}
+                    />
+                  </Box>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
 }
 
 /**
