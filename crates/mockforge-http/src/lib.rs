@@ -192,6 +192,8 @@ pub mod management;
 pub mod management_ws;
 pub mod metrics_middleware;
 pub mod middleware;
+/// Runtime network-profile switching API
+pub mod network_profile_runtime;
 pub mod op_middleware;
 /// Unified protocol server lifecycle implementation
 pub mod protocol_server;
@@ -2086,6 +2088,27 @@ pub async fn build_router_with_chains_and_multi_tenant(
             runtime_route_chaos_middleware,
         ));
         app = app.nest("/__mockforge/api/route-chaos", route_chaos_api_router(runtime_state));
+    }
+
+    // Runtime network-profile switching. Operators activate a named
+    // catalog profile (e.g., "mobile_3g") and the middleware applies its
+    // latency to every subsequent request — useful for "what does my
+    // consumer look like under bad network" probes against a live
+    // hosted mock without a redeploy.
+    {
+        use crate::network_profile_runtime::{
+            network_profile_api_router, network_profile_middleware, NetworkProfileRuntimeState,
+        };
+        let runtime_state = NetworkProfileRuntimeState::new(
+            mockforge_core::network_profiles::NetworkProfileCatalog::new(),
+        );
+        let middleware_state = runtime_state.clone();
+        app = app.layer(axum::middleware::from_fn_with_state(
+            middleware_state,
+            network_profile_middleware,
+        ));
+        app = app
+            .nest("/__mockforge/api/network-profiles", network_profile_api_router(runtime_state));
     }
 
     // Add OIDC well-known endpoints
