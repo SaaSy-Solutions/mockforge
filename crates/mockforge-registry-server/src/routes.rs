@@ -174,6 +174,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/runtime-logs", get(handlers::hosted_mocks::get_runtime_logs))
         .route("/api/v1/hosted-mocks/{deployment_id}/runtime-logs/stream", get(handlers::hosted_mocks::stream_runtime_logs))
         .route("/api/v1/hosted-mocks/{deployment_id}/runtime-requests", get(handlers::hosted_mocks::get_runtime_requests))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures", get(handlers::hosted_mocks::list_recorder_captures))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}", get(handlers::hosted_mocks::get_recorder_capture))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         // Projects list (for UI pickers)
         .route("/api/v1/projects", get(handlers::projects::list_projects))

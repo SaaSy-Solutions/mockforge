@@ -1420,6 +1420,136 @@ pub async fn get_runtime_requests(
     Ok(Json(events))
 }
 
+/// Proxy a request to the deployment's local recorder API.
+///
+/// The mockforge-recorder library is mounted on the deployed `http_app` at
+/// `/api/recorder/*` (#234), but the deployed instance has no per-user auth
+/// on those routes. This handler is the cloud-side gate: it verifies the
+/// caller has access to the deployment, then forwards the request to the
+/// deployment's internal URL.
+///
+/// Captures stay ephemeral on the deployment's local SQLite (Fly machines
+/// don't have a persistent volume mounted by default). For long-term
+/// retention we'd want either a Fly volume mount or a forwarder pattern
+/// like the log shipper — both bigger and tracked separately.
+async fn proxy_to_deployment_recorder(
+    deployment: &HostedMock,
+    path_and_query: &str,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}{}", base.trim_end_matches('/'), path_and_query);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+
+    let resp =
+        client.get(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder proxy fetch failed: {}", e))
+        })?;
+
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy read body failed: {}", e))
+    })?;
+
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy response build failed: {}", e))
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecorderCapturesQuery {
+    pub limit: Option<u32>,
+    pub since: Option<String>,
+}
+
+/// List recently captured request/response pairs for a deployment.
+/// Proxies through to the deployment's `/api/recorder/requests` endpoint.
+pub async fn list_recorder_captures(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+    Query(params): Query<RecorderCapturesQuery>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let mut qs = String::from("/api/recorder/requests");
+    let mut sep = '?';
+    if let Some(limit) = params.limit {
+        qs.push(sep);
+        qs.push_str(&format!("limit={}", limit));
+        sep = '&';
+    }
+    if let Some(since) = params.since.as_deref() {
+        qs.push(sep);
+        qs.push_str(&format!("since={}", urlencoding::encode(since)));
+    }
+
+    let _ = state; // currently unused inside the proxy itself; kept for symmetry/future use
+    proxy_to_deployment_recorder(&deployment, &qs).await
+}
+
+/// Get a single capture by id.
+pub async fn get_recorder_capture(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    // Validate the capture id is path-safe — defence in depth even though
+    // we already URL-encode below.
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+
+    let path = format!("/api/recorder/requests/{}", urlencoding::encode(&capture_id));
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, &path).await
+}
+
 /// Get deployment metrics
 pub async fn get_deployment_metrics(
     State(state): State<AppState>,
