@@ -278,6 +278,31 @@ export const HostedMocksPage: React.FC = () => {
   } = useDeploymentCaptures(detailsOpen ? selectedDeployment?.id : undefined, {
     enabled: detailsOpen && !!selectedDeployment,
   });
+
+  // Filters for the Captures tab. Mirrors the Requests tab UX so a user
+  // who learns one knows the other. Status filter buckets HTTP responses
+  // (recorder also captures non-HTTP protocols where status is null —
+  // those count as 'all' but are excluded from the 2xx/4xx/5xx buckets).
+  const [capturesStatusFilter, setCapturesStatusFilter] =
+    useState<RequestsStatusFilter>('all');
+  const [capturesPathFilter, setCapturesPathFilter] = useState('');
+
+  const filteredCaptures = React.useMemo(() => {
+    const pathQuery = capturesPathFilter.trim().toLowerCase();
+    return recorderCaptures.filter((capture) => {
+      if (capturesStatusFilter !== 'all') {
+        if (capture.status_code == null) return false;
+        const bucket = Math.floor(capture.status_code / 100);
+        if (capturesStatusFilter === '2xx' && bucket !== 2) return false;
+        if (capturesStatusFilter === '4xx' && bucket !== 4) return false;
+        if (capturesStatusFilter === '5xx' && bucket !== 5) return false;
+      }
+      if (pathQuery && !capture.path.toLowerCase().includes(pathQuery)) {
+        return false;
+      }
+      return true;
+    });
+  }, [recorderCaptures, capturesStatusFilter, capturesPathFilter]);
   const [selectedCapture, setSelectedCapture] = useState<DeploymentCapture | null>(null);
   const [selectedCaptureResponse, setSelectedCaptureResponse] =
     useState<DeploymentCaptureResponse | null>(null);
@@ -1689,6 +1714,46 @@ export const HostedMocksPage: React.FC = () => {
                     </Button>
                   </Box>
 
+                  {/* Filter toolbar — mirrors the Requests tab. */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    {(['all', '2xx', '4xx', '5xx'] as const).map((bucket) => (
+                      <Chip
+                        key={bucket}
+                        label={bucket === 'all' ? 'All' : bucket}
+                        size="small"
+                        clickable
+                        onClick={() => setCapturesStatusFilter(bucket)}
+                        color={
+                          capturesStatusFilter !== bucket
+                            ? 'default'
+                            : bucket === '5xx'
+                              ? 'error'
+                              : bucket === '4xx'
+                                ? 'warning'
+                                : bucket === '2xx'
+                                  ? 'success'
+                                  : 'primary'
+                        }
+                        variant={capturesStatusFilter === bucket ? 'filled' : 'outlined'}
+                      />
+                    ))}
+                    <TextField
+                      size="small"
+                      placeholder="Filter by path…"
+                      value={capturesPathFilter}
+                      onChange={(e) => setCapturesPathFilter(e.target.value)}
+                      sx={{ minWidth: 240, ml: 'auto' }}
+                    />
+                  </Box>
+
                   {capturesError && (
                     <Alert severity="warning" sx={{ mb: 2 }}>
                       {capturesError}. The recorder may not be enabled on this deployment —
@@ -1697,10 +1762,26 @@ export const HostedMocksPage: React.FC = () => {
                     </Alert>
                   )}
 
+                  {(capturesStatusFilter !== 'all' || capturesPathFilter.trim()) &&
+                    recorderCaptures.length > 0 && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1 }}
+                      >
+                        Showing {filteredCaptures.length} of {recorderCaptures.length} captures.
+                      </Typography>
+                    )}
+
                   {recorderCaptures.length === 0 ? (
                     <Alert severity="info">
                       No captures yet. Enable the recorder on the deployment, send traffic, and
                       the captures will appear here within a few seconds.
+                    </Alert>
+                  ) : filteredCaptures.length === 0 ? (
+                    <Alert severity="info">
+                      No captures match the active filter. Try widening the status bucket or
+                      clearing the path filter.
                     </Alert>
                   ) : (
                     <TableContainer
@@ -1725,7 +1806,7 @@ export const HostedMocksPage: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {recorderCaptures.map((capture) => (
+                          {filteredCaptures.map((capture) => (
                             <TableRow key={capture.id} hover>
                               <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                 {new Date(capture.timestamp).toLocaleTimeString()}
