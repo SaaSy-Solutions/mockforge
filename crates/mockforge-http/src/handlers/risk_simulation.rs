@@ -1,5 +1,9 @@
 //! Risk simulation API handlers
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for programmatic risk-engine configuration. Do not build
+//! speculative UI for these routes without a stakeholder-defined use case.
+//!
 //! This module provides API endpoints for simulating risk scenarios
 //! and managing risk engine configuration.
 

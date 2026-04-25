@@ -3,14 +3,50 @@
  */
 
 export interface MockServerConfig {
-  /** Port to listen on (default: random available port) */
+  /** HTTP port to listen on. Default: `0` (random available port). */
   port?: number;
-  /** Host to bind to (default: 127.0.0.1) */
+  /** Host to bind to. Default: `127.0.0.1`. */
   host?: string;
-  /** Path to MockForge configuration file */
+  /**
+   * Admin UI port. Default: `0` (random available port). The admin API is
+   * required for dynamic stubbing — `stubResponse`, `clearStubs`, etc. all
+   * go through it.
+   */
+  adminPort?: number;
+  /**
+   * WebSocket server port. Default: `0` (random). Set to a real port only if
+   * you intend to use the WebSocket mock from your tests; otherwise leave as
+   * `0` so it doesn't collide with any existing MockForge instance.
+   */
+  wsPort?: number;
+  /**
+   * gRPC server port. Default: `0`, which disables the gRPC server entirely
+   * (the CLI skips starting gRPC when port == 0 and gRPC is enabled).
+   */
+  grpcPort?: number;
+  /**
+   * Prometheus metrics port. Default: `0`. Metrics are only started if the
+   * CLI receives `--metrics`, which the SDK does not pass, so this is almost
+   * always ignored — but forcing it to `0` keeps things safe if the user's
+   * `mockforge.yaml` enables metrics.
+   */
+  metricsPort?: number;
+  /** Path to MockForge configuration file. */
   configFile?: string;
-  /** Path to OpenAPI specification */
+  /**
+   * Skip auto-discovery of `mockforge.yaml` / `mockforge.config.{ts,js}` from
+   * the current working directory and its ancestors. Default: `true`. Set to
+   * `false` to restore legacy behavior where a mockforge config in the host
+   * project would be picked up implicitly.
+   */
+  noConfig?: boolean;
+  /** Path to OpenAPI specification. */
   openApiSpec?: string;
+  /**
+   * Maximum time in milliseconds to wait for the server to start. Default:
+   * `12_000`. Useful to tune on slow CI runners.
+   */
+  startupTimeoutMs?: number;
 }
 
 export interface ResponseStub {

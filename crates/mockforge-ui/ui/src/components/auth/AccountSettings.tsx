@@ -12,7 +12,7 @@ import {
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi, type TwoFactorSetup } from '../../services/authApi';
-import { Shield, Bell, Lock, Mail, Copy, CheckCircle2 } from 'lucide-react';
+import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2 } from 'lucide-react';
 
 interface AccountSettingsProps {
     open: boolean;
@@ -51,6 +51,14 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifBanner, setNotifBanner] = useState<Banner>(null);
 
+    // GDPR state
+    const [gdprBanner, setGdprBanner] = useState<Banner>(null);
+    const [exporting, setExporting] = useState(false);
+    const [showDeleteForm, setShowDeleteForm] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState('');
+    const [deleteReason, setDeleteReason] = useState('');
+    const [deleting, setDeleting] = useState(false);
+
     // Hydrate state from server when the dialog opens
     useEffect(() => {
         if (!open || !user) return;
@@ -67,6 +75,10 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setDisablePassword('');
         setCopiedCodes(false);
         setNotifBanner(null);
+        setGdprBanner(null);
+        setShowDeleteForm(false);
+        setDeleteConfirm('');
+        setDeleteReason('');
 
         authApi
             .getMe()
@@ -209,6 +221,83 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
             setTimeout(() => setCopiedCodes(false), 2000);
         } catch {
             /* clipboard denied — no-op */
+        }
+    };
+
+    const handleExportData = async () => {
+        setExporting(true);
+        setGdprBanner(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('/api/v1/gdpr/export', {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(
+                    body.error || body.message || `Export failed (${response.status})`,
+                );
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().split('T')[0];
+            a.href = url;
+            a.download = `mockforge-data-export-${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            setGdprBanner({ kind: 'success', message: 'Your data has been downloaded.' });
+        } catch (err) {
+            setGdprBanner({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Failed to export data',
+            });
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleDeleteAccount = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (deleteConfirm !== 'DELETE') {
+            setGdprBanner({
+                kind: 'error',
+                message: 'Type DELETE to confirm account erasure.',
+            });
+            return;
+        }
+        setDeleting(true);
+        setGdprBanner(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('/api/v1/gdpr/erase', {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    confirm: true,
+                    reason: deleteReason.trim() || undefined,
+                }),
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(
+                    body.error || body.message || `Erase failed (${response.status})`,
+                );
+            }
+            // Data erased — log out and redirect
+            useAuthStore.getState().logout();
+            window.location.href = '/';
+        } catch (err) {
+            setGdprBanner({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Failed to erase account',
+            });
+            setDeleting(false);
         }
     };
 
@@ -467,6 +556,100 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                             }}
                             disabled={notifSaving}
                         />
+                    </div>
+
+                    {/* GDPR / privacy section */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            <Download className="h-4 w-4" />
+                            <span>Privacy &amp; data</span>
+                        </div>
+
+                        {gdprBanner && <Banner banner={gdprBanner} />}
+
+                        <div className="flex items-start justify-between gap-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md">
+                            <div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    Export your data
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                    Download a JSON file containing all your account data (GDPR right to data portability).
+                                </div>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleExportData}
+                                disabled={exporting}
+                            >
+                                {exporting ? 'Preparing…' : 'Export'}
+                            </Button>
+                        </div>
+
+                        {!showDeleteForm ? (
+                            <div className="flex items-start justify-between gap-4 p-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10">
+                                <div>
+                                    <div className="text-sm font-medium text-red-900 dark:text-red-200">
+                                        Delete your account
+                                    </div>
+                                    <div className="text-xs text-red-700 dark:text-red-300">
+                                        Permanently erase all your data. This cannot be undone.
+                                    </div>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => {
+                                        setShowDeleteForm(true);
+                                        setGdprBanner(null);
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                </Button>
+                            </div>
+                        ) : (
+                            <form
+                                onSubmit={handleDeleteAccount}
+                                className="space-y-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 p-4"
+                            >
+                                <p className="text-sm text-red-900 dark:text-red-200">
+                                    This action is irreversible. All your workspaces, mocks, tokens, and usage data will be erased.
+                                </p>
+                                <LabeledInput
+                                    id="deleteConfirm"
+                                    label="Type DELETE to confirm"
+                                    value={deleteConfirm}
+                                    onChange={setDeleteConfirm}
+                                    placeholder="DELETE"
+                                />
+                                <LabeledInput
+                                    id="deleteReason"
+                                    label="Reason (optional)"
+                                    value={deleteReason}
+                                    onChange={setDeleteReason}
+                                    placeholder="Help us improve — why are you leaving?"
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowDeleteForm(false);
+                                            setDeleteConfirm('');
+                                            setDeleteReason('');
+                                            setGdprBanner(null);
+                                        }}
+                                        disabled={deleting}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" variant="destructive" disabled={deleting}>
+                                        {deleting ? 'Erasing…' : 'Permanently delete account'}
+                                    </Button>
+                                </div>
+                            </form>
+                        )}
                     </div>
                 </div>
 

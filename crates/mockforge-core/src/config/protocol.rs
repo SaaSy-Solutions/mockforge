@@ -429,6 +429,18 @@ pub struct KafkaConfig {
     pub default_partitions: i32,
     /// Default replication factor for new topics
     pub default_replication_factor: i16,
+    /// Hostname returned in Kafka MetadataResponse so clients reach the
+    /// broker after the bootstrap handshake. Defaults to `host`. On
+    /// hosted-mock deployments the orchestrator sets this to the public
+    /// `<app>.fly.dev` (or custom) hostname so external Kafka clients can
+    /// route correctly. The mockforge-kafka broker itself must consume this
+    /// value when constructing metadata responses for the wiring to be
+    /// observable end-to-end (tracked in #231).
+    pub advertised_host: Option<String>,
+    /// Public port returned in Kafka MetadataResponse alongside
+    /// `advertised_host`. Defaults to `port`. Useful when Fly maps a
+    /// different public port (currently we keep them aligned at 9092).
+    pub advertised_port: Option<u16>,
 }
 
 impl Default for KafkaConfig {
@@ -445,6 +457,8 @@ impl Default for KafkaConfig {
             auto_create_topics: true,
             default_partitions: 3,
             default_replication_factor: 1,
+            advertised_host: None,
+            advertised_port: None,
         }
     }
 }

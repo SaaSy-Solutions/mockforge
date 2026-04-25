@@ -1,9 +1,30 @@
 {
-  "name": "@mockforge/sdk",
-  "version": "0.1.0",
+  "name": "@mockforge-dev/sdk",
+  "version": "0.2.0",
   "description": "MockForge SDK for Node.js - Embed mock servers in your tests",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SaaSy-Solutions/mockforge.git",
+    "directory": "sdk/nodejs"
+  },
+  "bugs": {
+    "url": "https://github.com/SaaSy-Solutions/mockforge/issues"
+  },
+  "homepage": "https://github.com/SaaSy-Solutions/mockforge/tree/main/sdk/nodejs#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "test": "jest",
@@ -11,11 +32,16 @@
   },
   "keywords": [
     "mock",
+    "mocks",
+    "mocking",
     "testing",
     "api",
     "http",
     "server",
-    "stub"
+    "stub",
+    "stubs",
+    "mockforge",
+    "integration-test"
   ],
   "author": "MockForge Contributors",
   "license": "MIT",

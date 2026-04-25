@@ -1,5 +1,9 @@
 //! HTTP handlers for risk assessment
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for programmatic GRC integrations. Do not build speculative UI
+//! for these routes without a stakeholder-defined use case.
+//!
 //! This module provides REST API endpoints for managing the risk register,
 //! creating risks, updating assessments, and tracking treatment plans.
 

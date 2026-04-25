@@ -445,6 +445,21 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         config.grpc.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
     }
 
+    // MQTT broker overrides
+    if let Ok(port) = std::env::var("MOCKFORGE_MQTT_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.mqtt.port = port_num;
+        }
+    }
+
+    if let Ok(host) = std::env::var("MOCKFORGE_MQTT_HOST") {
+        config.mqtt.host = host;
+    }
+
+    if let Ok(enabled) = std::env::var("MOCKFORGE_MQTT_ENABLED") {
+        config.mqtt.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
+    }
+
     // Kafka broker overrides
     if let Ok(port) = std::env::var("MOCKFORGE_KAFKA_PORT") {
         if let Ok(port_num) = port.parse() {
@@ -462,6 +477,68 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
 
     if let Ok(dir) = std::env::var("MOCKFORGE_KAFKA_FIXTURES_DIR") {
         config.kafka.fixtures_dir = Some(std::path::PathBuf::from(dir));
+    }
+
+    // Kafka advertised-listener overrides. Required when the broker is
+    // reachable on a different host/port from clients than where it binds —
+    // i.e. every hosted-mock deployment. The orchestrator templates the
+    // public `<app>.fly.dev` hostname into MOCKFORGE_KAFKA_ADVERTISED_HOST.
+    if let Ok(host) = std::env::var("MOCKFORGE_KAFKA_ADVERTISED_HOST") {
+        if !host.trim().is_empty() {
+            config.kafka.advertised_host = Some(host);
+        }
+    }
+
+    if let Ok(port) = std::env::var("MOCKFORGE_KAFKA_ADVERTISED_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.kafka.advertised_port = Some(port_num);
+        }
+    }
+
+    // OpenTelemetry / OTLP overrides. When `MOCKFORGE_OTLP_ENDPOINT` is set,
+    // turn on the observability tracing config and route exports to the
+    // given URL. Hosted-mock deployments get this set automatically by the
+    // orchestrator (#233) so spans flow back to MockForge Cloud.
+    if let Ok(endpoint) = std::env::var("MOCKFORGE_OTLP_ENDPOINT") {
+        if !endpoint.trim().is_empty() {
+            let otel = config
+                .observability
+                .opentelemetry
+                .get_or_insert_with(crate::config::OpenTelemetryConfig::default);
+            otel.enabled = true;
+            otel.otlp_endpoint = Some(endpoint);
+        }
+    }
+
+    if let Ok(rate) = std::env::var("MOCKFORGE_OTLP_SAMPLING_RATE") {
+        if let Ok(parsed) = rate.parse::<f64>() {
+            if let Some(otel) = config.observability.opentelemetry.as_mut() {
+                otel.sampling_rate = parsed.clamp(0.0, 1.0);
+            }
+        }
+    }
+
+    if let Ok(service) = std::env::var("MOCKFORGE_OTLP_SERVICE_NAME") {
+        if !service.trim().is_empty() {
+            if let Some(otel) = config.observability.opentelemetry.as_mut() {
+                otel.service_name = service;
+            }
+        }
+    }
+
+    // AMQP broker overrides
+    if let Ok(port) = std::env::var("MOCKFORGE_AMQP_PORT") {
+        if let Ok(port_num) = port.parse() {
+            config.amqp.port = port_num;
+        }
+    }
+
+    if let Ok(host) = std::env::var("MOCKFORGE_AMQP_HOST") {
+        config.amqp.host = host;
+    }
+
+    if let Ok(enabled) = std::env::var("MOCKFORGE_AMQP_ENABLED") {
+        config.amqp.enabled = enabled == "1" || enabled.eq_ignore_ascii_case("true");
     }
 
     // SMTP server overrides

@@ -62,6 +62,53 @@ pub async fn start_admin_server(
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    start_admin_server_notify(
+        addr,
+        http_server_addr,
+        ws_server_addr,
+        grpc_server_addr,
+        graphql_server_addr,
+        api_enabled,
+        prometheus_url,
+        chaos_api_state,
+        latency_injector,
+        mockai,
+        continuum_config,
+        virtual_clock,
+        recorder,
+        federation,
+        vbr_engine,
+        None,
+    )
+    .await
+}
+
+/// Like [`start_admin_server`], but sends the actual OS-assigned port through
+/// `bound_port_tx` once the listener has bound. Required when `addr.port() == 0`
+/// (ephemeral), because the OS picks the port and the caller needs to learn it.
+#[allow(clippy::too_many_arguments)]
+pub async fn start_admin_server_notify(
+    addr: SocketAddr,
+    http_server_addr: Option<SocketAddr>,
+    ws_server_addr: Option<SocketAddr>,
+    grpc_server_addr: Option<SocketAddr>,
+    graphql_server_addr: Option<SocketAddr>,
+    api_enabled: bool,
+    prometheus_url: String,
+    chaos_api_state: Option<std::sync::Arc<mockforge_chaos::api::ChaosApiState>>,
+    latency_injector: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_foundation::latency::LatencyInjector>>,
+    >,
+    mockai: Option<
+        std::sync::Arc<tokio::sync::RwLock<mockforge_core::intelligent_behavior::MockAI>>,
+    >,
+    continuum_config: Option<mockforge_core::ContinuumConfig>,
+    virtual_clock: Option<std::sync::Arc<mockforge_core::VirtualClock>>,
+    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
+    vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut app = create_admin_router(
         http_server_addr,
         ws_server_addr,
@@ -134,6 +181,11 @@ pub async fn start_admin_server(
             addr.port(), e, addr.port(), addr.port()
         )
     })?;
+
+    if let Some(tx) = bound_port_tx {
+        let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(addr.port());
+        let _ = tx.send(actual_port);
+    }
 
     axum::serve(listener, app).await?;
 

@@ -170,6 +170,55 @@ pub fn create_token(user_id: &str, secret: &str) -> Result<String> {
     create_access_token(user_id, secret)
 }
 
+/// Mint a JWT scoped to a single hosted-mock deployment, used by the cloud
+/// log-ingest endpoint so the in-container shipper can authenticate without
+/// holding a user credential.
+///
+/// The token sets `sub` to `deployment:<uuid>`. The ingest handler verifies
+/// the token itself (bypassing the per-user `auth_middleware`) and rejects
+/// requests where the `sub` doesn't match the URL path's deployment id.
+/// Because the `sub` isn't a UUID, downstream user lookups would fail —
+/// even if the token leaked into a user-scoped path it can't authorize
+/// anything that needs a real user_id.
+pub fn create_deployment_ingest_token(
+    deployment_id: uuid::Uuid,
+    secret: &str,
+    ttl_days: i64,
+) -> Result<String> {
+    let now = Utc::now();
+    let expiration = now
+        .checked_add_signed(Duration::days(ttl_days))
+        .ok_or_else(|| anyhow::anyhow!("Failed to calculate deployment token expiration"))?
+        .timestamp();
+
+    let claims = Claims {
+        sub: format!("deployment:{}", deployment_id),
+        exp: expiration as usize,
+        iat: now.timestamp() as usize,
+        iss: get_jwt_issuer().to_string(),
+        aud: get_jwt_audience().to_string(),
+        token_type: TokenType::Access,
+        jti: None,
+    };
+
+    let header = build_header(secret);
+    let token = encode(&header, &claims, &EncodingKey::from_secret(secret.as_bytes()))?;
+    Ok(token)
+}
+
+/// Verify an ingest token and return the embedded deployment id.
+/// Errors if the token is invalid, expired, or doesn't carry the
+/// `deployment:<uuid>` subject prefix.
+pub fn verify_deployment_ingest_token(token: &str, secret: &str) -> Result<uuid::Uuid> {
+    let claims = verify_token(token, secret)?;
+    let id_str = claims
+        .sub
+        .strip_prefix("deployment:")
+        .ok_or_else(|| anyhow::anyhow!("Token sub is not a deployment subject"))?;
+    uuid::Uuid::parse_str(id_str)
+        .map_err(|_| anyhow::anyhow!("Token sub deployment id is not a valid UUID"))
+}
+
 pub fn verify_token(token: &str, secret: &str) -> Result<Claims> {
     // Try the primary secret first
     match verify_token_with_secret(token, secret) {

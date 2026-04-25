@@ -16,6 +16,10 @@ pub use import_export::*;
 pub use proxy::{BodyTransformRequest, ProxyRuleRequest, ProxyRuleResponse};
 
 use axum::{
+    body::Body,
+    extract::State,
+    http::{HeaderName, HeaderValue, Request, StatusCode},
+    response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Router,
 };
@@ -1006,6 +1010,105 @@ pub fn management_router_with_spec_import(state: ManagementState) -> Router {
     Router::new()
         .merge(management)
         .merge(spec_import_router(SpecImportState::new()))
+}
+
+/// Match an incoming request against mocks registered via the
+/// `POST /__mockforge/api/mocks` endpoint and return the first match's
+/// response (ordered by descending priority). Returns `None` if nothing
+/// matches, so the caller can chain it with its existing 404.
+///
+/// This is what lets the `@mockforge-dev/sdk` Node.js SDK register a stub
+/// dynamically and have subsequent HTTP requests actually hit it — without
+/// it, stubs live in `ManagementState` but no route dispatches to them, so
+/// every SDK test would 404.
+pub async fn serve_dynamic_mock(state: &ManagementState, req: Request<Body>) -> Option<Response> {
+    let method = req.method().as_str().to_string();
+    let path = req.uri().path().to_string();
+
+    let query_params: std::collections::HashMap<String, String> = req
+        .uri()
+        .query()
+        .map(|q| url::form_urlencoded::parse(q.as_bytes()).into_owned().collect())
+        .unwrap_or_default();
+
+    let headers: std::collections::HashMap<String, String> = req
+        .headers()
+        .iter()
+        .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
+        .collect();
+
+    let (_parts, body) = req.into_parts();
+    let body_bytes = axum::body::to_bytes(body, 1024 * 1024).await.ok()?;
+    let body_opt: Option<&[u8]> = if body_bytes.is_empty() {
+        None
+    } else {
+        Some(&body_bytes)
+    };
+
+    let mocks = state.mocks.read().await;
+
+    let mut candidates: Vec<&MockConfig> = mocks
+        .iter()
+        .filter(|m| mock_matches_request(m, &method, &path, &headers, &query_params, body_opt))
+        .collect();
+    if candidates.is_empty() {
+        return None;
+    }
+    candidates.sort_by_key(|m| -(m.priority.unwrap_or(0)));
+    let mock = candidates.first()?;
+
+    if let Some(ms) = mock.latency_ms {
+        if ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        }
+    }
+
+    let status = mock
+        .status_code
+        .and_then(|c| StatusCode::from_u16(c).ok())
+        .unwrap_or(StatusCode::OK);
+
+    let body_bytes_out = serde_json::to_vec(&mock.response.body).unwrap_or_default();
+    let mut response = Response::builder().status(status);
+
+    let mut has_content_type = false;
+    if let Some(h) = &mock.response.headers {
+        for (k, v) in h {
+            if k.eq_ignore_ascii_case("content-type") {
+                has_content_type = true;
+            }
+            if let (Ok(name), Ok(value)) =
+                (HeaderName::from_bytes(k.as_bytes()), HeaderValue::from_str(v))
+            {
+                response = response.header(name, value);
+            }
+        }
+    }
+    if !has_content_type {
+        response = response.header("content-type", "application/json");
+    }
+
+    Some(
+        response
+            .body(Body::from(body_bytes_out))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+    )
+}
+
+/// Axum fallback handler for the main router: tries to serve a dynamic mock,
+/// or returns 404. Only invoked when nothing else in the router matched.
+///
+/// Wire via `.fallback_service(axum::routing::any(dynamic_mock_fallback).with_state(state))`
+/// so the handler's own `State<ManagementState>` extractor is satisfied
+/// without forcing the parent router to adopt `ManagementState` as its state.
+pub async fn dynamic_mock_fallback(
+    State(state): State<ManagementState>,
+    req: Request<Body>,
+) -> Response {
+    match serve_dynamic_mock(&state, req).await {
+        Some(resp) => resp,
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 #[cfg(test)]

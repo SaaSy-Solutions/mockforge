@@ -14,6 +14,12 @@ vi.mock('sonner', () => ({
     error: vi.fn(),
   },
 }));
+// Self-hosted mode so the Export/Import tab (filesystem-path feature, not ported to cloud)
+// renders under test. The test suite exercises both self-hosted-only and shared features.
+vi.mock('../../../utils/mode', () => ({
+  IS_CLOUD: false,
+  isCloudMode: () => false,
+}));
 
 describe('EncryptionSettings', () => {
   const mockStatus = {

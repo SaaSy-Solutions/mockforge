@@ -26,6 +26,7 @@ const en: Dictionary = {
 
   'nav.core': 'Core',
   'nav.servicesData': 'Services & Data',
+  'nav.protocolBrokers': 'Protocol Brokers',
   'nav.orchestration': 'Orchestration',
   'nav.observability': 'Observability',
   'nav.testing': 'Testing',
@@ -35,6 +36,7 @@ const en: Dictionary = {
   'nav.community': 'Community',
   'nav.plugins': 'Plugins',
   'nav.configuration': 'Configuration',
+  'nav.help': 'Help',
 
   'tab.dashboard': 'Dashboard',
   'tab.workspaces': 'Workspaces',
@@ -46,6 +48,11 @@ const en: Dictionary = {
   'tab.apiExplorer': 'API Explorer',
   'tab.tunnels': 'Tunnels',
   'tab.proxyInspector': 'Proxy Inspector',
+  'tab.smtpMailbox': 'SMTP Mailbox',
+  'tab.mqttBroker': 'MQTT Broker',
+  'tab.kafkaBroker': 'Kafka Broker',
+  'tab.faq': 'FAQ',
+  'tab.support': 'Support',
   'tab.chains': 'Chains',
   'tab.graph': 'Graph',
   'tab.stateMachines': 'State Machines',
@@ -140,6 +147,7 @@ const es: Dictionary = {
 
   'nav.core': 'Nucleo',
   'nav.servicesData': 'Servicios y Datos',
+  'nav.protocolBrokers': 'Brokers de Protocolo',
   'nav.orchestration': 'Orquestacion',
   'nav.observability': 'Observabilidad',
   'nav.testing': 'Pruebas',
@@ -149,6 +157,7 @@ const es: Dictionary = {
   'nav.community': 'Comunidad',
   'nav.plugins': 'Plugins',
   'nav.configuration': 'Configuracion',
+  'nav.help': 'Ayuda',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requiere una instancia local de MockForge',

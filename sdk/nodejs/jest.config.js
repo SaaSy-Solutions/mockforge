@@ -9,4 +9,7 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/*.test.ts',
   ],
+  // Integration tests spawn the mockforge CLI; axios keep-alive sockets can
+  // linger past afterEach. Force exit rather than noise on valid runs.
+  forceExit: true,
 };

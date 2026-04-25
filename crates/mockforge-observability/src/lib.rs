@@ -17,6 +17,8 @@
 //! registry.record_http_request("GET", 200, 0.045);
 //! ```
 
+#[cfg(feature = "log-shipper")]
+pub mod log_shipper;
 pub mod logging;
 pub mod prometheus;
 pub mod system_metrics;

@@ -90,6 +90,21 @@ const VoicePage = lazy(() => import('../pages/VoicePage').then(m => ({ default: 
 // AI Studio - Unified AI Copilot
 const AIStudioPage = lazy(() => import('../pages/AIStudioPage').then(m => ({ default: m.AIStudioPage })));
 
+// Protocol broker dashboards (self-hosted only)
+const SmtpMailboxPage = lazy(() => import('../pages/SmtpMailboxPage').then(m => ({ default: m.SmtpMailboxPage })));
+const MqttBrokerPage = lazy(() => import('../pages/MqttBrokerPage').then(m => ({ default: m.MqttBrokerPage })));
+const KafkaBrokerPage = lazy(() => import('../pages/KafkaBrokerPage').then(m => ({ default: m.KafkaBrokerPage })));
+
+// Public / legal / marketing pages
+const TermsPage = lazy(() => import('../pages/TermsPage').then(m => ({ default: m.TermsPage })));
+const PrivacyPage = lazy(() => import('../pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
+const DPAPage = lazy(() => import('../pages/DPAPage').then(m => ({ default: m.DPAPage })));
+const FAQPage = lazy(() => import('../pages/FAQPage').then(m => ({ default: m.FAQPage })));
+const SupportPage = lazy(() => import('../pages/SupportPage').then(m => ({ default: m.SupportPage })));
+const PricingPage = lazy(() => import('../pages/PricingPage').then(m => ({ default: m.PricingPage })));
+const EmailVerificationPage = lazy(() => import('../pages/EmailVerificationPage').then(m => ({ default: m.EmailVerificationPage })));
+const WaitlistPage = lazy(() => import('../pages/WaitlistPage').then(m => ({ default: m.WaitlistPage })));
+
 /**
  * ApiExplorerWrapper handles the special logic that was previously in the
  * switch statement: it checks for window.__mockforge_explorer_deployment
@@ -213,4 +228,19 @@ export const routes: RouteConfig[] = [
 
   // Proxy Inspector
   { path: '/proxy-inspector', element: <ProxyInspectorPage /> },
+
+  // Protocol broker dashboards (self-hosted)
+  { path: '/smtp-mailbox', element: <SmtpMailboxPage /> },
+  { path: '/mqtt-broker', element: <MqttBrokerPage /> },
+  { path: '/kafka-broker', element: <KafkaBrokerPage /> },
+
+  // Public / legal / marketing (render pre-auth via AuthGuard bypass)
+  { path: '/terms', element: <TermsPage /> },
+  { path: '/privacy', element: <PrivacyPage /> },
+  { path: '/dpa', element: <DPAPage /> },
+  { path: '/faq', element: <FAQPage /> },
+  { path: '/support', element: <SupportPage /> },
+  { path: '/pricing', element: <PricingPage /> },
+  { path: '/verify-email', element: <EmailVerificationPage /> },
+  { path: '/waitlist', element: <WaitlistPage /> },
 ];

@@ -35,7 +35,7 @@ export function SupportPage() {
     setSuccess(false);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('/api/v1/support/contact', {
         method: 'POST',
         headers: {

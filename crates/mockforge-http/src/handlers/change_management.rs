@@ -1,5 +1,10 @@
 //! HTTP handlers for change management
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for integration with external change-management systems
+//! (ServiceNow, Jira Change, etc.). Do not build speculative UI for these
+//! routes without a stakeholder-defined use case.
+//!
 //! This module provides REST API endpoints for managing change requests,
 //! approvals, implementation tracking, and completion.
 

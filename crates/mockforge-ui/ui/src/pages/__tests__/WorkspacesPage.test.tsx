@@ -33,6 +33,16 @@ const mockWorkspaces: WorkspaceSummary[] = [
 vi.mock('../../stores/useWorkspaceStore');
 vi.mock('../../services/api');
 vi.mock('../../hooks/useApi');
+vi.mock('../../utils/mode', () => ({
+  IS_CLOUD: false,
+  isCloudMode: () => false,
+}));
+vi.mock('../../components/workspace/EnvironmentManager', () => ({
+  EnvironmentManager: () => null,
+}));
+vi.mock('../../components/workspace/WorkspacePromotions', () => ({
+  default: () => null,
+}));
 
 // Set default mocks
 vi.mocked(useWorkspaceStore).mockReturnValue({
@@ -40,14 +50,19 @@ vi.mocked(useWorkspaceStore).mockReturnValue({
   loading: false,
   error: null,
   setActiveWorkspaceById: vi.fn(),
-  getState: () => ({ refreshWorkspaces: vi.fn() }),
+  getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
 } as any);
+
+// Zustand stores expose a static getState() — mock it on the hook function itself.
+(useWorkspaceStore as unknown as { getState: () => unknown }).getState = () => ({
+  refreshWorkspaces: vi.fn(),
+  setWorkspaces: vi.fn(),
+});
 
 Object.assign(apiService, {
   createWorkspace: vi.fn().mockResolvedValue({ data: { id: 'new-workspace' } }),
   getWorkspace: vi.fn().mockResolvedValue({ workspace: { summary: mockWorkspaces[0], folders: [], requests: [] } }),
   deleteWorkspace: vi.fn().mockResolvedValue({}),
-  openWorkspaceFromDirectory: vi.fn().mockResolvedValue({}),
   createFolder: vi.fn().mockResolvedValue({}),
   getFolder: vi.fn().mockResolvedValue({ folder: { summary: { id: 'folder-1', name: 'Folder 1' }, requests: [] } }),
   createRequest: vi.fn().mockResolvedValue({}),
@@ -94,7 +109,7 @@ describe('WorkspacesPage', () => {
       loading: false,
       error: null,
       setActiveWorkspaceById: vi.fn(),
-      getState: () => ({ refreshWorkspaces: vi.fn() }),
+      getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
     } as any);
 
     vi.mocked(useUpdateWorkspacesOrder).mockReturnValue({ mutateAsync: vi.fn() } as any);
@@ -184,23 +199,6 @@ describe('WorkspacesPage', () => {
     });
   });
 
-  it('opens workspace from directory', async () => {
-
-    render(<WorkspacesPage />, { wrapper: createWrapper() });
-
-    fireEvent.click(screen.getByText('Open from Directory'));
-
-    const dirInput = screen.getByPlaceholderText('/path/to/workspace');
-    fireEvent.change(dirInput, { target: { value: '/existing/workspace' } });
-
-    const openButton = screen.getByText('Open Workspace');
-    fireEvent.click(openButton);
-
-    await waitFor(() => {
-      expect(apiService.openWorkspaceFromDirectory).toHaveBeenCalled();
-    });
-  });
-
   it('selects workspace', async () => {
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
@@ -247,7 +245,7 @@ describe('WorkspacesPage', () => {
       loading: false,
       error: null,
       setActiveWorkspaceById: setActiveMock,
-      getState: () => ({ refreshWorkspaces: vi.fn() }),
+      getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
     } as any);
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
@@ -377,7 +375,7 @@ describe('WorkspacesPage', () => {
       loading: false,
       error: null,
       setActiveWorkspaceById: vi.fn(),
-      getState: () => ({ refreshWorkspaces: vi.fn() }),
+      getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
     } as any);
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
@@ -392,7 +390,7 @@ describe('WorkspacesPage', () => {
       loading: true,
       error: null,
       setActiveWorkspaceById: vi.fn(),
-      getState: () => ({ refreshWorkspaces: vi.fn() }),
+      getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
     } as any);
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
@@ -406,7 +404,7 @@ describe('WorkspacesPage', () => {
       loading: false,
       error: 'Failed to load workspaces',
       setActiveWorkspaceById: vi.fn(),
-      getState: () => ({ refreshWorkspaces: vi.fn() }),
+      getState: () => ({ refreshWorkspaces: vi.fn(), setWorkspaces: vi.fn() }),
     } as any);
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });

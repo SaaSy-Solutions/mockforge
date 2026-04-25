@@ -7,6 +7,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
+import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
+import { useRuntimeRequests } from '@/hooks/useRuntimeRequests';
+import {
+  useDeploymentCaptures,
+  fetchCaptureResponse,
+  type DeploymentCapture,
+  type DeploymentCaptureResponse,
+} from '@/hooks/useDeploymentCaptures';
 import {
   Box,
   Card,
@@ -78,6 +86,17 @@ const FLY_REGIONS: { code: string; label: string }[] = [
   { code: 'gru', label: 'São Paulo, Brazil' },
 ];
 
+type DeploymentProtocol =
+  | 'http'
+  | 'websocket'
+  | 'graphql'
+  | 'grpc'
+  | 'smtp'
+  | 'mqtt'
+  | 'kafka'
+  | 'amqp'
+  | 'tcp';
+
 interface Deployment {
   id: string;
   org_id: string;
@@ -92,6 +111,7 @@ interface Deployment {
   instance_type?: string;
   health_status: 'healthy' | 'unhealthy' | 'unknown';
   error_message?: string;
+  enabled_protocols?: DeploymentProtocol[];
   created_at: string;
   updated_at: string;
 }
@@ -157,6 +177,28 @@ export const HostedMocksPage: React.FC = () => {
     region: 'iad',
     project_id: '',
   });
+
+  // Optional protocols beyond HTTP. HTTP is implicit (always present);
+  // WebSocket and GraphQL ride on the HTTP listener so toggling them is a
+  // no-op — they're available unconditionally on Pro+ and don't show in the
+  // picker. The picker covers protocols that need their own Fly service.
+  type OptionalProtocol = 'grpc' | 'smtp' | 'mqtt' | 'kafka' | 'amqp' | 'tcp';
+  const [enabledOptionalProtocols, setEnabledOptionalProtocols] = useState<OptionalProtocol[]>([]);
+
+  const protocolOptions: Array<{ id: OptionalProtocol; label: string; minPlan: 'pro' | 'team'; hint: string }> = [
+    { id: 'grpc', label: 'gRPC', minPlan: 'pro', hint: 'HTTP/2 service on port 50051' },
+    { id: 'smtp', label: 'SMTP', minPlan: 'team', hint: 'Mock SMTP server on port 2525' },
+    { id: 'mqtt', label: 'MQTT', minPlan: 'team', hint: 'MQTT broker on port 1883' },
+    { id: 'kafka', label: 'Kafka', minPlan: 'team', hint: 'Kafka broker on port 9092' },
+    { id: 'amqp', label: 'AMQP', minPlan: 'team', hint: 'AMQP broker on port 5672' },
+    { id: 'tcp', label: 'Raw TCP', minPlan: 'team', hint: 'Custom TCP server on port 9999' },
+  ];
+
+  const toggleOptionalProtocol = (id: OptionalProtocol) => {
+    setEnabledOptionalProtocols((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
+  };
   const [creating, setCreating] = useState(false);
   const [uploadingSpec, setUploadingSpec] = useState(false);
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
@@ -166,7 +208,9 @@ export const HostedMocksPage: React.FC = () => {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [projectsLoadError, setProjectsLoadError] = useState<string | null>(null);
 
-  // Real-time stream for the selected hosted mock deployment
+  // Real-time stream for the selected hosted mock deployment.
+  // This goes direct to the deployment's `/__mockforge/ws` and gives
+  // structured request log events (method/path/status/latency).
   const streamEnabled = detailsOpen && selectedDeployment?.status === 'active';
   const streamUrl = streamEnabled ? selectedDeployment?.deployment_url : undefined;
   const {
@@ -174,6 +218,141 @@ export const HostedMocksPage: React.FC = () => {
     logs: streamLogs,
     metrics: streamMetrics,
   } = useHostedMockStream(streamUrl, { enabled: !!streamEnabled });
+
+  // Fly runtime logs (container stdout/stderr) via the registry server's SSE
+  // proxy. Complementary to the deployment WS stream above: works even when
+  // the app's WS endpoint isn't reachable, captures startup logs, etc.
+  const flyLogsEnabled = detailsOpen && !!selectedDeployment;
+  const {
+    entries: flyLogEntries,
+    connected: flyLogsConnected,
+    notConfigured: flyLogsNotConfigured,
+    error: flyLogsError,
+  } = useFlyRuntimeLogs(flyLogsEnabled ? selectedDeployment?.id : undefined, {
+    enabled: flyLogsEnabled,
+  });
+
+  // Structured request log feed (#232). Polls the registry server's
+  // /runtime-requests endpoint, which is populated by the in-container log
+  // shipper. Surfaces in the new "Requests" tab below.
+  const {
+    rows: runtimeRequestRows,
+    loading: runtimeRequestsLoading,
+    error: runtimeRequestsError,
+    refetch: refetchRuntimeRequests,
+  } = useRuntimeRequests(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
+  });
+
+  // Filters for the Requests tab. Pure client-side — the rows are
+  // already buffered by the hook so filtering doesn't trigger refetches.
+  type RequestsStatusFilter = 'all' | '2xx' | '4xx' | '5xx';
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState<RequestsStatusFilter>('all');
+  const [requestsPathFilter, setRequestsPathFilter] = useState('');
+
+  const filteredRequestRows = React.useMemo(() => {
+    const pathQuery = requestsPathFilter.trim().toLowerCase();
+    return runtimeRequestRows.filter((row) => {
+      if (requestsStatusFilter !== 'all') {
+        const bucket = Math.floor(row.status / 100);
+        if (requestsStatusFilter === '2xx' && bucket !== 2) return false;
+        if (requestsStatusFilter === '4xx' && bucket !== 4) return false;
+        if (requestsStatusFilter === '5xx' && bucket !== 5) return false;
+      }
+      if (pathQuery && !row.path.toLowerCase().includes(pathQuery)) {
+        return false;
+      }
+      return true;
+    });
+  }, [runtimeRequestRows, requestsStatusFilter, requestsPathFilter]);
+
+  // Recorder captures (#234) via the cloud proxy. The recorder library
+  // stores full request/response pairs on the deployment's local SQLite;
+  // the registry server proxies the read API so the data is reachable
+  // from the admin UI without exposing the deployment URL to the browser.
+  const {
+    captures: recorderCaptures,
+    loading: capturesLoading,
+    error: capturesError,
+    refetch: refetchCaptures,
+  } = useDeploymentCaptures(detailsOpen ? selectedDeployment?.id : undefined, {
+    enabled: detailsOpen && !!selectedDeployment,
+  });
+
+  // Filters for the Captures tab. Mirrors the Requests tab UX so a user
+  // who learns one knows the other. Status filter buckets HTTP responses
+  // (recorder also captures non-HTTP protocols where status is null —
+  // those count as 'all' but are excluded from the 2xx/4xx/5xx buckets).
+  const [capturesStatusFilter, setCapturesStatusFilter] =
+    useState<RequestsStatusFilter>('all');
+  const [capturesPathFilter, setCapturesPathFilter] = useState('');
+
+  const filteredCaptures = React.useMemo(() => {
+    const pathQuery = capturesPathFilter.trim().toLowerCase();
+    return recorderCaptures.filter((capture) => {
+      if (capturesStatusFilter !== 'all') {
+        if (capture.status_code == null) return false;
+        const bucket = Math.floor(capture.status_code / 100);
+        if (capturesStatusFilter === '2xx' && bucket !== 2) return false;
+        if (capturesStatusFilter === '4xx' && bucket !== 4) return false;
+        if (capturesStatusFilter === '5xx' && bucket !== 5) return false;
+      }
+      if (pathQuery && !capture.path.toLowerCase().includes(pathQuery)) {
+        return false;
+      }
+      return true;
+    });
+  }, [recorderCaptures, capturesStatusFilter, capturesPathFilter]);
+  const [selectedCapture, setSelectedCapture] = useState<DeploymentCapture | null>(null);
+  const [selectedCaptureResponse, setSelectedCaptureResponse] =
+    useState<DeploymentCaptureResponse | null>(null);
+  const [captureResponseLoading, setCaptureResponseLoading] = useState(false);
+  const [replayResult, setReplayResult] = useState<unknown | null>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState<string | null>(null);
+
+  const openCapture = useCallback(
+    async (capture: DeploymentCapture) => {
+      setSelectedCapture(capture);
+      setSelectedCaptureResponse(null);
+      setReplayResult(null);
+      setReplayError(null);
+      if (!selectedDeployment) return;
+      setCaptureResponseLoading(true);
+      try {
+        const resp = await fetchCaptureResponse(selectedDeployment.id, capture.id);
+        setSelectedCaptureResponse(resp);
+      } finally {
+        setCaptureResponseLoading(false);
+      }
+    },
+    [selectedDeployment],
+  );
+
+  const replaySelectedCapture = useCallback(async () => {
+    if (!selectedDeployment || !selectedCapture) return;
+    setReplayLoading(true);
+    setReplayError(null);
+    setReplayResult(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const url = `/api/v1/hosted-mocks/${encodeURIComponent(selectedDeployment.id)}/captures/${encodeURIComponent(selectedCapture.id)}/replay`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+      });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const contentType = resp.headers.get('content-type') ?? '';
+      const data = contentType.includes('application/json') ? await resp.json() : await resp.text();
+      setReplayResult(data);
+    } catch (err) {
+      setReplayError(err instanceof Error ? err.message : 'Replay failed');
+    } finally {
+      setReplayLoading(false);
+    }
+  }, [selectedDeployment, selectedCapture]);
 
   useEffect(() => {
     loadDeployments();
@@ -276,6 +455,11 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
+      // HTTP is always implicit. The picker only adds protocols that need
+      // their own Fly service entry; the backend rejects with a clear error
+      // if the org's plan can't accommodate the request.
+      const enabledProtocols = ['http', ...enabledOptionalProtocols];
+
       const request = {
         name: formData.name,
         slug: formData.slug || undefined,
@@ -284,6 +468,7 @@ export const HostedMocksPage: React.FC = () => {
         openapi_spec_url: formData.openapi_spec_url || undefined,
         region: formData.region || undefined,
         project_id: formData.project_id || undefined,
+        enabled_protocols: enabledProtocols,
       };
 
       const response = await fetch('/api/v1/hosted-mocks', {
@@ -321,6 +506,7 @@ export const HostedMocksPage: React.FC = () => {
         region: 'iad',
         project_id: '',
       });
+      setEnabledOptionalProtocols([]);
       loadDeployments();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create deployment');
@@ -957,6 +1143,50 @@ export const HostedMocksPage: React.FC = () => {
               </Button>
             </Box>
 
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                Protocols
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                HTTP, WebSocket, and GraphQL are always available on port 3000. Enable additional
+                protocols below to expose them on dedicated Fly ports. Plan-gated — the backend
+                will reject the request if your plan doesn't cover what you select.
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {protocolOptions.map((opt) => {
+                  const checked = enabledOptionalProtocols.includes(opt.id);
+                  return (
+                    <Chip
+                      key={opt.id}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <span>{opt.label}</span>
+                          <Box
+                            component="span"
+                            sx={{
+                              fontSize: 10,
+                              px: 0.75,
+                              py: 0.1,
+                              borderRadius: 1,
+                              bgcolor: opt.minPlan === 'team' ? 'secondary.main' : 'primary.main',
+                              color: 'common.white',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {opt.minPlan}
+                          </Box>
+                        </Box>
+                      }
+                      onClick={() => toggleOptionalProtocol(opt.id)}
+                      color={checked ? 'primary' : 'default'}
+                      variant={checked ? 'filled' : 'outlined'}
+                      title={opt.hint}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+
             <TextField
               label="Configuration (JSON)"
               required
@@ -1019,7 +1249,10 @@ export const HostedMocksPage: React.FC = () => {
             <DialogContent>
               <Tabs value={detailsTab} onChange={(_, v) => setDetailsTab(v)} sx={{ mb: 3 }}>
                 <Tab icon={<CodeIcon />} label="Overview" />
+                <Tab icon={<ViewIcon />} label="Events" />
                 <Tab icon={<ViewIcon />} label="Logs" />
+                <Tab icon={<ViewIcon />} label="Requests" />
+                <Tab icon={<ViewIcon />} label="Captures" />
                 <Tab icon={<AssessmentIcon />} label="Metrics" />
               </Tabs>
 
@@ -1145,17 +1378,140 @@ export const HostedMocksPage: React.FC = () => {
                 </Box>
               )}
 
+              {/* Events tab: deployment lifecycle history (created → deploying → active / failed). */}
               {detailsTab === 1 && (
                 <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Deployment lifecycle events. For runtime container output, see the Logs tab.
+                  </Typography>
+                  {logsLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : logs.length === 0 ? (
+                    <Alert severity="info">No lifecycle events recorded yet.</Alert>
+                  ) : (
+                    <List>
+                      {logs.map((log, index) => (
+                        <React.Fragment key={log.id}>
+                          <ListItem>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                  <Chip
+                                    label={log.level}
+                                    size="small"
+                                    color={
+                                      log.level === 'error'
+                                        ? 'error'
+                                        : log.level === 'warning'
+                                        ? 'warning'
+                                        : 'default'
+                                    }
+                                  />
+                                  <Typography variant="body2">{log.message}</Typography>
+                                </Box>
+                              }
+                              secondary={new Date(log.created_at).toLocaleString()}
+                            />
+                          </ListItem>
+                          {index < logs.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              )}
+
+              {/* Logs tab: runtime container logs (Fly SSE) + live request stream from the deployment WS. */}
+              {detailsTab === 2 && (
+                <Box>
+                  {flyLogsNotConfigured && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Fly runtime log streaming isn't configured on this MockForge Cloud instance
+                      (FLYIO_API_TOKEN unset). Container stdout/stderr won't appear here, but live
+                      request events from the deployment WebSocket will.
+                    </Alert>
+                  )}
+                  {flyLogsError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      Fly logs error: {flyLogsError}
+                    </Alert>
+                  )}
+                  {flyLogsConnected && !flyLogsNotConfigured && (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Streaming runtime logs from Fly
+                    </Alert>
+                  )}
+
+                  {flyLogEntries.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        Container logs ({flyLogEntries.length})
+                      </Typography>
+                      <Box
+                        sx={{
+                          maxHeight: 320,
+                          overflow: 'auto',
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          bgcolor: 'background.default',
+                          border: 1,
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          p: 1.5,
+                        }}
+                      >
+                        {flyLogEntries.map((entry, index) => (
+                          <Box
+                            key={`fly-${index}-${entry.timestamp}`}
+                            sx={{ display: 'flex', gap: 1, py: 0.25 }}
+                          >
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ minWidth: 160 }}
+                            >
+                              {new Date(entry.timestamp).toLocaleTimeString()}
+                            </Typography>
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              sx={{
+                                minWidth: 50,
+                                color:
+                                  entry.level === 'error'
+                                    ? 'error.main'
+                                    : entry.level === 'warning'
+                                    ? 'warning.main'
+                                    : 'text.secondary',
+                              }}
+                            >
+                              {entry.level}
+                            </Typography>
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              sx={{ flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                            >
+                              {entry.message}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+
                   {streamConnected && (
                     <Alert severity="success" sx={{ mb: 2 }}>
                       Live streaming connected — new requests will appear automatically
                     </Alert>
                   )}
                   {streamLogs.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
+                    <Box>
                       <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                        Live Requests
+                        Live requests
                       </Typography>
                       <List dense>
                         {streamLogs.slice(0, 50).map((entry, index) => (
@@ -1192,53 +1548,385 @@ export const HostedMocksPage: React.FC = () => {
                       </List>
                     </Box>
                   )}
-                  {logsLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                      <CircularProgress />
-                    </Box>
-                  ) : logs.length === 0 && streamLogs.length === 0 ? (
+
+                  {flyLogEntries.length === 0 && streamLogs.length === 0 && (
                     <Alert severity="info">
-                      {streamConnected ? 'Waiting for requests...' : 'No logs available'}
+                      Waiting for log output. Container logs appear here as Fly emits them; request
+                      logs appear when the deployment is reachable and traffic arrives.
                     </Alert>
-                  ) : logs.length > 0 ? (
-                    <>
-                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                        Historical Logs
-                      </Typography>
-                      <List>
-                        {logs.map((log, index) => (
-                          <React.Fragment key={log.id}>
-                            <ListItem>
-                              <ListItemText
-                                primary={
-                                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                    <Chip
-                                      label={log.level}
-                                      size="small"
-                                      color={
-                                        log.level === 'error'
-                                          ? 'error'
-                                          : log.level === 'warning'
-                                          ? 'warning'
-                                          : 'default'
-                                      }
-                                    />
-                                    <Typography variant="body2">{log.message}</Typography>
-                                  </Box>
-                                }
-                                secondary={new Date(log.created_at).toLocaleString()}
-                              />
-                            </ListItem>
-                            {index < logs.length - 1 && <Divider />}
-                          </React.Fragment>
-                        ))}
-                      </List>
-                    </>
-                  ) : null}
+                  )}
                 </Box>
               )}
 
-              {detailsTab === 2 && (
+              {/* Requests tab: structured request log feed from the in-container shipper (#232). */}
+              {detailsTab === 3 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      Live request feed shipped from the deployed container. Polls every 4
+                      seconds.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchRuntimeRequests}
+                      disabled={runtimeRequestsLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {/* Filter toolbar: status bucket chips + path substring search. */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    {(['all', '2xx', '4xx', '5xx'] as const).map((bucket) => (
+                      <Chip
+                        key={bucket}
+                        label={bucket === 'all' ? 'All' : bucket}
+                        size="small"
+                        clickable
+                        onClick={() => setRequestsStatusFilter(bucket)}
+                        color={
+                          requestsStatusFilter !== bucket
+                            ? 'default'
+                            : bucket === '5xx'
+                              ? 'error'
+                              : bucket === '4xx'
+                                ? 'warning'
+                                : bucket === '2xx'
+                                  ? 'success'
+                                  : 'primary'
+                        }
+                        variant={requestsStatusFilter === bucket ? 'filled' : 'outlined'}
+                      />
+                    ))}
+                    <TextField
+                      size="small"
+                      placeholder="Filter by path…"
+                      value={requestsPathFilter}
+                      onChange={(e) => setRequestsPathFilter(e.target.value)}
+                      sx={{ minWidth: 240, ml: 'auto' }}
+                    />
+                  </Box>
+
+                  {runtimeRequestsError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      Request feed error: {runtimeRequestsError}. The cloud may not have
+                      MOCKFORGE_LOG_INGEST_BASE_URL configured, or the container hasn't
+                      shipped any batches yet.
+                    </Alert>
+                  )}
+
+                  {(requestsStatusFilter !== 'all' || requestsPathFilter.trim()) &&
+                    runtimeRequestRows.length > 0 && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1 }}
+                      >
+                        Showing {filteredRequestRows.length} of {runtimeRequestRows.length}{' '}
+                        captured requests.
+                      </Typography>
+                    )}
+
+                  {runtimeRequestRows.length === 0 ? (
+                    <Alert severity="info">
+                      Waiting for requests. Send traffic to the deployment URL — captured
+                      pairs will appear here within a few seconds.
+                    </Alert>
+                  ) : filteredRequestRows.length === 0 ? (
+                    <Alert severity="info">
+                      No requests match the active filter. Try widening the status bucket or
+                      clearing the path filter.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        maxHeight: 480,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Method</TableCell>
+                            <TableCell>Path</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Latency</TableCell>
+                            <TableCell>IP</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {filteredRequestRows.map((row, idx) => (
+                            <TableRow
+                              key={`req-${row.request_id || idx}-${row.timestamp}`}
+                              hover
+                            >
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {new Date(row.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={row.method}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.path}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={row.status}
+                                  size="small"
+                                  color={
+                                    row.status >= 500
+                                      ? 'error'
+                                      : row.status >= 400
+                                        ? 'warning'
+                                        : 'success'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.latency_ms}ms
+                              </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {row.client_ip ?? '—'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {/* Captures tab: full request/response pairs from mockforge-recorder via the cloud proxy (#234). */}
+              {detailsTab === 4 && (
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                      Full request/response pairs from the deployment's recorder. Captures live on
+                      the deployment's local storage and are wiped on machine restart.
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await toggleRecorder(selectedDeployment.id, 'enable');
+                        refetchCaptures();
+                      }}
+                    >
+                      Enable
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={!selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await toggleRecorder(selectedDeployment.id, 'disable');
+                        refetchCaptures();
+                      }}
+                    >
+                      Disable
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      disabled={!selectedDeployment || recorderCaptures.length === 0}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        if (!confirm('Clear all captures on this deployment?')) return;
+                        await toggleRecorder(selectedDeployment.id, 'clear');
+                        refetchCaptures();
+                      }}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={capturesLoading || recorderCaptures.length === 0 || !selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await downloadCapturesHar(selectedDeployment.id, selectedDeployment.slug);
+                      }}
+                    >
+                      Export HAR
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={refetchCaptures}
+                      disabled={capturesLoading}
+                    >
+                      Refresh
+                    </Button>
+                  </Box>
+
+                  {/* Filter toolbar — mirrors the Requests tab. */}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    {(['all', '2xx', '4xx', '5xx'] as const).map((bucket) => (
+                      <Chip
+                        key={bucket}
+                        label={bucket === 'all' ? 'All' : bucket}
+                        size="small"
+                        clickable
+                        onClick={() => setCapturesStatusFilter(bucket)}
+                        color={
+                          capturesStatusFilter !== bucket
+                            ? 'default'
+                            : bucket === '5xx'
+                              ? 'error'
+                              : bucket === '4xx'
+                                ? 'warning'
+                                : bucket === '2xx'
+                                  ? 'success'
+                                  : 'primary'
+                        }
+                        variant={capturesStatusFilter === bucket ? 'filled' : 'outlined'}
+                      />
+                    ))}
+                    <TextField
+                      size="small"
+                      placeholder="Filter by path…"
+                      value={capturesPathFilter}
+                      onChange={(e) => setCapturesPathFilter(e.target.value)}
+                      sx={{ minWidth: 240, ml: 'auto' }}
+                    />
+                  </Box>
+
+                  {capturesError && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {capturesError}. The recorder may not be enabled on this deployment —
+                      configure <code>observability.recorder.enabled = true</code> in its config
+                      and redeploy.
+                    </Alert>
+                  )}
+
+                  {(capturesStatusFilter !== 'all' || capturesPathFilter.trim()) &&
+                    recorderCaptures.length > 0 && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1 }}
+                      >
+                        Showing {filteredCaptures.length} of {recorderCaptures.length} captures.
+                      </Typography>
+                    )}
+
+                  {recorderCaptures.length === 0 ? (
+                    <Alert severity="info">
+                      No captures yet. Enable the recorder on the deployment, send traffic, and
+                      the captures will appear here within a few seconds.
+                    </Alert>
+                  ) : filteredCaptures.length === 0 ? (
+                    <Alert severity="info">
+                      No captures match the active filter. Try widening the status bucket or
+                      clearing the path filter.
+                    </Alert>
+                  ) : (
+                    <TableContainer
+                      component={Box}
+                      sx={{
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        maxHeight: 480,
+                      }}
+                    >
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Time</TableCell>
+                            <TableCell>Protocol</TableCell>
+                            <TableCell>Method</TableCell>
+                            <TableCell>Path</TableCell>
+                            <TableCell>Status</TableCell>
+                            <TableCell align="right">Duration</TableCell>
+                            <TableCell />
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {filteredCaptures.map((capture) => (
+                            <TableRow key={capture.id} hover>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {new Date(capture.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={String(capture.protocol).toLowerCase()}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell>{capture.method}</TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {capture.path}
+                              </TableCell>
+                              <TableCell>
+                                {capture.status_code != null ? (
+                                  <Chip
+                                    label={capture.status_code}
+                                    size="small"
+                                    color={
+                                      capture.status_code >= 500
+                                        ? 'error'
+                                        : capture.status_code >= 400
+                                          ? 'warning'
+                                          : 'success'
+                                    }
+                                  />
+                                ) : (
+                                  <Typography variant="caption" color="text.secondary">
+                                    —
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {capture.duration_ms != null ? `${capture.duration_ms}ms` : '—'}
+                              </TableCell>
+                              <TableCell>
+                                <Button size="small" onClick={() => openCapture(capture)}>
+                                  View
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {detailsTab === 5 && (
                 <Box>
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>
@@ -1410,6 +2098,243 @@ export const HostedMocksPage: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Capture detail dialog. Sibling to the deployment details dialog so
+          we don't have to nest dialogs (which MUI handles but produces
+          confusing focus behaviour). */}
+      <Dialog
+        open={!!selectedCapture}
+        onClose={() => {
+          setSelectedCapture(null);
+          setSelectedCaptureResponse(null);
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        {selectedCapture && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip label={selectedCapture.method} size="small" variant="outlined" />
+                <Typography variant="body1" sx={{ fontFamily: 'monospace' }}>
+                  {selectedCapture.path}
+                </Typography>
+                {selectedCapture.status_code != null && (
+                  <Chip
+                    label={selectedCapture.status_code}
+                    size="small"
+                    color={
+                      selectedCapture.status_code >= 500
+                        ? 'error'
+                        : selectedCapture.status_code >= 400
+                          ? 'warning'
+                          : 'success'
+                    }
+                  />
+                )}
+              </Box>
+            </DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="subtitle2" gutterBottom>
+                Request
+              </Typography>
+              <Box
+                component="pre"
+                sx={{
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                  bgcolor: 'background.default',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1.5,
+                  maxHeight: 240,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  m: 0,
+                }}
+              >
+                {`Headers:\n${formatJsonString(selectedCapture.headers)}\n\nBody (${selectedCapture.body_encoding}):\n${selectedCapture.body ?? '(empty)'}`}
+              </Box>
+
+              <Typography variant="subtitle2" sx={{ mt: 2 }} gutterBottom>
+                Response
+              </Typography>
+              {captureResponseLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : selectedCaptureResponse ? (
+                <Box
+                  component="pre"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    bgcolor: 'background.default',
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    p: 1.5,
+                    maxHeight: 240,
+                    overflow: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    m: 0,
+                  }}
+                >
+                  {`Status: ${selectedCaptureResponse.status_code}\n\nHeaders:\n${formatJsonString(selectedCaptureResponse.headers)}\n\nBody (${selectedCaptureResponse.body_encoding}):\n${selectedCaptureResponse.body ?? '(empty)'}`}
+                </Box>
+              ) : (
+                <Alert severity="info">
+                  No response body recorded. The deployment may have shut down before the
+                  response was committed, or the recorder may not capture response bodies for
+                  this protocol.
+                </Alert>
+              )}
+
+              {(replayResult !== null || replayError || replayLoading) && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Replay result
+                  </Typography>
+                  {replayLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={20} />
+                    </Box>
+                  ) : replayError ? (
+                    <Alert severity="error">{replayError}</Alert>
+                  ) : (
+                    <Box
+                      component="pre"
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        bgcolor: 'background.default',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        p: 1.5,
+                        maxHeight: 240,
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        m: 0,
+                      }}
+                    >
+                      {typeof replayResult === 'string'
+                        ? replayResult
+                        : JSON.stringify(replayResult, null, 2)}
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={replaySelectedCapture}
+                disabled={replayLoading || !selectedDeployment}
+              >
+                Replay
+              </Button>
+              <Box sx={{ flex: 1 }} />
+              <Button
+                onClick={() => {
+                  setSelectedCapture(null);
+                  setSelectedCaptureResponse(null);
+                  setReplayResult(null);
+                  setReplayError(null);
+                }}
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 };
+
+/**
+ * Pretty-print a JSON string. Recorder stores headers and query_params as
+ * JSON-encoded strings; if the parse fails we surface the raw text so a
+ * malformed entry is still readable.
+ */
+function formatJsonString(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Trigger a HAR download for a deployment's captures. Goes through the
+ * cloud proxy so the auth_token JWT is the only thing the browser needs;
+ * the deployment URL stays server-side.
+ *
+ * Filename embeds slug + ISO date so the user can stash multiple exports
+ * without overwriting. Errors are surfaced as alerts because this is a
+ * one-shot user action — silent failure would leave them wondering why
+ * nothing downloaded.
+ */
+/**
+ * Flip the deployment's recorder enable/disable/clear state via the
+ * cloud proxy. We surface server-side errors as alerts because each
+ * action is a deliberate user click — silent failure is worse than
+ * mildly noisy success.
+ */
+async function toggleRecorder(
+  deploymentId: string,
+  action: 'enable' | 'disable' | 'clear',
+): Promise<void> {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    alert('Not authenticated');
+    return;
+  }
+  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/${action}`;
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Recorder action failed';
+    alert(`Recorder ${action} failed: ${msg}`);
+  }
+}
+
+async function downloadCapturesHar(deploymentId: string, slug: string): Promise<void> {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    alert('Not authenticated');
+    return;
+  }
+  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/export/har`;
+  try {
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    const date = new Date().toISOString().split('T')[0];
+    a.download = `${slug}-captures-${date}.har`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Download failed';
+    alert(`HAR export failed: ${msg}`);
+  }
+}

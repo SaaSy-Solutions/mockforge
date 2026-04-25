@@ -173,6 +173,7 @@ async fn main() -> Result<()> {
     workers::saml_cleanup::start_saml_cleanup_worker(db.pool().clone());
     workers::plugin_scanner::start_plugin_scanner_worker(state.clone());
     workers::osv_sync::start_osv_sync_worker(state.clone());
+    workers::runtime_logs_retention::start_runtime_logs_retention_worker(db.pool().clone());
 
     // Start deployment orchestrator for hosted mocks
     let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();

@@ -5,15 +5,37 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{cloud_workspace::WorkspaceSummaryResponse, AuditEventType, FeatureType},
+    models::{
+        cloud_workspace::WorkspaceSummaryResponse,
+        workspace_folder::{FolderSummaryResponse, WorkspaceFolder},
+        workspace_request::{RequestSummaryResponse, WorkspaceRequest},
+        AuditEventType, FeatureType,
+    },
     AppState,
 };
+
+async fn summarize_workspace(
+    pool: &sqlx::PgPool,
+    workspace: &crate::models::CloudWorkspace,
+) -> ApiResult<WorkspaceSummaryResponse> {
+    let folder_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM workspace_folders WHERE workspace_id = $1")
+            .bind(workspace.id)
+            .fetch_one(pool)
+            .await?;
+    let request_count = WorkspaceRequest::count_in_workspace(pool, workspace.id).await?;
+
+    let mut summary = workspace.to_summary();
+    summary.folder_count = folder_count;
+    summary.request_count = request_count;
+    Ok(summary)
+}
 
 /// List all workspaces for the user's organization
 pub async fn list_workspaces(
@@ -27,19 +49,34 @@ pub async fn list_workspaces(
 
     let workspaces = state.store.list_cloud_workspaces_by_org(org_ctx.org_id).await?;
 
-    let summaries: Vec<WorkspaceSummaryResponse> =
-        workspaces.iter().map(|w| w.to_summary()).collect();
+    let mut summaries: Vec<WorkspaceSummaryResponse> = Vec::with_capacity(workspaces.len());
+    for ws in &workspaces {
+        summaries.push(summarize_workspace(state.db.pool(), ws).await?);
+    }
 
     Ok(Json(summaries))
 }
 
-/// Get a single workspace by ID
+/// Detailed workspace shape consumed by WorkspacesPage when a user clicks into a workspace.
+#[derive(Debug, Serialize)]
+pub struct WorkspaceDetailResponse {
+    pub summary: WorkspaceSummaryResponse,
+    pub folders: Vec<FolderSummaryResponse>,
+    pub requests: Vec<RequestSummaryResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkspaceResponseEnvelope {
+    pub workspace: WorkspaceDetailResponse,
+}
+
+/// Get a single workspace by ID (detail view including folders + top-level requests).
 pub async fn get_workspace(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<WorkspaceSummaryResponse>> {
+) -> ApiResult<Json<WorkspaceResponseEnvelope>> {
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -56,7 +93,28 @@ pub async fn get_workspace(
         ));
     }
 
-    Ok(Json(workspace.to_summary()))
+    let pool = state.db.pool();
+    let summary = summarize_workspace(pool, &workspace).await?;
+
+    let folders = WorkspaceFolder::list_by_workspace(pool, id).await?;
+    let mut folder_summaries: Vec<FolderSummaryResponse> = Vec::with_capacity(folders.len());
+    for f in &folders {
+        folder_summaries.push(f.to_summary_response(pool).await?);
+    }
+
+    let top_level_requests = WorkspaceRequest::list_by_workspace(pool, id)
+        .await?
+        .into_iter()
+        .map(|r| r.to_summary())
+        .collect::<Vec<_>>();
+
+    Ok(Json(WorkspaceResponseEnvelope {
+        workspace: WorkspaceDetailResponse {
+            summary,
+            folders: folder_summaries,
+            requests: top_level_requests,
+        },
+    }))
 }
 
 /// Create a new workspace

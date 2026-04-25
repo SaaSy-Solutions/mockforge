@@ -3,16 +3,21 @@
 //! Provides endpoints for deploying, managing, and monitoring cloud-hosted mock services
 
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Query, State},
     http::HeaderMap,
+    response::sse::{Event, KeepAlive, Sse},
     Json,
 };
+use chrono::{DateTime, Utc};
+use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use uuid::Uuid;
 
 use crate::{
     deployment::flyio::FlyioClient,
     error::{ApiError, ApiResult},
+    fly_logs::LogEntry,
     middleware::{
         permission_check::PermissionChecker, permissions::Permission, resolve_org_context, AuthUser,
     },
@@ -104,6 +109,43 @@ pub async fn create_deployment(
         )));
     }
 
+    // Resolve and plan-gate the protocol set. HTTP is always present and is
+    // free; gRPC requires Pro; brokers (SMTP/MQTT/Kafka/AMQP/TCP) require
+    // Team. Reject with an explicit error so the UI can surface "upgrade to
+    // enable X" rather than a generic 400.
+    let mut enabled_protocols = request.enabled_protocols.clone().unwrap_or_default();
+    if !enabled_protocols.contains(&crate::models::Protocol::Http) {
+        enabled_protocols.insert(0, crate::models::Protocol::Http);
+    }
+    let plan = org_ctx.org.plan.clone();
+    if !crate::models::protocols_allowed_on_plan(&enabled_protocols, &plan) {
+        let blocked: Vec<String> = enabled_protocols
+            .iter()
+            .filter(|p| !crate::models::protocols_allowed_on_plan(&[**p], &plan))
+            .map(|p| format!("{:?}", p))
+            .collect();
+        return Err(ApiError::InvalidRequest(format!(
+            "These protocols require a higher plan than '{}': {}",
+            plan,
+            blocked.join(", ")
+        )));
+    }
+
+    // Persist enabled protocols into the deployment's config_json so the
+    // orchestrator can read them when building the Fly machine. Done as an
+    // additive merge to preserve any keys the caller already supplied.
+    let mut config_json = request.config_json.clone();
+    if let Some(obj) = config_json.as_object_mut() {
+        obj.insert(
+            "enabled_protocols".to_string(),
+            serde_json::to_value(&enabled_protocols).unwrap_or(serde_json::Value::Null),
+        );
+    } else {
+        // Caller passed a non-object (e.g. null) — replace with a fresh
+        // object that only carries the protocol list.
+        config_json = serde_json::json!({ "enabled_protocols": enabled_protocols });
+    }
+
     // Create deployment record
     let deployment = state
         .store
@@ -113,7 +155,7 @@ pub async fn create_deployment(
             &request.name,
             slug,
             request.description.as_deref(),
-            request.config_json,
+            config_json,
             request.openapi_spec_url.as_deref(),
             request.region.as_deref(),
         )
@@ -990,6 +1032,733 @@ pub async fn get_deployment_logs(
     Ok(Json(responses))
 }
 
+/// Query parameters for the runtime-logs endpoint.
+#[derive(Debug, Deserialize)]
+pub struct RuntimeLogsQuery {
+    /// Maximum entries to return. Falls back to the env-configured default.
+    pub limit: Option<u32>,
+    /// RFC3339 timestamp; only entries strictly newer than this are returned.
+    pub since: Option<String>,
+}
+
+/// Get runtime logs for a deployment by polling the Fly logs API.
+///
+/// This is the new "logs" surface (#224). The historical
+/// `GET /api/v1/hosted-mocks/{id}/logs` endpoint stays as deployment events
+/// (lifecycle entries from the local `deployment_logs` table) so the UI can
+/// surface both views: an "Events" tab from the existing endpoint and a
+/// "Logs" tab backed by this one.
+pub async fn get_runtime_logs(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+    Query(params): Query<RuntimeLogsQuery>,
+) -> ApiResult<Json<Vec<LogEntry>>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let Some(client) = crate::fly_logs::global() else {
+        // No Fly token configured — return empty rather than 500. Operators
+        // see this in self-hosted / dev; the UI shows a "not configured"
+        // hint when the list is empty and the configured flag (sent in a
+        // header below) is false.
+        return Ok(Json(Vec::new()));
+    };
+
+    let since = params
+        .since
+        .as_deref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&Utc));
+
+    let app_name = deployment.fly_app_name();
+    let entries = client.fetch_recent(&app_name, since, params.limit).await.map_err(|e| {
+        warn!(error = %e, app_name = %app_name, "Fly runtime logs fetch failed");
+        ApiError::Internal(anyhow::anyhow!("Fly logs query failed: {}", e))
+    })?;
+
+    Ok(Json(entries))
+}
+
+/// SSE stream of runtime logs. Polls the Fly logs API every few seconds and
+/// emits new entries as `data:` events. Closes on the first transient error
+/// after surfacing it as a `data:` event so the browser can render a banner.
+pub async fn stream_runtime_logs(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    let pool = state.db.pool();
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let app_name = deployment.fly_app_name();
+    let stream = build_runtime_logs_stream(app_name);
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// Build the SSE event stream for runtime logs. Each tick polls Fly with a
+/// `since` cursor that advances past the latest entry observed so we don't
+/// duplicate events on refetch.
+fn build_runtime_logs_stream(app_name: String) -> impl Stream<Item = Result<Event, Infallible>> {
+    use futures_util::stream::unfold;
+
+    /// Per-stream poll state: cursor + tick count for an initial empty-poll
+    /// quietness. We start the cursor a few seconds in the past so the first
+    /// poll picks up "what's happening now" without dumping the whole window.
+    struct State {
+        cursor: DateTime<Utc>,
+        client: Option<&'static crate::fly_logs::FlyLogsClient>,
+        app_name: String,
+        emitted_unconfigured: bool,
+    }
+
+    let state = State {
+        cursor: Utc::now() - chrono::Duration::seconds(30),
+        client: crate::fly_logs::global(),
+        app_name,
+        emitted_unconfigured: false,
+    };
+
+    unfold(state, |mut st| async move {
+        // Slow poll loop. 2 seconds keeps the UI responsive without hammering
+        // Fly's API; tighten once we move to the NATS subscription path
+        // (#232).
+        if st.client.is_none() && !st.emitted_unconfigured {
+            st.emitted_unconfigured = true;
+            let event = Event::default()
+                .event("config")
+                .data("Fly runtime logs are not configured (FLYIO_API_TOKEN unset)");
+            return Some((Ok(event), st));
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+        let Some(client) = st.client else {
+            // Configured-flag already emitted; keep stream alive with a
+            // periodic comment so the connection doesn't close.
+            let event = Event::default().comment("idle");
+            return Some((Ok(event), st));
+        };
+
+        match client.fetch_recent(&st.app_name, Some(st.cursor), None).await {
+            Ok(entries) if entries.is_empty() => {
+                let event = Event::default().comment("no-new-logs");
+                Some((Ok(event), st))
+            }
+            Ok(entries) => {
+                // Advance cursor to the newest entry we just emitted.
+                if let Some(latest) = entries.iter().map(|e| e.timestamp).max() {
+                    st.cursor = latest;
+                }
+                let payload = serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string());
+                let event = Event::default().event("logs").data(payload);
+                Some((Ok(event), st))
+            }
+            Err(err) => {
+                let payload = serde_json::json!({ "error": err.to_string() }).to_string();
+                let event = Event::default().event("error").data(payload);
+                Some((Ok(event), st))
+            }
+        }
+    })
+}
+
+/// One captured request/response event. Mirrors `RequestLogEvent` in
+/// `mockforge-observability::log_shipper` — both sides serialize via serde
+/// so the wire format is the canonical contract.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RuntimeRequestEvent {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub method: String,
+    pub path: String,
+    pub status: u16,
+    pub latency_ms: u32,
+    #[serde(default)]
+    pub matched_route: Option<String>,
+    #[serde(default)]
+    pub client_ip: Option<String>,
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub request_id: Option<String>,
+    #[serde(default)]
+    pub bytes_in: Option<i64>,
+    #[serde(default)]
+    pub bytes_out: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IngestPayload {
+    pub events: Vec<RuntimeRequestEvent>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IngestResponse {
+    pub accepted: usize,
+}
+
+/// Ingest a batch of structured request logs from a hosted-mock container.
+///
+/// This endpoint is **not** behind the user-scoped `auth_middleware` — it
+/// authenticates with a deployment-scoped JWT minted by the orchestrator
+/// at deploy time and passed to the container as `MOCKFORGE_LOG_INGEST_TOKEN`.
+/// The token's subject embeds the deployment_id; we reject mismatches.
+pub async fn ingest_runtime_logs(
+    State(state): State<AppState>,
+    Path(deployment_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(payload): Json<IngestPayload>,
+) -> ApiResult<Json<IngestResponse>> {
+    // Bearer token from the in-container shipper.
+    let auth = headers
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or_else(|| ApiError::InvalidRequest("Missing deployment ingest token".to_string()))?;
+
+    let token_deployment_id = mockforge_registry_core::auth::verify_deployment_ingest_token(
+        auth,
+        &state.config.jwt_secret,
+    )
+    .map_err(|e| {
+        tracing::warn!(error = %e, "Deployment ingest token rejected");
+        ApiError::InvalidRequest("Invalid deployment ingest token".to_string())
+    })?;
+
+    if token_deployment_id != deployment_id {
+        return Err(ApiError::InvalidRequest(
+            "Token deployment id does not match URL path".to_string(),
+        ));
+    }
+
+    if payload.events.is_empty() {
+        return Ok(Json(IngestResponse { accepted: 0 }));
+    }
+
+    // Cap accepted batch size as a defence against runaway shippers — a
+    // misbehaving container shouldn't be able to flood the table with one
+    // request. Matches the shipper's default flush size.
+    const MAX_BATCH: usize = 500;
+    let events: Vec<RuntimeRequestEvent> = payload.events.into_iter().take(MAX_BATCH).collect();
+    let accepted = events.len();
+
+    // Bulk insert. Building one INSERT with many VALUES rows would be
+    // marginally faster but uglier with sqlx; the row count per batch is
+    // small (50 by default), so per-row inserts in a transaction is fine.
+    let pool = state.db.pool();
+    let mut tx = pool.begin().await.map_err(ApiError::Database)?;
+    for evt in &events {
+        sqlx::query(
+            r#"
+            INSERT INTO runtime_request_logs (
+                deployment_id, occurred_at, method, path, status, latency_ms,
+                matched_route, client_ip, user_agent, request_id, bytes_in, bytes_out
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(evt.timestamp)
+        .bind(&evt.method)
+        .bind(&evt.path)
+        .bind(evt.status as i16)
+        .bind(evt.latency_ms as i32)
+        .bind(evt.matched_route.as_ref())
+        .bind(evt.client_ip.as_ref())
+        .bind(evt.user_agent.as_ref())
+        .bind(evt.request_id.as_ref())
+        .bind(evt.bytes_in)
+        .bind(evt.bytes_out)
+        .execute(&mut *tx)
+        .await
+        .map_err(ApiError::Database)?;
+    }
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    Ok(Json(IngestResponse { accepted }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RuntimeRequestsQuery {
+    /// Maximum entries to return. Capped at 500 server-side.
+    pub limit: Option<u32>,
+    /// RFC3339 timestamp; only entries strictly newer than this are returned.
+    pub since: Option<String>,
+}
+
+/// Read back recent runtime request logs for a deployment. Powers the
+/// admin UI's "Requests" tab.
+pub async fn get_runtime_requests(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+    Query(params): Query<RuntimeRequestsQuery>,
+) -> ApiResult<Json<Vec<RuntimeRequestEvent>>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let limit = params.limit.unwrap_or(100).min(500) as i64;
+    let since = params
+        .since
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&chrono::Utc));
+
+    type RuntimeRequestRow = (
+        chrono::DateTime<chrono::Utc>,
+        String,
+        String,
+        i16,
+        i32,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<i64>,
+    );
+
+    let rows: Vec<RuntimeRequestRow> = if let Some(since) = since {
+        sqlx::query_as(
+            r#"
+            SELECT occurred_at, method, path, status, latency_ms,
+                   matched_route, client_ip, user_agent, request_id,
+                   bytes_in, bytes_out
+            FROM runtime_request_logs
+            WHERE deployment_id = $1 AND occurred_at > $2
+            ORDER BY occurred_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(since)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::Database)?
+    } else {
+        sqlx::query_as(
+            r#"
+            SELECT occurred_at, method, path, status, latency_ms,
+                   matched_route, client_ip, user_agent, request_id,
+                   bytes_in, bytes_out
+            FROM runtime_request_logs
+            WHERE deployment_id = $1
+            ORDER BY occurred_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(deployment_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(ApiError::Database)?
+    };
+
+    let events: Vec<RuntimeRequestEvent> = rows
+        .into_iter()
+        .map(|row| RuntimeRequestEvent {
+            timestamp: row.0,
+            method: row.1,
+            path: row.2,
+            status: row.3 as u16,
+            latency_ms: row.4 as u32,
+            matched_route: row.5,
+            client_ip: row.6,
+            user_agent: row.7,
+            request_id: row.8,
+            bytes_in: row.9,
+            bytes_out: row.10,
+        })
+        .collect();
+
+    Ok(Json(events))
+}
+
+/// Proxy a request to the deployment's local recorder API.
+///
+/// The mockforge-recorder library is mounted on the deployed `http_app` at
+/// `/api/recorder/*` (#234), but the deployed instance has no per-user auth
+/// on those routes. This handler is the cloud-side gate: it verifies the
+/// caller has access to the deployment, then forwards the request to the
+/// deployment's internal URL.
+///
+/// Captures stay ephemeral on the deployment's local SQLite (Fly machines
+/// don't have a persistent volume mounted by default). For long-term
+/// retention we'd want either a Fly volume mount or a forwarder pattern
+/// like the log shipper — both bigger and tracked separately.
+async fn proxy_to_deployment_recorder(
+    deployment: &HostedMock,
+    path_and_query: &str,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}{}", base.trim_end_matches('/'), path_and_query);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+
+    let resp =
+        client.get(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder proxy fetch failed: {}", e))
+        })?;
+
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy read body failed: {}", e))
+    })?;
+
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy response build failed: {}", e))
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecorderCapturesQuery {
+    pub limit: Option<u32>,
+    pub since: Option<String>,
+}
+
+/// List recently captured request/response pairs for a deployment.
+/// Proxies through to the deployment's `/api/recorder/requests` endpoint.
+pub async fn list_recorder_captures(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+    Query(params): Query<RecorderCapturesQuery>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let mut qs = String::from("/api/recorder/requests");
+    let mut sep = '?';
+    if let Some(limit) = params.limit {
+        qs.push(sep);
+        qs.push_str(&format!("limit={}", limit));
+        sep = '&';
+    }
+    if let Some(since) = params.since.as_deref() {
+        qs.push(sep);
+        qs.push_str(&format!("since={}", urlencoding::encode(since)));
+    }
+
+    let _ = state; // currently unused inside the proxy itself; kept for symmetry/future use
+    proxy_to_deployment_recorder(&deployment, &qs).await
+}
+
+/// Get a single capture by id.
+pub async fn get_recorder_capture(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    // Validate the capture id is path-safe — defence in depth even though
+    // we already URL-encode below.
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+
+    let path = format!("/api/recorder/requests/{}", urlencoding::encode(&capture_id));
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, &path).await
+}
+
+/// Get the response body associated with a capture. Recorder splits the
+/// request and response on separate endpoints so callers can paginate
+/// requests cheaply without dragging response payloads along.
+pub async fn get_recorder_capture_response(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+
+    let path = format!("/api/recorder/requests/{}/response", urlencoding::encode(&capture_id));
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, &path).await
+}
+
+/// Proxy a POST to the deployment's recorder API. Used by the
+/// enable/disable/clear mutations below — same auth model as the GET
+/// proxies (user JWT gates access; the deployment itself has no
+/// per-user auth on `/api/recorder/*`).
+async fn proxy_post_to_deployment_recorder(
+    deployment: &HostedMock,
+    path: &str,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}{}", base.trim_end_matches('/'), path);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+
+    let resp =
+        client.post(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder proxy POST failed: {}", e))
+        })?;
+
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy read body failed: {}", e))
+    })?;
+
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder proxy response build failed: {}", e))
+    })
+}
+
+async fn check_org_access(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    deployment_id: Uuid,
+) -> ApiResult<HostedMock> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+    Ok(deployment)
+}
+
+/// Enable recording on the deployment. Proxies POST /api/recorder/enable.
+pub async fn enable_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_post_to_deployment_recorder(&deployment, "/api/recorder/enable").await
+}
+
+/// Disable recording on the deployment. Proxies POST /api/recorder/disable.
+pub async fn disable_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_post_to_deployment_recorder(&deployment, "/api/recorder/disable").await
+}
+
+/// Clear all captures on the deployment. Proxies DELETE /api/recorder/clear.
+/// Note: the deployment's clear endpoint is DELETE; we POST through to it
+/// here because typing the verb at the cloud layer doesn't change much
+/// and POST is friendlier for browser fetch without preflight.
+pub async fn clear_recorder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    // Build a DELETE on the wire since that's what the recorder defines.
+    let base = deployment.internal_url.as_deref().or(deployment.deployment_url.as_deref());
+    let Some(base) = base else {
+        return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
+    };
+    let url = format!("{}/api/recorder/clear", base.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let resp =
+        client.delete(&url).send().await.map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Recorder clear proxy failed: {}", e))
+        })?;
+    let status = resp.status();
+    let headers_resp = resp.headers().clone();
+    let body = resp.bytes().await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder clear read body failed: {}", e))
+    })?;
+    let mut builder = axum::http::Response::builder().status(status);
+    if let Some(content_type) = headers_resp.get(axum::http::header::CONTENT_TYPE) {
+        builder = builder.header(axum::http::header::CONTENT_TYPE, content_type);
+    }
+    builder.body(axum::body::Body::from(body)).map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Recorder clear response build failed: {}", e))
+    })
+}
+
+/// Replay a captured request against the deployment. The recorder
+/// records the request envelope; replay re-executes it and returns the
+/// fresh response — useful for "did the bug we captured get fixed yet"
+/// or "check whether a chaos rule still triggers."
+pub async fn replay_recorder_capture(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((deployment_id, capture_id)): Path<(Uuid, String)>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    if capture_id.contains('/') || capture_id.contains('?') || capture_id.contains('#') {
+        return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
+    }
+    let path = format!("/api/recorder/replay/{}", urlencoding::encode(&capture_id));
+    proxy_post_to_deployment_recorder(&deployment, &path).await
+}
+
+/// Export the deployment's recorder captures as HAR. Proxies the
+/// recorder's existing `/api/recorder/export/har` endpoint and forwards
+/// the response unchanged. The browser handles the download via a blob
+/// URL on the UI side.
+pub async fn export_recorder_captures_har(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, "/api/recorder/export/har").await
+}
+
 /// Get deployment metrics
 pub async fn get_deployment_metrics(
     State(state): State<AppState>,
@@ -1017,7 +1786,40 @@ pub async fn get_deployment_metrics(
         ));
     }
 
-    // Get current metrics
+    // Prefer live metrics from Fly Managed Prometheus when configured.
+    // Falls back to the local `deployment_metrics` table when:
+    //   * Fly Prometheus env vars aren't set (dev / self-hosted), or
+    //   * the query fails (transient network / auth error).
+    if let Some(client) = crate::fly_metrics::global() {
+        let app_name = deployment.fly_app_name();
+        match client.snapshot_for_app(&app_name).await {
+            Ok(snap) => {
+                use chrono::Datelike;
+                let now = chrono::Utc::now().date_naive();
+                let period_start =
+                    chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now);
+                return Ok(Json(MetricsResponse {
+                    requests: snap.requests,
+                    requests_2xx: snap.requests_2xx,
+                    requests_4xx: snap.requests_4xx,
+                    requests_5xx: snap.requests_5xx,
+                    egress_bytes: snap.egress_bytes,
+                    avg_response_time_ms: snap.avg_response_time_ms,
+                    period_start,
+                }));
+            }
+            Err(err) => {
+                tracing::warn!(
+                    app_name = %app_name,
+                    error = %err,
+                    "Fly Prometheus metrics query failed; falling back to local counters"
+                );
+            }
+        }
+    }
+
+    // Fallback: return the local aggregate counters. Until the in-container
+    // log shipper lands (#232) this table has no writer and returns zeros.
     let metrics = DeploymentMetrics::get_or_create_current(pool, deployment_id)
         .await
         .map_err(ApiError::Database)?;
@@ -1124,6 +1926,12 @@ pub struct CreateDeploymentRequest {
     pub config_json: serde_json::Value,
     pub openapi_spec_url: Option<String>,
     pub region: Option<String>,
+    /// Protocols to expose on the deployment. HTTP is implicit and always
+    /// included. Items beyond Free-tier (gRPC, brokers) require a higher
+    /// plan and are rejected at create time if the org isn't entitled.
+    /// Persisted into `config_json["enabled_protocols"]`.
+    #[serde(default)]
+    pub enabled_protocols: Option<Vec<crate::models::Protocol>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1149,6 +1957,7 @@ pub struct DeploymentResponse {
     pub instance_type: String,
     pub health_status: String,
     pub error_message: Option<String>,
+    pub enabled_protocols: Vec<crate::models::Protocol>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -1157,6 +1966,7 @@ impl From<HostedMock> for DeploymentResponse {
     fn from(mock: HostedMock) -> Self {
         let status = mock.status().to_string();
         let health_status = mock.health_status().to_string();
+        let enabled_protocols = mock.enabled_protocols();
         Self {
             id: mock.id,
             org_id: mock.org_id,
@@ -1171,6 +1981,7 @@ impl From<HostedMock> for DeploymentResponse {
             instance_type: mock.instance_type,
             health_status,
             error_message: mock.error_message,
+            enabled_protocols,
             created_at: mock.created_at,
             updated_at: mock.updated_at,
         }

@@ -1,5 +1,10 @@
 //! Access review API handlers
 //!
+//! **Internal / API-only.** No admin UI consumes these endpoints. They are
+//! intended for programmatic compliance tooling (scheduled scripts, SIEM
+//! integrations, external GRC platforms). Do not build speculative UI for
+//! these routes without a stakeholder-defined use case.
+//!
 //! Provides HTTP endpoints for managing access reviews, including:
 //! - Listing reviews
 //! - Approving/revoking access

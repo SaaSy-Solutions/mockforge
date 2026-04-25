@@ -25,12 +25,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/DesignSystem';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
-import { Folder, FolderOpen, FileText, Plus, Upload, Settings, Trash2, History, Play, Shield, GripVertical, AlertTriangle } from 'lucide-react';
+import { Folder, FolderOpen, FileText, Plus, Upload, Trash2, History, Play, Shield, GripVertical, AlertTriangle } from 'lucide-react';
 import { Checkbox } from '../components/ui/DesignSystem';
 import { toast } from 'sonner';
 import ResponseHistory from '../components/workspace/ResponseHistory';
 import EncryptionSettings from '../components/workspace/EncryptionSettings';
+import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
+import WorkspacePromotions from '../components/workspace/WorkspacePromotions';
 import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
+import { IS_CLOUD } from '../utils/mode';
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 interface WorkspacesPageProps {}
@@ -42,7 +45,6 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
   // Dialog states
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
-  const [openFromDirectoryOpen, setOpenFromDirectoryOpen] = useState(false);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -66,10 +68,6 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
   const [enableSync, setEnableSync] = useState(false);
   const [syncDirectory, setSyncDirectory] = useState('');
-
-  const [openFromDirectory, setOpenFromDirectory] = useState({
-    directory: '',
-  });
 
   const [newFolder, setNewFolder] = useState<CreateFolderRequest>({
     name: '',
@@ -132,24 +130,6 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       const errorDetails = getErrorDetails(err);
       toast.error(`Failed to create workspace: ${errorDetails.message}`);
       logError(err, 'Create workspace');
-    }
-  };
-
-  const handleOpenFromDirectory = async () => {
-    try {
-      // Sanitize directory path
-      const sanitizedDir = sanitizeInput(openFromDirectory.directory);
-      await apiService.openWorkspaceFromDirectory(sanitizedDir);
-      toast.success('Workspace opened from directory successfully');
-      setOpenFromDirectoryOpen(false);
-      setOpenFromDirectory({ directory: '' });
-      // Refresh workspaces from the store
-      const { refreshWorkspaces } = useWorkspaceStore.getState();
-      await refreshWorkspaces();
-    } catch (err) {
-      const errorDetails = getErrorDetails(err);
-      toast.error(`Failed to open workspace: ${errorDetails.message}`);
-      logError(err, 'Open workspace from directory');
     }
   };
 
@@ -469,25 +449,29 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="enable-sync"
-                    checked={enableSync}
-                    onCheckedChange={setEnableSync}
-                  />
-                  <Label htmlFor="enable-sync" className="text-gray-900 dark:text-gray-100">Enable directory sync</Label>
-                </div>
-                {enableSync && (
-                  <div>
-                    <Label htmlFor="sync-directory" className="text-gray-900 dark:text-gray-100">Sync Directory</Label>
-                    <Input
-                      id="sync-directory"
-                      value={syncDirectory}
-                      onChange={(e) => setSyncDirectory(e.target.value)}
-                      placeholder="/path/to/workspace"
-                      className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
-                    />
-                  </div>
+                {!IS_CLOUD && (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="enable-sync"
+                        checked={enableSync}
+                        onCheckedChange={setEnableSync}
+                      />
+                      <Label htmlFor="enable-sync" className="text-gray-900 dark:text-gray-100">Enable directory sync</Label>
+                    </div>
+                    {enableSync && (
+                      <div>
+                        <Label htmlFor="sync-directory" className="text-gray-900 dark:text-gray-100">Sync Directory</Label>
+                        <Input
+                          id="sync-directory"
+                          value={syncDirectory}
+                          onChange={(e) => setSyncDirectory(e.target.value)}
+                          placeholder="/path/to/workspace"
+                          className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
               <DialogFooter>
@@ -496,42 +480,6 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                 </Button>
                 <Button onClick={handleCreateWorkspace} disabled={!newWorkspace.name.trim()}>
                   Create Workspace
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={openFromDirectoryOpen} onOpenChange={setOpenFromDirectoryOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <FolderOpen className="w-4 h-4 mr-2" />
-                Open from Directory
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Open Workspace from Directory</DialogTitle>
-                <DialogDescription>
-                  Open an existing workspace from a directory on your system.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="directory-path">Directory Path</Label>
-                  <Input
-                    id="directory-path"
-                    value={openFromDirectory.directory}
-                    onChange={(e) => setOpenFromDirectory({ directory: e.target.value })}
-                    placeholder="/path/to/workspace"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpenFromDirectoryOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleOpenFromDirectory} disabled={!openFromDirectory.directory.trim()}>
-                  Open Workspace
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -546,16 +494,12 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             <FolderOpen className="w-16 h-16 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold mb-2">No Workspaces Yet</h3>
             <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Get started by creating a new workspace or opening an existing one from a directory.
+              Get started by creating a new workspace.
             </p>
             <div className="flex gap-2">
               <Button onClick={() => setCreateWorkspaceOpen(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Workspace
-              </Button>
-              <Button variant="outline" onClick={() => setOpenFromDirectoryOpen(true)}>
-                <FolderOpen className="w-4 h-4 mr-2" />
-                Open from Directory
               </Button>
             </div>
           </CardContent>
@@ -921,47 +865,75 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {/* Folders */}
-              {selectedWorkspace.folders.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Folders</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {selectedWorkspace.folders.map((folder) => (
-                      <Card
-                        key={folder.id}
-                        className={`cursor-pointer transition-all hover:shadow-sm ${
-                          selectedFolder?.summary.id === folder.id ? 'ring-2 ring-primary' : ''
-                        }`}
-                        onClick={() => handleFolderClick(folder.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center space-x-2">
-                            <Folder className="w-4 h-4" />
-                            <span className="font-medium">{folder.name}</span>
-                            <Badge variant="outline">{folder.request_count} requests</Badge>
-                          </div>
-                          {folder.description && (
-                            <p className="text-sm text-muted-foreground mt-1">{folder.description}</p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
+            <div className="space-y-6">
+                {/* Folders */}
+                {selectedWorkspace.folders.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Folders</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {selectedWorkspace.folders.map((folder) => (
+                        <Card
+                          key={folder.id}
+                          className={`cursor-pointer transition-all hover:shadow-sm ${
+                            selectedFolder?.summary.id === folder.id ? 'ring-2 ring-primary' : ''
+                          }`}
+                          onClick={() => handleFolderClick(folder.id)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center space-x-2">
+                              <Folder className="w-4 h-4" />
+                              <span className="font-medium">{folder.name}</span>
+                              <Badge variant="outline">{folder.request_count} requests</Badge>
+                            </div>
+                            {folder.description && (
+                              <p className="text-sm text-muted-foreground mt-1">{folder.description}</p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Requests */}
-              <div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Requests {selectedFolder && `in ${selectedFolder.summary.name}`}
-                </h3>
-                {selectedFolder ? (
-                  selectedFolder.requests.length === 0 ? (
-                    <p className="text-muted-foreground">No requests in this folder</p>
+                {/* Requests */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    Requests {selectedFolder && `in ${selectedFolder.summary.name}`}
+                  </h3>
+                  {selectedFolder ? (
+                    selectedFolder.requests.length === 0 ? (
+                      <p className="text-muted-foreground">No requests in this folder</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedFolder.requests.map((request) => (
+                          <Card key={request.id}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                  <Badge variant="outline">{request.method}</Badge>
+                                  <span className="font-medium">{request.name}</span>
+                                  <span className="text-sm text-muted-foreground">{request.path}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleViewHistory(request.id, request.name)}
+                                  >
+                                    <History className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    )
+                  ) : selectedWorkspace.requests.length === 0 ? (
+                    <p className="text-muted-foreground">No requests in this workspace</p>
                   ) : (
                     <div className="space-y-2">
-                      {selectedFolder.requests.map((request) => (
+                      {selectedWorkspace.requests.map((request) => (
                         <Card key={request.id}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
@@ -978,49 +950,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                 >
                                   <History className="w-4 h-4" />
                                 </Button>
-                                <Button variant="ghost" size="sm">
-                                  <Settings className="w-4 h-4" />
-                                </Button>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
                       ))}
                     </div>
-                  )
-                ) : selectedWorkspace.requests.length === 0 ? (
-                  <p className="text-muted-foreground">No requests in this workspace</p>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedWorkspace.requests.map((request) => (
-                      <Card key={request.id}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                              <Badge variant="outline">{request.method}</Badge>
-                              <span className="font-medium">{request.name}</span>
-                              <span className="text-sm text-muted-foreground">{request.path}</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleViewHistory(request.id, request.name)}
-                              >
-                                <History className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Settings className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                  )}
+                </div>
+
+                {/* Environments */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">Environments</h3>
+                  <EnvironmentManager workspaceId={selectedWorkspace.summary.id} />
+                </div>
+
+                {/* Scenario promotions are a cloud-registry feature. */}
+                {IS_CLOUD && (
+                  <WorkspacePromotions workspaceId={selectedWorkspace.summary.id} />
                 )}
               </div>
-            </div>
           </CardContent>
         </Card>
       )}

@@ -33,9 +33,15 @@ describe('MockServer', () => {
     });
   });
 
-  // Note: Integration tests that actually start the server are skipped
-  // because they require the MockForge CLI to be installed
-  describe.skip('Integration tests (require MockForge CLI)', () => {
+  // Integration tests spawn the real `mockforge` CLI, so they only run when
+  // the caller explicitly opts in — NOT automatically under CI, because the
+  // publish workflow runs on GitHub-hosted runners that don't have the CLI
+  // installed. The main CI job that exercises integration tests installs
+  // mockforge first and sets MOCKFORGE_INTEGRATION=1.
+  const runIntegration = process.env.MOCKFORGE_INTEGRATION === '1';
+  const d = runIntegration ? describe : describe.skip;
+
+  d('Integration tests (require MockForge CLI)', () => {
     let server: MockServer;
 
     afterEach(async () => {
@@ -44,20 +50,44 @@ describe('MockServer', () => {
       }
     });
 
-    it('should start and stop server', async () => {
-      server = await MockServer.start({ port: 3456 });
+    it('starts on a random port and stops cleanly', async () => {
+      server = await MockServer.start({ port: 0, startupTimeoutMs: 30_000 });
       expect(server.isRunning()).toBe(true);
+      expect(server.getPort()).toBeGreaterThan(0);
       await server.stop();
       expect(server.isRunning()).toBe(false);
     });
 
-    it('should stub a response', async () => {
-      server = await MockServer.start({ port: 3457 });
+    it('serves a registered stub', async () => {
+      server = await MockServer.start({ port: 0, startupTimeoutMs: 30_000 });
+      await server.stubResponse('GET', '/api/users/123', { id: 123 });
 
-      await server.stubResponse('GET', '/test', { message: 'hello' });
+      const res = await fetch(`${server.url()}/api/users/123`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: 123 });
+    });
 
-      // Would test actual HTTP request here
-      await server.stop();
+    it('honours custom status codes and response headers', async () => {
+      server = await MockServer.start({ port: 0, startupTimeoutMs: 30_000 });
+      await server.stubResponse(
+        'POST',
+        '/api/widgets',
+        { ok: true },
+        { status: 201, headers: { 'X-Source': 'sdk-test' } }
+      );
+
+      const res = await fetch(`${server.url()}/api/widgets`, { method: 'POST' });
+      expect(res.status).toBe(201);
+      expect(res.headers.get('x-source')).toBe('sdk-test');
+    });
+
+    it('clearStubs removes all registered stubs', async () => {
+      server = await MockServer.start({ port: 0, startupTimeoutMs: 30_000 });
+      await server.stubResponse('GET', '/gone', { here: true });
+      expect((await fetch(`${server.url()}/gone`)).status).toBe(200);
+
+      await server.clearStubs();
+      expect((await fetch(`${server.url()}/gone`)).status).toBe(404);
     });
   });
 });

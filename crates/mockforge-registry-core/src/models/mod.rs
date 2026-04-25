@@ -32,6 +32,9 @@ pub mod template_star;
 pub mod user;
 pub mod verification_token;
 pub mod waitlist;
+pub mod workspace_environment;
+pub mod workspace_folder;
+pub mod workspace_request;
 
 pub use verification_token::VerificationToken;
 
@@ -47,7 +50,9 @@ pub use federation::Federation;
 pub use federation_scenario_activation::{
     FederationScenarioActivation, FederationScenarioActivationStatus, PerServiceActivationState,
 };
-pub use hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
+pub use hosted_mock::{
+    protocols_allowed_on_plan, DeploymentStatus, HealthStatus, HostedMock, Protocol,
+};
 pub use org_template::OrgTemplate;
 pub use organization::{OrgMember, OrgRole, Organization, Plan};
 pub use osv::{OsvAdvisory, OsvAffected, OsvImportRecord, OsvMatch, OsvPackage, OsvSeverity};

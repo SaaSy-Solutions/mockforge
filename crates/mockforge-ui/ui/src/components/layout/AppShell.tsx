@@ -65,6 +65,10 @@ import {
   Wifi,
   Share2,
   Lock as LockIcon,
+  Mail,
+  Radio as RadioIcon,
+  MessageCircle as MessageCircleIcon,
+  LifeBuoy,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -94,6 +98,14 @@ const navSections = [
       { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
       { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
       { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
+    ]
+  },
+  {
+    titleKey: 'nav.protocolBrokers',
+    items: [
+      { id: 'smtp-mailbox', labelKey: 'tab.smtpMailbox', icon: Mail },
+      { id: 'mqtt-broker', labelKey: 'tab.mqttBroker', icon: RadioIcon },
+      { id: 'kafka-broker', labelKey: 'tab.kafkaBroker', icon: Database },
     ]
   },
   {
@@ -189,6 +201,13 @@ const navSections = [
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
       { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
     ]
+  },
+  {
+    titleKey: 'nav.help',
+    items: [
+      { id: 'faq', labelKey: 'tab.faq', icon: MessageCircleIcon },
+      { id: 'support', labelKey: 'tab.support', icon: LifeBuoy },
+    ]
   }
 ];
 
@@ -214,6 +233,8 @@ const cloudNavItemIds = new Set([
   'publisher-keys',
   'byok',
   'usage',
+  'faq',
+  'support',
 ]);
 
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"

@@ -6,7 +6,7 @@ MockForge provides SDKs for multiple languages to integrate with your testing wo
 
 | SDK | Use Case | Installation |
 |-----|----------|--------------|
-| [Node.js](./nodejs.md) | Embed mock servers in JS/TS tests | `npm install @mockforge/sdk` |
+| [Node.js](./nodejs.md) | Embed mock servers in JS/TS tests | `npm install @mockforge-dev/sdk` |
 | [Python](./python.md) | Build remote plugins | `pip install mockforge-plugin` |
 | [Go](./go.md) | Build WASM plugins with TinyGo | `go get github.com/mockforge/sdk/go` |
 | [.NET](./dotnet.md) | Embed in C# tests | `dotnet add package MockForge.Sdk` |
@@ -19,7 +19,7 @@ Embed MockForge servers directly in your test suites:
 
 ```typescript
 // Node.js example
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 const server = await MockServer.start();
 await server.stubResponse('GET', '/api/users/1', { id: 1, name: 'Test' });
@@ -53,7 +53,7 @@ func (p *MyPlugin) Authenticate(ctx *PluginContext, creds *AuthCredentials) (*Au
 
 ```typescript
 // Jest / Vitest
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 
 describe('User API', () => {
   let server: MockServer;
@@ -164,7 +164,7 @@ class PostgresPlugin(RemotePlugin):
 ### Contract Testing
 
 ```typescript
-import { MockServer } from '@mockforge/sdk';
+import { MockServer } from '@mockforge-dev/sdk';
 import SwaggerParser from '@apidevtools/swagger-parser';
 
 describe('API Contract', () => {

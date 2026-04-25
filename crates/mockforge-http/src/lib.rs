@@ -897,7 +897,16 @@ pub async fn build_router_with_multi_tenant(
     let management_state = management_state;
     #[cfg(not(feature = "smtp"))]
     let _ = smtp_registry;
+    let management_state_for_fallback = management_state.clone();
     app = app.nest("/__mockforge/api", management_router(management_state));
+    // Serve any request that the rest of the router doesn't handle as a dynamic
+    // mock lookup. Lets the Node/Rust SDK register stubs via the management
+    // API and have requests actually reach them. Falls through to 404 when
+    // no mock matches.
+    app = app.fallback_service(
+        axum::routing::any(crate::management::dynamic_mock_fallback)
+            .with_state(management_state_for_fallback),
+    );
 
     // Add verification API endpoint
     app = app.merge(verification_router());
@@ -1359,6 +1368,22 @@ pub async fn serve_router_with_tls(
     app: Router,
     tls_config: Option<mockforge_core::config::HttpTlsConfig>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_router_with_tls_notify(port, app, tls_config, None).await
+}
+
+/// Serve a provided router on the given port with optional TLS support, notifying
+/// the caller via `bound_port_tx` with the actual OS-assigned port once the
+/// listener has bound. This matters when the requested `port` is `0` (ephemeral),
+/// because callers such as the `@mockforge-dev/sdk` need to learn the real port
+/// to connect to it. On the TLS path, `bound_port_tx` is currently ignored and
+/// the requested `port` is reported verbatim — callers that need dynamic TLS
+/// ports should bind on a known port.
+pub async fn serve_router_with_tls_notify(
+    port: u16,
+    app: Router,
+    tls_config: Option<mockforge_core::config::HttpTlsConfig>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
     let addr = mockforge_core::wildcard_socket_addr(port);
@@ -1366,11 +1391,12 @@ pub async fn serve_router_with_tls(
     if let Some(ref tls) = tls_config {
         if tls.enabled {
             info!("HTTPS listening on {}", addr);
+            if let Some(tx) = bound_port_tx {
+                let _ = tx.send(port);
+            }
             return serve_with_tls(addr, app, tls).await;
         }
     }
-
-    info!("HTTP listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
         format!(
@@ -1379,6 +1405,12 @@ pub async fn serve_router_with_tls(
             port, e, port, port
         )
     })?;
+
+    let actual_port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
+    info!("HTTP listening on {}", listener.local_addr().unwrap_or(addr));
+    if let Some(tx) = bound_port_tx {
+        let _ = tx.send(actual_port);
+    }
 
     // Wrap the Router with OData URI rewrite.
     // Router::layer() only applies to matched routes, so we must wrap at the service level
@@ -2004,7 +2036,13 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let _ = mqtt_broker;
         management_state
     };
+    let management_state_for_fallback = management_state.clone();
     app = app.nest("/__mockforge/api", management_router(management_state));
+    // Dynamic-mock fallback; see identical block earlier in this file.
+    app = app.fallback_service(
+        axum::routing::any(crate::management::dynamic_mock_fallback)
+            .with_state(management_state_for_fallback),
+    );
 
     // Add verification API endpoint
     app = app.merge(verification_router());

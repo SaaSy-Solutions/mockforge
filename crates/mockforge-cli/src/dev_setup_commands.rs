@@ -74,11 +74,14 @@ impl Framework {
     }
 
     fn sdk_package(&self) -> &'static str {
+        // Every supported JS framework uses the same Node SDK today. Kept as a
+        // match arm so each framework can pivot to its own SDK later without
+        // changing the callers.
         match self {
-            Self::React | Self::Next => "@mockforge/sdk",
-            Self::Vue | Self::Nuxt => "@mockforge/sdk",
-            Self::Angular => "@mockforge/sdk",
-            Self::Svelte => "@mockforge/sdk",
+            Self::React | Self::Next => "@mockforge-dev/sdk",
+            Self::Vue | Self::Nuxt => "@mockforge-dev/sdk",
+            Self::Angular => "@mockforge-dev/sdk",
+            Self::Svelte => "@mockforge-dev/sdk",
         }
     }
 }
@@ -1665,12 +1668,12 @@ mod tests {
 
     #[test]
     fn test_framework_sdk_package() {
-        assert_eq!(Framework::React.sdk_package(), "@mockforge/sdk");
-        assert_eq!(Framework::Vue.sdk_package(), "@mockforge/sdk");
-        assert_eq!(Framework::Angular.sdk_package(), "@mockforge/sdk");
-        assert_eq!(Framework::Svelte.sdk_package(), "@mockforge/sdk");
-        assert_eq!(Framework::Next.sdk_package(), "@mockforge/sdk");
-        assert_eq!(Framework::Nuxt.sdk_package(), "@mockforge/sdk");
+        assert_eq!(Framework::React.sdk_package(), "@mockforge-dev/sdk");
+        assert_eq!(Framework::Vue.sdk_package(), "@mockforge-dev/sdk");
+        assert_eq!(Framework::Angular.sdk_package(), "@mockforge-dev/sdk");
+        assert_eq!(Framework::Svelte.sdk_package(), "@mockforge-dev/sdk");
+        assert_eq!(Framework::Next.sdk_package(), "@mockforge-dev/sdk");
+        assert_eq!(Framework::Nuxt.sdk_package(), "@mockforge-dev/sdk");
     }
 
     // detect_project_root tests

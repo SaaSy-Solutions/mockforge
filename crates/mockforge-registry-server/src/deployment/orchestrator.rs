@@ -154,18 +154,10 @@ impl DeploymentOrchestrator {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("FLYIO_ORG_SLUG not configured"))?;
 
-        // Generate app name (must be unique globally on Fly.io)
-        let app_name = format!(
-            "mockforge-{}-{}",
-            deployment
-                .org_id
-                .to_string()
-                .replace("-", "")
-                .chars()
-                .take(8)
-                .collect::<String>(),
-            deployment.slug
-        );
+        // Generate app name (must be unique globally on Fly.io). Delegated to
+        // `HostedMock::fly_app_name()` so other subsystems (fly_metrics) stay
+        // in sync with whatever the orchestrator actually names the app.
+        let app_name = deployment.fly_app_name();
 
         DeploymentLog::create(
             pool,
@@ -220,11 +212,85 @@ impl DeploymentOrchestrator {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
         }
 
+        // Inject env vars + extra Fly services for any protocols the
+        // deployment opted into beyond HTTP. HTTP/WS/GraphQL all share port
+        // 3000 (router merge happens in mockforge-cli/src/serve.rs) so they
+        // never produce a Fly service entry; gRPC and the broker family do.
+        let enabled_protocols = deployment.enabled_protocols();
+        for protocol in &enabled_protocols {
+            if let Some((key, value)) = protocol.enable_env() {
+                env.insert(key.to_string(), value);
+            }
+        }
+
+        // Kafka clients respect the broker's advertised listener over the
+        // bootstrap address — without this env var they'd loop on the
+        // internal Fly address and fail. The mockforge-kafka broker must
+        // honor `config.kafka.advertised_host` for this to be functional
+        // end-to-end (#231 broker-side todo).
+        if enabled_protocols.contains(&crate::models::Protocol::Kafka) {
+            let advertised_host = if let Ok(domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+                format!("{}.{}", deployment.slug, domain)
+            } else {
+                format!("{}.fly.dev", app_name)
+            };
+            env.insert("MOCKFORGE_KAFKA_ADVERTISED_HOST".to_string(), advertised_host);
+            env.insert("MOCKFORGE_KAFKA_ADVERTISED_PORT".to_string(), "9092".to_string());
+        }
+
+        // Wire the in-container request log shipper (#232) to forward every
+        // request to MockForge Cloud's ingest endpoint. We only set the
+        // env vars when:
+        //   * a JWT secret is available (production deploys always have one)
+        //   * a public ingest base URL is configured via MOCKFORGE_LOG_INGEST_BASE_URL
+        // Otherwise the shipper auto-disables and the deployment runs
+        // without structured request log capture — same behaviour as before
+        // this issue.
+        if let Ok(jwt_secret) = std::env::var("JWT_SECRET") {
+            if let Ok(ingest_base) = std::env::var("MOCKFORGE_LOG_INGEST_BASE_URL") {
+                let trimmed_base = ingest_base.trim_end_matches('/');
+                let token = mockforge_registry_core::auth::create_deployment_ingest_token(
+                    deployment.id,
+                    &jwt_secret,
+                    30, // 30 days; rotated on every redeploy
+                )
+                .ok();
+                if let Some(token) = token {
+                    env.insert(
+                        "MOCKFORGE_LOG_INGEST_URL".to_string(),
+                        format!(
+                            "{}/api/v1/hosted-mocks/{}/log-ingest",
+                            trimmed_base, deployment.id
+                        ),
+                    );
+                    env.insert("MOCKFORGE_LOG_INGEST_TOKEN".to_string(), token);
+                }
+            }
+        }
+
+        // OTLP tracing export (#233). When the registry server has a
+        // collector reachable at `MOCKFORGE_OTLP_INGEST_ENDPOINT` we tell
+        // the deployment to ship spans there. Identifying labels (deployment
+        // id, org id) are already set above as MOCKFORGE_DEPLOYMENT_ID /
+        // _ORG_ID; the receiver uses those for multi-tenant routing.
+        if let Ok(otlp_endpoint) = std::env::var("MOCKFORGE_OTLP_INGEST_ENDPOINT") {
+            if !otlp_endpoint.trim().is_empty() {
+                env.insert("MOCKFORGE_OTLP_ENDPOINT".to_string(), otlp_endpoint);
+                // Deployment-scoped service name keeps spans separable when
+                // multiple hosted mocks share a backend.
+                env.insert(
+                    "MOCKFORGE_OTLP_SERVICE_NAME".to_string(),
+                    format!("hosted-mock/{}", deployment.slug),
+                );
+            }
+        }
+
         // Use MockForge Docker image
         let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
             .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());
 
-        let services = vec![FlyioService {
+        // Always-on HTTP service (also serves WS upgrade and /graphql).
+        let mut services = vec![FlyioService {
             protocol: "tcp".to_string(),
             internal_port: 3000,
             ports: vec![
@@ -238,6 +304,33 @@ impl DeploymentOrchestrator {
                 },
             ],
         }];
+
+        // Per-protocol Fly services. Skip protocols already covered by the
+        // HTTP listener above and skip duplicates; the orchestrator is the
+        // one place we synthesize Fly machine configs, so we keep this
+        // verbose for clarity.
+        let mut bound_internal_ports: std::collections::HashSet<u16> =
+            std::collections::HashSet::new();
+        bound_internal_ports.insert(3000);
+        for protocol in deployment.enabled_protocols() {
+            let Some(internal) = protocol.internal_port() else {
+                continue; // HTTP / WS / GraphQL — share 3000.
+            };
+            if !bound_internal_ports.insert(internal) {
+                continue;
+            }
+            let public = protocol.public_port().unwrap_or(internal);
+            let handlers: Vec<String> =
+                protocol.fly_handlers().iter().map(|s| (*s).to_string()).collect();
+            services.push(FlyioService {
+                protocol: "tcp".to_string(),
+                internal_port: internal,
+                ports: vec![FlyioPort {
+                    port: public,
+                    handlers,
+                }],
+            });
+        }
 
         let mut checks = HashMap::new();
         checks.insert(

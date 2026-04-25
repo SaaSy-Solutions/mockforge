@@ -104,28 +104,78 @@ where
     }
 }
 
-/// Extract and verify JWT token or API token from Authorization header
+/// Tiny percent-decoder for the `?token=` query path. We accept ASCII
+/// percent-encoded JWTs which is what browsers emit; anything malformed
+/// returns `None` and falls back to "no auth", letting the standard error
+/// path produce a 401.
+fn percent_decode_token(raw: &str) -> Option<String> {
+    let mut out = Vec::with_capacity(raw.len());
+    let bytes = raw.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16)?;
+                let lo = (bytes[i + 2] as char).to_digit(16)?;
+                out.push(((hi as u8) << 4) | lo as u8);
+                i += 3;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// Extract and verify JWT token or API token.
+///
+/// Tokens are normally read from the `Authorization: Bearer <token>` header.
+/// Browsers cannot send custom headers on `EventSource` connections, so for
+/// SSE endpoints (and similar) we also accept the token in a `?token=` query
+/// string parameter. JWTs are short-lived, so the common "URL tokens leak to
+/// logs/referrer" risk is bounded — but we never recommend this path for
+/// long-lived API tokens. Header takes precedence when both are present.
 pub async fn auth_middleware(
     State(state): State<AppState>,
     headers: HeaderMap,
     mut request: Request,
     next: Next,
 ) -> Result<Response, Response> {
-    let auth_header =
-        headers.get("Authorization").and_then(|h| h.to_str().ok()).ok_or_else(|| {
-            auth_error_response(
-                "Authentication required",
-                "Include an Authorization: Bearer <token> header",
-            )
-        })?;
+    let header_token = headers
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(|s| s.to_string());
 
-    // Extract the token using safe strip_prefix (no panic on invalid input)
-    let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+    // Pull `token=...` out of the query string without dragging in the `url`
+    // crate. SSE endpoints rely on this fallback because EventSource can't
+    // attach an Authorization header. Pure standard-library parse keeps the
+    // surface small.
+    let query_token = request.uri().query().and_then(|q| {
+        q.split('&').find_map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            if key == "token" {
+                percent_decode_token(value)
+            } else {
+                None
+            }
+        })
+    });
+
+    let owned_token = header_token.or(query_token).ok_or_else(|| {
         auth_error_response(
-            "Invalid authorization format",
-            "Use format: Authorization: Bearer <token>",
+            "Authentication required",
+            "Include an Authorization: Bearer <token> header (or ?token= query for SSE).",
         )
     })?;
+
+    let token = owned_token.as_str();
 
     // Check if this is an API token (starts with mfx_)
     if token.starts_with("mfx_") {

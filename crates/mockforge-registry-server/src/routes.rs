@@ -42,6 +42,21 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/status", get(handlers::status::get_status))
         // Support contact (public, works with or without auth)
         .route("/api/v1/support/contact", post(handlers::support::submit_contact))
+        // Runtime log ingest from hosted-mock containers. Public route —
+        // the handler itself validates a deployment-scoped JWT and rejects
+        // requests where the token's deployment_id doesn't match the path.
+        // See `mockforge_registry_core::auth::create_deployment_ingest_token`.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/log-ingest",
+            post(handlers::hosted_mocks::ingest_runtime_logs),
+        )
+        // OTLP trace ingest scaffold (#233). Same deployment-scoped JWT
+        // contract as the log ingest above. Today this is a counter-only
+        // receiver; storage backend is a follow-up.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/otlp/v1/traces",
+            post(handlers::otlp::ingest_traces),
+        )
         // Waitlist signup (public)
         .route("/api/v1/waitlist/subscribe", post(handlers::waitlist::subscribe))
         .route("/api/v1/waitlist/unsubscribe", get(handlers::waitlist::unsubscribe))
@@ -156,6 +171,17 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/stop", post(handlers::hosted_mocks::stop_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/start", post(handlers::hosted_mocks::start_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/logs", get(handlers::hosted_mocks::get_deployment_logs))
+        .route("/api/v1/hosted-mocks/{deployment_id}/runtime-logs", get(handlers::hosted_mocks::get_runtime_logs))
+        .route("/api/v1/hosted-mocks/{deployment_id}/runtime-logs/stream", get(handlers::hosted_mocks::stream_runtime_logs))
+        .route("/api/v1/hosted-mocks/{deployment_id}/runtime-requests", get(handlers::hosted_mocks::get_runtime_requests))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures", get(handlers::hosted_mocks::list_recorder_captures))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}", get(handlers::hosted_mocks::get_recorder_capture))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/response", get(handlers::hosted_mocks::get_recorder_capture_response))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/export/har", get(handlers::hosted_mocks::export_recorder_captures_har))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/enable", post(handlers::hosted_mocks::enable_recorder))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/disable", post(handlers::hosted_mocks::disable_recorder))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/clear", post(handlers::hosted_mocks::clear_recorder))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/replay", post(handlers::hosted_mocks::replay_recorder_capture))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         // Projects list (for UI pickers)
         .route("/api/v1/projects", get(handlers::projects::list_projects))
@@ -190,13 +216,44 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Workspace routes
         .route("/api/v1/workspaces", get(handlers::cloud_workspaces::list_workspaces))
         .route("/api/v1/workspaces", post(handlers::cloud_workspaces::create_workspace))
+        // NB: order routes MUST be registered before `/{id}` so they aren't captured by it.
+        .route("/api/v1/workspaces/order", put(handlers::workspace_ordering::reorder_workspaces))
         .route("/api/v1/workspaces/{id}", get(handlers::cloud_workspaces::get_workspace))
         .route("/api/v1/workspaces/{id}", patch(handlers::cloud_workspaces::update_workspace))
         .route("/api/v1/workspaces/{id}", delete(handlers::cloud_workspaces::delete_workspace))
+        .route("/api/v1/workspaces/{id}/activate", post(handlers::workspace_ordering::activate_workspace))
         .route(
             "/api/v1/workspaces/{id}/active-scenarios",
             get(handlers::federations::get_workspace_active_scenarios),
         )
+        // Workspace content: environments + variables
+        .route("/api/v1/workspaces/{workspace_id}/environments", get(handlers::workspace_environments::list_environments))
+        .route("/api/v1/workspaces/{workspace_id}/environments", post(handlers::workspace_environments::create_environment))
+        .route("/api/v1/workspaces/{workspace_id}/environments/order", put(handlers::workspace_environments::reorder_environments))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}", put(handlers::workspace_environments::update_environment))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}", delete(handlers::workspace_environments::delete_environment))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}/activate", post(handlers::workspace_environments::activate_environment))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}/variables", get(handlers::workspace_environments::list_variables))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}/variables", post(handlers::workspace_environments::set_variable))
+        .route("/api/v1/workspaces/{workspace_id}/environments/{environment_id}/variables/{variable_name}", delete(handlers::workspace_environments::delete_variable))
+        // Workspace content: folders + requests
+        .route("/api/v1/workspaces/{workspace_id}/folders", post(handlers::workspace_folders::create_folder))
+        .route("/api/v1/workspaces/{workspace_id}/folders/{folder_id}", get(handlers::workspace_folders::get_folder))
+        .route("/api/v1/workspaces/{workspace_id}/requests", post(handlers::workspace_folders::create_request))
+        // Import + autocomplete
+        .route("/api/v1/import/preview", post(handlers::workspace_import::preview_import))
+        .route("/api/v1/workspaces/{workspace_id}/import", post(handlers::workspace_import::import_to_workspace))
+        .route("/api/v1/workspaces/{workspace_id}/autocomplete", post(handlers::workspace_import::autocomplete))
+        // Request execution + history
+        .route("/api/v1/workspaces/{workspace_id}/requests/{request_id}/execute", post(handlers::workspace_request_execute::execute_request))
+        .route("/api/v1/workspaces/{workspace_id}/requests/{request_id}/history", get(handlers::workspace_request_execute::list_request_history))
+        // Workspace encryption policy (status, config, enable/disable, security-check)
+        .route("/api/v1/workspaces/{workspace_id}/encryption/status", get(handlers::workspace_encryption::get_status))
+        .route("/api/v1/workspaces/{workspace_id}/encryption/config", get(handlers::workspace_encryption::get_config))
+        .route("/api/v1/workspaces/{workspace_id}/encryption/config", put(handlers::workspace_encryption::put_config))
+        .route("/api/v1/workspaces/{workspace_id}/encryption/enable", post(handlers::workspace_encryption::enable))
+        .route("/api/v1/workspaces/{workspace_id}/encryption/disable", post(handlers::workspace_encryption::disable))
+        .route("/api/v1/workspaces/{workspace_id}/encryption/security-check", post(handlers::workspace_encryption::security_check))
         // Service routes
         .route("/api/v1/services", get(handlers::cloud_services::list_services))
         .route("/api/v1/services", post(handlers::cloud_services::create_service))

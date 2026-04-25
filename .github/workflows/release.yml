@@ -36,17 +36,18 @@ jobs:
       run: |
         if sccache --start-server 2>/dev/null && sccache rustc -vV 2>/dev/null; then
           echo "sccache_available=true" >> "$GITHUB_OUTPUT"
-          echo "::notice::sccache is available — using cached compilation"
+          echo "::notice::sccache is available - using cached compilation"
         else
           echo "sccache_available=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::sccache unavailable (GHA cache service may be down) — building without cache"
+          echo "::warning::sccache unavailable (GHA cache service may be down) - building without cache"
           sccache --stop-server 2>/dev/null || true
         fi
       continue-on-error: true
 
     - name: Configure RUSTC_WRAPPER
+      env:
+        SCCACHE_OK: ${{ steps.sccache-check.outputs.sccache_available }}
       run: |
-        SCCACHE_OK="${{ steps.sccache-check.outputs.sccache_available }}"
         if [ "$SCCACHE_OK" = "true" ]; then
           echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
         else
@@ -66,6 +67,9 @@ jobs:
 
     - name: Generate changelog
       id: changelog
+      env:
+        REF_NAME: ${{ github.ref_name }}
+        REPO: ${{ github.repository }}
       run: |
         # Generate changelog from git tags
         echo "## What's Changed" >> changelog.md
@@ -80,7 +84,7 @@ jobs:
         fi
 
         echo "" >> changelog.md
-        echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ github.ref_name }}" >> changelog.md
+        echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREVIOUS_TAG}...${REF_NAME}" >> changelog.md
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
@@ -106,74 +110,22 @@ jobs:
       uses: Swatinem/rust-cache@v2
 
     - name: Publish crates
-      run: |
-        # Publish in dependency order (leaf crates first, then dependent crates)
-        # Each publish needs time for crates.io to index before dependents can be published
-
-        # Tier 0: Leaf crates (no internal dependencies)
-        cargo publish -p mockforge-analytics || true
-        cargo publish -p mockforge-data || true
-        cargo publish -p mockforge-plugin-core || true
-        cargo publish -p mockforge-plugin-registry || true
-        cargo publish -p mockforge-template-expansion || true
-        cargo publish -p mockforge-tracing || true
-        cargo publish -p mockforge-tunnel || true
-        sleep 20
-
-        # Tier 1: Depend only on leaf crates
-        cargo publish -p mockforge-amqp || true
-        cargo publish -p mockforge-federation || true
-        cargo publish -p mockforge-ftp || true
-        cargo publish -p mockforge-k8s-operator || true
-        cargo publish -p mockforge-kafka || true
-        cargo publish -p mockforge-mqtt || true
-        cargo publish -p mockforge-observability || true
-        cargo publish -p mockforge-performance || true
-        cargo publish -p mockforge-pipelines || true
-        cargo publish -p mockforge-plugin-loader || true
-        cargo publish -p mockforge-plugin-sdk || true
-        cargo publish -p mockforge-recorder || true
-        cargo publish -p mockforge-reporting || true
-        cargo publish -p mockforge-route-chaos || true
-        cargo publish -p mockforge-schema || true
-        cargo publish -p mockforge-smtp || true
-        cargo publish -p mockforge-tcp || true
-        sleep 20
-
-        # Tier 2: Core and mid-level crates
-        cargo publish -p mockforge-collab || true
-        cargo publish -p mockforge-core || true
-        cargo publish -p mockforge-runtime-daemon || true
-        cargo publish -p mockforge-world-state || true
-        sleep 20
-
-        # Tier 3: Higher-level crates
-        cargo publish -p mockforge-bench || true
-        cargo publish -p mockforge-chaos || true
-        cargo publish -p mockforge-test || true
-        cargo publish -p mockforge-vbr || true
-        sleep 20
-
-        # Tier 4: Protocol crates
-        cargo publish -p mockforge-graphql || true
-        cargo publish -p mockforge-grpc || true
-        cargo publish -p mockforge-scenarios || true
-        cargo publish -p mockforge-ws || true
-        sleep 20
-
-        # Tier 5: High-level crates
-        cargo publish -p mockforge-sdk || true
-        cargo publish -p mockforge-ui || true
-        sleep 20
-
-        # Tier 6: Top-level crates
-        cargo publish -p mockforge-http || true
-        sleep 20
-
-        # Tier 7: CLI (depends on everything)
-        cargo publish -p mockforge-cli || true
+      # Delegates to scripts/publish-crates.sh, which:
+      #   - iterates workspace crates in topologically-sorted dep order,
+      #   - adds `version = ".."` to path deps so cargo publish accepts
+      #     them (crates.io rejects path-only deps),
+      #   - flips `publish = false` -> true for internal crates pulled in
+      #     transitively (e.g. mockforge-registry-core),
+      #   - parses the `Retry-After` value on crates.io 429s and sleeps
+      #     before retrying instead of silently dropping the publish,
+      #   - polls crates.io until each new version is actually indexed
+      #     before publishing dependents.
+      # One source of truth for both CI and local "release-from-laptop" flows.
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      run: |
+        chmod +x scripts/publish-crates.sh
+        scripts/publish-crates.sh
 
   # Docker image publishing lives in .github/workflows/docker-build.yml
   # (multi-arch push to ghcr.io/saasy-solutions/mockforge on every push to
@@ -221,8 +173,9 @@ jobs:
         echo "Extracted version: $VERSION"
 
     - name: Update Helm chart version and appVersion
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        VERSION=${{ steps.version.outputs.version }}
         sed -i "s/^version:.*/version: $VERSION/" helm/mockforge/Chart.yaml
         sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" helm/mockforge/Chart.yaml
 
@@ -241,9 +194,12 @@ jobs:
         ls -la .helm-release/
 
     - name: Generate Helm repository index
+      env:
+        REPO: ${{ github.repository }}
+        REF_NAME: ${{ github.ref_name }}
       run: |
         cd .helm-release
-        helm repo index . --url https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        helm repo index . --url "https://github.com/${REPO}/releases/download/${REF_NAME}"
 
     - name: Upload Helm chart to GitHub Release
       uses: softprops/action-gh-release@v1
@@ -270,6 +226,8 @@ jobs:
         fi
 
     - name: Update Helm repository on GitHub Pages
+      env:
+        OWNER: ${{ github.repository_owner }}
       run: |
         # Copy packaged chart to gh-pages
         mkdir -p gh-pages/charts
@@ -277,25 +235,25 @@ jobs:
 
         # Generate index for all charts
         cd gh-pages
-        helm repo index charts --url https://${{ github.repository_owner }}.github.io/mockforge/charts --merge charts/index.yaml || helm repo index charts --url https://${{ github.repository_owner }}.github.io/mockforge/charts
+        helm repo index charts --url "https://${OWNER}.github.io/mockforge/charts" --merge charts/index.yaml || helm repo index charts --url "https://${OWNER}.github.io/mockforge/charts"
 
         # Create README if it doesn't exist
         if [ ! -f charts/README.md ]; then
-          cat > charts/README.md << 'EOF'
+          cat > charts/README.md <<EOF
         # MockForge Helm Chart Repository
 
         ## Usage
 
         Add the repository:
-        ```bash
-        helm repo add mockforge https://${{ github.repository_owner }}.github.io/mockforge/charts
+        \`\`\`bash
+        helm repo add mockforge https://${OWNER}.github.io/mockforge/charts
         helm repo update
-        ```
+        \`\`\`
 
         Install MockForge:
-        ```bash
+        \`\`\`bash
         helm install mockforge mockforge/mockforge
-        ```
+        \`\`\`
 
         ## Available Charts
 
@@ -308,10 +266,12 @@ jobs:
         fi
 
     - name: Commit and push to gh-pages
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
         cd gh-pages
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add charts/
-        git commit -m "Release Helm chart version ${{ steps.version.outputs.version }}" || echo "No changes to commit"
+        git commit -m "Release Helm chart version $VERSION" || echo "No changes to commit"
         git push origin gh-pages || echo "No changes to push"

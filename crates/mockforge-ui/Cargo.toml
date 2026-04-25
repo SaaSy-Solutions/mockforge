@@ -11,17 +11,22 @@ documentation.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
-# Previously internal, now published to crates.io
+# Published to crates.io — deliberately excludes `/ui/dist/**` and
+# `/build_ui.sh` so the packaged tarball stays under the registry's
+# 10 MiB cap (with a full Vite build, it was ~46 MiB, which is why this
+# crate was frozen at 0.3.105 for ages). `build.rs` falls back to a
+# placeholder admin page when `ui/dist/index.html` is absent, so
+# `cargo install` users still get a functional mock server — just with
+# a "use Docker for the admin UI" landing page. Docker images and
+# binary releases (built from source) still embed the full React UI.
 include = [
     "/src/**/*",
-    "/ui/dist/**/*",
     "/ui/public/*.png",
     "/ui/public/manifest.json",
     "/ui/public/sw.js",
     "/build.rs",
-    "/build_ui.sh",
     "/Cargo.toml",
-    "/README.md"
+    "/README.md",
 ]
 
 [dependencies]
