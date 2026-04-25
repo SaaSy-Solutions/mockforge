@@ -111,6 +111,11 @@ EXPOSE 3000 3001 50051 9080 1025 1883 9092 5672 9999
 ENV MOCKFORGE_LATENCY_ENABLED=true
 ENV MOCKFORGE_FAILURES_ENABLED=false
 ENV MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
+# Enable response-side OpenAPI schema validation by default. Without this,
+# the mock can quietly drift from the contract — and that's the entire
+# value prop of running a contract-bound mock. Users who want the older
+# permissive behaviour can override with MOCKFORGE_RESPONSE_VALIDATION=0.
+ENV MOCKFORGE_RESPONSE_VALIDATION=1
 # Mark that we're running in Docker (for Admin UI host detection)
 ENV DOCKER_CONTAINER=true
 # Default Admin UI to be accessible from outside container

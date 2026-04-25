@@ -2049,6 +2049,26 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Add verification API endpoint
     app = app.merge(verification_router());
 
+    // Mount the request-chains management API at the prefix the UI's
+    // ChainsPage expects (`/__mockforge/chains/*`). Without this nest the
+    // page 404s on every call. The registry/engine are constructed from
+    // the chain_config param when supplied, otherwise from defaults.
+    {
+        use crate::chain_handlers::{chains_router, create_chain_state};
+        let chain_config = _circling_config.clone().unwrap_or_default();
+        let chain_registry = Arc::new(mockforge_core::request_chaining::RequestChainRegistry::new(
+            chain_config.clone(),
+        ));
+        let chain_engine = Arc::new(mockforge_core::chain_execution::ChainExecutionEngine::new(
+            chain_registry.clone(),
+            chain_config,
+        ));
+        app = app.nest(
+            "/__mockforge/chains",
+            chains_router(create_chain_state(chain_registry, chain_engine)),
+        );
+    }
+
     // Add OIDC well-known endpoints
     use crate::auth::oidc::oidc_router;
     app = app.merge(oidc_router());
