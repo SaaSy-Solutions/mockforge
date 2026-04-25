@@ -201,6 +201,8 @@ pub mod proxy_server;
 pub mod quick_mock;
 /// RAG-powered AI response generation
 pub mod rag_ai_generator;
+/// Reality-slider-driven mock/proxy switching middleware (#222)
+pub mod reality_proxy;
 /// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
@@ -2602,6 +2604,29 @@ pub async fn build_router_with_chains_and_multi_tenant(
             adapter: http_adapter,
             xray_state: Some(xray_state.clone()),
         };
+
+        // Reality-driven mock/proxy middleware (#222). Must be added
+        // BEFORE the consistency layer so it ends up inner — that way
+        // each request hits consistency first (which injects UnifiedState
+        // including reality_continuum_ratio), then this middleware reads
+        // that state and either forwards to upstream or falls through to
+        // the mock chain. Activated only when MOCKFORGE_PROXY_UPSTREAM is
+        // set; absent that, the layer isn't even installed.
+        if let Some(reality_cfg) = crate::reality_proxy::RealityProxyConfig::from_env() {
+            tracing::info!(
+                upstream = %reality_cfg.upstream_base,
+                "Reality-driven proxy middleware enabled — requests will be split between mock and upstream based on reality_continuum_ratio"
+            );
+            app =
+                app.layer(axum::middleware::from_fn(
+                    move |req: axum::extract::Request, next: axum::middleware::Next| {
+                        let cfg = reality_cfg.clone();
+                        async move {
+                            crate::reality_proxy::reality_proxy_middleware(cfg, req, next).await
+                        }
+                    },
+                ));
+        }
 
         // Add consistency middleware (before other middleware to inject state early)
         let consistency_middleware_state_clone = consistency_middleware_state.clone();

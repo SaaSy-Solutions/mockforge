@@ -131,19 +131,27 @@ pub async fn create_deployment(
         )));
     }
 
-    // Persist enabled protocols into the deployment's config_json so the
-    // orchestrator can read them when building the Fly machine. Done as an
-    // additive merge to preserve any keys the caller already supplied.
+    // Persist enabled protocols and upstream_url into the deployment's
+    // config_json so the orchestrator can read them when building the
+    // Fly machine. Additive merge preserves any keys the caller supplied.
     let mut config_json = request.config_json.clone();
+    if !config_json.is_object() {
+        config_json = serde_json::json!({});
+    }
     if let Some(obj) = config_json.as_object_mut() {
         obj.insert(
             "enabled_protocols".to_string(),
             serde_json::to_value(&enabled_protocols).unwrap_or(serde_json::Value::Null),
         );
-    } else {
-        // Caller passed a non-object (e.g. null) — replace with a fresh
-        // object that only carries the protocol list.
-        config_json = serde_json::json!({ "enabled_protocols": enabled_protocols });
+        if let Some(upstream) = request.upstream_url.as_ref() {
+            let trimmed = upstream.trim();
+            if !trimmed.is_empty() {
+                obj.insert(
+                    "upstream_url".to_string(),
+                    serde_json::Value::String(trimmed.to_string()),
+                );
+            }
+        }
     }
 
     // Create deployment record
@@ -2342,6 +2350,12 @@ pub struct CreateDeploymentRequest {
     /// Persisted into `config_json["enabled_protocols"]`.
     #[serde(default)]
     pub enabled_protocols: Option<Vec<crate::models::Protocol>>,
+    /// Optional upstream URL the deployment proxies to when the reality
+    /// slider is > 0 (#222). When unset, the slider is a no-op and
+    /// responses always come from the mock. Persisted into
+    /// `config_json["upstream_url"]`.
+    #[serde(default)]
+    pub upstream_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

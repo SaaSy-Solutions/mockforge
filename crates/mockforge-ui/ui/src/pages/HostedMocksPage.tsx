@@ -180,6 +180,7 @@ export const HostedMocksPage: React.FC = () => {
     description: '',
     config_json: '{}',
     openapi_spec_url: '',
+    upstream_url: '',
     region: 'iad',
     project_id: '',
   });
@@ -504,6 +505,7 @@ export const HostedMocksPage: React.FC = () => {
         description: formData.description || undefined,
         config_json: configJson,
         openapi_spec_url: formData.openapi_spec_url || undefined,
+        upstream_url: formData.upstream_url.trim() || undefined,
         region: formData.region || undefined,
         project_id: formData.project_id || undefined,
         enabled_protocols: enabledProtocols,
@@ -541,6 +543,7 @@ export const HostedMocksPage: React.FC = () => {
         description: '',
         config_json: '{}',
         openapi_spec_url: '',
+        upstream_url: '',
         region: 'iad',
         project_id: '',
       });
@@ -1180,6 +1183,16 @@ export const HostedMocksPage: React.FC = () => {
                 />
               </Button>
             </Box>
+
+            <TextField
+              label="Upstream URL (optional)"
+              fullWidth
+              value={formData.upstream_url}
+              onChange={(e) => setFormData({ ...formData, upstream_url: e.target.value })}
+              placeholder="https://api.production.example.com"
+              helperText="When set, the reality slider on the deployment will probabilistically forward requests to this URL. Leave blank for always-mock behavior."
+              sx={{ mb: 2 }}
+            />
 
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
