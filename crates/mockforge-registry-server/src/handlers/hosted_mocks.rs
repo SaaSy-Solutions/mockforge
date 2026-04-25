@@ -1585,6 +1585,37 @@ pub async fn get_recorder_capture_response(
     proxy_to_deployment_recorder(&deployment, &path).await
 }
 
+/// Export the deployment's recorder captures as HAR. Proxies the
+/// recorder's existing `/api/recorder/export/har` endpoint and forwards
+/// the response unchanged. The browser handles the download via a blob
+/// URL on the UI side.
+pub async fn export_recorder_captures_har(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest(
+            "You don't have access to this deployment".to_string(),
+        ));
+    }
+
+    let _ = state;
+    proxy_to_deployment_recorder(&deployment, "/api/recorder/export/har").await
+}
+
 /// Get deployment metrics
 pub async fn get_deployment_metrics(
     State(state): State<AppState>,

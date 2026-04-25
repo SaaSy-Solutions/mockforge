@@ -1671,6 +1671,17 @@ export const HostedMocksPage: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
+                      disabled={capturesLoading || recorderCaptures.length === 0 || !selectedDeployment}
+                      onClick={async () => {
+                        if (!selectedDeployment) return;
+                        await downloadCapturesHar(selectedDeployment.id, selectedDeployment.slug);
+                      }}
+                    >
+                      Export HAR
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
                       onClick={refetchCaptures}
                       disabled={capturesLoading}
                     >
@@ -2060,5 +2071,45 @@ function formatJsonString(raw: string): string {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
     return raw;
+  }
+}
+
+/**
+ * Trigger a HAR download for a deployment's captures. Goes through the
+ * cloud proxy so the auth_token JWT is the only thing the browser needs;
+ * the deployment URL stays server-side.
+ *
+ * Filename embeds slug + ISO date so the user can stash multiple exports
+ * without overwriting. Errors are surfaced as alerts because this is a
+ * one-shot user action — silent failure would leave them wondering why
+ * nothing downloaded.
+ */
+async function downloadCapturesHar(deploymentId: string, slug: string): Promise<void> {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    alert('Not authenticated');
+    return;
+  }
+  const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/export/har`;
+  try {
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    const date = new Date().toISOString().split('T')[0];
+    a.download = `${slug}-captures-${date}.har`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Download failed';
+    alert(`HAR export failed: ${msg}`);
   }
 }

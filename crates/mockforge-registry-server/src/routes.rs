@@ -177,6 +177,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/captures", get(handlers::hosted_mocks::list_recorder_captures))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}", get(handlers::hosted_mocks::get_recorder_capture))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/response", get(handlers::hosted_mocks::get_recorder_capture_response))
+        .route("/api/v1/hosted-mocks/{deployment_id}/captures/export/har", get(handlers::hosted_mocks::export_recorder_captures_har))
         .route("/api/v1/hosted-mocks/{deployment_id}/metrics", get(handlers::hosted_mocks::get_deployment_metrics))
         // Projects list (for UI pickers)
         .route("/api/v1/projects", get(handlers::projects::list_projects))
