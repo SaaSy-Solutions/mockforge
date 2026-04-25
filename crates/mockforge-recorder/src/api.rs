@@ -57,6 +57,7 @@ pub fn create_api_router(
 
         // Export endpoints
         .route("/api/recorder/export/har", get(export_har))
+        .route("/api/recorder/export/jsonl", get(export_jsonl))
 
         // Control endpoints
         .route("/api/recorder/status", get(get_status))
@@ -181,6 +182,41 @@ async fn export_har(
     let har_json = serde_json::to_string_pretty(&har)?;
 
     Ok((StatusCode::OK, [("content-type", "application/json")], har_json).into_response())
+}
+
+/// Export recordings as JSONL — one `RecordedExchange` per line. Unlike
+/// HAR this works for every protocol (HAR is HTTP-only) and is directly
+/// replay-able by `mockforge-cli replay`. Each line is a self-contained
+/// JSON object so consumers can stream-parse without buffering the whole
+/// file.
+async fn export_jsonl(
+    State(state): State<ApiState>,
+    Query(params): Query<ExportParams>,
+) -> Result<Response, ApiError> {
+    let limit = params.limit.unwrap_or(1000);
+
+    let filter = QueryFilter {
+        limit: Some(limit),
+        ..Default::default()
+    };
+
+    let result = execute_query(state.recorder.database(), filter).await?;
+
+    let mut body = String::with_capacity(result.exchanges.len() * 256);
+    for exchange in &result.exchanges {
+        body.push_str(&serde_json::to_string(exchange)?);
+        body.push('\n');
+    }
+
+    Ok((
+        StatusCode::OK,
+        [
+            ("content-type", "application/x-ndjson"),
+            ("content-disposition", "attachment; filename=\"captures.jsonl\""),
+        ],
+        body,
+    )
+        .into_response())
 }
 
 /// Get recording status
