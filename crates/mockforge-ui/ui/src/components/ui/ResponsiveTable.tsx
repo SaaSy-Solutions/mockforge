@@ -183,7 +183,7 @@ function DesktopTable<T>({
               <th
                 key={column.key}
                 className={cn(
-                  'px-6 py-3 text-left text-xs font-medium text-tertiary uppercase tracking-wider',
+                  'px-6 py-3 text-left text-xs font-medium text-text-tertiary uppercase tracking-wider',
                   column.width && `w-[${column.width}]`,
                   column.minWidth && `min-w-[${column.minWidth}]`,
                   sortable && column.sortable && 'cursor-pointer hover:text-primary transition-colors'

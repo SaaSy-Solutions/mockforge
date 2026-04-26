@@ -22,6 +22,67 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  /* Background and text hierarchy — referenced as bg-bg-* / text-text-* across
+     the UI (Dialog, Card, Tabs, ThemeToggle, etc.). Without these mappings
+     Tailwind v4 emits no utility class and the elements render transparent. */
+  --color-bg-primary: hsl(var(--bg-primary));
+  --color-bg-secondary: hsl(var(--bg-secondary));
+  --color-bg-tertiary: hsl(var(--bg-tertiary));
+  --color-bg-overlay: hsl(var(--bg-overlay));
+  --color-text-primary: hsl(var(--text-primary));
+  --color-text-secondary: hsl(var(--text-secondary));
+  --color-text-tertiary: hsl(var(--text-tertiary));
+  --color-text-inverse: hsl(var(--text-inverse));
+
+  /* Brand and status palettes — referenced via bg-brand-*, text-success-*,
+     border-danger-*, ring-warning-*, etc. Light/dark swap is driven by the
+     :root/.dark variable definitions below. */
+  --color-brand: hsl(var(--brand));
+  --color-brand-50: hsl(var(--brand-50));
+  --color-brand-100: hsl(var(--brand-100));
+  --color-brand-200: hsl(var(--brand-200));
+  --color-brand-300: hsl(var(--brand-300));
+  --color-brand-400: hsl(var(--brand-400));
+  --color-brand-500: hsl(var(--brand-500));
+  --color-brand-600: hsl(var(--brand-600));
+  --color-brand-700: hsl(var(--brand-700));
+  --color-brand-800: hsl(var(--brand-800));
+  --color-brand-900: hsl(var(--brand-900));
+
+  --color-success: hsl(var(--success));
+  --color-success-50: hsl(var(--success-50));
+  --color-success-100: hsl(var(--success-100));
+  --color-success-400: hsl(var(--success-400));
+  --color-success-500: hsl(var(--success-500));
+  --color-success-600: hsl(var(--success-600));
+  --color-success-700: hsl(var(--success-700));
+  --color-success-900: hsl(var(--success-900));
+
+  --color-warning: hsl(var(--warning));
+  --color-warning-50: hsl(var(--warning-50));
+  --color-warning-100: hsl(var(--warning-100));
+  --color-warning-400: hsl(var(--warning-400));
+  --color-warning-500: hsl(var(--warning-500));
+  --color-warning-600: hsl(var(--warning-600));
+  --color-warning-900: hsl(var(--warning-900));
+
+  --color-danger: hsl(var(--danger));
+  --color-danger-50: hsl(var(--danger-50));
+  --color-danger-100: hsl(var(--danger-100));
+  --color-danger-400: hsl(var(--danger-400));
+  --color-danger-500: hsl(var(--danger-500));
+  --color-danger-600: hsl(var(--danger-600));
+  --color-danger-700: hsl(var(--danger-700));
+  --color-danger-900: hsl(var(--danger-900));
+
+  --color-info: hsl(var(--info));
+  --color-info-50: hsl(var(--info-50));
+  --color-info-100: hsl(var(--info-100));
+  --color-info-400: hsl(var(--info-400));
+  --color-info-500: hsl(var(--info-500));
+  --color-info-600: hsl(var(--info-600));
+  --color-info-900: hsl(var(--info-900));
 }
 
 /* Modern design tokens via CSS variables */
@@ -62,33 +123,49 @@
     --brand: 24 86% 42%;
     --brand-50: 24 100% 97%;
     --brand-100: 24 95% 92%;
+    --brand-200: 24 90% 84%;
+    --brand-300: 24 85% 70%;
+    --brand-400: 24 85% 55%;
     --brand-500: 24 86% 42%;
     --brand-600: 24 88% 36%;
+    --brand-700: 24 92% 30%;
+    --brand-800: 24 95% 24%;
+    --brand-900: 24 98% 18%;
 
     /* Enhanced Status Colors - WCAG AA Compliant */
     --success: 142 76% 36%;
     --success-50: 142 100% 97%;
     --success-100: 142 90% 92%;
+    --success-400: 142 70% 45%;
     --success-500: 142 76% 36%;
     --success-600: 142 78% 32%;
+    --success-700: 142 80% 26%;
+    --success-900: 142 85% 14%;
 
     --warning: 42 96% 50%;
     --warning-50: 42 100% 96%;
     --warning-100: 42 95% 90%;
+    --warning-400: 42 96% 60%;
     --warning-500: 42 96% 50%;
     --warning-600: 42 98% 45%;
+    --warning-900: 42 95% 18%;
 
     --danger: 0 84% 50%;
     --danger-50: 0 100% 97%;
     --danger-100: 0 95% 92%;
+    --danger-400: 0 84% 60%;
     --danger-500: 0 84% 50%;
     --danger-600: 0 86% 45%;
+    --danger-700: 0 86% 38%;
+    --danger-900: 0 80% 18%;
 
     --info: 217 91% 60%;
     --info-50: 217 100% 97%;
     --info-100: 217 95% 92%;
+    --info-400: 217 91% 70%;
     --info-500: 217 91% 60%;
     --info-600: 217 93% 55%;
+    --info-900: 217 80% 18%;
 
     /* Background Hierarchy */
     --bg-primary: 0 0% 100%;

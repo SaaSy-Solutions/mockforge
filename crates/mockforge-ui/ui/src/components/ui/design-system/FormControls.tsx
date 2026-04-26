@@ -17,7 +17,7 @@ export function Input({ className, size = 'md', ...props }: InputProps) {
     <input
       className={cn(
         'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
-        'text-primary placeholder-tertiary',
+        'text-text-primary placeholder:text-text-tertiary',
         'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
         'hover:border-gray-300 dark:hover:border-gray-600',
         'transition-all duration-200 ease-out',
@@ -46,7 +46,7 @@ export function Textarea({ className, size = 'md', ...props }: TextareaProps) {
     <textarea
       className={cn(
         'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
-        'text-primary placeholder-tertiary',
+        'text-text-primary placeholder:text-text-tertiary',
         'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
         'hover:border-gray-300 dark:hover:border-gray-600',
         'transition-all duration-200 ease-out',
@@ -79,7 +79,7 @@ export function Select({ className, size = 'md', children, ...props }: SelectPro
     <select
       className={cn(
         'w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900',
-        'text-primary',
+        'text-text-primary',
         'focus:border-brand focus:outline-none focus:ring-4 focus:ring-brand/20',
         'hover:border-gray-300 dark:hover:border-gray-600',
         'transition-all duration-200 ease-out',

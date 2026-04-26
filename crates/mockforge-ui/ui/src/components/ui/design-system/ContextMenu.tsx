@@ -22,7 +22,7 @@ export function ContextMenu({ children, items, position, onClose }: ContextMenuP
         onClick={onClose}
       />
       <div
-        className="absolute z-50 min-w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 py-1"
+        className="absolute z-50 min-w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black/5 py-1"
         style={{ left: position.x, top: position.y }}
       >
         {items.map((item, index) => (
