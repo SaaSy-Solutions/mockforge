@@ -310,9 +310,14 @@ pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks
 
 # Cloudflare Pages deploy (mockforge-admin-ui)
 # Requires: CLOUDFLARE_API_TOKEN in env (auto-loaded from ~/.zshenv)
+# Cloud-mode build flags for the hosted admin UI. Without these, the bundle
+# defaults to local mode and POSTs /__mockforge/auth/login on its own origin
+# (Cloudflare Pages → 405). See .env.production.example and PR #137.
+DEPLOY_UI_ENV = VITE_MOCKFORGE_MODE=cloud VITE_API_BASE_URL=https://api.mockforge.dev
+
 deploy-ui: ## Build & deploy admin UI to Cloudflare Pages (production)
-	@echo "Building mockforge-admin-ui..."
-	@cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && pnpm build
+	@echo "Building mockforge-admin-ui (cloud mode)..."
+	@cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && $(DEPLOY_UI_ENV) pnpm build
 	@echo "Deploying to Cloudflare Pages (main branch = production)..."
 	@cd crates/mockforge-ui/ui && CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
 		pnpm dlx wrangler@latest pages deploy dist \
@@ -322,8 +327,8 @@ deploy-ui: ## Build & deploy admin UI to Cloudflare Pages (production)
 
 deploy-ui-preview: ## Build & deploy admin UI as a preview (uses current git branch)
 	@BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-		echo "Deploying preview on branch: $$BRANCH"; \
-		cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && pnpm build && \
+		echo "Deploying preview on branch: $$BRANCH (cloud mode)"; \
+		cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && $(DEPLOY_UI_ENV) pnpm build && \
 		CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
 			pnpm dlx wrangler@latest pages deploy dist \
 				--project-name=mockforge-admin-ui \
