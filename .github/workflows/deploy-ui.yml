@@ -1,0 +1,57 @@
+name: Deploy Admin UI
+
+# No untrusted GitHub event input is interpolated into run: blocks. The only
+# secret used is CLOUDFLARE_API_TOKEN, which is assigned to env: rather than
+# inlined into a shell command.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/mockforge-ui/ui/**'
+      - '.github/workflows/deploy-ui.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ui-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloudflare Pages
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 20
+
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 0d3a86eae0519c72f1bf7b96b38fea94
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        working-directory: crates/mockforge-ui/ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: crates/mockforge-ui/ui
+        run: pnpm build
+
+      - name: Deploy to Cloudflare Pages (production)
+        working-directory: crates/mockforge-ui/ui
+        run: |
+          pnpm dlx wrangler@4.85.0 pages deploy dist \
+            --project-name=mockforge-admin-ui \
+            --branch=main \
+            --commit-dirty=true
