@@ -71,52 +71,29 @@ pub async fn get_audit_logs(
         return Err(ApiError::PermissionDenied);
     }
 
-    // Parse event type if provided
-    let event_type = if let Some(event_type_str) = &query.event_type {
-        // Try to parse as enum
-        match event_type_str.as_str() {
-            "member_added" => Some(AuditEventType::MemberAdded),
-            "member_removed" => Some(AuditEventType::MemberRemoved),
-            "member_role_changed" => Some(AuditEventType::MemberRoleChanged),
-            "org_created" => Some(AuditEventType::OrgCreated),
-            "org_updated" => Some(AuditEventType::OrgUpdated),
-            "org_deleted" => Some(AuditEventType::OrgDeleted),
-            "org_plan_changed" => Some(AuditEventType::OrgPlanChanged),
-            "billing_checkout" => Some(AuditEventType::BillingCheckout),
-            "billing_upgrade" => Some(AuditEventType::BillingUpgrade),
-            "billing_downgrade" => Some(AuditEventType::BillingDowngrade),
-            "billing_canceled" => Some(AuditEventType::BillingCanceled),
-            "api_token_created" => Some(AuditEventType::ApiTokenCreated),
-            "api_token_deleted" => Some(AuditEventType::ApiTokenDeleted),
-            "api_token_rotated" => Some(AuditEventType::ApiTokenRotated),
-            "settings_updated" => Some(AuditEventType::SettingsUpdated),
-            "byok_config_updated" => Some(AuditEventType::ByokConfigUpdated),
-            "byok_config_deleted" => Some(AuditEventType::ByokConfigDeleted),
-            "deployment_created" => Some(AuditEventType::DeploymentCreated),
-            "deployment_deleted" => Some(AuditEventType::DeploymentDeleted),
-            "deployment_updated" => Some(AuditEventType::DeploymentUpdated),
-            "plugin_published" => Some(AuditEventType::PluginPublished),
-            "template_published" => Some(AuditEventType::TemplatePublished),
-            "scenario_published" => Some(AuditEventType::ScenarioPublished),
-            "password_changed" => Some(AuditEventType::PasswordChanged),
-            "email_changed" => Some(AuditEventType::EmailChanged),
-            "two_factor_enabled" => Some(AuditEventType::TwoFactorEnabled),
-            "two_factor_disabled" => Some(AuditEventType::TwoFactorDisabled),
-            "admin_impersonation" => Some(AuditEventType::AdminImpersonation),
-            _ => None,
-        }
-    } else {
-        None
-    };
+    // Parse event types if provided. Accepts a single value or a comma-separated list
+    // (e.g. `?event_type=byok_config_updated,byok_config_deleted`). Unknown values are
+    // silently ignored so a stale client can't 500 the endpoint.
+    let event_types: Vec<AuditEventType> = query
+        .event_type
+        .as_deref()
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter_map(AuditEventType::from_str)
+                .collect()
+        })
+        .unwrap_or_default();
 
     // Get audit logs
     let logs = state
         .store
-        .list_audit_logs(org_id, query.limit.or(Some(100)), query.offset.or(Some(0)), event_type)
+        .list_audit_logs(org_id, query.limit.or(Some(100)), query.offset.or(Some(0)), &event_types)
         .await?;
 
     // Get total count
-    let total = state.store.count_audit_logs(org_id, event_type).await?;
+    let total = state.store.count_audit_logs(org_id, &event_types).await?;
 
     // Convert to response format
     let log_responses: Vec<AuditLogResponse> = logs

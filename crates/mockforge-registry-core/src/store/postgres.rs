@@ -278,9 +278,9 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<Vec<AuditLog>> {
-        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_type)
+        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_types)
             .await
             .map_err(Into::into)
     }
@@ -288,20 +288,21 @@ impl RegistryStore for PgRegistryStore {
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<i64> {
-        let count: (i64,) = if let Some(evt) = event_type {
-            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND event_type = $2")
-                .bind(org_id)
-                .bind(evt)
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1")
-                .bind(org_id)
-                .fetch_one(&self.pool)
-                .await?
-        };
+        let mut query = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
+
+        if !event_types.is_empty() {
+            query.push(" AND event_type IN (");
+            let mut sep = query.separated(", ");
+            for et in event_types {
+                sep.push_bind(*et);
+            }
+            query.push(")");
+        }
+
+        let count: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
         Ok(count.0)
     }
 

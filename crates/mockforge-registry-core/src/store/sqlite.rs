@@ -952,53 +952,54 @@ impl RegistryStore for SqliteRegistryStore {
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<Vec<AuditLog>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let rows = if let Some(et) = event_type {
-            let et_str = audit_event_type_to_str(&et);
-            sqlx::query(
-                "SELECT * FROM audit_logs WHERE org_id = ? AND event_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            )
-            .bind(org_id.to_string())
-            .bind(&et_str)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query(
-                "SELECT * FROM audit_logs WHERE org_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            )
-            .bind(org_id.to_string())
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        let event_strs: Vec<String> = event_types.iter().map(audit_event_type_to_str).collect();
+
+        let mut query =
+            sqlx::QueryBuilder::<sqlx::Sqlite>::new("SELECT * FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id.to_string());
+        if !event_strs.is_empty() {
+            query.push(" AND event_type IN (");
+            let mut sep = query.separated(", ");
+            for s in &event_strs {
+                sep.push_bind(s);
+            }
+            query.push(")");
+        }
+        query.push(" ORDER BY created_at DESC LIMIT ");
+        query.push_bind(limit);
+        query.push(" OFFSET ");
+        query.push_bind(offset);
+
+        let rows = query.build().fetch_all(&self.pool).await?;
         rows.iter().map(row_to_audit_log).collect()
     }
 
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<i64> {
         use sqlx::Row;
-        let row = if let Some(et) = event_type {
-            let et_str = audit_event_type_to_str(&et);
-            sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ? AND event_type = ?")
-                .bind(org_id.to_string())
-                .bind(&et_str)
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query("SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ?")
-                .bind(org_id.to_string())
-                .fetch_one(&self.pool)
-                .await?
-        };
+        let event_strs: Vec<String> = event_types.iter().map(audit_event_type_to_str).collect();
+
+        let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+            "SELECT COUNT(*) as c FROM audit_logs WHERE org_id = ",
+        );
+        query.push_bind(org_id.to_string());
+        if !event_strs.is_empty() {
+            query.push(" AND event_type IN (");
+            let mut sep = query.separated(", ");
+            for s in &event_strs {
+                sep.push_bind(s);
+            }
+            query.push(")");
+        }
+
+        let row = query.build().fetch_one(&self.pool).await?;
         Ok(row.try_get::<i64, _>("c")?)
     }
 
@@ -5031,13 +5032,21 @@ mod tests {
             .await;
 
         // Count and list
-        assert_eq!(store.count_audit_logs(org.id, None).await.unwrap(), 2);
+        assert_eq!(store.count_audit_logs(org.id, &[]).await.unwrap(), 2);
+        assert_eq!(store.count_audit_logs(org.id, &[AuditEventType::OrgCreated]).await.unwrap(), 1);
+        // Multi-event filter (OR semantics)
         assert_eq!(
-            store.count_audit_logs(org.id, Some(AuditEventType::OrgCreated)).await.unwrap(),
-            1
+            store
+                .count_audit_logs(
+                    org.id,
+                    &[AuditEventType::OrgCreated, AuditEventType::ApiTokenCreated]
+                )
+                .await
+                .unwrap(),
+            2
         );
 
-        let logs = store.list_audit_logs(org.id, None, None, None).await.unwrap();
+        let logs = store.list_audit_logs(org.id, None, None, &[]).await.unwrap();
         assert_eq!(logs.len(), 2);
         // most recent first
         assert_eq!(logs[0].event_type, AuditEventType::ApiTokenCreated);
@@ -5047,7 +5056,7 @@ mod tests {
 
         // Filtered list
         let org_created = store
-            .list_audit_logs(org.id, None, None, Some(AuditEventType::OrgCreated))
+            .list_audit_logs(org.id, None, None, &[AuditEventType::OrgCreated])
             .await
             .unwrap();
         assert_eq!(org_created.len(), 1);
