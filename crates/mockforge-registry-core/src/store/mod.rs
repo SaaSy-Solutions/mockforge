@@ -882,19 +882,21 @@ pub trait RegistryStore: Send + Sync + 'static {
     );
 
     /// List audit logs for an organization with optional filters.
+    ///
+    /// `event_types` is an OR filter: pass an empty slice to return logs of every type.
     async fn list_audit_logs(
         &self,
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<Vec<AuditLog>>;
 
     /// Count audit logs matching the filter (for pagination).
     async fn count_audit_logs(
         &self,
         org_id: Uuid,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> StoreResult<i64>;
 
     // ---------------------------------------------------------------------

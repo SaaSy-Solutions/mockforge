@@ -68,6 +68,61 @@ pub enum AuditEventType {
     AdminImpersonation,
 }
 
+impl AuditEventType {
+    /// Parse the snake_case string representation back into an enum.
+    ///
+    /// Mirrors the `rename_all = "snake_case"` serde encoding used for the
+    /// sqlx `audit_event_type` Postgres enum and the SQLite TEXT column.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "member_added" => Some(Self::MemberAdded),
+            "member_removed" => Some(Self::MemberRemoved),
+            "member_role_changed" => Some(Self::MemberRoleChanged),
+            "org_created" => Some(Self::OrgCreated),
+            "org_updated" => Some(Self::OrgUpdated),
+            "org_deleted" => Some(Self::OrgDeleted),
+            "org_plan_changed" => Some(Self::OrgPlanChanged),
+            "billing_checkout" => Some(Self::BillingCheckout),
+            "billing_upgrade" => Some(Self::BillingUpgrade),
+            "billing_downgrade" => Some(Self::BillingDowngrade),
+            "billing_canceled" => Some(Self::BillingCanceled),
+            "api_token_created" => Some(Self::ApiTokenCreated),
+            "api_token_deleted" => Some(Self::ApiTokenDeleted),
+            "api_token_rotated" => Some(Self::ApiTokenRotated),
+            "settings_updated" => Some(Self::SettingsUpdated),
+            "byok_config_updated" => Some(Self::ByokConfigUpdated),
+            "byok_config_deleted" => Some(Self::ByokConfigDeleted),
+            "deployment_created" => Some(Self::DeploymentCreated),
+            "deployment_deleted" => Some(Self::DeploymentDeleted),
+            "deployment_updated" => Some(Self::DeploymentUpdated),
+            "plugin_published" => Some(Self::PluginPublished),
+            "template_published" => Some(Self::TemplatePublished),
+            "scenario_published" => Some(Self::ScenarioPublished),
+            "password_changed" => Some(Self::PasswordChanged),
+            "email_changed" => Some(Self::EmailChanged),
+            "two_factor_enabled" => Some(Self::TwoFactorEnabled),
+            "two_factor_disabled" => Some(Self::TwoFactorDisabled),
+            "federation_created" => Some(Self::FederationCreated),
+            "federation_updated" => Some(Self::FederationUpdated),
+            "federation_deleted" => Some(Self::FederationDeleted),
+            "federation_scenario_activated" => Some(Self::FederationScenarioActivated),
+            "federation_scenario_deactivated" => Some(Self::FederationScenarioDeactivated),
+            "workspace_created" => Some(Self::WorkspaceCreated),
+            "workspace_updated" => Some(Self::WorkspaceUpdated),
+            "workspace_deleted" => Some(Self::WorkspaceDeleted),
+            "service_created" => Some(Self::ServiceCreated),
+            "service_updated" => Some(Self::ServiceUpdated),
+            "service_deleted" => Some(Self::ServiceDeleted),
+            "fixture_created" => Some(Self::FixtureCreated),
+            "fixture_updated" => Some(Self::FixtureUpdated),
+            "fixture_deleted" => Some(Self::FixtureDeleted),
+            "admin_impersonation" => Some(Self::AdminImpersonation),
+            _ => None,
+        }
+    }
+}
+
 /// Audit log entry
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AuditLog {
@@ -114,19 +169,24 @@ impl AuditLog {
         .await
     }
 
-    /// Get audit logs for an organization
+    /// Get audit logs for an organization, optionally filtered to one or more event types.
     pub async fn get_by_org(
         pool: &sqlx::PgPool,
-        _org_id: Uuid,
+        org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
-        event_type: Option<AuditEventType>,
+        event_types: &[AuditEventType],
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = $1");
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
 
-        if let Some(event_type) = event_type {
-            query.push(" AND event_type = $2");
-            query.push_bind(event_type);
+        if !event_types.is_empty() {
+            query.push(" AND event_type IN (");
+            let mut sep = query.separated(", ");
+            for et in event_types {
+                sep.push_bind(*et);
+            }
+            query.push(")");
         }
 
         query.push(" ORDER BY created_at DESC");
@@ -147,13 +207,15 @@ impl AuditLog {
     /// Get audit logs for a specific user within an organization
     pub async fn get_by_user_in_org(
         pool: &sqlx::PgPool,
-        _org_id: Uuid,
-        _user_id: Uuid,
+        org_id: Uuid,
+        user_id: Uuid,
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut query = sqlx::QueryBuilder::new(
-            "SELECT * FROM audit_logs WHERE org_id = $1 AND user_id = $2 ORDER BY created_at DESC",
-        );
+        let mut query = sqlx::QueryBuilder::new("SELECT * FROM audit_logs WHERE org_id = ");
+        query.push_bind(org_id);
+        query.push(" AND user_id = ");
+        query.push_bind(user_id);
+        query.push(" ORDER BY created_at DESC");
 
         if let Some(limit) = limit {
             query.push(" LIMIT ");

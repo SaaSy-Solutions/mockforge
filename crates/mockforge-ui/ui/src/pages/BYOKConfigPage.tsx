@@ -186,7 +186,8 @@ async function fetchAuditLogs(orgId: string): Promise<AuditLogEntry[]> {
     { headers: authHeaders() }
   );
   if (!response.ok) throw new Error('Failed to fetch audit logs');
-  return response.json();
+  const body = (await response.json()) as { logs?: AuditLogEntry[] } | AuditLogEntry[];
+  return Array.isArray(body) ? body : (body.logs ?? []);
 }
 
 // Provider definitions with model options
