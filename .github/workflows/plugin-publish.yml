@@ -17,6 +17,11 @@ on:
         type: boolean
         default: false
 
+# Serialize publishes — never abort an in-flight release mid-publish.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   MOCKFORGE_REGISTRY_URL: ${{ secrets.MOCKFORGE_REGISTRY_URL || 'https://registry.mockforge.dev' }}
   MOCKFORGE_REGISTRY_TOKEN: ${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}

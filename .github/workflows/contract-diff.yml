@@ -9,13 +9,6 @@ on:
       - 'crates/mockforge-core/src/ai_contract_diff/**'
       - 'crates/mockforge-cli/src/contract_diff_commands.rs'
       - '.github/workflows/contract-diff.yml'
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*.yaml'
-      - '**/*.yml'
-      - '**/*.json'
   workflow_dispatch:
     inputs:
       spec_path:
@@ -36,6 +29,12 @@ on:
           - anthropic
           - ollama
           - openai-compatible
+
+# Push-on-main trigger removed: PR run already verifies the change. Only
+# GitHub-internal context is interpolated below (workflow / ref / event_name).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

@@ -21,6 +21,12 @@ on:
       - '.github/workflows/docker-build.yml'
   workflow_dispatch:
 
+# Push-on-main retained — publishes the GHCR image. Concurrency keys are
+# GitHub-internal context (not user-supplied), safe to interpolate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
   # Must be lowercase for Docker image references

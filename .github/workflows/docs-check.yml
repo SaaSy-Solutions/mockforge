@@ -6,15 +6,13 @@ on:
       - 'book/**'
       - 'scripts/automated-tests/test-docs.sh'
       - '.github/workflows/docs-check.yml'
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - 'book/**'
-      - 'scripts/automated-tests/test-docs.sh'
-      - '.github/workflows/docs-check.yml'
   workflow_dispatch:
+
+# Push-on-main trigger removed: PR run already verifies the change. Only
+# GitHub-internal context is interpolated below (workflow / ref / event_name).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

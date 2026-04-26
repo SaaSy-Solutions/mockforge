@@ -26,6 +26,11 @@ on:
         default: 'false'
         type: boolean
 
+# Serialize publishes — never abort an in-flight release mid-publish.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write

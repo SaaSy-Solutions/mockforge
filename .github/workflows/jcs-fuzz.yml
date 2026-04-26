@@ -20,6 +20,12 @@ on:
         required: false
         default: '10000'
 
+# If a cron tick fires while the previous tick is still running, supersede the
+# older one — the input is just "latest main", no value in running both.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1

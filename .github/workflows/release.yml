@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*.*.*'
 
+# Serialize releases — never abort an in-flight release mid-publish.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
