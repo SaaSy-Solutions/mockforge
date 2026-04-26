@@ -1601,7 +1601,7 @@ export function OrganizationPage() {
   const selectedOrg = organizations?.find((org) => org.id === selectedOrgId);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Organizations</h1>
         <p className="text-muted-foreground mt-2">
@@ -1609,7 +1609,7 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-[1fr_2fr]">
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         {/* Organizations List */}
         <Card>
           <CardHeader>
@@ -1668,7 +1668,7 @@ export function OrganizationPage() {
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="members" className="w-full">
-                <TabsList className="flex flex-wrap">
+                <TabsList className="flex w-full overflow-x-auto">
                   <TabsTrigger value="members">
                     <Users className="w-4 h-4 mr-1" />
                     Members
