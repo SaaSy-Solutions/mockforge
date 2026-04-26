@@ -62,6 +62,21 @@ interface CreatePortalResponse {
 // API base URL - adjust based on your setup
 const API_BASE = '/api/v1';
 
+async function extractErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json();
+    if (body && typeof body === 'object') {
+      const msg = body.error ?? body.message ?? body.details?.message;
+      if (typeof msg === 'string' && msg.trim().length > 0) {
+        return msg;
+      }
+    }
+  } catch {
+    // Non-JSON body — fall through.
+  }
+  return fallback;
+}
+
 async function fetchSubscription(): Promise<Subscription> {
   const token = localStorage.getItem('auth_token');
   const response = await fetch(`${API_BASE}/billing/subscription`, {
@@ -71,7 +86,7 @@ async function fetchSubscription(): Promise<Subscription> {
     },
   });
   if (!response.ok) {
-    throw new Error('Failed to fetch subscription');
+    throw new Error(await extractErrorMessage(response, 'Failed to fetch subscription'));
   }
   return response.json();
 }
@@ -87,7 +102,7 @@ async function createCheckout(request: CreateCheckoutRequest): Promise<CreateChe
     body: JSON.stringify(request),
   });
   if (!response.ok) {
-    throw new Error('Failed to create checkout session');
+    throw new Error(await extractErrorMessage(response, 'Failed to create checkout session'));
   }
   return response.json();
 }
@@ -105,7 +120,7 @@ async function createPortalSession(): Promise<CreatePortalResponse> {
     }),
   });
   if (!response.ok) {
-    throw new Error('Failed to create portal session');
+    throw new Error(await extractErrorMessage(response, 'Failed to create portal session'));
   }
   return response.json();
 }
@@ -116,7 +131,12 @@ export function BillingPage() {
   const [selectedPlan, setSelectedPlan] = useState<'pro' | 'team' | null>(null);
 
   // Fetch subscription
-  const { data: subscription, isLoading } = useQuery({
+  const {
+    data: subscription,
+    isLoading,
+    error: subscriptionError,
+    refetch: refetchSubscription,
+  } = useQuery({
     queryKey: ['subscription'],
     queryFn: fetchSubscription,
   });
@@ -213,9 +233,22 @@ export function BillingPage() {
   }
 
   if (!subscription) {
+    const message =
+      subscriptionError instanceof Error
+        ? subscriptionError.message
+        : 'Failed to load subscription';
     return (
       <div className="container mx-auto p-6">
-        <div className="text-center py-12">Failed to load subscription</div>
+        <div className="mx-auto max-w-md text-center py-12 space-y-4">
+          <AlertCircle className="w-8 h-8 text-yellow-600 mx-auto" />
+          <div>
+            <h2 className="font-semibold">Failed to load subscription</h2>
+            <p className="text-sm text-muted-foreground mt-1">{message}</p>
+          </div>
+          <Button variant="outline" onClick={() => refetchSubscription()}>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
