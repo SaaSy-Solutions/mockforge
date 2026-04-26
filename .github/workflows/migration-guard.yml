@@ -1,0 +1,73 @@
+name: Migration Guard
+
+# Catches the failure mode that caused the prod drift in #261: a migration file
+# that was previously committed (and may have been applied to a long-lived DB)
+# being modified, deleted, or effectively renumbered. sqlx records each migration
+# by version number + content checksum, so any of these will either error on
+# startup or — worse — silently leave production diverging from the repo.
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'crates/*/migrations/**'
+
+concurrency:
+  group: migration-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Migration files are append-only
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Append-only check
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "Comparing $BASE_SHA..$HEAD_SHA for changes under crates/*/migrations/"
+          changed=$(git diff --name-status "$BASE_SHA" "$HEAD_SHA" -- 'crates/*/migrations/' || true)
+          echo "$changed"
+
+          # Block any modification (M) or deletion (D) of an already-committed migration.
+          # Renames (R) are also forbidden because sqlx tracks files by version-prefixed
+          # filename — renaming = renumbering = silent collision.
+          violators=$(echo "$changed" | awk '$1 ~ /^[MDR]/ {print}')
+          if [ -n "$violators" ]; then
+            echo "::error::Existing migration files cannot be modified, deleted, or renamed."
+            echo "::error::sqlx records each migration's checksum + version on apply; any change"
+            echo "::error::breaks deployments against any DB that already ran the original."
+            echo "::error::If you need to change historical schema, add a NEW migration."
+            echo
+            echo "Violations:"
+            echo "$violators"
+            exit 1
+          fi
+
+          # New migrations must use unique version prefixes (the YYYYMMDDHHMMSS timestamp).
+          # Catches the orphan-branch renumbering pattern from #261.
+          new_files=$(echo "$changed" | awk '$1 == "A" {print $2}' | grep -E 'crates/.*/migrations/[0-9]+_.+\.sql$' || true)
+          if [ -n "$new_files" ]; then
+            for crate_dir in $(echo "$new_files" | xargs -n1 dirname | sort -u); do
+              # All version prefixes in this dir on HEAD.
+              dupes=$(ls "$crate_dir" 2>/dev/null \
+                | grep -E '^[0-9]+_' \
+                | awk -F_ '{print $1}' \
+                | sort | uniq -d)
+              if [ -n "$dupes" ]; then
+                echo "::error::Duplicate migration version prefix in $crate_dir:"
+                echo "$dupes"
+                exit 1
+              fi
+            done
+          fi
+
+          echo "Migration changes are append-only and version-unique."
