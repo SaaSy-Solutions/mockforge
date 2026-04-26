@@ -29,7 +29,7 @@ pub async fn get_faq() -> Json<FAQResponse> {
             id: "2".to_string(),
             category: "Getting Started".to_string(),
             question: "What's the difference between Free, Pro, and Team plans?".to_string(),
-            answer: "Free plan includes 10,000 requests/month, 1GB storage, and BYOK for AI features. Pro ($29/month) includes 100,000 requests, 10GB storage, hosted AI, and priority support. Team ($99/month) includes 1M requests, 100GB storage, SSO, and 24-hour support SLA.".to_string(),
+            answer: "Free plan includes 10,000 requests/month, 1GB storage, and BYOK for AI features. Pro ($29/month) includes 250,000 requests, 20GB storage, 100K hosted AI tokens, and priority support. Team ($99/month) includes 1,000,000 requests, 100GB storage, 1M AI tokens, SSO, and a 24-hour support SLA.".to_string(),
         },
         FAQItem {
             id: "3".to_string(),
@@ -83,7 +83,7 @@ pub async fn get_faq() -> Json<FAQResponse> {
             id: "11".to_string(),
             category: "Technical".to_string(),
             question: "What API rate limits apply?".to_string(),
-            answer: "Rate limits vary by plan. Free: 60 requests/minute, Pro: 300 requests/minute, Team: 1000 requests/minute. Monthly request limits also apply. Check the X-RateLimit-* headers in API responses for current limits.".to_string(),
+            answer: "Two limits apply. (1) A short-window per-minute limit protects the platform from bursts; the active value is returned in the X-RateLimit-* response headers. (2) Your plan's monthly request quota (10,000 / 250,000 / 1,000,000 for Free / Pro / Team). Exceeding either returns HTTP 429.".to_string(),
         },
         FAQItem {
             id: "12".to_string(),
@@ -119,7 +119,7 @@ pub async fn get_faq() -> Json<FAQResponse> {
             id: "17".to_string(),
             category: "Security".to_string(),
             question: "Can I export or delete my data?".to_string(),
-            answer: "Yes. You can export your data at any time via the API or by contacting support. You can also request data deletion, which we'll process within 30 days per GDPR requirements.".to_string(),
+            answer: "Yes — both are self-serve. Open Account Settings → Privacy: 'Export my data' downloads a JSON archive (GDPR right to portability) and 'Delete my account' permanently erases your data. Programmatic equivalents are GET /api/v1/gdpr/export and DELETE /api/v1/gdpr/erase. Deletion completes within 30 days per GDPR requirements.".to_string(),
         },
         FAQItem {
             id: "18".to_string(),
@@ -137,7 +137,49 @@ pub async fn get_faq() -> Json<FAQResponse> {
             id: "20".to_string(),
             category: "Marketplace".to_string(),
             question: "How do I publish to the marketplace?".to_string(),
-            answer: "Use the CLI commands (mockforge plugin publish, template publish, scenario publish) or the web UI. Your content will be reviewed before being made public. Verified content gets a badge.".to_string(),
+            answer: "Plugins can be published with `mockforge plugin publish <path>` from the CLI. Templates and scenarios are published from the web UI in their respective marketplaces. Submissions are reviewed before being made public, and verified content gets a badge.".to_string(),
+        },
+        FAQItem {
+            id: "21".to_string(),
+            category: "Security".to_string(),
+            question: "How do I enable two-factor authentication?".to_string(),
+            answer: "Open Account Settings → Security and click 'Enable 2FA'. Scan the QR code with any TOTP app (1Password, Authy, Google Authenticator), then enter the 6-digit code to confirm. You'll be issued recovery codes — store them somewhere safe. To disable later, re-enter your password.".to_string(),
+        },
+        FAQItem {
+            id: "22".to_string(),
+            category: "Organizations".to_string(),
+            question: "How do I set up SAML SSO for my team?".to_string(),
+            answer: "SSO is available on Team plans. Open Organization → SSO and configure your IdP's SSO URL, certificate, and entity ID. MockForge exposes SP metadata at /api/v1/sso/saml/metadata/<org-slug> and the ACS URL at /api/v1/sso/saml/acs/<org-slug>. Once configured, click 'Enable SSO' to require it for all org members.".to_string(),
+        },
+        FAQItem {
+            id: "23".to_string(),
+            category: "Features".to_string(),
+            question: "Which protocols can I mock?".to_string(),
+            answer: "MockForge supports HTTP/REST, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, and raw TCP. Each protocol has its own server in the CLI (e.g. `--http-port`, `--grpc-port`, `--ws-port`) and can be driven from the same OpenAPI/proto/schema sources. Cloud currently hosts HTTP/WS/gRPC; the other protocols run locally or self-hosted.".to_string(),
+        },
+        FAQItem {
+            id: "24".to_string(),
+            category: "Features".to_string(),
+            question: "What is Federation and when should I use it?".to_string(),
+            answer: "Federation lets multiple MockForge instances cooperate so a single mock can be backed by responses from several upstreams or workspaces. Use it to compose mocks across teams, fan out requests to specialized instances, or front a hybrid of cloud-hosted and self-hosted mocks. Manage federations from the Federation page in the admin UI.".to_string(),
+        },
+        FAQItem {
+            id: "25".to_string(),
+            category: "Features".to_string(),
+            question: "How do I record real traffic and replay it?".to_string(),
+            answer: "Use the Recorder page (or `mockforge record` on the CLI) to capture live HTTP/gRPC/WS sessions to a fixture file. The captured fixture can be replayed deterministically as a mock or fed into the Behavioral Cloning workflow to generate variations. Combine with the Chaos page to inject latency, errors, or schema drift on top of the replay.".to_string(),
+        },
+        FAQItem {
+            id: "26".to_string(),
+            category: "Marketplace".to_string(),
+            question: "How do I write my own plugin?".to_string(),
+            answer: "Plugins are WebAssembly modules. Add the `mockforge-plugin-sdk` crate, implement the `Plugin` trait, and build with `cargo build --target wasm32-wasi --release`. Test locally with `mockforge plugin install ./target/wasm32-wasi/release/my_plugin.wasm`, then publish with `mockforge plugin publish`. See the response-graphql example under examples/plugins.".to_string(),
+        },
+        FAQItem {
+            id: "27".to_string(),
+            category: "Technical".to_string(),
+            question: "When should I use JWT vs Personal Access Tokens?".to_string(),
+            answer: "JWTs are short-lived (issued by web login) — use them for browser sessions and short scripts. Personal Access Tokens (PATs) are long-lived, scoped, and revocable — use them for CLI, CI/CD, and any automation. Create PATs in Settings → API Tokens. Both authenticate via `Authorization: Bearer <token>`.".to_string(),
         },
     ];
 

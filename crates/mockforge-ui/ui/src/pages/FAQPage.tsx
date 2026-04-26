@@ -205,12 +205,12 @@ export function FAQPage() {
               Discord
             </a>
             <a
-              href="https://forum.mockforge.dev"
+              href="https://github.com/SaaSy-Solutions/mockforge/discussions"
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-2 border border-border rounded-md hover:bg-muted transition-colors"
             >
-              Community Forum
+              GitHub Discussions
             </a>
           </div>
         </CardContent>
