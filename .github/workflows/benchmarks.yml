@@ -12,6 +12,12 @@ on:
       - main
   workflow_dispatch:
 
+# Push-on-main retained — it updates .github/benchmarks/baseline.json.
+# Concurrency keys are GitHub-internal context (not user-supplied), safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   REGRESSION_THRESHOLD: 5.0

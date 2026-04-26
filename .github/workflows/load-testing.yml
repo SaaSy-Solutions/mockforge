@@ -29,6 +29,12 @@ on:
           - extended
           - stress
 
+# Push-on-main retained — Extended Load Test + Performance Benchmarks gate on
+# refs/heads/main. Concurrency keys are GitHub-internal context, safe to interpolate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   standard-load-test:
     name: Standard Load Test

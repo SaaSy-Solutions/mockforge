@@ -7,12 +7,13 @@ on:
       - 'k8s/**'
       - 'helm/**'
       - '.github/workflows/k8s-tests.yml'
-  push:
-    branches: [main, develop]
-    paths:
-      - 'k8s/**'
-      - 'helm/**'
   workflow_dispatch:
+
+# Push-on-main trigger removed: PR run already verifies the change. Only
+# GitHub-internal context is interpolated below (workflow / ref / event_name).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate-manifests:
