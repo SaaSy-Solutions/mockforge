@@ -46,6 +46,13 @@ jobs:
 
       - name: Build
         working-directory: crates/mockforge-ui/ui
+        env:
+          # Cloud-mode build flags for the hosted admin UI. Without these the
+          # bundle defaults to local mode and POSTs /__mockforge/auth/login on
+          # its own origin (Cloudflare Pages -> 405). See
+          # .env.production.example and PR #137.
+          VITE_MOCKFORGE_MODE: cloud
+          VITE_API_BASE_URL: https://api.mockforge.dev
         run: pnpm build
 
       - name: Deploy to Cloudflare Pages (production)
