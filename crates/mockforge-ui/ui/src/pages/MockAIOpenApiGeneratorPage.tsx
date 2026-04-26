@@ -384,7 +384,7 @@ export function MockAIOpenApiGeneratorPage() {
               {/* Confidence Scores */}
               {Object.keys(result.metadata.path_confidence).length > 0 && (
                 <div>
-                  <h3 className="text-md font-semibold mb-3 flex items-center gap-2">
+                  <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" />
                     Path Confidence Scores
                   </h3>

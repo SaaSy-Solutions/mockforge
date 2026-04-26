@@ -70,7 +70,6 @@ export function StatusBadge({ status, className, showDot = true, size = 'md' }: 
         cfg.color,
         cfg.ring,
         sizes[size],
-        'dark:ring-opacity-20',
         className
       )}
       role="status"

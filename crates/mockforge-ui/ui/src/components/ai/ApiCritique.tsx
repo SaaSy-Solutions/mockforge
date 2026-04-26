@@ -233,10 +233,24 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
     }
   };
 
+  const getSeverityBadgeClasses = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'critical':
+        return 'text-red-600 dark:text-red-400 bg-red-600/10';
+      case 'high':
+        return 'text-orange-600 dark:text-orange-400 bg-orange-600/10';
+      case 'medium':
+        return 'text-yellow-600 dark:text-yellow-400 bg-yellow-600/10';
+      case 'low':
+        return 'text-blue-600 dark:text-blue-400 bg-blue-600/10';
+      default:
+        return 'text-gray-600 dark:text-gray-400 bg-gray-600/10';
+    }
+  };
+
   const getSeverityBadge = (severity: string) => {
-    const color = getSeverityColor(severity);
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${color} bg-opacity-10`}>
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getSeverityBadgeClasses(severity)}`}>
         {severity.toUpperCase()}
       </span>
     );

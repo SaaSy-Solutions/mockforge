@@ -74,7 +74,7 @@ export const iconColors = {
   success: 'text-success',
   warning: 'text-warning',
   danger: 'text-danger',
-  muted: 'text-tertiary',
+  muted: 'text-text-tertiary',
 } as const;
 
 interface IconProps {
