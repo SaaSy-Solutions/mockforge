@@ -1327,6 +1327,11 @@ pub async fn handle_serve(
 
         // Initialize the global time travel manager for UI handlers
         time_travel_handlers::init_time_travel_manager(manager.clone());
+        // Mirror the same handle into mockforge-http's process-wide
+        // OnceLock so the time-travel routes mounted on the main HTTP
+        // app (reachable on hosted mocks where the admin port isn't
+        // exposed publicly) operate against the same manager.
+        mockforge_http::time_travel_api::init_time_travel_manager(manager.clone());
 
         if manager.clock().is_enabled() {
             println!("⏰ Time travel enabled");
