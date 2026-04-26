@@ -225,6 +225,8 @@ pub mod spec_import;
 pub mod sse;
 /// State machine API for scenario state machines
 pub mod state_machine_api;
+/// Time-travel runtime API mirrored from the admin server onto the main HTTP port
+pub mod time_travel_api;
 /// TLS/HTTPS support
 pub mod tls;
 /// Token response utilities
@@ -2115,6 +2117,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let api_state = MockAiApiState::new(mockai.clone());
         app = app.nest("/__mockforge/api/mockai", mockai_api_router(api_state));
     }
+
+    // Time-travel runtime API. The admin server mounts these routes on
+    // its own port (9080), but hosted-mock Fly machines only expose
+    // port 3000 publicly — so until now operators couldn't set / advance
+    // virtual time on a deployed mock. The handlers consult a process-
+    // wide TimeTravelManager that serve.rs initialises alongside the
+    // existing admin-server registration; both paths see the same Arc.
+    app = app.nest("/__mockforge/time-travel", crate::time_travel_api::time_travel_router());
 
     // Runtime route-chaos rules API + middleware. This sits in front of
     // the static per-route handlers so operators can add/remove fault and
