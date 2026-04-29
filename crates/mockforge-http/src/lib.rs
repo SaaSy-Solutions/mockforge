@@ -663,10 +663,18 @@ pub async fn build_router_with_multi_tenant(
         }
     }
 
+    let rate_limit_disabled = middleware::is_rate_limit_disabled();
     let rate_limiter =
         std::sync::Arc::new(middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
-    let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
+    let mut state = HttpServerState::new();
+    if rate_limit_disabled {
+        info!(
+            "HTTP rate limiting disabled (MOCKFORGE_RATE_LIMIT_ENABLED=false or --no-rate-limit)"
+        );
+    } else {
+        state = state.with_rate_limiter(rate_limiter.clone());
+    }
 
     // Add production headers to state if configured
     if let Some(headers) = production_headers.clone() {
@@ -3049,17 +3057,25 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Initialize rate limiter and state
+    let rate_limit_disabled = middleware::is_rate_limit_disabled();
     let rate_limiter =
         std::sync::Arc::new(middleware::GlobalRateLimiter::new(rate_limit_config.clone()));
 
-    let mut state = HttpServerState::new().with_rate_limiter(rate_limiter.clone());
+    let mut state = HttpServerState::new();
+    if rate_limit_disabled {
+        info!(
+            "HTTP rate limiting disabled (MOCKFORGE_RATE_LIMIT_ENABLED=false or --no-rate-limit)"
+        );
+    } else {
+        state = state.with_rate_limiter(rate_limiter.clone());
+    }
 
     // Add production headers to state if configured
     if let Some(headers) = production_headers.clone() {
         state = state.with_production_headers(headers);
     }
 
-    // Add rate limiting middleware
+    // Add rate limiting middleware (no-op when state.rate_limiter is None)
     app = app.layer(from_fn_with_state(state.clone(), middleware::rate_limit_middleware));
 
     // Add production headers middleware if configured
