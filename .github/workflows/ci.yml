@@ -31,10 +31,13 @@ env:
   ENVIRONMENT: "development"
 
 jobs:
+  # Only stable runs per-PR. Beta/nightly produced constant noise (rustc churn,
+  # not real regressions) and each PR was spending ~3x the self-hosted queue time
+  # for a signal nobody acted on. If we ever want beta/nightly visibility again,
+  # add a scheduled workflow (e.g. weekly) rather than per-PR.
   test:
     name: Test
     runs-on: [self-hosted, linux, x64, rust]
-    continue-on-error: ${{ matrix.rust == 'nightly' }}
     env:
       CARGO_INCREMENTAL: "0"
       SCCACHE_CACHE_SIZE: "2G"
@@ -43,8 +46,6 @@ jobs:
       matrix:
         rust:
           - stable
-          - beta
-          - nightly
 
     steps:
     - name: Checkout repository
@@ -158,60 +159,12 @@ jobs:
           directory: crates/mockforge-ui/ui/coverage
           flags: ui-tests
 
-  cross-platform-test:
-    name: Cross-Platform Tests
-    runs-on: ${{ matrix.os }}
-    # Temporarily disabled — macos-latest and windows-latest have been
-    # failing on main and consume significant CI minutes. Re-enable once
-    # the cross-platform regressions are investigated and fixed.
-    # Was: if: github.event_name == 'pull_request'
-    if: false
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
-
-      - name: Install protoc (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install protobuf
-
-      - name: Install protoc (Windows)
-        if: matrix.os == 'windows-latest'
-        run: choco install protoc -y
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.os }}
-
-      # The mockforge binary must be built with all-protocols so the e2e
-      # tests in mockforge-integration-tests find a WebSocket and gRPC
-      # server to talk to when they spawn it as a subprocess. Without
-      # this step the binary ships with just its default features
-      # (no ws/grpc/mqtt), and every non-HTTP e2e probe gets
-      # Connection refused.
-      - name: Build mockforge binary with all protocols
-        run: cargo build --bin mockforge --features all-protocols
-        shell: bash
-
-      - name: Run tests
-        run: |
-          EXCLUDES="--exclude mockforge-desktop"
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            EXCLUDES="$EXCLUDES --exclude mockforge-kafka"
-          fi
-          cargo nextest run --workspace $EXCLUDES
-        shell: bash
+  # Cross-Platform Tests (macos-latest + windows-latest) removed: the job had
+  # been chronically red on main for weeks (see MEMORY.md:
+  # project_broken_ci_state.md). Each PR burned GHA-hosted macOS and Windows
+  # minutes — the most expensive tier — to produce a failure nobody acted on.
+  # When cross-platform coverage is wanted back, add a dedicated workflow
+  # with `on: schedule:` weekly + `workflow_dispatch:` rather than per-PR.
 
   warning-gate:
     name: Incremental Warning Gate
@@ -342,6 +295,11 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: [self-hosted, linux, x64, rust]
+    # Coverage only runs on main pushes — per-PR runs took a full workspace
+    # rebuild with llvm-cov instrumentation (~15 min on a warm runner) for a
+    # signal that was never acted on at PR-review time. Codecov tracks the
+    # trend on main; if a PR needs per-branch coverage, use workflow_dispatch.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
