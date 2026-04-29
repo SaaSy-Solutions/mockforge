@@ -540,6 +540,15 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Configuration")]
     pub no_config: bool,
 
+    /// Disable the built-in HTTP per-IP rate limiter (default: 1000 req/min, 2000 burst).
+    ///
+    /// Equivalent to setting `MOCKFORGE_RATE_LIMIT_ENABLED=false`. Useful when
+    /// load-testing against a spec — without this, sustained traffic from a
+    /// single client will start receiving `429 Too Many Requests` once the
+    /// per-minute budget is exhausted.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub no_rate_limit: bool,
+
     #[command(flatten)]
     pub ports: PortArgs,
 
@@ -2286,6 +2295,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 progress: args.progress,
                 verbose: args.verbose,
                 no_config: args.no_config,
+                no_rate_limit: args.no_rate_limit,
             })
             .await?;
         }

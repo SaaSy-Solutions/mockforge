@@ -92,6 +92,8 @@ pub(crate) struct ServeArgs {
     /// host project may happen to contain a `mockforge.yaml` that would
     /// otherwise be picked up and override explicit flags.
     pub(crate) no_config: bool,
+    /// Disable the built-in HTTP rate limiter (sets `MOCKFORGE_RATE_LIMIT_ENABLED=false`).
+    pub(crate) no_rate_limit: bool,
 }
 
 impl Default for ServeArgs {
@@ -161,6 +163,7 @@ impl Default for ServeArgs {
             progress: false,
             verbose: false,
             no_config: false,
+            no_rate_limit: false,
         }
     }
 }
@@ -626,6 +629,14 @@ pub(crate) fn initialize_opentelemetry_tracing(
 pub async fn handle_serve(
     serve_args: ServeArgs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // CLI flags that influence library behavior via env vars must be applied
+    // before the HTTP router is constructed. `--no-rate-limit` only adds to
+    // (never overrides) what the operator already set in the environment, so
+    // a user who already disabled the limiter via env var sees no surprise.
+    if serve_args.no_rate_limit && std::env::var_os("MOCKFORGE_RATE_LIMIT_ENABLED").is_none() {
+        std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", "false");
+    }
+
     // Opt-in federation scenario poller. If the four env vars
     // (MOCKFORGE_FEDERATION_POLL_URL / WORKSPACE_ID / POLL_TOKEN /
     // POLL_INTERVAL_SECS) aren't set this is a no-op; otherwise a tokio

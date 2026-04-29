@@ -21,6 +21,36 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
+/// Returns true when the operator has explicitly disabled HTTP rate limiting.
+///
+/// Honors `MOCKFORGE_RATE_LIMIT_ENABLED=false` (preferred, matches the
+/// `MOCKFORGE_LATENCY_ENABLED` / `MOCKFORGE_FAILURES_ENABLED` family) and the
+/// shorthand alias `MOCKFORGE_RATE_LIMIT_DISABLED=true`. The `--no-rate-limit`
+/// CLI flag funnels through these env vars as well.
+///
+/// When this returns true the router skips wiring a `GlobalRateLimiter` into
+/// state; the middleware then short-circuits and forwards every request.
+pub fn is_rate_limit_disabled() -> bool {
+    fn truthy(v: &str) -> bool {
+        matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+    }
+    fn falsy(v: &str) -> bool {
+        matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off")
+    }
+
+    if let Ok(v) = std::env::var("MOCKFORGE_RATE_LIMIT_ENABLED") {
+        if falsy(&v) {
+            return true;
+        }
+    }
+    if let Ok(v) = std::env::var("MOCKFORGE_RATE_LIMIT_DISABLED") {
+        if truthy(&v) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Rate limiting configuration
 #[derive(Debug, Clone)]
 pub struct RateLimitConfig {
@@ -223,6 +253,55 @@ pub async fn rate_limit_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ==================== is_rate_limit_disabled Tests ====================
+
+    /// Snapshot + restore both env vars around the assertions so this test is
+    /// robust to other tests in the binary touching them in parallel.
+    #[test]
+    fn test_is_rate_limit_disabled_env_vars() {
+        let saved_enabled = std::env::var("MOCKFORGE_RATE_LIMIT_ENABLED").ok();
+        let saved_disabled = std::env::var("MOCKFORGE_RATE_LIMIT_DISABLED").ok();
+
+        // Default (unset): limiter is on
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_ENABLED");
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_DISABLED");
+        assert!(!is_rate_limit_disabled());
+
+        // ENABLED=false → disabled
+        for v in ["false", "0", "no", "off", "FALSE", "  False  "] {
+            std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", v);
+            assert!(is_rate_limit_disabled(), "ENABLED={v:?} should disable");
+        }
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_ENABLED");
+
+        // ENABLED=true → not disabled
+        std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", "true");
+        assert!(!is_rate_limit_disabled());
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_ENABLED");
+
+        // DISABLED=true → disabled (alias)
+        for v in ["true", "1", "yes", "on", "TRUE"] {
+            std::env::set_var("MOCKFORGE_RATE_LIMIT_DISABLED", v);
+            assert!(is_rate_limit_disabled(), "DISABLED={v:?} should disable");
+        }
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_DISABLED");
+
+        // DISABLED=false → not disabled
+        std::env::set_var("MOCKFORGE_RATE_LIMIT_DISABLED", "false");
+        assert!(!is_rate_limit_disabled());
+        std::env::remove_var("MOCKFORGE_RATE_LIMIT_DISABLED");
+
+        // Restore
+        match saved_enabled {
+            Some(v) => std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", v),
+            None => std::env::remove_var("MOCKFORGE_RATE_LIMIT_ENABLED"),
+        }
+        match saved_disabled {
+            Some(v) => std::env::set_var("MOCKFORGE_RATE_LIMIT_DISABLED", v),
+            None => std::env::remove_var("MOCKFORGE_RATE_LIMIT_DISABLED"),
+        }
+    }
 
     // ==================== RateLimitConfig Tests ====================
 
