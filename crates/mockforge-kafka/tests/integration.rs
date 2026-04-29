@@ -257,17 +257,30 @@ async fn test_offset_management() {
 
 #[tokio::test]
 async fn test_broker_startup_timeout() {
+    // Port 0 asks the OS for an ephemeral free port. The prior hardcoded 9093 was
+    // flaky under parallel multi-binary test execution: if any sibling test (or a
+    // leftover socket in TIME_WAIT) held 9093, `broker.start()` returned a bind
+    // error within milliseconds and this test's `assert!(start_result.is_err())`
+    // silently passed for the wrong reason — or, after compression landed, fired
+    // on a non-timeout error path and made the test unstable. With port 0, bind
+    // always succeeds and `start()` parks in its accept loop, so the 1s timeout
+    // reliably fires.
     let config = KafkaConfig {
-        port: 9093, // Use a different port for testing
+        port: 0,
         ..Default::default()
     };
     let broker = KafkaMockBroker::new(config).await.unwrap();
 
-    // Test that broker can start (with timeout to avoid hanging)
     let start_result = timeout(Duration::from_secs(1), broker.start()).await;
 
-    // Should timeout since we're not actually connecting
-    assert!(start_result.is_err());
+    // The outer Result is Err(Elapsed) because start()'s accept loop blocked
+    // through the whole 1s timeout.
+    assert!(
+        start_result.is_err(),
+        "broker.start() should have been blocked by its accept loop until the timeout fired, \
+         but returned early with {:?}",
+        start_result
+    );
 }
 
 #[tokio::test]
