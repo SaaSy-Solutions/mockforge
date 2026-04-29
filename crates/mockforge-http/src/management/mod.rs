@@ -1068,7 +1068,31 @@ pub async fn serve_dynamic_mock(state: &ManagementState, req: Request<Body>) -> 
         .and_then(|c| StatusCode::from_u16(c).ok())
         .unwrap_or(StatusCode::OK);
 
-    let body_bytes_out = serde_json::to_vec(&mock.response.body).unwrap_or_default();
+    // Honor MOCKFORGE_RESPONSE_TEMPLATE_EXPAND for mocks created via the
+    // management API. The full templater in mockforge-core handles
+    // `{{faker.email}}`, `{{uuid}}`, `{{randInt …}}`, etc. — it's gated
+    // on the env var because it's the same opt-in as everywhere else
+    // (config-loaded routes, OpenAPI overrides). Run inside spawn_blocking
+    // because the templater's rng() and faker providers are not Send-safe
+    // across `.await` points.
+    let template_expand = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let body_value = if template_expand {
+        let body_clone = mock.response.body.clone();
+        match tokio::task::spawn_blocking(move || {
+            mockforge_core::templating::expand_tokens(&body_clone)
+        })
+        .await
+        {
+            Ok(expanded) => expanded,
+            Err(_) => mock.response.body.clone(),
+        }
+    } else {
+        mock.response.body.clone()
+    };
+
+    let body_bytes_out = serde_json::to_vec(&body_value).unwrap_or_default();
     let mut response = Response::builder().status(status);
 
     let mut has_content_type = false;

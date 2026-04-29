@@ -144,11 +144,21 @@ async fn test_data_protocol_generation() {
     if response.status().is_success() {
         let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
 
-        // Verify data generation worked
+        // Verify data generation worked. The mock body is JSON with template
+        // tokens inside string values, so all expanded fields come back as
+        // strings even when the underlying generator (e.g. randInt) yields
+        // a number — that's the documented behavior of in-string {{…}}
+        // expansion. The original test asserted `random.is_number()`, which
+        // never matched reality and produced the chronic CI red on every
+        // release until v0.3.119.
         assert!(body["id"].is_string(), "ID should be generated");
         assert!(body["email"].as_str().unwrap().contains("@"), "Email should be generated");
         assert!(body["name"].is_string(), "Name should be generated");
-        assert!(body["random"].is_number(), "Random number should be generated");
+        let random_str = body["random"].as_str().expect("random field should be a string");
+        assert!(
+            random_str.parse::<i64>().is_ok(),
+            "Random number should be generated (got {random_str:?})"
+        );
     }
 
     server.stop().expect("Failed to stop server");

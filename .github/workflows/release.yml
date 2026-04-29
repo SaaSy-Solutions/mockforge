@@ -62,6 +62,20 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
+    # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` (see
+    # crates/mockforge-cli/Cargo.toml). The mockforge-integration-tests crate
+    # spawns this binary as a subprocess for e2e tests and tries to connect
+    # to the WS / gRPC ports — without the protocol features compiled in,
+    # nothing is listening and the tests fail with `Connection refused`.
+    # The cross-platform-test job in ci.yml had this same step (added in
+    # PR #208) but it was never replicated here, so every release tag has
+    # been red on the `Run tests` step. The pre-built debug binary takes
+    # precedence in mockforge-test's binary-resolution order, which is why
+    # building it here (as `dev` profile) before `cargo test --release`
+    # is the right shape.
+    - name: Build mockforge binary with all protocols
+      run: cargo build --bin mockforge --features all-protocols
+
     - name: Run tests
       run: cargo test --workspace --release
     - name: Build release binaries
