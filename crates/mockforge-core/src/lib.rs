@@ -22,7 +22,16 @@
 //!
 //! ### Creating a Simple HTTP Mock Server
 //!
-//! ```rust,no_run
+//! NOTE: marked `ignore` (not `no_run`) — the example references types
+//! that moved out of `mockforge-core` during the workspace splits in
+//! commits 2ec7625a (openapi) and b75e243c (foundation):
+//! `OpenApiSpec`, `OpenApiRouteRegistry`, and `ValidationOptions` now
+//! live in `mockforge_openapi`; `LatencyProfile` is in
+//! `mockforge_foundation`. Until the example is rewritten using only
+//! symbols still re-exported from `mockforge_core`, marking it `ignore`
+//! keeps it visible as docs without breaking `cargo test --doc`.
+//!
+//! ```rust,ignore
 //! use mockforge_core::{
 //!     Config, LatencyProfile, OpenApiRouteRegistry, OpenApiSpec, Result, ValidationOptions,
 //! };
@@ -119,7 +128,13 @@
 //!
 //! Simulate realistic network conditions and errors:
 //!
-//! ```rust,no_run
+//! NOTE: also marked `ignore` for the same reason as the Quick Start
+//! example above — `LatencyProfile`, `FailureConfig`, and
+//! `create_failure_injector` no longer live in `mockforge_core` after
+//! the foundation/openapi extraction. Rewrite to use the actual hosting
+//! crates when this section is updated.
+//!
+//! ```rust,ignore
 //! use mockforge_core::{LatencyProfile, FailureConfig, create_failure_injector};
 //!
 //! // Configure latency simulation
