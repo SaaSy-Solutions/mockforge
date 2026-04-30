@@ -7,7 +7,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PluginList } from '../../plugins/PluginList';
 
-// Mock fetch
+// PluginList calls `authenticatedFetch` from `@/utils/apiClient`, which
+// captures `globalThis.fetch` at module load — patching `global.fetch` from
+// the test never reaches the component. Mock the wrapper directly so we can
+// drive responses per-test.
+const authenticatedFetchMock = vi.fn();
+vi.mock('@/utils/apiClient', () => ({
+  authenticatedFetch: (...args: unknown[]) => authenticatedFetchMock(...args),
+}));
+
+// PluginList still uses raw `fetch` for enable/disable/reload calls.
 global.fetch = vi.fn();
 
 describe('PluginList', () => {
@@ -15,10 +24,11 @@ describe('PluginList', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authenticatedFetchMock.mockReset();
   });
 
   it('renders loading state', () => {
-    (global.fetch as any).mockImplementationOnce(() =>
+    authenticatedFetchMock.mockImplementationOnce(() =>
       new Promise(() => {}) // Never resolves
     );
 
@@ -53,7 +63,7 @@ describe('PluginList', () => {
       },
     };
 
-    (global.fetch as any).mockResolvedValueOnce({
+    authenticatedFetchMock.mockResolvedValueOnce({
       json: async () => mockPlugins,
     });
 
@@ -71,7 +81,7 @@ describe('PluginList', () => {
   });
 
   it('handles errors', async () => {
-    (global.fetch as any).mockRejectedValueOnce(new Error('Failed to fetch'));
+    authenticatedFetchMock.mockRejectedValueOnce(new Error('Failed to fetch'));
 
     render(
       <PluginList
@@ -92,7 +102,7 @@ describe('PluginList', () => {
       data: { plugins: [] },
     };
 
-    (global.fetch as any).mockResolvedValueOnce({
+    authenticatedFetchMock.mockResolvedValueOnce({
       json: async () => mockPlugins,
     });
 
@@ -105,10 +115,10 @@ describe('PluginList', () => {
     );
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(authenticatedFetchMock).toHaveBeenCalledWith(
         expect.stringContaining('type=response')
       );
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(authenticatedFetchMock).toHaveBeenCalledWith(
         expect.stringContaining('status=enabled')
       );
     });

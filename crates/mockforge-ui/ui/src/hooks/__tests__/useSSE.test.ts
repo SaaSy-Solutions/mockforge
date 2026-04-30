@@ -7,9 +7,16 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useSSE, useLogsSSE } from '../useSSE';
 
 // Mock EventSource
+//
+// Real `EventSource` opens asynchronously, but reproducing that with
+// `setTimeout` makes these tests flaky under React 19 — the effect cleanup
+// can race the open handler. Instead, fire `onopen` synchronously when the
+// consumer assigns the handler, so the hook's state setter lands inside
+// `renderHook`'s render window. The test contract is "handler runs, hook
+// reflects OPEN", which this still verifies.
 class MockEventSource {
   url: string;
-  onopen: ((event: Event) => void) | null = null;
+  private _onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   readyState: number = 0;
@@ -22,14 +29,17 @@ class MockEventSource {
 
   constructor(url: string) {
     this.url = url;
-    this.readyState = MockEventSource.CONNECTING;
-    // Simulate connection opening
-    setTimeout(() => {
-      this.readyState = MockEventSource.OPEN;
-      if (this.onopen) {
-        this.onopen(new Event('open'));
-      }
-    }, 0);
+    this.readyState = MockEventSource.OPEN;
+  }
+
+  set onopen(handler: ((event: Event) => void) | null) {
+    this._onopen = handler;
+    if (handler && this.readyState === MockEventSource.OPEN) {
+      handler(new Event('open'));
+    }
+  }
+  get onopen(): ((event: Event) => void) | null {
+    return this._onopen;
   }
 
   addEventListener(event: string, handler: (event: MessageEvent) => void) {
@@ -67,9 +77,19 @@ class MockEventSource {
 describe('useSSE', () => {
   beforeEach(() => {
     (global as any).EventSource = MockEventSource;
+    (globalThis as any).EventSource = MockEventSource;
+    if (typeof window !== 'undefined') {
+      (window as any).EventSource = MockEventSource;
+    }
+    // The shared test setup (src/test/setup.ts) configures cloud mode, but
+    // useSSE intentionally refuses relative URLs in cloud mode. These tests
+    // exercise the local-mode connection path, so drop cloud mode here.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllTimers();
   });
 
@@ -162,6 +182,16 @@ describe('useSSE', () => {
 describe('useLogsSSE', () => {
   beforeEach(() => {
     (global as any).EventSource = MockEventSource;
+    (globalThis as any).EventSource = MockEventSource;
+    if (typeof window !== 'undefined') {
+      (window as any).EventSource = MockEventSource;
+    }
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('connects to logs SSE endpoint', async () => {

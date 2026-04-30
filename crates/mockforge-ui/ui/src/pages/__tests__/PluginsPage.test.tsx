@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { PluginsPage } from '../PluginsPage';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { pluginsApi } from '../../services/api';
@@ -54,9 +55,11 @@ vi.mock('sonner', () => ({
 describe('PluginsPage', () => {
   const renderWithProviders = () =>
     render(
-      <I18nProvider>
-        <PluginsPage />
-      </I18nProvider>
+      <MemoryRouter>
+        <I18nProvider>
+          <PluginsPage />
+        </I18nProvider>
+      </MemoryRouter>
     );
 
   beforeEach(() => {

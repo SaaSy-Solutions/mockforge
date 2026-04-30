@@ -51,6 +51,25 @@ vi.mock('../../hooks/useApi', () => ({
   })),
 }));
 
+// LogsPage filters by `logPrefs.defaultTimeRange` (default 24h). The fixture
+// timestamps above sit in 2024, so the real store would silently drop every
+// log — pin the time-range filter off for tests so fixtures render.
+vi.mock('../../stores/usePreferencesStore', () => ({
+  usePreferencesStore: (selector: any) =>
+    selector({
+      preferences: {
+        logs: {
+          autoScroll: true,
+          pauseOnError: false,
+          defaultTimeRange: 0,
+          itemsPerPage: 100,
+          showTimestamps: true,
+          compactView: false,
+        },
+      },
+    }),
+}));
+
 describe('LogsPage', () => {
   const createWrapper = () => {
     const queryClient = new QueryClient({
@@ -234,8 +253,9 @@ describe('LogsPage', () => {
   });
 
   it('shows load more button when there are more logs', () => {
-    // Mock more logs than display limit
-    const manyLogs = Array.from({ length: 100 }, (_, i) => ({
+    // The default itemsPerPage is 100 — generate more so progressive
+    // loading kicks in.
+    const manyLogs = Array.from({ length: 150 }, (_, i) => ({
       id: `${i}`,
       timestamp: '2024-01-01T10:00:00Z',
       method: 'GET',
@@ -254,7 +274,7 @@ describe('LogsPage', () => {
   });
 
   it('loads more logs when button is clicked', () => {
-    const manyLogs = Array.from({ length: 100 }, (_, i) => ({
+    const manyLogs = Array.from({ length: 150 }, (_, i) => ({
       id: `${i}`,
       timestamp: '2024-01-01T10:00:00Z',
       method: 'GET',

@@ -9,11 +9,12 @@ import { logger } from '@/utils/logger';
 // Detect cloud mode — relative WebSocket paths don't work when the UI
 // is served by a static host (Cloudflare Pages) because /__mockforge/ws
 // doesn't exist on the registry server. Absolute URLs to hosted mock
-// deployments ARE allowed.
-const isCloud = (() => {
+// deployments ARE allowed. Read at call time so tests can drop cloud mode
+// via vi.stubEnv.
+function isCloudMode(): boolean {
   const apiBase = import.meta.env.VITE_API_BASE_URL;
   return !!apiBase && apiBase !== '';
-})();
+}
 
 /** Returns true if the URL is an absolute ws:// or wss:// URL (not a relative path). */
 function isAbsoluteWsUrl(url: string): boolean {
@@ -61,7 +62,7 @@ export function useWebSocket(
   const connect = useCallback(() => {
     // In cloud mode, skip relative WS paths (they don't exist on the registry
     // server). Absolute URLs targeting hosted mock deployments are still allowed.
-    if (isCloud && !isAbsoluteWsUrl(url)) return;
+    if (isCloudMode() && !isAbsoluteWsUrl(url)) return;
 
     shouldReconnectRef.current = true;
 

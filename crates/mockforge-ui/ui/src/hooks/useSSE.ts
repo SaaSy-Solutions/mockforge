@@ -5,10 +5,12 @@ import { logger } from '@/utils/logger';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-const isCloud = (() => {
+// Read at call time (not module load) so tests can drop cloud mode via
+// vi.stubEnv without stripping the value from every other consumer.
+function isCloudMode(): boolean {
   const apiBase = import.meta.env.VITE_API_BASE_URL;
   return !!apiBase && apiBase !== '';
-})();
+}
 
 /** Returns true if the URL is absolute (starts with http:// or https://). */
 function isAbsoluteUrl(url: string): boolean {
@@ -101,7 +103,7 @@ export function useSSE<T = unknown>(
   const connect = useCallback(() => {
     // Skip relative SSE paths in cloud mode — they don't exist on the registry
     // server. Absolute URLs targeting hosted mock deployments are still allowed.
-    if (isCloud && !isAbsoluteUrl(url)) return;
+    if (isCloudMode() && !isAbsoluteUrl(url)) return;
 
     // Prevent multiple connections
     if (eventSourceRef.current && eventSourceRef.current.readyState !== EventSource.CLOSED) {
