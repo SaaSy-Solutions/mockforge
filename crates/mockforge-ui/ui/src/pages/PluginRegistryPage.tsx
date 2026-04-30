@@ -56,6 +56,7 @@ import {
   ThumbUp as ThumbUpIcon,
   ThumbDown as ThumbDownIcon,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { authenticatedFetch } from '../utils/apiClient';
 import { useAuthStore } from '../stores/useAuthStore';
 import { PublishPluginModal } from '../components/marketplace/PublishPluginModal';
@@ -143,6 +144,7 @@ interface SecurityFinding {
 }
 
 export const PluginRegistryPage: React.FC = () => {
+  const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = currentUser?.role === 'admin';
 
@@ -645,11 +647,22 @@ export const PluginRegistryPage: React.FC = () => {
             Discover and install plugins from the MockForge ecosystem
           </Typography>
         </Box>
-        {currentUser && (
-          <Button variant="contained" onClick={() => setPublishOpen(true)}>
-            Publish Plugin
-          </Button>
-        )}
+        <Stack direction="row" spacing={1} alignItems="center">
+          {isAdmin && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate('/plugin-registry/moderation')}
+            >
+              Moderation
+            </Button>
+          )}
+          {currentUser && (
+            <Button variant="contained" onClick={() => setPublishOpen(true)}>
+              Publish Plugin
+            </Button>
+          )}
+        </Stack>
       </Box>
 
       {/* Filters */}

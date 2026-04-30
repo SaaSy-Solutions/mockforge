@@ -235,6 +235,88 @@ pub async fn restore_plugin(
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakenDownPluginEntry {
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub current_version: String,
+    pub author: TakenDownAuthorInfo,
+    pub taken_down_at: String,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakenDownAuthorInfo {
+    pub id: String,
+    pub username: String,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListTakenDownResponse {
+    pub plugins: Vec<TakenDownPluginEntry>,
+    pub total: usize,
+}
+
+/// Admin moderation: list every plugin that's currently taken-down.
+/// `Plugin::search` filters these out, so this is the only programmatic
+/// path for the moderation UI to find them after the post-takedown
+/// snackbar window closes.
+pub async fn list_taken_down_plugins(
+    State(state): State<AppState>,
+    Extension(user_id): Extension<String>,
+) -> ApiResult<Json<ListTakenDownResponse>> {
+    let pool = state.db.pool();
+
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+
+    let user = sqlx::query_as::<_, (bool,)>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::Database)?;
+    if !user.0 {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let plugins = state.store.list_taken_down_plugins().await?;
+    let mut entries = Vec::with_capacity(plugins.len());
+    for plugin in plugins {
+        let author = state
+            .store
+            .find_user_by_id(plugin.author_id)
+            .await?
+            .unwrap_or_else(|| crate::models::User::placeholder(plugin.author_id));
+        entries.push(TakenDownPluginEntry {
+            name: plugin.name,
+            description: plugin.description,
+            category: plugin.category,
+            current_version: plugin.current_version,
+            author: TakenDownAuthorInfo {
+                id: author.id.to_string(),
+                username: author.username,
+                email: Some(author.email),
+            },
+            // taken_down_at is guaranteed Some by the SQL filter, but
+            // keep a defensive fallback so a clock-skew or column
+            // regression can't crash the page.
+            taken_down_at: plugin.taken_down_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+            reason: plugin.taken_down_reason,
+        });
+    }
+
+    let total = entries.len();
+    Ok(Json(ListTakenDownResponse {
+        plugins: entries,
+        total,
+    }))
+}
+
+#[derive(Debug, Serialize)]
 pub struct PluginWithBadges {
     pub name: String,
     pub version: String,

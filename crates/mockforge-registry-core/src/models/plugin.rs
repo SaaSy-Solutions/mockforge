@@ -360,6 +360,18 @@ impl Plugin {
         .await?;
         Ok(())
     }
+
+    /// Returns every plugin currently flagged as taken-down, newest first.
+    /// Powers the admin moderation page; the public search filters these
+    /// out, so this is the only path to find them once a takedown has
+    /// happened (apart from the per-action audit row).
+    pub async fn list_taken_down(pool: &sqlx::PgPool) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM plugins WHERE taken_down_at IS NOT NULL ORDER BY taken_down_at DESC",
+        )
+        .fetch_all(pool)
+        .await
+    }
 }
 
 #[cfg(feature = "postgres")]

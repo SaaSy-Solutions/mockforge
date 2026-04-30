@@ -64,6 +64,7 @@ const OrchestrationExecutionView = lazy(() => import('../pages/OrchestrationExec
 
 // Plugins & Templates
 const PluginRegistryPage = lazy(() => import('../pages/PluginRegistryPage'));
+const PluginModerationPage = lazy(() => import('../pages/PluginModerationPage'));
 const TemplateMarketplacePage = lazy(() => import('../pages/TemplateMarketplacePage'));
 const ScenarioMarketplacePage = lazy(() => import('../pages/ScenarioMarketplacePage'));
 
@@ -194,6 +195,7 @@ export const routes: RouteConfig[] = [
   // Plugins
   { path: '/plugins', element: <PluginsPage /> },
   { path: '/plugin-registry', element: <PluginRegistryPage /> },
+  { path: '/plugin-registry/moderation', element: <PluginModerationPage /> },
 
   // User Management
   { path: '/user-management', element: <UserManagementPage /> },

@@ -393,6 +393,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/admin/plugins/{name}/verify", post(handlers::admin::verify_plugin))
         .route("/api/v1/admin/plugins/{name}/takedown", post(handlers::admin::takedown_plugin))
         .route("/api/v1/admin/plugins/{name}/restore", post(handlers::admin::restore_plugin))
+        .route(
+            "/api/v1/admin/plugins/taken-down",
+            get(handlers::admin::list_taken_down_plugins),
+        )
         .route("/api/v1/admin/stats", get(handlers::admin::get_admin_stats))
         .route("/api/v1/admin/analytics", get(handlers::analytics::get_analytics))
         .route(
@@ -487,6 +491,7 @@ mod tests {
             "/api/v1/admin/plugins/{name}/verify",
             "/api/v1/admin/plugins/{name}/takedown",
             "/api/v1/admin/plugins/{name}/restore",
+            "/api/v1/admin/plugins/taken-down",
             "/api/v1/admin/stats",
             "/api/v1/admin/analytics",
             "/api/v1/admin/analytics/funnel",
