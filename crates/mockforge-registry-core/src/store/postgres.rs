@@ -15,6 +15,7 @@ use super::{
     AdminAnalyticsSnapshot, ConversionFunnelSnapshot, OrgSettingRow, ProjectRow, RegistryStore,
     StoreResult, SubscriptionRow, UserSettingRow,
 };
+use crate::error::StoreError;
 use crate::models::api_token::{ApiToken, TokenScope};
 use crate::models::attestation::{UserPublicKey, UserPublicKeyWithUsage};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
@@ -791,12 +792,17 @@ impl RegistryStore for PgRegistryStore {
 
     async fn resolve_suspicious_activity(
         &self,
+        org_id: Uuid,
         activity_id: Uuid,
         resolved_by: Uuid,
     ) -> StoreResult<()> {
-        SuspiciousActivity::resolve(&self.pool, activity_id, resolved_by)
+        let affected = SuspiciousActivity::resolve(&self.pool, org_id, activity_id, resolved_by)
             .await
-            .map_err(Into::into)
+            .map_err(StoreError::from)?;
+        if affected == 0 {
+            return Err(StoreError::NotFound);
+        }
+        Ok(())
     }
 
     async fn create_cloud_workspace(

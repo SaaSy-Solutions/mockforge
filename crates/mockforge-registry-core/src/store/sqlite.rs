@@ -1629,6 +1629,7 @@ impl RegistryStore for SqliteRegistryStore {
     #[allow(unused_variables)]
     async fn resolve_suspicious_activity(
         &self,
+        org_id: Uuid,
         activity_id: Uuid,
         resolved_by: Uuid,
     ) -> StoreResult<()> {

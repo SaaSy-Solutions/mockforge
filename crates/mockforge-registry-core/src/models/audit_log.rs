@@ -68,6 +68,10 @@ pub enum AuditEventType {
     FixtureCreated,
     FixtureUpdated,
     FixtureDeleted,
+    // Invitations
+    InvitationCreated,
+    InvitationRevoked,
+    InvitationAccepted,
     // Admin actions
     AdminImpersonation,
 }
@@ -124,6 +128,9 @@ impl AuditEventType {
             "fixture_created" => Some(Self::FixtureCreated),
             "fixture_updated" => Some(Self::FixtureUpdated),
             "fixture_deleted" => Some(Self::FixtureDeleted),
+            "invitation_created" => Some(Self::InvitationCreated),
+            "invitation_revoked" => Some(Self::InvitationRevoked),
+            "invitation_accepted" => Some(Self::InvitationAccepted),
             "admin_impersonation" => Some(Self::AdminImpersonation),
             _ => None,
         }
@@ -180,6 +187,9 @@ impl AuditEventType {
             Self::FixtureCreated => "fixture_created",
             Self::FixtureUpdated => "fixture_updated",
             Self::FixtureDeleted => "fixture_deleted",
+            Self::InvitationCreated => "invitation_created",
+            Self::InvitationRevoked => "invitation_revoked",
+            Self::InvitationAccepted => "invitation_accepted",
             Self::AdminImpersonation => "admin_impersonation",
         }
     }
@@ -381,6 +391,9 @@ mod tests {
             AuditEventType::FixtureCreated,
             AuditEventType::FixtureUpdated,
             AuditEventType::FixtureDeleted,
+            AuditEventType::InvitationCreated,
+            AuditEventType::InvitationRevoked,
+            AuditEventType::InvitationAccepted,
             AuditEventType::AdminImpersonation,
         ];
         for variant in variants {

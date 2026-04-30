@@ -791,8 +791,9 @@ pub struct CreateInvitationRequest {
 /// POST /api/v1/organizations/:org_id/invitations
 pub async fn create_invitation(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
+    headers: HeaderMap,
     Json(req): Json<CreateInvitationRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     if !req.email.contains('@') {
@@ -810,11 +811,13 @@ pub async fn create_invitation(
         }
     }
 
-    state
+    let org = state
         .store
         .find_organization_by_id(org_id)
         .await?
         .ok_or(ApiError::OrganizationNotFound)?;
+
+    require_org_admin(&state, &org, user_id).await?;
 
     use base64::Engine;
     use rand::RngCore;
@@ -837,12 +840,145 @@ pub async fn create_invitation(
         .set_org_setting(org_id, &setting_key, serde_json::to_value(&payload).unwrap())
         .await?;
 
+    let (ip_address, user_agent) = audit_context(&headers);
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::InvitationCreated,
+            format!("Created invitation for {} ({})", req.email, role),
+            Some(serde_json::json!({ "nonce": nonce, "email": req.email, "role": role })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
+
     Ok(Json(serde_json::json!({
         "token": payload_str,
+        "nonce": nonce,
         "org_id": org_id,
         "email": req.email,
         "role": role,
     })))
+}
+
+/// GET /api/v1/organizations/:org_id/invitations
+///
+/// Lists pending (un-accepted) invitations for the organization. Restricted
+/// to owner/admin members. Pending invitations are stored as
+/// `org_settings` rows keyed `invite:{nonce}`; this endpoint scans those
+/// keys, decodes the payload, and returns a typed listing.
+pub async fn list_invitations(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    require_org_admin(&state, &org, user_id).await?;
+
+    let rows = state.store.list_org_settings_raw(org_id).await?;
+    let mut invitations = Vec::new();
+    for row in rows {
+        let Some(nonce) = row.key.strip_prefix("invite:") else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_value::<InvitePayload>(row.value.clone()) else {
+            continue;
+        };
+        invitations.push(serde_json::json!({
+            "nonce": nonce,
+            "email": payload.email,
+            "role": payload.role,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }));
+    }
+
+    Ok(Json(serde_json::json!({ "invitations": invitations })))
+}
+
+/// DELETE /api/v1/organizations/:org_id/invitations/:nonce
+///
+/// Revokes a pending invitation by nonce. Restricted to owner/admin.
+pub async fn revoke_invitation(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((org_id, nonce)): Path<(Uuid, String)>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    let org = state
+        .store
+        .find_organization_by_id(org_id)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    require_org_admin(&state, &org, user_id).await?;
+
+    let setting_key = format!("invite:{}", nonce);
+    let setting = state
+        .store
+        .get_org_setting(org_id, &setting_key)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("invitation not found".to_string()))?;
+    let stored: InvitePayload = serde_json::from_value(setting.setting_value)
+        .map_err(|e| ApiError::InvalidRequest(format!("decode: {}", e)))?;
+
+    state.store.delete_org_setting(org_id, &setting_key).await?;
+
+    let (ip_address, user_agent) = audit_context(&headers);
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user_id),
+            AuditEventType::InvitationRevoked,
+            format!("Revoked invitation for {} ({})", stored.email, stored.role),
+            Some(serde_json::json!({ "nonce": nonce, "email": stored.email, "role": stored.role })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "nonce": nonce,
+        "email": stored.email,
+    })))
+}
+
+/// Helper — verify caller is an owner or admin of the org.
+async fn require_org_admin(
+    state: &AppState,
+    org: &crate::models::Organization,
+    user_id: Uuid,
+) -> ApiResult<()> {
+    if org.owner_id == user_id {
+        return Ok(());
+    }
+    let Some(member) = state.store.find_org_member(org.id, user_id).await? else {
+        return Err(ApiError::PermissionDenied);
+    };
+    match member.role() {
+        OrgRole::Owner | OrgRole::Admin => Ok(()),
+        OrgRole::Member => Err(ApiError::PermissionDenied),
+    }
+}
+
+/// Helper — extract IP + UA for audit logging.
+fn audit_context(headers: &HeaderMap) -> (Option<String>, Option<String>) {
+    let ip = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+    let ua = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+    (ip, ua)
 }
 
 /// GET /api/v1/invitations/:token
@@ -944,6 +1080,23 @@ pub async fn accept_invitation(
     state.store.create_org_member(stored.org_id, user.id, role).await?;
 
     state.store.delete_org_setting(payload.org_id, &setting_key).await?;
+
+    state
+        .store
+        .record_audit_event(
+            stored.org_id,
+            Some(user.id),
+            AuditEventType::InvitationAccepted,
+            format!("Invitation accepted by {} ({})", user.username, user.email),
+            Some(serde_json::json!({
+                "nonce": payload.nonce,
+                "email": stored.email,
+                "role": stored.role,
+            })),
+            None,
+            None,
+        )
+        .await;
 
     let jwt = crate::auth::create_access_token(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(ApiError::Internal)?;

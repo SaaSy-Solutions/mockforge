@@ -94,14 +94,25 @@ pub async fn get_suspicious_activities(
     }))
 }
 
-/// Mark suspicious activity as resolved
+/// Mark suspicious activity as resolved.
+///
+/// Scoped to the caller's organization so a user from org A cannot resolve
+/// an activity belonging to org B by guessing or leaking its UUID. The
+/// store enforces this constraint inside the UPDATE statement.
 pub async fn resolve_suspicious_activity(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
     Path(activity_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Mark as resolved
-    state.store.resolve_suspicious_activity(activity_id, user_id).await?;
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    state
+        .store
+        .resolve_suspicious_activity(org_ctx.org_id, activity_id, user_id)
+        .await?;
 
     Ok(Json(serde_json::json!({
         "success": true,
