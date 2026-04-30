@@ -121,6 +121,58 @@ impl AuditEventType {
             _ => None,
         }
     }
+
+    /// Canonical snake_case wire form. Round-trips with [`Self::from_str`].
+    ///
+    /// Use this when serializing for HTTP responses; the `Debug` form
+    /// produces PascalCase like `OrgUpdated` which doesn't match the input
+    /// the filter accepts.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MemberAdded => "member_added",
+            Self::MemberRemoved => "member_removed",
+            Self::MemberRoleChanged => "member_role_changed",
+            Self::OrgCreated => "org_created",
+            Self::OrgUpdated => "org_updated",
+            Self::OrgDeleted => "org_deleted",
+            Self::OrgPlanChanged => "org_plan_changed",
+            Self::BillingCheckout => "billing_checkout",
+            Self::BillingUpgrade => "billing_upgrade",
+            Self::BillingDowngrade => "billing_downgrade",
+            Self::BillingCanceled => "billing_canceled",
+            Self::ApiTokenCreated => "api_token_created",
+            Self::ApiTokenDeleted => "api_token_deleted",
+            Self::ApiTokenRotated => "api_token_rotated",
+            Self::SettingsUpdated => "settings_updated",
+            Self::ByokConfigUpdated => "byok_config_updated",
+            Self::ByokConfigDeleted => "byok_config_deleted",
+            Self::DeploymentCreated => "deployment_created",
+            Self::DeploymentDeleted => "deployment_deleted",
+            Self::DeploymentUpdated => "deployment_updated",
+            Self::PluginPublished => "plugin_published",
+            Self::TemplatePublished => "template_published",
+            Self::ScenarioPublished => "scenario_published",
+            Self::PasswordChanged => "password_changed",
+            Self::EmailChanged => "email_changed",
+            Self::TwoFactorEnabled => "two_factor_enabled",
+            Self::TwoFactorDisabled => "two_factor_disabled",
+            Self::FederationCreated => "federation_created",
+            Self::FederationUpdated => "federation_updated",
+            Self::FederationDeleted => "federation_deleted",
+            Self::FederationScenarioActivated => "federation_scenario_activated",
+            Self::FederationScenarioDeactivated => "federation_scenario_deactivated",
+            Self::WorkspaceCreated => "workspace_created",
+            Self::WorkspaceUpdated => "workspace_updated",
+            Self::WorkspaceDeleted => "workspace_deleted",
+            Self::ServiceCreated => "service_created",
+            Self::ServiceUpdated => "service_updated",
+            Self::ServiceDeleted => "service_deleted",
+            Self::FixtureCreated => "fixture_created",
+            Self::FixtureUpdated => "fixture_updated",
+            Self::FixtureDeleted => "fixture_deleted",
+            Self::AdminImpersonation => "admin_impersonation",
+        }
+    }
 }
 
 /// Audit log entry
@@ -263,5 +315,75 @@ pub async fn record_audit_event(
     .await
     {
         tracing::warn!("Failed to record audit event: {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every variant must round-trip through as_str → from_str. A new variant
+    /// added without updating either method will fail this test.
+    #[test]
+    fn audit_event_type_round_trips_via_as_str() {
+        let variants = [
+            AuditEventType::MemberAdded,
+            AuditEventType::MemberRemoved,
+            AuditEventType::MemberRoleChanged,
+            AuditEventType::OrgCreated,
+            AuditEventType::OrgUpdated,
+            AuditEventType::OrgDeleted,
+            AuditEventType::OrgPlanChanged,
+            AuditEventType::BillingCheckout,
+            AuditEventType::BillingUpgrade,
+            AuditEventType::BillingDowngrade,
+            AuditEventType::BillingCanceled,
+            AuditEventType::ApiTokenCreated,
+            AuditEventType::ApiTokenDeleted,
+            AuditEventType::ApiTokenRotated,
+            AuditEventType::SettingsUpdated,
+            AuditEventType::ByokConfigUpdated,
+            AuditEventType::ByokConfigDeleted,
+            AuditEventType::DeploymentCreated,
+            AuditEventType::DeploymentDeleted,
+            AuditEventType::DeploymentUpdated,
+            AuditEventType::PluginPublished,
+            AuditEventType::TemplatePublished,
+            AuditEventType::ScenarioPublished,
+            AuditEventType::PasswordChanged,
+            AuditEventType::EmailChanged,
+            AuditEventType::TwoFactorEnabled,
+            AuditEventType::TwoFactorDisabled,
+            AuditEventType::FederationCreated,
+            AuditEventType::FederationUpdated,
+            AuditEventType::FederationDeleted,
+            AuditEventType::FederationScenarioActivated,
+            AuditEventType::FederationScenarioDeactivated,
+            AuditEventType::WorkspaceCreated,
+            AuditEventType::WorkspaceUpdated,
+            AuditEventType::WorkspaceDeleted,
+            AuditEventType::ServiceCreated,
+            AuditEventType::ServiceUpdated,
+            AuditEventType::ServiceDeleted,
+            AuditEventType::FixtureCreated,
+            AuditEventType::FixtureUpdated,
+            AuditEventType::FixtureDeleted,
+            AuditEventType::AdminImpersonation,
+        ];
+        for variant in variants {
+            let s = variant.as_str();
+            assert_eq!(
+                AuditEventType::from_str(s),
+                Some(variant),
+                "round-trip failed for {variant:?} (got {s:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn audit_event_type_as_str_examples() {
+        assert_eq!(AuditEventType::ApiTokenCreated.as_str(), "api_token_created");
+        assert_eq!(AuditEventType::OrgUpdated.as_str(), "org_updated");
+        assert_eq!(AuditEventType::MemberRoleChanged.as_str(), "member_role_changed");
     }
 }

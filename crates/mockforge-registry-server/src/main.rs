@@ -178,6 +178,7 @@ async fn main() -> Result<()> {
         db.pool().clone(),
     );
     workers::usage_threshold_checker::start_usage_threshold_checker(state.clone());
+    workers::token_rotation_reminders::start_token_rotation_reminders_worker(db.pool().clone());
 
     // Start deployment orchestrator for hosted mocks
     let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();
