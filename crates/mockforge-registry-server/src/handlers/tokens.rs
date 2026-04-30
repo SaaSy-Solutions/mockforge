@@ -205,6 +205,54 @@ pub async fn list_tokens(
     Ok(Json(items))
 }
 
+/// Available token scope, including human-readable label and description.
+#[derive(Debug, Serialize)]
+pub struct TokenScopeInfo {
+    pub value: String,
+    pub label: String,
+    pub description: String,
+}
+
+/// Return the canonical list of token scopes.
+///
+/// Returns static metadata derived from the `TokenScope` enum so the UI
+/// doesn't have to hardcode the list. Lives behind the auth middleware along
+/// with the other token routes.
+pub async fn list_scopes() -> Json<Vec<TokenScopeInfo>> {
+    Json(vec![
+        TokenScopeInfo {
+            value: TokenScope::ReadPackages.to_string(),
+            label: "Read Packages".to_string(),
+            description: "Read and search packages".to_string(),
+        },
+        TokenScopeInfo {
+            value: TokenScope::PublishPackages.to_string(),
+            label: "Publish Packages".to_string(),
+            description: "Publish new package versions".to_string(),
+        },
+        TokenScopeInfo {
+            value: TokenScope::DeployMocks.to_string(),
+            label: "Deploy Mocks".to_string(),
+            description: "Deploy hosted mock services".to_string(),
+        },
+        TokenScopeInfo {
+            value: TokenScope::AdminOrg.to_string(),
+            label: "Admin Organization".to_string(),
+            description: "Full organization administration".to_string(),
+        },
+        TokenScopeInfo {
+            value: TokenScope::ReadUsage.to_string(),
+            label: "Read Usage".to_string(),
+            description: "Read usage analytics and metrics".to_string(),
+        },
+        TokenScopeInfo {
+            value: TokenScope::ManageBilling.to_string(),
+            label: "Manage Billing".to_string(),
+            description: "Manage billing and subscription".to_string(),
+        },
+    ])
+}
+
 /// Delete an API token
 pub async fn delete_token(
     State(state): State<AppState>,
