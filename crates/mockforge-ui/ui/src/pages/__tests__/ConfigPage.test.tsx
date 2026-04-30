@@ -56,6 +56,7 @@ const mockUseApi = vi.hoisted(() => {
     useUpdateFaults: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateProxy: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateProtocols: vi.fn(() => ({ mutateAsync: vi.fn() })),
+    useUpdateAiMode: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateValidation: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useRestartServers: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useRestartStatus: vi.fn(() => ({ data: { restarting: false } })),
@@ -111,6 +112,7 @@ describe('ConfigPage', () => {
     mockUseApi.useUpdateFaults.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateProxy.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateProtocols.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateAiMode.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateValidation.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useRestartServers.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useRestartStatus.mockReturnValue({ data: { restarting: false } });

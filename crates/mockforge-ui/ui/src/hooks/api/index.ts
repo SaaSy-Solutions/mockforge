@@ -22,6 +22,7 @@ export {
   useUpdateFaults,
   useUpdateProxy,
   useUpdateProtocols,
+  useUpdateAiMode,
   useEnvVars,
   useUpdateEnvVar,
   useConfiguration,

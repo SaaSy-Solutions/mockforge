@@ -184,6 +184,11 @@ pub async fn generate_mock(
     } else {
         None // Default to live mode if no workspace_id provided
     };
+    // Fall back to the server-wide default when the workspace doesn't override.
+    let ai_mode = match ai_mode {
+        Some(m) => Some(m),
+        None => state.ai_mode_default().await,
+    };
 
     // Get deterministic config from workspace if available
     let deterministic_config = if let Some(workspace_id) = &request.workspace_id {
@@ -347,6 +352,11 @@ pub async fn generate_persona(
         }
     } else {
         None
+    };
+    // Fall back to the server-wide default when the workspace doesn't override.
+    let ai_mode = match ai_mode {
+        Some(m) => Some(m),
+        None => state.ai_mode_default().await,
     };
 
     let deterministic_config = if let Some(workspace_id) = &request.workspace_id {
