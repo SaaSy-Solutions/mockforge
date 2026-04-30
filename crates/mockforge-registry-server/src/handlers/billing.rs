@@ -56,6 +56,7 @@ pub async fn get_subscription(
             .as_ref()
             .map(|s| s.cancel_at_period_end)
             .unwrap_or(false),
+        current_period_start: subscription.as_ref().map(|s| s.current_period_start),
         current_period_end: subscription.as_ref().map(|s| s.current_period_end).or_else(|| {
             // For free plan, return None or far future
             Some(chrono::Utc::now() + chrono::Duration::days(365))
@@ -92,6 +93,7 @@ pub struct SubscriptionResponse {
     pub plan: String,
     pub status: String,
     pub cancel_at_period_end: bool,
+    pub current_period_start: Option<chrono::DateTime<chrono::Utc>>,
     pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
     pub usage: UsageStats,
     pub limits: serde_json::Value,
