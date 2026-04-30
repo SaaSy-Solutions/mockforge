@@ -204,11 +204,25 @@ const removeMember = (orgId: string, userId: string) =>
   apiFetch<void>(`${API_BASE}/organizations/${orgId}/members/${userId}`, { method: 'DELETE' });
 
 // Invitations
+interface PendingInvitation {
+  nonce: string;
+  email: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const createInvitation = (orgId: string, data: { email: string; role?: string }) =>
-  apiFetch<{ token: string; org_id: string; email: string; role: string }>(
+  apiFetch<{ token: string; nonce: string; org_id: string; email: string; role: string }>(
     `${API_BASE}/organizations/${orgId}/invitations`,
     { method: 'POST', body: JSON.stringify(data) }
   );
+const listInvitations = (orgId: string) =>
+  apiFetch<{ invitations: PendingInvitation[] }>(`${API_BASE}/organizations/${orgId}/invitations`);
+const revokeInvitation = (orgId: string, nonce: string) =>
+  apiFetch<void>(`${API_BASE}/organizations/${orgId}/invitations/${encodeURIComponent(nonce)}`, {
+    method: 'DELETE',
+  });
 
 // Audit logs
 const fetchAuditLogs = (orgId: string, params: { limit?: number; offset?: number; event_type?: string }) => {
@@ -247,6 +261,37 @@ const updateOrgTemplate = (orgId: string, tid: string, data: { name?: string; de
   });
 const deleteOrgTemplate = (orgId: string, tid: string) =>
   apiFetch<void>(`${API_BASE}/organizations/${orgId}/templates/${tid}`, { method: 'DELETE' });
+
+// Quota display helpers — give common keys a friendly label + unit so the
+// raw JSON keys from the backend (`requests_per_30d`, `storage_gb`, …)
+// don't leak into the UI as snake_case.
+const QUOTA_KEY_META: Record<string, { label: string; unit?: 'count' | 'gb' }> = {
+  requests_per_30d: { label: 'Requests / 30 days', unit: 'count' },
+  requests_per_minute: { label: 'Requests / minute', unit: 'count' },
+  storage_gb: { label: 'Storage', unit: 'gb' },
+  ai_calls_per_day: { label: 'AI calls / day', unit: 'count' },
+  ai_calls_per_month: { label: 'AI calls / month', unit: 'count' },
+  hosted_mocks_max: { label: 'Hosted mocks (max)', unit: 'count' },
+  max_workspaces: { label: 'Workspaces (max)', unit: 'count' },
+  max_members: { label: 'Members (max)', unit: 'count' },
+  max_publisher_keys: { label: 'Publisher keys (max)', unit: 'count' },
+  api_tokens_max: { label: 'API tokens (max)', unit: 'count' },
+};
+function formatQuotaKey(key: string): { label: string; unit?: 'count' | 'gb' } {
+  const meta = QUOTA_KEY_META[key];
+  if (meta) return meta;
+  // Fallback: strip underscores, capitalize first letter.
+  const label = key.replace(/_/g, ' ');
+  return { label: label.charAt(0).toUpperCase() + label.slice(1) };
+}
+function formatQuotaValue(value: unknown, unit?: 'count' | 'gb'): string {
+  if (typeof value === 'number') {
+    if (unit === 'gb') return `${value.toLocaleString()} GB`;
+    if (unit === 'count') return value.toLocaleString();
+    return String(value);
+  }
+  return String(value);
+}
 
 // Usage, Billing, Quota
 const fetchOrgUsage = (orgId: string) =>
@@ -1297,18 +1342,35 @@ function SSOTab({ org }: { org: Organization }) {
 
 function InvitationsTab({ org }: { org: Organization }) {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
   const [inviteResult, setInviteResult] = useState<{ token: string } | null>(null);
+
+  const { data: invitationData, isLoading } = useQuery({
+    queryKey: ['org-invitations', org.id],
+    queryFn: () => listInvitations(org.id),
+  });
+  const invitations = invitationData?.invitations ?? [];
 
   const inviteMutation = useMutation({
     mutationFn: (data: { email: string; role: string }) => createInvitation(org.id, data),
     onSuccess: (data) => {
       showToast('success', 'Invitation created');
       setInviteResult(data);
+      queryClient.invalidateQueries({ queryKey: ['org-invitations', org.id] });
     },
     onError: (err: Error) => showToast('error', 'Failed to create invitation', err.message),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (nonce: string) => revokeInvitation(org.id, nonce),
+    onSuccess: () => {
+      showToast('success', 'Invitation revoked');
+      queryClient.invalidateQueries({ queryKey: ['org-invitations', org.id] });
+    },
+    onError: (err: Error) => showToast('error', 'Failed to revoke invitation', err.message),
   });
 
   return (
@@ -1320,11 +1382,42 @@ function InvitationsTab({ org }: { org: Organization }) {
         </Button>
       </div>
 
-      <div className="text-center py-8 text-muted-foreground">
-        <UserPlus className="w-8 h-8 mx-auto mb-3" />
-        <p>Create invitation links to invite new members to your organization.</p>
-        <p className="text-sm mt-1">Invitations are single-use and expire after acceptance.</p>
-      </div>
+      {isLoading ? (
+        <div className="text-center py-8 text-muted-foreground">Loading invitations...</div>
+      ) : invitations.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <UserPlus className="w-8 h-8 mx-auto mb-3" />
+          <p>No pending invitations.</p>
+          <p className="text-sm mt-1">Invitations are single-use and expire after acceptance.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {invitations.map((inv) => (
+            <div
+              key={inv.nonce}
+              className="flex items-center justify-between border rounded-lg p-3"
+            >
+              <div className="min-w-0">
+                <div className="font-medium truncate">{inv.email}</div>
+                <div className="text-xs text-muted-foreground">
+                  Role: <span className="uppercase tracking-wide">{inv.role}</span>
+                  {' · '}
+                  Created {new Date(inv.created_at).toLocaleString()}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => revokeMutation.mutate(inv.nonce)}
+                disabled={revokeMutation.isPending}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Revoke
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) setInviteResult(null); }}>
         <DialogContent className="sm:max-w-md">
@@ -1494,12 +1587,15 @@ function UsageQuotaTab({ org }: { org: Organization }) {
         <div>
           <h4 className="text-sm font-semibold mb-3">Quota</h4>
           <div className="p-3 border rounded-lg space-y-2">
-            {Object.entries(quota.quota).map(([key, value]) => (
-              <div key={key} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{key.replace(/_/g, ' ')}</span>
-                <span className="font-medium">{String(value)}</span>
-              </div>
-            ))}
+            {Object.entries(quota.quota).map(([key, value]) => {
+              const meta = formatQuotaKey(key);
+              return (
+                <div key={key} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{meta.label}</span>
+                  <span className="font-medium">{formatQuotaValue(value, meta.unit)}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

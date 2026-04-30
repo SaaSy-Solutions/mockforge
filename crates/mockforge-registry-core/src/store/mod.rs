@@ -1168,9 +1168,13 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// Count unresolved suspicious activities for an org.
     async fn count_unresolved_suspicious_activities(&self, org_id: Uuid) -> StoreResult<i64>;
 
-    /// Mark a suspicious activity as resolved by the given user.
+    /// Mark a suspicious activity as resolved by the given user, scoped to
+    /// `org_id`. The org constraint is enforced inside the UPDATE so callers
+    /// from one organization cannot resolve activities belonging to another.
+    /// Returns [`StoreError::NotFound`] when no matching activity exists.
     async fn resolve_suspicious_activity(
         &self,
+        org_id: Uuid,
         activity_id: Uuid,
         resolved_by: Uuid,
     ) -> StoreResult<()>;

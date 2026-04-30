@@ -111,20 +111,24 @@ impl SuspiciousActivity {
         query.build_query_as::<Self>().fetch_all(pool).await
     }
 
-    /// Mark activity as resolved
+    /// Mark activity as resolved, scoped to `org_id`. The UPDATE silently
+    /// affects zero rows when `activity_id` doesn't belong to `org_id`;
+    /// callers should treat that as not-found.
     pub async fn resolve(
         pool: &sqlx::PgPool,
+        org_id: Uuid,
         activity_id: Uuid,
         resolved_by: Uuid,
-    ) -> sqlx::Result<()> {
-        sqlx::query(
-            "UPDATE suspicious_activities SET resolved = TRUE, resolved_at = NOW(), resolved_by = $1 WHERE id = $2"
+    ) -> sqlx::Result<u64> {
+        let result = sqlx::query(
+            "UPDATE suspicious_activities SET resolved = TRUE, resolved_at = NOW(), resolved_by = $1 WHERE id = $2 AND org_id = $3"
         )
         .bind(resolved_by)
         .bind(activity_id)
+        .bind(org_id)
         .execute(pool)
         .await?;
-        Ok(())
+        Ok(result.rows_affected())
     }
 
     /// Clean up old resolved activities (older than N days)
