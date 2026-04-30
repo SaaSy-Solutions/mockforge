@@ -3095,7 +3095,8 @@ impl RegistryStore for SqliteRegistryStore {
             r#"
             SELECT id, plugin_id, version, user_id, rating, title, comment,
                    helpful_count, unhelpful_count, verified,
-                   created_at, updated_at
+                   created_at, updated_at,
+                   author_response_text, author_response_at
             FROM reviews
             WHERE plugin_id = ?
             ORDER BY helpful_count DESC, created_at DESC
@@ -3117,6 +3118,7 @@ impl RegistryStore for SqliteRegistryStore {
             let unhelpful: i64 = row.try_get("unhelpful_count")?;
             let created_at_str: String = row.try_get("created_at")?;
             let updated_at_str: String = row.try_get("updated_at")?;
+            let response_at_str: Option<String> = row.try_get("author_response_at")?;
             out.push(Review {
                 id: parse_uuid(&id_str)?,
                 plugin_id: parse_uuid(&plugin_id_str)?,
@@ -3130,6 +3132,8 @@ impl RegistryStore for SqliteRegistryStore {
                 verified: row.try_get("verified")?,
                 created_at: parse_dt(&created_at_str)?,
                 updated_at: parse_dt(&updated_at_str)?,
+                author_response_text: row.try_get("author_response_text")?,
+                author_response_at: response_at_str.as_deref().map(parse_dt).transpose()?,
             });
         }
         Ok(out)
@@ -3188,6 +3192,8 @@ impl RegistryStore for SqliteRegistryStore {
             verified: false,
             created_at: parse_dt(&now)?,
             updated_at: parse_dt(&now)?,
+            author_response_text: None,
+            author_response_at: None,
         })
     }
 
@@ -3281,6 +3287,104 @@ impl RegistryStore for SqliteRegistryStore {
             .bind(plugin_id.to_string())
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    async fn increment_plugin_download(
+        &self,
+        plugin_id: Uuid,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<()> {
+        sqlx::query("UPDATE plugin_versions SET downloads = downloads + 1 WHERE id = ?")
+            .bind(plugin_version_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        sqlx::query("UPDATE plugins SET downloads_total = downloads_total + 1 WHERE id = ?")
+            .bind(plugin_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn take_down_plugin(&self, plugin_id: Uuid, reason: Option<&str>) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE plugins SET taken_down_at = datetime('now'), taken_down_reason = ? WHERE id = ?",
+        )
+        .bind(reason)
+        .bind(plugin_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn restore_plugin(&self, plugin_id: Uuid) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE plugins SET taken_down_at = NULL, taken_down_reason = NULL WHERE id = ?",
+        )
+        .bind(plugin_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn find_review_in_plugin(
+        &self,
+        plugin_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<Option<crate::models::Review>> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT id, plugin_id, version, user_id, rating, title, comment, \
+             helpful_count, unhelpful_count, verified, created_at, updated_at, \
+             author_response_text, author_response_at \
+             FROM reviews WHERE plugin_id = ? AND id = ?",
+        )
+        .bind(plugin_id.to_string())
+        .bind(review_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+        let id: String = row.try_get("id")?;
+        let plugin_id_str: String = row.try_get("plugin_id")?;
+        let user_id_str: String = row.try_get("user_id")?;
+        let created_at_str: String = row.try_get("created_at")?;
+        let updated_at_str: String = row.try_get("updated_at")?;
+        let author_response_at_str: Option<String> = row.try_get("author_response_at")?;
+        Ok(Some(crate::models::Review {
+            id: Uuid::parse_str(&id).map_err(|e| StoreError::Hash(e.to_string()))?,
+            plugin_id: Uuid::parse_str(&plugin_id_str)
+                .map_err(|e| StoreError::Hash(e.to_string()))?,
+            version: row.try_get("version")?,
+            user_id: Uuid::parse_str(&user_id_str).map_err(|e| StoreError::Hash(e.to_string()))?,
+            rating: row.try_get("rating")?,
+            title: row.try_get("title")?,
+            comment: row.try_get("comment")?,
+            helpful_count: row.try_get("helpful_count")?,
+            unhelpful_count: row.try_get("unhelpful_count")?,
+            verified: row.try_get("verified")?,
+            created_at: parse_dt(&created_at_str)?,
+            updated_at: parse_dt(&updated_at_str)?,
+            author_response_text: row.try_get("author_response_text")?,
+            author_response_at: author_response_at_str.as_deref().map(parse_dt).transpose()?,
+        }))
+    }
+
+    async fn set_review_author_response(
+        &self,
+        review_id: Uuid,
+        text: Option<&str>,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE reviews \
+             SET author_response_text = ?1, \
+                 author_response_at = CASE WHEN ?1 IS NULL THEN NULL ELSE datetime('now') END, \
+                 updated_at = datetime('now') \
+             WHERE id = ?2",
+        )
+        .bind(text)
+        .bind(review_id.to_string())
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 

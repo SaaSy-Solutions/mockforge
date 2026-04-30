@@ -2096,6 +2096,56 @@ impl RegistryStore for PgRegistryStore {
         Ok(())
     }
 
+    async fn increment_plugin_download(
+        &self,
+        plugin_id: Uuid,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<()> {
+        // Single round-trip update for both counters via a CTE so the
+        // tracker endpoint stays fast — the CLI is waiting on the redirect.
+        sqlx::query(
+            r#"
+            WITH bumped_version AS (
+                UPDATE plugin_versions SET downloads = downloads + 1 WHERE id = $2
+            )
+            UPDATE plugins SET downloads_total = downloads_total + 1 WHERE id = $1
+            "#,
+        )
+        .bind(plugin_id)
+        .bind(plugin_version_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn take_down_plugin(&self, plugin_id: Uuid, reason: Option<&str>) -> StoreResult<()> {
+        Plugin::take_down(&self.pool, plugin_id, reason).await.map_err(Into::into)
+    }
+
+    async fn restore_plugin(&self, plugin_id: Uuid) -> StoreResult<()> {
+        Plugin::restore(&self.pool, plugin_id).await.map_err(Into::into)
+    }
+
+    async fn find_review_in_plugin(
+        &self,
+        plugin_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<Option<Review>> {
+        Review::find_in_plugin(&self.pool, plugin_id, review_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn set_review_author_response(
+        &self,
+        review_id: Uuid,
+        text: Option<&str>,
+    ) -> StoreResult<()> {
+        Review::set_author_response(&self.pool, review_id, text)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn get_user_public_info(&self, user_id: Uuid) -> StoreResult<Option<(String, String)>> {
         let row = sqlx::query_as::<_, (String, String)>(
             "SELECT id::text, username FROM users WHERE id = $1",

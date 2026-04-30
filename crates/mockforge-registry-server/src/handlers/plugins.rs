@@ -2,6 +2,7 @@
 
 use axum::{
     extract::{Path, State},
+    response::Redirect,
     Json,
 };
 use mockforge_plugin_registry::{
@@ -15,6 +16,16 @@ use crate::{
     models::{AuditEventType, TokenScope, User},
     AppState,
 };
+
+/// Build the canonical download URL clients see in API responses. Clients
+/// follow this 302 to the artifact and the server records the hit.
+fn tracked_download_url(name: &str, version: &str) -> String {
+    format!(
+        "/api/v1/plugins/{}/versions/{}/download",
+        urlencoding::encode(name),
+        urlencoding::encode(version)
+    )
+}
 
 pub async fn search_plugins(
     State(state): State<AppState>,
@@ -94,20 +105,26 @@ pub async fn search_plugins(
 
         let category = map_category_from_string(&plugin.category);
 
-        // Load versions with dependencies
+        // Load versions with dependencies. We rewrite `download_url` to
+        // the in-process tracker endpoint so well-behaved clients
+        // following redirects automatically bump per-version download
+        // counters. The raw S3 URL stays in `v.download_url` server-side
+        // for the redirect target.
         let mut version_entries = Vec::new();
         for v in versions {
             let dependencies = state.store.get_plugin_version_dependencies(v.id).await?;
 
+            let tracked_url = tracked_download_url(&plugin.name, &v.version);
             version_entries.push(VersionEntry {
                 version: v.version,
-                download_url: v.download_url,
+                download_url: tracked_url,
                 checksum: v.checksum,
                 size: v.file_size as u64,
                 published_at: v.published_at.to_rfc3339(),
                 yanked: v.yanked,
                 min_mockforge_version: v.min_mockforge_version,
                 dependencies,
+                downloads: v.downloads.max(0) as u64,
             });
         }
 
@@ -180,26 +197,35 @@ pub async fn get_plugin(
         .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
+    // Hide taken-down plugins from the public detail endpoint.
+    // Admins use the dedicated admin moderation surface to review them.
+    if plugin.taken_down_at.is_some() {
+        return Err(ApiError::PluginNotFound(name));
+    }
+
     let tags = state.store.get_plugin_tags(plugin.id).await?;
 
     let versions = state.store.list_plugin_versions(plugin.id).await?;
 
     let category = map_category_from_string(&plugin.category);
 
-    // Load versions with dependencies
+    // Load versions with dependencies. See note in `search_plugins` —
+    // we hand back the tracker URL so downloads count.
     let mut version_entries = Vec::new();
     for v in versions {
         let dependencies = state.store.get_plugin_version_dependencies(v.id).await?;
 
+        let tracked_url = tracked_download_url(&plugin.name, &v.version);
         version_entries.push(VersionEntry {
             version: v.version,
-            download_url: v.download_url,
+            download_url: tracked_url,
             checksum: v.checksum,
             size: v.file_size as u64,
             published_at: v.published_at.to_rfc3339(),
             yanked: v.yanked,
             min_mockforge_version: v.min_mockforge_version,
             dependencies,
+            downloads: v.downloads.max(0) as u64,
         });
     }
 
@@ -254,6 +280,10 @@ pub async fn get_version(
         .await?
         .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
 
+    if plugin.taken_down_at.is_some() {
+        return Err(ApiError::PluginNotFound(name));
+    }
+
     let plugin_version = state
         .store
         .find_plugin_version(plugin.id, &version)
@@ -263,21 +293,58 @@ pub async fn get_version(
     // Load dependencies
     let dependencies = state.store.get_plugin_version_dependencies(plugin_version.id).await?;
 
+    let tracked_url = tracked_download_url(&name, &plugin_version.version);
     let entry = VersionEntry {
         version: plugin_version.version,
-        download_url: plugin_version.download_url,
+        download_url: tracked_url,
         checksum: plugin_version.checksum,
         size: plugin_version.file_size as u64,
         published_at: plugin_version.published_at.to_rfc3339(),
         yanked: plugin_version.yanked,
         min_mockforge_version: plugin_version.min_mockforge_version,
         dependencies,
+        downloads: plugin_version.downloads.max(0) as u64,
     };
 
     // Record metrics
     metrics.record_download_success();
 
     Ok(Json(entry))
+}
+
+/// Tracked-download redirect. Bumps both the plugin-level and version-level
+/// counters then 302-redirects to the artifact URL stored on the version
+/// row. Yanked versions still resolve so existing installs that re-fetch
+/// the artifact don't break — the registry just stops advertising them
+/// in the catalog.
+pub async fn download_version(
+    State(state): State<AppState>,
+    Path((name, version)): Path<(String, String)>,
+) -> ApiResult<Redirect> {
+    let plugin = state
+        .store
+        .find_plugin_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
+
+    if plugin.taken_down_at.is_some() {
+        return Err(ApiError::PluginNotFound(name));
+    }
+
+    let plugin_version = state
+        .store
+        .find_plugin_version(plugin.id, &version)
+        .await?
+        .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
+
+    // Counter update is best-effort: a failed UPDATE shouldn't block the
+    // user's actual download. We still log so a persistent failure shows
+    // up in metrics.
+    if let Err(e) = state.store.increment_plugin_download(plugin.id, plugin_version.id).await {
+        tracing::warn!(plugin = %name, version = %version, error = %e, "increment_plugin_download failed");
+    }
+
+    Ok(Redirect::temporary(&plugin_version.download_url))
 }
 
 #[derive(Debug, Deserialize)]

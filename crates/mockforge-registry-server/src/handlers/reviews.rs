@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
+    models::AuditEventType,
     AppState,
 };
 
@@ -45,6 +46,16 @@ pub struct ReviewWithUser {
     pub updated_at: String,
     pub user: UserInfo,
     pub user_name: String,
+    /// Plugin author's response to this review, set via the
+    /// `/respond` endpoint. `None` until the author posts one.
+    pub author_response: Option<AuthorResponseDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorResponseDto {
+    pub text: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -99,6 +110,13 @@ pub async fn get_reviews(
             .await?
             .unwrap_or_else(|| (review.user_id.to_string(), "unknown".to_string()));
 
+        let author_response = match (review.author_response_text, review.author_response_at) {
+            (Some(text), Some(at)) => Some(AuthorResponseDto {
+                text,
+                created_at: at.to_rfc3339(),
+            }),
+            _ => None,
+        };
         reviews_with_users.push(ReviewWithUser {
             id: review.id.to_string(),
             plugin_id: review.plugin_id.to_string(),
@@ -116,6 +134,7 @@ pub async fn get_reviews(
                 username: user.1.clone(),
             },
             user_name: user.1,
+            author_response,
         });
     }
 
@@ -258,4 +277,131 @@ pub async fn vote_review(
         "success": true,
         "message": "Vote recorded"
     })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthorResponseRequest {
+    pub text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorResponseResponse {
+    pub success: bool,
+    pub message: String,
+    pub author_response: Option<AuthorResponseDto>,
+}
+
+/// Post (or replace) the plugin author's response to a single review.
+/// Author check uses `plugins.author_id` rather than ownership of the
+/// review itself — only the plugin owner can respond. Replaces any
+/// existing response so authors can correct typos without a separate
+/// edit endpoint.
+pub async fn respond_to_review(
+    State(state): State<AppState>,
+    Path((plugin_name, review_id)): Path<(String, String)>,
+    Extension(user_id): Extension<String>,
+    Json(request): Json<AuthorResponseRequest>,
+) -> ApiResult<Json<AuthorResponseResponse>> {
+    let trimmed = request.text.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::InvalidRequest(
+            "Response text cannot be empty — use DELETE to clear instead".to_string(),
+        ));
+    }
+    if trimmed.len() > 5000 {
+        return Err(ApiError::InvalidRequest(
+            "Response text must be 5000 characters or fewer".to_string(),
+        ));
+    }
+
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+    let review_uuid = Uuid::parse_str(&review_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid review ID".to_string()))?;
+
+    let plugin = state
+        .store
+        .find_plugin_by_name(&plugin_name)
+        .await?
+        .ok_or_else(|| ApiError::PluginNotFound(plugin_name.clone()))?;
+
+    if plugin.author_id != user_uuid {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Verify the review exists and belongs to this plugin so a typo in
+    // the path returns 404 (not 500 from the UPDATE silently succeeding
+    // on no rows).
+    state
+        .store
+        .find_review_in_plugin(plugin.id, review_uuid)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Review not found for plugin".to_string()))?;
+
+    state.store.set_review_author_response(review_uuid, Some(trimmed)).await?;
+
+    let now = chrono::Utc::now();
+    let response_dto = AuthorResponseDto {
+        text: trimmed.to_string(),
+        created_at: now.to_rfc3339(),
+    };
+
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_uuid),
+            AuditEventType::PluginReviewResponsePosted,
+            format!("Author responded to review on plugin '{}'", plugin_name),
+            Some(serde_json::json!({
+                "plugin_name": plugin_name,
+                "review_id": review_id,
+            })),
+            None,
+            None,
+        )
+        .await;
+
+    Ok(Json(AuthorResponseResponse {
+        success: true,
+        message: "Response posted".to_string(),
+        author_response: Some(response_dto),
+    }))
+}
+
+/// Clear an existing author response. Same author check as `respond`.
+pub async fn clear_review_response(
+    State(state): State<AppState>,
+    Path((plugin_name, review_id)): Path<(String, String)>,
+    Extension(user_id): Extension<String>,
+) -> ApiResult<Json<AuthorResponseResponse>> {
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+    let review_uuid = Uuid::parse_str(&review_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid review ID".to_string()))?;
+
+    let plugin = state
+        .store
+        .find_plugin_by_name(&plugin_name)
+        .await?
+        .ok_or_else(|| ApiError::PluginNotFound(plugin_name.clone()))?;
+
+    if plugin.author_id != user_uuid {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    state
+        .store
+        .find_review_in_plugin(plugin.id, review_uuid)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Review not found for plugin".to_string()))?;
+
+    state.store.set_review_author_response(review_uuid, None).await?;
+
+    Ok(Json(AuthorResponseResponse {
+        success: true,
+        message: "Response cleared".to_string(),
+        author_response: None,
+    }))
 }

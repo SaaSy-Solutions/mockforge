@@ -102,6 +102,7 @@ interface VersionInfo {
   size?: number;
   minMockforgeVersion?: string | null;
   dependencies?: Record<string, string>;
+  downloads?: number;
 }
 
 const formatFileSize = (bytes: number): string => {
@@ -122,6 +123,10 @@ interface Review {
   helpfulCount: number;
   unhelpfulCount: number;
   verified: boolean;
+  authorResponse?: {
+    text: string;
+    createdAt: string;
+  } | null;
 }
 
 interface SecurityScanResult {
@@ -163,6 +168,17 @@ export const PluginRegistryPage: React.FC = () => {
   const [publishOpen, setPublishOpen] = useState(false);
   const [yankingVersion, setYankingVersion] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [takedownBusy, setTakedownBusy] = useState(false);
+  const [takedownDialogOpen, setTakedownDialogOpen] = useState(false);
+  const [takedownReason, setTakedownReason] = useState('');
+  // Track the name of the last plugin we took down so the snackbar can
+  // offer an Undo action — useful since taken-down plugins disappear from
+  // search and there's no other UI surface to find them again.
+  const [recentlyTakenDown, setRecentlyTakenDown] = useState<string | null>(null);
+  const [respondingToReview, setRespondingToReview] = useState<Review | null>(null);
+  const [responseDraft, setResponseDraft] = useState('');
+  const [responseSubmitting, setResponseSubmitting] = useState(false);
+  const [responseError, setResponseError] = useState<string | null>(null);
 
   const PAGE_SIZE = 24;
 
@@ -473,6 +489,132 @@ export const PluginRegistryPage: React.FC = () => {
     }
   };
 
+  const handleTakedown = async () => {
+    if (!selectedPlugin) return;
+    setTakedownBusy(true);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/admin/plugins/${encodeURIComponent(selectedPlugin.name)}/takedown`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: takedownReason.trim() || null }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `HTTP ${resp.status}`);
+      }
+      setRecentlyTakenDown(selectedPlugin.name);
+      setCopyFeedback(`Took down ${selectedPlugin.name}`);
+      setTakedownDialogOpen(false);
+      setTakedownReason('');
+      // Plugin is now hidden from search; close the dialog and drop it
+      // from the local list so the admin sees the moderation took effect.
+      setDetailsOpen(false);
+      setPlugins((prev) => prev.filter((p) => p.name !== selectedPlugin.name));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Takedown failed';
+      setCopyFeedback(msg);
+    } finally {
+      setTakedownBusy(false);
+      setTimeout(() => setCopyFeedback(null), 4000);
+    }
+  };
+
+  const handleRestore = async (pluginName: string) => {
+    setTakedownBusy(true);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/admin/plugins/${encodeURIComponent(pluginName)}/restore`,
+        { method: 'POST' }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `HTTP ${resp.status}`);
+      }
+      setCopyFeedback(`Restored ${pluginName}`);
+      setRecentlyTakenDown(null);
+      loadPlugins(0, false);
+      setPage(0);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Restore failed';
+      setCopyFeedback(msg);
+    } finally {
+      setTakedownBusy(false);
+      setTimeout(() => setCopyFeedback(null), 4000);
+    }
+  };
+
+  const openRespondDialog = (review: Review) => {
+    setRespondingToReview(review);
+    setResponseDraft(review.authorResponse?.text || '');
+    setResponseError(null);
+  };
+
+  const closeRespondDialog = () => {
+    if (responseSubmitting) return;
+    setRespondingToReview(null);
+    setResponseDraft('');
+    setResponseError(null);
+  };
+
+  const handleSubmitAuthorResponse = async () => {
+    if (!selectedPlugin || !respondingToReview) return;
+    const trimmed = responseDraft.trim();
+    if (trimmed.length === 0) {
+      setResponseError('Response cannot be empty.');
+      return;
+    }
+    if (trimmed.length > 5000) {
+      setResponseError('Response must be 5000 characters or fewer.');
+      return;
+    }
+    setResponseSubmitting(true);
+    setResponseError(null);
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/plugins/${encodeURIComponent(selectedPlugin.name)}/reviews/${encodeURIComponent(respondingToReview.id)}/respond`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: trimmed }),
+        }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data?.success === false) {
+        throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
+      }
+      setRespondingToReview(null);
+      setResponseDraft('');
+      handleViewDetails(selectedPlugin);
+    } catch (error) {
+      setResponseError(error instanceof Error ? error.message : 'Failed to post response');
+    } finally {
+      setResponseSubmitting(false);
+    }
+  };
+
+  const handleClearAuthorResponse = async (review: Review) => {
+    if (!selectedPlugin) return;
+    if (!window.confirm('Remove your response to this review?')) return;
+    try {
+      const resp = await authenticatedFetch(
+        `/api/v1/plugins/${encodeURIComponent(selectedPlugin.name)}/reviews/${encodeURIComponent(review.id)}/respond`,
+        { method: 'DELETE' }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err?.error || err?.message || `HTTP ${resp.status}`);
+      }
+      handleViewDetails(selectedPlugin);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to remove response';
+      setCopyFeedback(msg);
+      setTimeout(() => setCopyFeedback(null), 4000);
+    }
+  };
+
   const getSecurityBadge = (score: number) => {
     if (score >= 90) return { color: 'success', label: 'Excellent', icon: <CheckCircleIcon /> };
     if (score >= 70) return { color: 'info', label: 'Good', icon: <CheckCircleIcon /> };
@@ -779,17 +921,28 @@ export const PluginRegistryPage: React.FC = () => {
                     color={selectedPlugin.securityScore >= 70 ? 'success' : 'warning'}
                   />
                   {isAdmin && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color={(pluginBadges[selectedPlugin.name] || []).includes('verified') ? 'warning' : 'success'}
-                      disabled={verifyBusy}
-                      onClick={() => handleToggleVerify(selectedPlugin)}
-                    >
-                      {(pluginBadges[selectedPlugin.name] || []).includes('verified')
-                        ? 'Unverify'
-                        : 'Verify'}
-                    </Button>
+                    <>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color={(pluginBadges[selectedPlugin.name] || []).includes('verified') ? 'warning' : 'success'}
+                        disabled={verifyBusy}
+                        onClick={() => handleToggleVerify(selectedPlugin)}
+                      >
+                        {(pluginBadges[selectedPlugin.name] || []).includes('verified')
+                          ? 'Unverify'
+                          : 'Verify'}
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        disabled={takedownBusy}
+                        onClick={() => setTakedownDialogOpen(true)}
+                      >
+                        Take down
+                      </Button>
+                    </>
                   )}
                 </Stack>
               </Box>
@@ -960,7 +1113,7 @@ export const PluginRegistryPage: React.FC = () => {
                               <Typography variant="body2" sx={{ mb: 1 }}>
                                 {review.comment}
                               </Typography>
-                              <Box sx={{ display: 'flex', gap: 2 }}>
+                              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                                 <Button
                                   size="small"
                                   startIcon={<ThumbUpIcon />}
@@ -975,7 +1128,46 @@ export const PluginRegistryPage: React.FC = () => {
                                 >
                                   Not helpful ({review.unhelpfulCount})
                                 </Button>
+                                {selectedPlugin &&
+                                  currentUser?.username === selectedPlugin.author.name && (
+                                    <Button
+                                      size="small"
+                                      onClick={() => openRespondDialog(review)}
+                                    >
+                                      {review.authorResponse ? 'Edit response' : 'Respond as author'}
+                                    </Button>
+                                  )}
+                                {review.authorResponse &&
+                                  selectedPlugin &&
+                                  currentUser?.username === selectedPlugin.author.name && (
+                                    <Button
+                                      size="small"
+                                      color="error"
+                                      onClick={() => handleClearAuthorResponse(review)}
+                                    >
+                                      Remove response
+                                    </Button>
+                                  )}
                               </Box>
+                              {review.authorResponse && (
+                                <Box
+                                  sx={{
+                                    mt: 2,
+                                    ml: 4,
+                                    p: 2,
+                                    bgcolor: 'action.hover',
+                                    borderRadius: 1,
+                                  }}
+                                >
+                                  <Typography variant="caption" color="primary" fontWeight="bold">
+                                    Author response ·{' '}
+                                    {new Date(review.authorResponse.createdAt).toLocaleDateString()}
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    {review.authorResponse.text}
+                                  </Typography>
+                                </Box>
+                              )}
                             </Box>
                           </ListItem>
                           <Divider component="li" />
@@ -1096,6 +1288,14 @@ export const PluginRegistryPage: React.FC = () => {
                                 )}
                                 {typeof version.size === 'number' && version.size > 0 && (
                                   <Chip label={formatFileSize(version.size)} size="small" variant="outlined" />
+                                )}
+                                {typeof version.downloads === 'number' && version.downloads > 0 && (
+                                  <Chip
+                                    icon={<DownloadIcon />}
+                                    label={version.downloads.toLocaleString()}
+                                    size="small"
+                                    variant="outlined"
+                                  />
                                 )}
                               </Box>
                             }
@@ -1222,6 +1422,105 @@ export const PluginRegistryPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      <Dialog
+        open={takedownDialogOpen}
+        onClose={() => (!takedownBusy ? setTakedownDialogOpen(false) : undefined)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Take down {selectedPlugin ? selectedPlugin.name : ''}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="warning">
+              The plugin will be hidden from search and detail views. Existing
+              installs keep working — restoring it later from the audit log
+              undoes the takedown.
+            </Alert>
+            <TextField
+              label="Reason (optional)"
+              value={takedownReason}
+              onChange={(e) => setTakedownReason(e.target.value.slice(0, 1000))}
+              multiline
+              minRows={3}
+              fullWidth
+              helperText="Stored on the plugin row for future moderation review."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTakedownDialogOpen(false)} disabled={takedownBusy}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleTakedown}
+            disabled={takedownBusy}
+          >
+            {takedownBusy ? 'Taking down…' : 'Take down'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(respondingToReview)}
+        onClose={closeRespondDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {respondingToReview?.authorResponse ? 'Edit your response' : 'Respond to review'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {respondingToReview && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {respondingToReview.userName} · {respondingToReview.rating}★
+                </Typography>
+                {respondingToReview.title && (
+                  <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
+                    {respondingToReview.title}
+                  </Typography>
+                )}
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  {respondingToReview.comment}
+                </Typography>
+              </Paper>
+            )}
+            <TextField
+              label="Your response"
+              value={responseDraft}
+              onChange={(e) => setResponseDraft(e.target.value.slice(0, 5000))}
+              multiline
+              minRows={4}
+              fullWidth
+              required
+              helperText={`${responseDraft.length}/5000`}
+            />
+            {responseError && <Alert severity="error">{responseError}</Alert>}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRespondDialog} disabled={responseSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmitAuthorResponse}
+            disabled={responseSubmitting || responseDraft.trim().length === 0}
+          >
+            {responseSubmitting
+              ? 'Posting…'
+              : respondingToReview?.authorResponse
+              ? 'Update response'
+              : 'Post response'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <PublishPluginModal
         open={publishOpen}
         onClose={() => setPublishOpen(false)}
@@ -1236,10 +1535,25 @@ export const PluginRegistryPage: React.FC = () => {
 
       <Snackbar
         open={Boolean(copyFeedback)}
-        autoHideDuration={4000}
-        onClose={() => setCopyFeedback(null)}
+        autoHideDuration={recentlyTakenDown ? 10000 : 4000}
+        onClose={() => {
+          setCopyFeedback(null);
+          setRecentlyTakenDown(null);
+        }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         message={copyFeedback || ''}
+        action={
+          recentlyTakenDown ? (
+            <Button
+              size="small"
+              color="inherit"
+              disabled={takedownBusy}
+              onClick={() => handleRestore(recentlyTakenDown)}
+            >
+              Undo
+            </Button>
+          ) : undefined
+        }
       />
     </Box>
   );

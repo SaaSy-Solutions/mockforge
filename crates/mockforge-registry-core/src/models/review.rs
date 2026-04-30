@@ -19,6 +19,14 @@ pub struct Review {
     pub verified: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Public response from the plugin's author. NULL until the author posts
+    /// one through `POST /api/v1/plugins/{name}/reviews/{review_id}/respond`.
+    /// Stored alongside the review (rather than a separate response table)
+    /// because there's at most one response per review.
+    #[sqlx(default)]
+    pub author_response_text: Option<String>,
+    #[sqlx(default)]
+    pub author_response_at: Option<DateTime<Utc>>,
 }
 
 #[cfg(feature = "postgres")]
@@ -80,5 +88,43 @@ impl Review {
             .await?;
 
         Ok(count)
+    }
+
+    /// Find a single review by id within a plugin. Used by the author-response
+    /// endpoint to verify the review actually belongs to the plugin in the
+    /// path before letting the plugin author post a response.
+    pub async fn find_in_plugin(
+        pool: &sqlx::PgPool,
+        plugin_id: Uuid,
+        review_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM reviews WHERE plugin_id = $1 AND id = $2")
+            .bind(plugin_id)
+            .bind(review_id)
+            .fetch_optional(pool)
+            .await
+    }
+
+    /// Set or clear the plugin author's response on a review. Passing `None`
+    /// clears both the text and the timestamp.
+    pub async fn set_author_response(
+        pool: &sqlx::PgPool,
+        review_id: Uuid,
+        text: Option<&str>,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE reviews
+            SET author_response_text = $2,
+                author_response_at = CASE WHEN $2 IS NULL THEN NULL ELSE NOW() END,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(review_id)
+        .bind(text)
+        .execute(pool)
+        .await?;
+        Ok(())
     }
 }
