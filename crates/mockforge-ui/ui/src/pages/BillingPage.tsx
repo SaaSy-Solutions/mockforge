@@ -15,8 +15,10 @@ import {
   AlertCircle,
   ExternalLink,
   ArrowUpCircle,
+  CreditCard,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { authenticatedFetch } from '@/utils/apiClient';
 
 // Types
 interface Subscription {
@@ -31,6 +33,7 @@ interface Subscription {
     | 'incomplete'
     | 'incomplete_expired';
   cancel_at_period_end?: boolean;
+  current_period_start?: string;
   current_period_end?: string;
   usage: UsageStats;
   limits: {
@@ -111,12 +114,8 @@ async function extractErrorMessage(response: Response, fallback: string): Promis
 }
 
 async function fetchSubscription(): Promise<Subscription> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/billing/subscription`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+  const response = await authenticatedFetch(`${API_BASE}/billing/subscription`, {
+    headers: { 'Content-Type': 'application/json' },
   });
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response, 'Failed to fetch subscription'));
@@ -125,13 +124,9 @@ async function fetchSubscription(): Promise<Subscription> {
 }
 
 async function createCheckout(request: CreateCheckoutRequest): Promise<CreateCheckoutResponse> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/billing/checkout`, {
+  const response = await authenticatedFetch(`${API_BASE}/billing/checkout`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
   if (!response.ok) {
@@ -141,12 +136,8 @@ async function createCheckout(request: CreateCheckoutRequest): Promise<CreateChe
 }
 
 async function fetchInvoices(): Promise<ListInvoicesResponse> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/billing/invoices`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+  const response = await authenticatedFetch(`${API_BASE}/billing/invoices`, {
+    headers: { 'Content-Type': 'application/json' },
   });
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response, 'Failed to fetch invoices'));
@@ -155,13 +146,9 @@ async function fetchInvoices(): Promise<ListInvoicesResponse> {
 }
 
 async function createPortalSession(): Promise<CreatePortalResponse> {
-  const token = localStorage.getItem('auth_token');
-  const response = await fetch(`${API_BASE}/billing/portal`, {
+  const response = await authenticatedFetch(`${API_BASE}/billing/portal`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       return_url: window.location.href,
     }),
@@ -347,6 +334,12 @@ export function BillingPage() {
         </Card>
       )}
 
+      <PaymentIssueBanner
+        status={subscription.status}
+        onUpdatePaymentMethod={handleManageSubscription}
+        portalPending={portalMutation.isPending}
+      />
+
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -370,9 +363,17 @@ export function BillingPage() {
               <CardContent className="space-y-4">
                 <div>
                   <div className="text-2xl font-bold capitalize">{subscription.plan}</div>
+                  {subscription.current_period_start && subscription.current_period_end && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Current period:{' '}
+                      {new Date(subscription.current_period_start).toLocaleDateString()} –{' '}
+                      {new Date(subscription.current_period_end).toLocaleDateString()}
+                    </div>
+                  )}
                   {subscription.current_period_end && (
                     <div className="text-sm text-muted-foreground mt-1">
-                      Renews on {new Date(subscription.current_period_end).toLocaleDateString()}
+                      {subscription.cancel_at_period_end ? 'Ends on ' : 'Renews on '}
+                      {new Date(subscription.current_period_end).toLocaleDateString()}
                     </div>
                   )}
                 </div>
@@ -865,6 +866,88 @@ function formatMoney(cents: number, currency: string | null): string {
   } catch {
     return `${amount.toFixed(2)} ${code}`;
   }
+}
+
+interface PaymentIssueBannerProps {
+  status: Subscription['status'];
+  onUpdatePaymentMethod: () => void;
+  portalPending: boolean;
+}
+
+// Shown when Stripe reports the subscription is in a non-active state that
+// requires user action (failed payment, incomplete authentication, etc.).
+// Backend webhooks set these statuses; the banner offers a one-click jump
+// to the Stripe portal to update the payment method.
+function PaymentIssueBanner({ status, onUpdatePaymentMethod, portalPending }: PaymentIssueBannerProps) {
+  let title: string | null = null;
+  let message: string | null = null;
+  let cta = 'Update Payment Method';
+  let tone: 'red' | 'yellow' = 'yellow';
+
+  switch (status) {
+    case 'past_due':
+      tone = 'red';
+      title = 'Payment Past Due';
+      message =
+        'Your most recent payment failed. Update your payment method to keep your subscription active — Stripe will retry the charge automatically.';
+      break;
+    case 'unpaid':
+      tone = 'red';
+      title = 'Subscription Unpaid';
+      message =
+        'Your subscription is unpaid and access will be reduced soon. Update your payment method to restore service.';
+      break;
+    case 'incomplete':
+      tone = 'yellow';
+      title = 'Payment Incomplete';
+      message =
+        'Your last payment requires additional action (such as 3D Secure authentication). Open the billing portal to complete it.';
+      cta = 'Complete Payment';
+      break;
+    case 'incomplete_expired':
+      tone = 'red';
+      title = 'Subscription Setup Failed';
+      message =
+        'The initial payment for this subscription expired before it could be confirmed. Start a new checkout to subscribe.';
+      cta = 'Manage in Stripe';
+      break;
+    default:
+      return null;
+  }
+
+  const toneClasses =
+    tone === 'red'
+      ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
+      : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20';
+  const iconClass = tone === 'red' ? 'text-red-600' : 'text-yellow-600';
+  const headingClass =
+    tone === 'red'
+      ? 'text-red-800 dark:text-red-200'
+      : 'text-yellow-800 dark:text-yellow-200';
+  const bodyClass =
+    tone === 'red' ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300';
+
+  return (
+    <Card className={toneClasses}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className={`w-5 h-5 mt-0.5 ${iconClass}`} />
+          <div className="flex-1">
+            <h3 className={`font-semibold ${headingClass}`}>{title}</h3>
+            <p className={`text-sm ${bodyClass}`}>{message}</p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={onUpdatePaymentMethod}
+            disabled={portalPending}
+          >
+            <CreditCard className="w-4 h-4 mr-2" />
+            {portalPending ? 'Opening...' : cta}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function InvoiceStatusBadge({ status }: { status: string | null }) {
