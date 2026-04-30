@@ -3327,6 +3327,13 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(())
     }
 
+    async fn list_taken_down_plugins(&self) -> StoreResult<Vec<Plugin>> {
+        // SQLite is the in-memory test backend; the plugin search/list
+        // surface is stubbed (see `search_plugins` above), so the
+        // moderation list mirrors that and stays empty.
+        Ok(Vec::new())
+    }
+
     async fn find_review_in_plugin(
         &self,
         plugin_id: Uuid,

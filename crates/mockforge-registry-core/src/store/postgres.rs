@@ -2126,6 +2126,10 @@ impl RegistryStore for PgRegistryStore {
         Plugin::restore(&self.pool, plugin_id).await.map_err(Into::into)
     }
 
+    async fn list_taken_down_plugins(&self) -> StoreResult<Vec<Plugin>> {
+        Plugin::list_taken_down(&self.pool).await.map_err(Into::into)
+    }
+
     async fn find_review_in_plugin(
         &self,
         plugin_id: Uuid,

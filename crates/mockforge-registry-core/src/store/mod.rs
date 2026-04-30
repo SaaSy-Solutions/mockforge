@@ -1814,6 +1814,11 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     async fn restore_plugin(&self, plugin_id: Uuid) -> StoreResult<()>;
 
+    /// All currently taken-down plugins, newest takedown first. Powers
+    /// the admin moderation page; the public search excludes these so
+    /// this is the only programmatic way to enumerate them.
+    async fn list_taken_down_plugins(&self) -> StoreResult<Vec<crate::models::Plugin>>;
+
     /// Look up a single review by id, scoped to the plugin path param so the
     /// author-response endpoint can return 404 (not 403) when the path/body
     /// disagree.
