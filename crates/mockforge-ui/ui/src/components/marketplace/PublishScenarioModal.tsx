@@ -6,6 +6,8 @@
 
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { authenticatedFetch } from '@/utils/apiClient';
+import { useAuthStore } from '@/stores/useAuthStore';
 import {
   Dialog,
   DialogTitle,
@@ -35,6 +37,7 @@ export const PublishScenarioModal: React.FC<PublishScenarioModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [manifest, setManifest] = useState(`{
   "name": "",
   "version": "1.0.0",
@@ -100,19 +103,14 @@ export const PublishScenarioModal: React.FC<PublishScenarioModalProps> = ({
         size: fileBuffer.byteLength,
       };
 
-      // Get auth token
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
+      if (!isAuthenticated) {
         throw new Error('Not authenticated. Please log in.');
       }
 
-      // Submit to API
-      const response = await fetch('/api/v1/marketplace/scenarios/publish', {
+      // Submit to API (authenticatedFetch attaches the JWT and refreshes on 401)
+      const response = await authenticatedFetch('/api/v1/marketplace/scenarios/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
 
@@ -121,9 +119,8 @@ export const PublishScenarioModal: React.FC<PublishScenarioModalProps> = ({
         throw new Error(apiErrorMessage(response, errorData, `Failed to publish: ${response.statusText}`));
       }
 
-      const result = await response.json();
+      await response.json().catch(() => ({}));
 
-      // Success
       if (onSuccess) {
         onSuccess();
       }
