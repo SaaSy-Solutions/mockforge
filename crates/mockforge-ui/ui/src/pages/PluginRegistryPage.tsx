@@ -700,7 +700,7 @@ export const PluginRegistryPage: React.FC = () => {
                           label={badge.replace(/-/g, ' ')}
                           size="small"
                           color={
-                            badge === 'official' || badge === 'verified'
+                            badge === 'official' || badge === 'verified' || badge === 'signed'
                               ? 'success'
                               : badge === 'popular' || badge === 'trending'
                               ? 'info'

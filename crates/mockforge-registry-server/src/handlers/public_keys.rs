@@ -11,7 +11,7 @@
 //! owns the user-facing CRUD.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use base64::Engine;
@@ -33,17 +33,22 @@ pub struct PublicKeyResponse {
     pub label: String,
     pub created_at: String,
     pub revoked_at: Option<String>,
+    /// Number of plugin versions whose SBOM signature was verified by
+    /// this key. Lets the UI show a "signed N versions" pill so a user
+    /// can decide whether a key is safe to revoke before doing it.
+    pub usage_count: i64,
 }
 
-impl From<mockforge_registry_core::models::UserPublicKey> for PublicKeyResponse {
-    fn from(k: mockforge_registry_core::models::UserPublicKey) -> Self {
+impl From<mockforge_registry_core::models::UserPublicKeyWithUsage> for PublicKeyResponse {
+    fn from(k: mockforge_registry_core::models::UserPublicKeyWithUsage) -> Self {
         Self {
-            id: k.id,
-            algorithm: k.algorithm,
-            public_key_b64: k.public_key_b64,
-            label: k.label,
-            created_at: k.created_at.to_rfc3339(),
-            revoked_at: k.revoked_at.map(|dt| dt.to_rfc3339()),
+            id: k.key.id,
+            algorithm: k.key.algorithm,
+            public_key_b64: k.key.public_key_b64,
+            label: k.key.label,
+            created_at: k.key.created_at.to_rfc3339(),
+            revoked_at: k.key.revoked_at.map(|dt| dt.to_rfc3339()),
+            usage_count: k.usage_count,
         }
     }
 }
@@ -54,11 +59,21 @@ pub struct ListPublicKeysResponse {
     pub keys: Vec<PublicKeyResponse>,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPublicKeysQuery {
+    /// When `true`, the response also includes soft-revoked keys so the
+    /// UI can render a revocation history. Defaults to `false`.
+    #[serde(default)]
+    pub include_revoked: bool,
+}
+
 pub async fn list_my_public_keys(
     AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
+    Query(q): Query<ListPublicKeysQuery>,
 ) -> ApiResult<Json<ListPublicKeysResponse>> {
-    let keys = state.store.list_user_public_keys(user_id).await?;
+    let keys = state.store.list_user_public_keys_with_usage(user_id, q.include_revoked).await?;
     Ok(Json(ListPublicKeysResponse {
         keys: keys.into_iter().map(Into::into).collect(),
     }))
@@ -119,7 +134,17 @@ pub async fn create_my_public_key(
     }
 
     let saved = state.store.create_user_public_key(user_id, &algorithm, key_b64, label).await?;
-    Ok(Json(saved.into()))
+    // Freshly registered keys have signed nothing yet — short-circuit
+    // the count rather than re-querying.
+    Ok(Json(PublicKeyResponse {
+        id: saved.id,
+        algorithm: saved.algorithm,
+        public_key_b64: saved.public_key_b64,
+        label: saved.label,
+        created_at: saved.created_at.to_rfc3339(),
+        revoked_at: saved.revoked_at.map(|dt| dt.to_rfc3339()),
+        usage_count: 0,
+    }))
 }
 
 pub async fn revoke_my_public_key(

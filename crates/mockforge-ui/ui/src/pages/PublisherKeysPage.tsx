@@ -14,6 +14,9 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Button,
   Card,
   CardContent,
@@ -23,10 +26,12 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   LinearProgress,
   Paper,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -34,8 +39,10 @@ import {
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
   Key as KeyIcon,
   ContentCopy as CopyIcon,
+  Terminal as TerminalIcon,
   VerifiedUser as VerifiedIcon,
 } from '@mui/icons-material';
 import { authenticatedFetch } from '../utils/apiClient';
@@ -47,14 +54,21 @@ interface PublicKey {
   label: string;
   createdAt: string;
   revokedAt?: string | null;
+  /// Number of plugin versions whose SBOM signature was verified by
+  /// this key. Server-computed via a JOIN on `plugin_versions` so we
+  /// don't ship N+1 queries from the browser.
+  usageCount: number;
 }
 
 interface ListResponse {
   keys: PublicKey[];
 }
 
-async function fetchKeys(): Promise<PublicKey[]> {
-  const resp = await authenticatedFetch('/api/v1/users/me/public-keys');
+async function fetchKeys(includeRevoked: boolean): Promise<PublicKey[]> {
+  const url = includeRevoked
+    ? '/api/v1/users/me/public-keys?includeRevoked=true'
+    : '/api/v1/users/me/public-keys';
+  const resp = await authenticatedFetch(url);
   if (!resp.ok) {
     const body = await resp.text().catch(() => '');
     throw new Error(`Failed to load keys (${resp.status}): ${body}`);
@@ -226,6 +240,95 @@ function sha256Fallback(bytes: Uint8Array): Uint8Array {
 // Exported for unit tests.
 export const __testing__ = { sha256, sha256Fallback, normalizeBase64 };
 
+/// Copy-to-clipboard CLI snippet. Plain element instead of a heavier
+/// dependency (no syntax highlighter pulled in for a four-snippet
+/// reference) — the CLI strings are short and the dialog text already
+/// uses `<code>` for the same purpose, so this stays consistent.
+const CliSnippet: React.FC<{ command: string; description: string }> = ({
+  command,
+  description,
+}) => {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    navigator.clipboard
+      .writeText(command)
+      .then(() => {
+        setCopied(true);
+        // Reset after a beat so a second copy still shows feedback.
+        window.setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {
+        /* clipboard permission denied — silently no-op */
+      });
+  };
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+        {description}
+      </Typography>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{
+          backgroundColor: 'action.hover',
+          borderRadius: 1,
+          px: 1.5,
+          py: 0.75,
+          fontFamily: 'monospace',
+          fontSize: '0.85rem',
+        }}
+      >
+        <span style={{ color: 'var(--mui-palette-text-secondary, #888)' }}>$</span>
+        <span style={{ flexGrow: 1, overflowX: 'auto', whiteSpace: 'nowrap' }}>{command}</span>
+        <Tooltip title={copied ? 'Copied!' : 'Copy command'}>
+          <IconButton size="small" onClick={onCopy} aria-label="copy command">
+            <CopyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </div>
+  );
+};
+
+/// CLI quick-reference accordion. Until now the page only mentioned
+/// `mockforge-plugin key gen` inline; the rest of the publishing
+/// workflow (sign, rotate, publish --sign) was undiscoverable from
+/// the UI even though the server depends on it. Collapsed by default
+/// so users who already know the flow aren't visually taxed.
+const CliQuickReference: React.FC = () => (
+  <Accordion variant="outlined" sx={{ mb: 3 }}>
+    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <TerminalIcon fontSize="small" color="action" />
+        <Typography variant="subtitle2">CLI quick reference</Typography>
+      </Stack>
+    </AccordionSummary>
+    <AccordionDetails>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        These commands run locally with the <code>mockforge-plugin</code>{' '}
+        binary. Your private key never leaves your machine.
+      </Typography>
+      <CliSnippet
+        description="Generate a fresh Ed25519 keypair (PKCS#8 PEM). Output the public half to register on this page."
+        command="mockforge-plugin key gen --out ~/.mockforge/publisher.pem"
+      />
+      <CliSnippet
+        description="Sign an SBOM detached, e.g. as a separate CI step before upload."
+        command="mockforge-plugin key sign --key-file ~/.mockforge/publisher.pem --checksum <hex> --sbom sbom.json"
+      />
+      <CliSnippet
+        description="Publish a plugin with an attested SBOM in one shot."
+        command="mockforge-plugin publish --sign --key-file ~/.mockforge/publisher.pem --sbom sbom.json"
+      />
+      <CliSnippet
+        description="Rotate: register a new key and revoke an old one atomically."
+        command="mockforge-plugin key rotate --out ~/.mockforge/publisher-new.pem --label ci-2026 --revoke <old-key-id>"
+      />
+    </AccordionDetails>
+  </Accordion>
+);
+
 const PublisherKeysPage: React.FC = () => {
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
@@ -234,6 +337,10 @@ const PublisherKeysPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<PublicKey | null>(null);
   const [fingerprints, setFingerprints] = useState<Record<string, string>>({});
+  // Off by default — most of the time users care about active keys.
+  // Flipping this on makes the server return revoked rows too so the
+  // user can audit who signed what before it was retired.
+  const [includeRevoked, setIncludeRevoked] = useState(false);
 
   const {
     data: keys,
@@ -241,8 +348,8 @@ const PublisherKeysPage: React.FC = () => {
     isError,
     error: queryError,
   } = useQuery({
-    queryKey: ['publisher-public-keys'],
-    queryFn: fetchKeys,
+    queryKey: ['publisher-public-keys', includeRevoked],
+    queryFn: () => fetchKeys(includeRevoked),
   });
 
   // Derive fingerprints whenever the key list changes. Done in an
@@ -320,17 +427,29 @@ const PublisherKeysPage: React.FC = () => {
           <KeyIcon color="primary" />
           <Typography variant="h5">Publisher Attestation Keys</Typography>
         </Stack>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setShowAdd(true)}
-          disabled={addMutation.isPending}
-        >
-          Add key
-        </Button>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={includeRevoked}
+                onChange={(e) => setIncludeRevoked(e.target.checked)}
+                size="small"
+              />
+            }
+            label="Show revoked"
+          />
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setShowAdd(true)}
+            disabled={addMutation.isPending}
+          >
+            Add key
+          </Button>
+        </Stack>
       </Stack>
 
-      <Typography variant="body2" color="text.secondary" mb={3}>
+      <Typography variant="body2" color="text.secondary" mb={2}>
         Register an Ed25519 public key to sign SBOMs at publish time. The
         registry verifies signatures against any of your active keys and
         surfaces a <b>verified publisher attestation</b> finding on each
@@ -338,6 +457,8 @@ const PublisherKeysPage: React.FC = () => {
         <code>mockforge-plugin key gen</code> — the private half never
         leaves your machine.
       </Typography>
+
+      <CliQuickReference />
 
       {isLoading && <LinearProgress />}
       {isError && (
@@ -377,6 +498,26 @@ const PublisherKeysPage: React.FC = () => {
                       color="primary"
                       variant="outlined"
                     />
+                    {/* Usage badge — surfaces the per-key signed-version
+                        count returned from the server's JOIN. Hidden at
+                        zero so a brand-new key isn't shouting "signed 0".
+                        Worth showing on revoked keys too: that's the
+                        whole point of "show revoked" — auditors want to
+                        see what a key did before being retired. */}
+                    {key.usageCount > 0 && (
+                      <Tooltip
+                        title={`${key.usageCount} plugin version${
+                          key.usageCount === 1 ? '' : 's'
+                        } verified by this key`}
+                      >
+                        <Chip
+                          label={`signed ${key.usageCount}`}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                        />
+                      </Tooltip>
+                    )}
                     {key.revokedAt && (
                       <Chip label="Revoked" color="default" size="small" />
                     )}
