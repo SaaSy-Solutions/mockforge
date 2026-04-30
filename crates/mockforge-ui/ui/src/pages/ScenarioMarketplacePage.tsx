@@ -16,7 +16,6 @@ import {
   Button,
   Chip,
   Rating,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -27,24 +26,23 @@ import {
   MenuItem,
   List,
   ListItem,
-  ListItemText,
   Divider,
   Alert,
-  Avatar,
+  Snackbar,
+  Link,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Star as StarIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  Category as CategoryIcon,
-  TrendingUp as TrendingIcon,
-  NewReleases as NewIcon,
-  FilterList as FilterIcon,
   Upload as UploadIcon,
+  Launch as LaunchIcon,
 } from '@mui/icons-material';
 import { PublishScenarioModal } from '../components/marketplace/PublishScenarioModal';
 import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
+import { authenticatedFetch } from '../utils/apiClient';
+import { useAuthStore } from '../stores/useAuthStore';
+import { apiErrorMessage } from '../utils/errorHandling';
 
 interface Scenario {
   name: string;
@@ -87,7 +85,11 @@ interface Review {
   verified_purchase: boolean;
 }
 
+type Snack = { severity: 'success' | 'error' | 'info'; message: string } | null;
+
 export const ScenarioMarketplacePage: React.FC = () => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [filteredScenarios, setFilteredScenarios] = useState<Scenario[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
@@ -95,6 +97,13 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [snack, setSnack] = useState<Snack>(null);
+
+  // Review form
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,10 +163,19 @@ export const ScenarioMarketplacePage: React.FC = () => {
         const data = await response.json();
         setScenarios(data.scenarios || []);
       } else {
-        console.error('Failed to load scenarios:', response.statusText);
+        const errorData = await response.json().catch(() => ({}));
+        setSnack({
+          severity: 'error',
+          message: apiErrorMessage(response, errorData, 'Failed to load scenarios'),
+        });
+        setScenarios([]);
       }
     } catch (error) {
-      console.error('Failed to load scenarios:', error);
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to load scenarios',
+      });
+      setScenarios([]);
     } finally {
       setLoading(false);
     }
@@ -190,35 +208,102 @@ export const ScenarioMarketplacePage: React.FC = () => {
     setFilteredScenarios(filtered);
   };
 
-  const handleViewDetails = async (scenario: Scenario) => {
-    setSelectedScenario(scenario);
-    setDetailsOpen(true);
-
-    // Load reviews
+  const loadReviews = async (scenarioName: string) => {
     try {
-      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenario.name)}/reviews?page=0&per_page=10`);
+      const response = await fetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/reviews?page=0&per_page=20`
+      );
       if (response.ok) {
         const data = await response.json();
         setReviews(data.reviews || []);
+      } else {
+        setReviews([]);
       }
-    } catch (error) {
-      console.error('Failed to load reviews:', error);
+    } catch {
+      setReviews([]);
     }
+  };
+
+  const handleViewDetails = async (scenario: Scenario) => {
+    setSelectedScenario(scenario);
+    setReviews([]);
+    setReviewRating(5);
+    setReviewTitle('');
+    setReviewComment('');
+    setDetailsOpen(true);
+    await loadReviews(scenario.name);
   };
 
   const handleDownload = async (scenarioName: string, version?: string) => {
     try {
       const targetVersion = version || selectedScenario?.version || 'latest';
-      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(targetVersion)}`);
+      const response = await fetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(targetVersion)}`
+      );
 
       if (response.ok) {
         const data = await response.json();
-        // Trigger download
         window.open(data.download_url, '_blank');
-        loadScenarios(); // Refresh to update download count
+        setSnack({
+          severity: 'success',
+          message: `Downloading ${scenarioName}@${targetVersion}`,
+        });
+        loadScenarios();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setSnack({
+          severity: 'error',
+          message: apiErrorMessage(response, errorData, 'Failed to download scenario'),
+        });
       }
     } catch (error) {
-      console.error('Failed to download scenario:', error);
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to download scenario',
+      });
+    }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedScenario) return;
+    if (reviewComment.trim().length < 10) {
+      setSnack({ severity: 'error', message: 'Comment must be at least 10 characters' });
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(selectedScenario.name)}/reviews`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating: reviewRating,
+            title: reviewTitle.trim() ? reviewTitle.trim() : undefined,
+            comment: reviewComment.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to submit review'));
+      }
+
+      setSnack({ severity: 'success', message: 'Review submitted' });
+      setReviewTitle('');
+      setReviewComment('');
+      setReviewRating(5);
+      await loadReviews(selectedScenario.name);
+      // Reload scenarios so updated rating is reflected in the grid
+      loadScenarios();
+    } catch (error) {
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to submit review',
+      });
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
@@ -466,7 +551,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
                           Rating
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Rating value={selectedScenario.rating} readOnly />
+                          <Rating value={selectedScenario.rating} readOnly precision={0.5} />
                           <Typography variant="body2">
                             ({selectedScenario.reviews_count} reviews)
                           </Typography>
@@ -475,6 +560,40 @@ export const ScenarioMarketplacePage: React.FC = () => {
                     </Card>
                   </Grid>
                 </Grid>
+
+                {(selectedScenario.repository ||
+                  selectedScenario.homepage ||
+                  selectedScenario.license) && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
+                    {selectedScenario.license && (
+                      <Chip
+                        label={`License: ${selectedScenario.license}`}
+                        size="small"
+                        variant="outlined"
+                      />
+                    )}
+                    {selectedScenario.repository && (
+                      <Link
+                        href={selectedScenario.repository}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        <LaunchIcon fontSize="inherit" /> Repository
+                      </Link>
+                    )}
+                    {selectedScenario.homepage && (
+                      <Link
+                        href={selectedScenario.homepage}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                      >
+                        <LaunchIcon fontSize="inherit" /> Homepage
+                      </Link>
+                    )}
+                  </Box>
+                )}
 
                 {selectedScenario.versions.length > 0 && (
                   <Box sx={{ mb: 2 }}>
@@ -508,6 +627,52 @@ export const ScenarioMarketplacePage: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 Reviews
               </Typography>
+
+              {isAuthenticated ? (
+                <Card variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Leave a review
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Typography variant="body2">Your rating:</Typography>
+                      <Rating
+                        value={reviewRating}
+                        onChange={(_, value) => setReviewRating(value || 1)}
+                      />
+                    </Box>
+                    <TextField
+                      fullWidth
+                      placeholder="Title (optional)"
+                      value={reviewTitle}
+                      onChange={(e) => setReviewTitle(e.target.value)}
+                      sx={{ mb: 2 }}
+                      inputProps={{ maxLength: 200 }}
+                    />
+                    <TextField
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      placeholder="Share your experience (min 10 characters)"
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      sx={{ mb: 2 }}
+                    />
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={reviewSubmitting || reviewComment.trim().length < 10}
+                      onClick={handleSubmitReview}
+                    >
+                      {reviewSubmitting ? 'Submitting…' : 'Submit review'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Sign in to leave a review.
+                </Alert>
+              )}
 
               {reviews.length === 0 ? (
                 <Alert severity="info">No reviews yet</Alert>
@@ -565,8 +730,22 @@ export const ScenarioMarketplacePage: React.FC = () => {
         onSuccess={() => {
           loadScenarios();
           setPublishModalOpen(false);
+          setSnack({ severity: 'success', message: 'Scenario published successfully' });
         }}
       />
+
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {snack ? (
+          <Alert severity={snack.severity} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
+            {snack.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 };
