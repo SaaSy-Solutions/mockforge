@@ -11,6 +11,7 @@ import {
   TrendingUp,
   HardDrive,
   Zap,
+  Activity,
   AlertCircle,
   ExternalLink,
   ArrowUpCircle,
@@ -21,7 +22,14 @@ import { useToast } from '@/components/ui/ToastProvider';
 interface Subscription {
   org_id: string;
   plan: 'free' | 'pro' | 'team';
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+  status:
+    | 'active'
+    | 'trialing'
+    | 'past_due'
+    | 'canceled'
+    | 'unpaid'
+    | 'incomplete'
+    | 'incomplete_expired';
   cancel_at_period_end?: boolean;
   current_period_end?: string;
   usage: UsageStats;
@@ -33,6 +41,10 @@ interface Subscription {
     storage_gb: number;
     ai_tokens_per_month: number;
     hosted_mocks: boolean;
+    max_hosted_mocks: number;
+    max_plugins_published: number;
+    max_templates_published: number;
+    max_scenarios_published: number;
   };
 }
 
@@ -41,6 +53,8 @@ interface UsageStats {
   requests_limit: number;
   storage_bytes: number;
   storage_limit_bytes: number;
+  egress_bytes: number;
+  egress_limit_bytes: number;
   ai_tokens_used: number;
   ai_tokens_limit: number;
 }
@@ -57,6 +71,25 @@ interface CreateCheckoutResponse {
 
 interface CreatePortalResponse {
   portal_url: string;
+}
+
+interface InvoiceItem {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amount_due: number;
+  amount_paid: number;
+  currency: string | null;
+  created: number | null;
+  period_start: number | null;
+  period_end: number | null;
+  hosted_invoice_url: string | null;
+  invoice_pdf: string | null;
+}
+
+interface ListInvoicesResponse {
+  org_id: string;
+  invoices: InvoiceItem[];
 }
 
 // API base URL - adjust based on your setup
@@ -107,6 +140,20 @@ async function createCheckout(request: CreateCheckoutRequest): Promise<CreateChe
   return response.json();
 }
 
+async function fetchInvoices(): Promise<ListInvoicesResponse> {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_BASE}/billing/invoices`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, 'Failed to fetch invoices'));
+  }
+  return response.json();
+}
+
 async function createPortalSession(): Promise<CreatePortalResponse> {
   const token = localStorage.getItem('auth_token');
   const response = await fetch(`${API_BASE}/billing/portal`, {
@@ -139,6 +186,19 @@ export function BillingPage() {
   } = useQuery({
     queryKey: ['subscription'],
     queryFn: fetchSubscription,
+  });
+
+  // Fetch invoices (only meaningful once we have a Stripe customer; backend
+  // returns an empty list otherwise so this is safe to fire eagerly)
+  const {
+    data: invoiceList,
+    isLoading: invoicesLoading,
+    isError: invoicesError,
+    refetch: refetchInvoices,
+  } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: fetchInvoices,
+    staleTime: 5 * 60_000,
   });
 
   // Create checkout mutation
@@ -204,6 +264,9 @@ export function BillingPage() {
     return num.toString();
   };
 
+  // -1 = unlimited, 0 = not included, otherwise show the number
+  const formatLimit = (n: number) => (n === -1 ? 'Unlimited' : n === 0 ? 'Not included' : String(n));
+
   const getUsagePercentage = (used: number, limit: number) => {
     if (limit <= 0) return 0;
     return Math.min((used / limit) * 100, 100);
@@ -217,6 +280,12 @@ export function BillingPage() {
         return <Badge className="bg-blue-500"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
       case 'past_due':
         return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
+      case 'unpaid':
+        return <Badge className="bg-red-500"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
+      case 'incomplete':
+        return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
+      case 'incomplete_expired':
+        return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
       case 'canceled':
         return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Canceled</Badge>;
       default:
@@ -282,6 +351,7 @@ export function BillingPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="usage">Usage</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="plans">Plans</TabsTrigger>
         </TabsList>
 
@@ -309,23 +379,35 @@ export function BillingPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Projects</span>
-                    <span>
-                      {subscription.limits.max_projects === -1
-                        ? 'Unlimited'
-                        : subscription.limits.max_projects}
-                    </span>
+                    <span>{formatLimit(subscription.limits.max_projects)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Collaborators</span>
-                    <span>{subscription.limits.max_collaborators}</span>
+                    <span>{formatLimit(subscription.limits.max_collaborators)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Environments</span>
-                    <span>{subscription.limits.max_environments}</span>
+                    <span>{formatLimit(subscription.limits.max_environments)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Hosted Mocks</span>
-                    <span>{subscription.limits.hosted_mocks ? 'Yes' : 'No'}</span>
+                    <span>
+                      {subscription.limits.hosted_mocks
+                        ? formatLimit(subscription.limits.max_hosted_mocks)
+                        : 'Not included'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Plugins published</span>
+                    <span>{formatLimit(subscription.limits.max_plugins_published)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Templates published</span>
+                    <span>{formatLimit(subscription.limits.max_templates_published)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Scenarios published</span>
+                    <span>{formatLimit(subscription.limits.max_scenarios_published)}</span>
                   </div>
                 </div>
                 {subscription.plan === 'free' ? (
@@ -404,6 +486,35 @@ export function BillingPage() {
                     />
                   </div>
                 </div>
+                {(subscription.usage.egress_limit_bytes > 0 || subscription.usage.egress_bytes > 0) && (
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="flex items-center">
+                        <Activity className="w-4 h-4 mr-1" />
+                        Egress
+                      </span>
+                      <span>
+                        {formatBytes(subscription.usage.egress_bytes)}
+                        {subscription.usage.egress_limit_bytes > 0
+                          ? ` / ${formatBytes(subscription.usage.egress_limit_bytes)}`
+                          : ''}
+                      </span>
+                    </div>
+                    {subscription.usage.egress_limit_bytes > 0 && (
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all"
+                          style={{
+                            width: `${getUsagePercentage(
+                              subscription.usage.egress_bytes,
+                              subscription.usage.egress_limit_bytes
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
                 {subscription.usage.ai_tokens_limit > 0 && (
                   <div>
                     <div className="flex justify-between text-sm mb-1">
@@ -460,6 +571,17 @@ export function BillingPage() {
                     {formatBytes(subscription.usage.storage_bytes)} / {formatBytes(subscription.usage.storage_limit_bytes)}
                   </div>
                 </div>
+                {(subscription.usage.egress_limit_bytes > 0 || subscription.usage.egress_bytes > 0) && (
+                  <div className="rounded-lg border p-3">
+                    <div className="text-sm text-muted-foreground">Egress</div>
+                    <div className="text-lg font-semibold">
+                      {formatBytes(subscription.usage.egress_bytes)}
+                      {subscription.usage.egress_limit_bytes > 0
+                        ? ` / ${formatBytes(subscription.usage.egress_limit_bytes)}`
+                        : ''}
+                    </div>
+                  </div>
+                )}
                 {subscription.usage.ai_tokens_limit > 0 && (
                   <div className="rounded-lg border p-3">
                     <div className="text-sm text-muted-foreground">AI Tokens</div>
@@ -476,6 +598,94 @@ export function BillingPage() {
                 View full usage dashboard
                 <ExternalLink className="w-3 h-3 ml-1" />
               </a>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Invoices Tab */}
+        <TabsContent value="invoices" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Invoices</CardTitle>
+              <CardDescription>
+                Past invoices from Stripe. Use the Stripe portal for payment-method changes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {invoicesLoading ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Loading invoices...
+                </div>
+              ) : invoicesError ? (
+                <div className="text-center py-6 space-y-3">
+                  <AlertCircle className="w-8 h-8 mx-auto text-red-500" />
+                  <p className="text-sm text-muted-foreground">Failed to load invoices</p>
+                  <Button variant="outline" size="sm" onClick={() => refetchInvoices()}>
+                    Retry
+                  </Button>
+                </div>
+              ) : !invoiceList || invoiceList.invoices.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  No invoices yet.{' '}
+                  {subscription.plan === 'free'
+                    ? 'Upgrade to a paid plan to start receiving invoices.'
+                    : 'Your first invoice will appear after the next billing cycle.'}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Date</th>
+                        <th className="py-2 pr-4 font-medium">Number</th>
+                        <th className="py-2 pr-4 font-medium">Period</th>
+                        <th className="py-2 pr-4 font-medium">Amount</th>
+                        <th className="py-2 pr-4 font-medium">Status</th>
+                        <th className="py-2 pr-4 font-medium text-right">Links</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceList.invoices.map((inv) => (
+                        <tr key={inv.id} className="border-b last:border-0">
+                          <td className="py-2 pr-4">{formatUnix(inv.created)}</td>
+                          <td className="py-2 pr-4 font-mono text-xs">{inv.number ?? '—'}</td>
+                          <td className="py-2 pr-4 text-xs text-muted-foreground">
+                            {formatPeriod(inv.period_start, inv.period_end)}
+                          </td>
+                          <td className="py-2 pr-4 font-medium">
+                            {formatMoney(inv.amount_paid || inv.amount_due, inv.currency)}
+                          </td>
+                          <td className="py-2 pr-4">
+                            <InvoiceStatusBadge status={inv.status} />
+                          </td>
+                          <td className="py-2 pr-4 text-right space-x-2">
+                            {inv.hosted_invoice_url && (
+                              <a
+                                href={inv.hosted_invoice_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline dark:text-blue-400"
+                              >
+                                View
+                              </a>
+                            )}
+                            {inv.invoice_pdf && (
+                              <a
+                                href={inv.invoice_pdf}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline dark:text-blue-400"
+                              >
+                                PDF
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -633,4 +843,44 @@ export function BillingPage() {
       </Tabs>
     </div>
   );
+}
+
+function formatUnix(unixSeconds: number | null): string {
+  if (!unixSeconds) return '—';
+  return new Date(unixSeconds * 1000).toLocaleDateString();
+}
+
+function formatPeriod(start: number | null, end: number | null): string {
+  if (!start || !end) return '—';
+  const s = new Date(start * 1000).toLocaleDateString();
+  const e = new Date(end * 1000).toLocaleDateString();
+  return `${s} – ${e}`;
+}
+
+function formatMoney(cents: number, currency: string | null): string {
+  const code = (currency ?? 'usd').toUpperCase();
+  const amount = cents / 100;
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${code}`;
+  }
+}
+
+function InvoiceStatusBadge({ status }: { status: string | null }) {
+  if (!status) return <Badge>—</Badge>;
+  switch (status) {
+    case 'paid':
+      return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
+    case 'open':
+      return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
+    case 'uncollectible':
+      return <Badge className="bg-red-500"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
+    case 'void':
+      return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
+    case 'draft':
+      return <Badge className="bg-gray-400">Draft</Badge>;
+    default:
+      return <Badge>{status}</Badge>;
+  }
 }

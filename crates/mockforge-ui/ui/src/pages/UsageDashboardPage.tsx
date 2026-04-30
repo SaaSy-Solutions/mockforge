@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
@@ -16,6 +16,9 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Package,
+  Key,
+  Server,
 } from 'lucide-react';
 import { authenticatedFetch } from '@/utils/apiClient';
 
@@ -51,6 +54,30 @@ interface UsageHistoryResponse {
   }>;
 }
 
+interface OrgLifetimeUsageResponse {
+  org_id: string;
+  total_requests: number;
+  total_storage_gb: number;
+  total_ai_tokens: number;
+  hosted_mocks_count: number;
+  plugins_published: number;
+  api_tokens_count: number;
+}
+
+interface UsageAlertItem {
+  id: string;
+  metric: string;
+  period_start: string;
+  threshold_pct: number;
+  notified_at: string;
+}
+
+interface ListUsageAlertsResponse {
+  org_id: string;
+  period_start: string;
+  alerts: UsageAlertItem[];
+}
+
 // API base URL
 const API_BASE = '/api/v1';
 
@@ -70,6 +97,31 @@ async function fetchUsageHistory(): Promise<UsageHistoryResponse> {
     throw new Error('Failed to fetch usage history');
   }
   return response.json();
+}
+
+async function fetchLifetimeUsage(orgId: string): Promise<OrgLifetimeUsageResponse> {
+  const response = await authenticatedFetch(`${API_BASE}/organizations/${orgId}/usage`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch lifetime usage');
+  }
+  return response.json();
+}
+
+async function fetchUsageAlerts(): Promise<ListUsageAlertsResponse> {
+  const response = await authenticatedFetch(`${API_BASE}/usage/alerts`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch usage alerts');
+  }
+  return response.json();
+}
+
+async function dismissUsageAlert(alertId: string): Promise<void> {
+  const response = await authenticatedFetch(`${API_BASE}/usage/alerts/${alertId}/dismiss`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to dismiss alert');
+  }
 }
 
 // Use SI units (base-1000) to match backend which stores limits in SI bytes
@@ -164,6 +216,32 @@ export function UsageDashboardPage() {
     refetchInterval: 60_000,
   });
 
+  const {
+    data: lifetime,
+    isLoading: lifetimeLoading,
+    isError: lifetimeError,
+    refetch: refetchLifetime,
+  } = useQuery({
+    queryKey: ['usage-lifetime', usage?.org_id],
+    queryFn: () => fetchLifetimeUsage(usage!.org_id),
+    enabled: !!usage?.org_id,
+    staleTime: 60_000,
+  });
+
+  const queryClient = useQueryClient();
+  const { data: alertsData } = useQuery({
+    queryKey: ['usage-alerts'],
+    queryFn: fetchUsageAlerts,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  const dismissMutation = useMutation({
+    mutationFn: dismissUsageAlert,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usage-alerts'] });
+    },
+  });
+
   if (usageLoading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
@@ -245,6 +323,7 @@ export function UsageDashboardPage() {
         <TabsList>
           <TabsTrigger value="current">Current Usage</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="lifetime">All Time</TabsTrigger>
         </TabsList>
 
         {/* Current Usage Tab */}
@@ -269,14 +348,16 @@ export function UsageDashboardPage() {
               formatValue={formatBytes}
             />
 
-            {/* Egress */}
-            <UsageCard
-              icon={<Activity className="w-5 h-5 mr-2" />}
-              title="Data Egress"
-              description="Data transfer usage"
-              metric={usage.usage.egress}
-              formatValue={formatBytes}
-            />
+            {/* Egress - show only if a limit is defined OR there's actual usage */}
+            {(usage.usage.egress.limit > 0 || usage.usage.egress.used > 0) && (
+              <UsageCard
+                icon={<Activity className="w-5 h-5 mr-2" />}
+                title="Data Egress"
+                description="Data transfer usage"
+                metric={usage.usage.egress}
+                formatValue={formatBytes}
+              />
+            )}
 
             {/* AI Tokens - show if limit > 0 OR if there's actual usage */}
             {(usage.usage.ai_tokens.limit > 0 || usage.usage.ai_tokens.used > 0) && (
@@ -291,7 +372,54 @@ export function UsageDashboardPage() {
             )}
           </div>
 
-          {/* Usage Warnings */}
+          {/* Server-driven alerts (persistent, dismissible) */}
+          {alertsData && alertsData.alerts.length > 0 && (
+            <Card className="border-yellow-500">
+              <CardHeader>
+                <CardTitle className="flex items-center text-base">
+                  <AlertCircle className="w-5 h-5 text-yellow-500 mr-2" />
+                  Active Alerts
+                </CardTitle>
+                <CardDescription>
+                  Thresholds crossed during this billing period. Dismiss once acknowledged.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {alertsData.alerts.map((alert) => (
+                  <div
+                    key={alert.id}
+                    className="flex items-center justify-between border rounded-md p-2 text-sm"
+                  >
+                    <div>
+                      <span className="font-medium">
+                        {METRIC_LABELS[alert.metric] ?? alert.metric}
+                      </span>{' '}
+                      <span className="text-muted-foreground">
+                        crossed {alert.threshold_pct}% of plan limit
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={dismissMutation.isPending}
+                      onClick={() => dismissMutation.mutate(alert.id)}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                ))}
+                <a
+                  href="/billing"
+                  className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                >
+                  Upgrade plan
+                  <ArrowUpRight className="w-3 h-3 ml-1" />
+                </a>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Inline computed warning (instant, in-session, no dismissal) */}
           {highUsageMetrics.length > 0 && (
             <Card className="border-yellow-500">
               <CardContent className="p-4">
@@ -380,12 +508,15 @@ export function UsageDashboardPage() {
                           {formatBytes(period.storage_bytes)}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-sm text-muted-foreground">Egress</div>
-                        <div className="text-lg font-semibold">
-                          {formatBytes(period.egress_bytes)}
+                      {/* Show egress in history only if there's non-zero usage OR a plan limit is defined */}
+                      {(period.egress_bytes > 0 || usage.usage.egress.limit > 0) && (
+                        <div>
+                          <div className="text-sm text-muted-foreground">Egress</div>
+                          <div className="text-lg font-semibold">
+                            {formatBytes(period.egress_bytes)}
+                          </div>
                         </div>
-                      </div>
+                      )}
                       {/* Show AI tokens in history if there's any non-zero usage OR current plan includes them */}
                       {(period.ai_tokens_used > 0 || usage.usage.ai_tokens.limit > 0) && (
                         <div>
@@ -444,7 +575,95 @@ export function UsageDashboardPage() {
             </Card>
           )}
         </TabsContent>
+
+        {/* Lifetime / All Time Tab */}
+        <TabsContent value="lifetime" className="space-y-4">
+          {lifetimeLoading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <UsageCardSkeleton />
+              <UsageCardSkeleton />
+            </div>
+          ) : lifetimeError || !lifetime ? (
+            <div className="text-center py-12 space-y-4">
+              <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+              <h2 className="text-lg font-semibold">Failed to load lifetime totals</h2>
+              <Button variant="outline" onClick={() => refetchLifetime()}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Lifetime Usage</CardTitle>
+                  <CardDescription>Cumulative across all billing periods</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <LifetimeStat
+                    icon={<TrendingUp className="w-4 h-4 mr-2" />}
+                    label="Total Requests"
+                    value={formatNumber(lifetime.total_requests)}
+                  />
+                  <LifetimeStat
+                    icon={<HardDrive className="w-4 h-4 mr-2" />}
+                    label="Total Storage"
+                    value={`${lifetime.total_storage_gb.toFixed(2)} GB`}
+                  />
+                  <LifetimeStat
+                    icon={<Zap className="w-4 h-4 mr-2" />}
+                    label="Total AI Tokens"
+                    value={formatNumber(lifetime.total_ai_tokens)}
+                  />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Resources</CardTitle>
+                  <CardDescription>Current count across the org</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <LifetimeStat
+                    icon={<Server className="w-4 h-4 mr-2" />}
+                    label="Hosted Mocks"
+                    value={lifetime.hosted_mocks_count.toString()}
+                  />
+                  <LifetimeStat
+                    icon={<Package className="w-4 h-4 mr-2" />}
+                    label="Plugins Published"
+                    value={lifetime.plugins_published.toString()}
+                  />
+                  <LifetimeStat
+                    icon={<Key className="w-4 h-4 mr-2" />}
+                    label="API Tokens"
+                    value={lifetime.api_tokens_count.toString()}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function LifetimeStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="flex items-center text-muted-foreground">
+        {icon}
+        {label}
+      </span>
+      <span className="font-semibold">{value}</span>
     </div>
   );
 }

@@ -177,6 +177,7 @@ async fn main() -> Result<()> {
     workers::runtime_observability_retention::start_runtime_observability_retention_worker(
         db.pool().clone(),
     );
+    workers::usage_threshold_checker::start_usage_threshold_checker(state.clone());
 
     // Start deployment orchestrator for hosted mocks
     let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();
