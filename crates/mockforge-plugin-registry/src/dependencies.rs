@@ -335,6 +335,7 @@ mod tests {
             yanked,
             min_mockforge_version: None,
             dependencies: HashMap::new(),
+            downloads: 0,
         }
     }
 
@@ -963,6 +964,7 @@ mod tests {
                 yanked: false,
                 min_mockforge_version: None,
                 dependencies: deps_map,
+                downloads: 0,
             }],
         );
 

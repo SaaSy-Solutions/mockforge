@@ -19,6 +19,26 @@ pub struct VerifyPluginRequest {
     pub verified: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakedownPluginRequest {
+    /// Optional reason shown on the admin detail view. Stored on the
+    /// plugin row so admins reviewing past moderation see why.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TakedownPluginResponse {
+    pub success: bool,
+    pub plugin_name: String,
+    pub taken_down: bool,
+    pub taken_down_at: Option<String>,
+    pub reason: Option<String>,
+    pub message: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifyPluginResponse {
@@ -101,6 +121,115 @@ pub async fn verify_plugin(
         plugin_name: name,
         verified: request.verified,
         verified_at: verified_at.map(|dt| dt.to_rfc3339()),
+        message,
+    }))
+}
+
+/// Soft-delete a plugin from the public catalog. Reversible via
+/// `restore_plugin` — installed copies keep working because we only flip
+/// flags; we don't drop rows.
+pub async fn takedown_plugin(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Extension(user_id): Extension<String>,
+    Json(request): Json<TakedownPluginRequest>,
+) -> ApiResult<Json<TakedownPluginResponse>> {
+    let pool = state.db.pool();
+
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+
+    let user = sqlx::query_as::<_, (bool,)>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::Database)?;
+    if !user.0 {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let plugin = Plugin::find_by_name(pool, &name)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
+
+    let reason = request.reason.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    state.store.take_down_plugin(plugin.id, reason).await?;
+
+    let message = format!("Plugin '{}' has been taken down", name);
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_uuid),
+            AuditEventType::PluginTakenDown,
+            message.clone(),
+            Some(serde_json::json!({
+                "plugin_name": name,
+                "reason": reason,
+            })),
+            None,
+            None,
+        )
+        .await;
+
+    Ok(Json(TakedownPluginResponse {
+        success: true,
+        plugin_name: name,
+        taken_down: true,
+        taken_down_at: Some(Utc::now().to_rfc3339()),
+        reason: reason.map(str::to_string),
+        message,
+    }))
+}
+
+/// Reverse a takedown — clears both the timestamp and the stored reason.
+pub async fn restore_plugin(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Extension(user_id): Extension<String>,
+) -> ApiResult<Json<TakedownPluginResponse>> {
+    let pool = state.db.pool();
+
+    let user_uuid = Uuid::parse_str(&user_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
+
+    let user = sqlx::query_as::<_, (bool,)>("SELECT is_admin FROM users WHERE id = $1")
+        .bind(user_uuid)
+        .fetch_one(pool)
+        .await
+        .map_err(ApiError::Database)?;
+    if !user.0 {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let plugin = Plugin::find_by_name(pool, &name)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::PluginNotFound(name.clone()))?;
+
+    state.store.restore_plugin(plugin.id).await?;
+
+    let message = format!("Plugin '{}' has been restored", name);
+    state
+        .store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_uuid),
+            AuditEventType::PluginRestored,
+            message.clone(),
+            Some(serde_json::json!({ "plugin_name": name })),
+            None,
+            None,
+        )
+        .await;
+
+    Ok(Json(TakedownPluginResponse {
+        success: true,
+        plugin_name: name,
+        taken_down: false,
+        taken_down_at: None,
+        reason: None,
         message,
     }))
 }

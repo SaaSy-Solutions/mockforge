@@ -1799,6 +1799,38 @@ pub trait RegistryStore: Send + Sync + 'static {
         helpful: bool,
     ) -> StoreResult<()>;
 
+    /// Increment both `plugins.downloads_total` and
+    /// `plugin_versions.downloads`. Called by the tracked-download endpoint
+    /// before redirecting to the artifact URL.
+    async fn increment_plugin_download(
+        &self,
+        plugin_id: Uuid,
+        plugin_version_id: Uuid,
+    ) -> StoreResult<()>;
+
+    /// Set / clear the takedown columns. `reason` is preserved on the row
+    /// so admins can audit moderation history.
+    async fn take_down_plugin(&self, plugin_id: Uuid, reason: Option<&str>) -> StoreResult<()>;
+
+    async fn restore_plugin(&self, plugin_id: Uuid) -> StoreResult<()>;
+
+    /// Look up a single review by id, scoped to the plugin path param so the
+    /// author-response endpoint can return 404 (not 403) when the path/body
+    /// disagree.
+    async fn find_review_in_plugin(
+        &self,
+        plugin_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<Option<crate::models::Review>>;
+
+    /// Set or clear the author response on a review. None clears both
+    /// columns so authors can retract a response.
+    async fn set_review_author_response(
+        &self,
+        review_id: Uuid,
+        text: Option<&str>,
+    ) -> StoreResult<()>;
+
     /// Lookup (id, username) for a user.
     async fn get_user_public_info(&self, user_id: Uuid) -> StoreResult<Option<(String, String)>>;
 

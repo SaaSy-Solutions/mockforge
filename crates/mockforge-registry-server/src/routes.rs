@@ -20,6 +20,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/plugins/search", post(handlers::plugins::search_plugins))
         .route("/api/v1/plugins/{name}", get(handlers::plugins::get_plugin))
         .route("/api/v1/plugins/{name}/versions/{version}", get(handlers::plugins::get_version))
+        .route(
+            "/api/v1/plugins/{name}/versions/{version}/download",
+            get(handlers::plugins::download_version),
+        )
         .route("/api/v1/plugins/{name}/reviews", get(handlers::reviews::get_reviews))
         .route("/api/v1/plugins/{name}/badges", get(handlers::admin::get_plugin_badges))
         .route("/api/v1/plugins/{name}/security", get(handlers::plugins::get_plugin_security))
@@ -89,6 +93,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route(
             "/api/v1/plugins/{name}/reviews/{review_id}/vote",
             post(handlers::reviews::vote_review),
+        )
+        .route(
+            "/api/v1/plugins/{name}/reviews/{review_id}/respond",
+            post(handlers::reviews::respond_to_review),
+        )
+        .route(
+            "/api/v1/plugins/{name}/reviews/{review_id}/respond",
+            delete(handlers::reviews::clear_review_response),
         )
         // Auth info routes
         .route("/api/v1/auth/verify", get(handlers::auth::verify_token))
@@ -375,6 +387,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
     // Admin routes (require admin JWT + rate limiting)
     let admin_routes = Router::new()
         .route("/api/v1/admin/plugins/{name}/verify", post(handlers::admin::verify_plugin))
+        .route("/api/v1/admin/plugins/{name}/takedown", post(handlers::admin::takedown_plugin))
+        .route("/api/v1/admin/plugins/{name}/restore", post(handlers::admin::restore_plugin))
         .route("/api/v1/admin/stats", get(handlers::admin::get_admin_stats))
         .route("/api/v1/admin/analytics", get(handlers::analytics::get_analytics))
         .route(
@@ -406,6 +420,7 @@ mod tests {
             "/api/v1/plugins/search",
             "/api/v1/plugins/{name}",
             "/api/v1/plugins/{name}/versions/{version}",
+            "/api/v1/plugins/{name}/versions/{version}/download",
             "/api/v1/stats",
             "/api/v1/auth/register",
             "/api/v1/auth/login",
@@ -466,6 +481,8 @@ mod tests {
         // Verify admin route paths are correctly defined
         let routes = vec![
             "/api/v1/admin/plugins/{name}/verify",
+            "/api/v1/admin/plugins/{name}/takedown",
+            "/api/v1/admin/plugins/{name}/restore",
             "/api/v1/admin/stats",
             "/api/v1/admin/analytics",
             "/api/v1/admin/analytics/funnel",

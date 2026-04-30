@@ -138,6 +138,12 @@ pub struct VersionEntry {
 
     /// Dependencies
     pub dependencies: HashMap<String, String>,
+
+    /// Per-version download count. Bumped by the
+    /// `/api/v1/plugins/{name}/versions/{version}/download` redirect
+    /// endpoint each time a client follows it.
+    #[serde(default)]
+    pub downloads: u64,
 }
 
 /// Author information
@@ -284,6 +290,7 @@ mod tests {
             yanked: false,
             min_mockforge_version: Some("0.3.0".to_string()),
             dependencies: HashMap::new(),
+            downloads: 0,
         }
     }
 

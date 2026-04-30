@@ -25,6 +25,10 @@ pub struct Plugin {
     pub updated_at: DateTime<Utc>,
     #[sqlx(default)]
     pub language: String,
+    #[sqlx(default)]
+    pub taken_down_at: Option<DateTime<Utc>>,
+    #[sqlx(default)]
+    pub taken_down_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -114,7 +118,10 @@ impl Plugin {
             conditions.push(format!("t.name = ANY(${})", params_count));
         }
 
-        sql.push_str(" WHERE 1=1 ");
+        // Hide taken-down plugins from public search. The admin UI loads
+        // them through a separate query path (`Plugin::find_by_name` does
+        // not filter on this) so moderation stays reversible.
+        sql.push_str(" WHERE p.taken_down_at IS NULL ");
 
         // Add search query
         if let Some(_q) = query {
@@ -211,7 +218,9 @@ impl Plugin {
             conditions.push(format!("t.name = ANY(${})", params_count));
         }
 
-        sql.push_str(" WHERE 1=1 ");
+        // Same taken-down filter as `search` so the count matches the
+        // page rendered to anonymous / non-admin users.
+        sql.push_str(" WHERE p.taken_down_at IS NULL ");
 
         if let Some(_q) = query {
             params_count += 1;
@@ -320,6 +329,35 @@ impl Plugin {
             .bind(plugin_id)
             .execute(pool)
             .await?;
+        Ok(())
+    }
+
+    /// Mark a plugin as taken-down. The reason is surfaced to admins on the
+    /// detail view so they remember why moderation acted.
+    pub async fn take_down(
+        pool: &sqlx::PgPool,
+        plugin_id: Uuid,
+        reason: Option<&str>,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            "UPDATE plugins SET taken_down_at = NOW(), taken_down_reason = $2 WHERE id = $1",
+        )
+        .bind(plugin_id)
+        .bind(reason)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Reverse a takedown — clears both the timestamp and the reason so the
+    /// plugin reappears in search.
+    pub async fn restore(pool: &sqlx::PgPool, plugin_id: Uuid) -> sqlx::Result<()> {
+        sqlx::query(
+            "UPDATE plugins SET taken_down_at = NULL, taken_down_reason = NULL WHERE id = $1",
+        )
+        .bind(plugin_id)
+        .execute(pool)
+        .await?;
         Ok(())
     }
 }
