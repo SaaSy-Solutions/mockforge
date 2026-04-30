@@ -1189,11 +1189,50 @@ export interface ValidationConfig {
   overrides: Record<string, string>;
 }
 
+export interface ProtocolsConfig {
+  http: boolean;
+  graphql: boolean;
+  grpc: boolean;
+  websocket: boolean;
+  smtp: boolean;
+  mqtt: boolean;
+  ftp: boolean;
+  kafka: boolean;
+  rabbitmq: boolean;
+  amqp: boolean;
+  tcp: boolean;
+}
+
+export interface BandwidthConfig {
+  enabled: boolean;
+  max_bytes_per_sec: number;
+  burst_capacity_bytes: number;
+}
+
+export interface BurstLossConfig {
+  enabled: boolean;
+  burst_probability: number;
+  burst_duration_ms: number;
+  loss_rate_during_burst: number;
+  recovery_time_ms: number;
+}
+
+export interface TrafficShapingConfig {
+  enabled: boolean;
+  bandwidth: BandwidthConfig;
+  burst_loss: BurstLossConfig;
+}
+
+export type AiMode = 'live' | 'generate_once_freeze';
+
 export interface ServerConfiguration {
   latency: LatencyConfig;
   faults: FaultConfig;
   proxy: ServerProxyConfig;
   validation: ValidationConfig;
+  protocols?: ProtocolsConfig;
+  traffic_shaping?: TrafficShapingConfig;
+  ai_mode?: AiMode | null;
 }
 
 export interface SmokeTestResult {

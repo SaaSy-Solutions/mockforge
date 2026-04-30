@@ -40,6 +40,14 @@ class ConfigApiService {
       body: JSON.stringify({ config_type: 'protocols', data: config }),
     }) as Promise<{ message: string }>;
   }
+
+  async updateAiMode(mode: 'live' | 'generate_once_freeze' | null): Promise<{ message: string }> {
+    return fetchJson('/__mockforge/config/ai-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config_type: 'ai_mode', data: { ai_mode: mode } }),
+    }) as Promise<{ message: string }>;
+  }
 }
 
 export { ConfigApiService };

@@ -235,6 +235,9 @@ pub struct ConfigurationState {
     pub traffic_shaping: TrafficShapingConfig,
     /// Protocol enable/disable state
     pub protocols: crate::models::ProtocolsState,
+    /// Default AI mode for workspaces that don't override it.
+    /// Accepted values: "live" | "generate_once_freeze".
+    pub ai_mode: Option<String>,
 }
 
 /// Import history entry
@@ -477,6 +480,7 @@ impl AdminState {
                     amqp: false,
                     tcp: false,
                 },
+                ai_mode: None,
             })),
             logs: Arc::new(RwLock::new(Vec::new())),
             time_series: Arc::new(RwLock::new(TimeSeriesData::default())),
@@ -802,6 +806,35 @@ impl AdminState {
         config.validation_settings.aggregate_errors = aggregate_errors;
         config.validation_settings.validate_responses = validate_responses;
         config.validation_settings.overrides = overrides;
+    }
+
+    /// Update the server-wide default AI mode.
+    /// `mode` must be `"live"` or `"generate_once_freeze"`; other values are rejected.
+    pub async fn update_ai_mode_config(
+        &self,
+        mode: Option<String>,
+    ) -> std::result::Result<(), String> {
+        if let Some(ref m) = mode {
+            if m != "live" && m != "generate_once_freeze" {
+                return Err(format!("invalid ai_mode: {}", m));
+            }
+        }
+        let mut config = self.config.write().await;
+        config.ai_mode = mode;
+        Ok(())
+    }
+
+    /// Resolve the server-wide default `AiMode`, parsing the stored string.
+    /// Returns `None` for unset, the parsed enum otherwise. Invalid stored values map to `None`.
+    pub async fn ai_mode_default(&self) -> Option<mockforge_core::ai_studio::config::AiMode> {
+        let config = self.config.read().await;
+        match config.ai_mode.as_deref() {
+            Some("live") => Some(mockforge_core::ai_studio::config::AiMode::Live),
+            Some("generate_once_freeze") => {
+                Some(mockforge_core::ai_studio::config::AiMode::GenerateOnceFreeze)
+            }
+            _ => None,
+        }
     }
 
     /// Get filtered logs
@@ -1897,10 +1930,43 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
             "rabbitmq": config_state.protocols.rabbitmq,
             "amqp": config_state.protocols.amqp,
             "tcp": config_state.protocols.tcp
-        }
+        },
+        "ai_mode": config_state.ai_mode
     });
 
     Json(ApiResponse::success(config))
+}
+
+/// Update the server-wide default AI mode.
+///
+/// Body: `{ "config_type": "ai_mode", "data": { "ai_mode": "live" | "generate_once_freeze" | null } }`.
+pub async fn update_ai_mode(
+    State(state): State<AdminState>,
+    Json(update): Json<crate::models::ConfigUpdate>,
+) -> Json<ApiResponse<String>> {
+    if update.config_type != "ai_mode" {
+        return Json(ApiResponse::error("Invalid config type".to_string()));
+    }
+
+    let mode = update
+        .data
+        .get("ai_mode")
+        .and_then(|v| {
+            if v.is_null() {
+                Some(None)
+            } else {
+                v.as_str().map(|s| Some(s.to_string()))
+            }
+        })
+        .unwrap_or(None);
+
+    match state.update_ai_mode_config(mode.clone()).await {
+        Ok(()) => {
+            tracing::info!("Updated default AI mode: {:?}", mode);
+            Json(ApiResponse::success("AI mode updated".to_string()))
+        }
+        Err(e) => Json(ApiResponse::error(e)),
+    }
 }
 
 /// Count total fixtures in the fixtures directory
@@ -4987,6 +5053,7 @@ mod tests {
                 amqp: false,
                 tcp: false,
             },
+            ai_mode: None,
         };
 
         assert_eq!(state.latency_profile.name, "default");

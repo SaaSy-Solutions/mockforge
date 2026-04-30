@@ -1,7 +1,7 @@
 import { logger } from '@/utils/logger';
 import { useState, useEffect } from 'react';
 import { Settings, Save, RefreshCw, Shield, Zap, Server, Database, Wifi, WifiOff } from 'lucide-react';
-import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateProtocols, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
+import { useConfig, useValidation, useServerInfo, useUpdateLatency, useUpdateFaults, useUpdateProxy, useUpdateProtocols, useUpdateAiMode, useUpdateValidation, useRestartServers, useRestartStatus } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { toast } from 'sonner';
 import {
@@ -87,6 +87,7 @@ export function ConfigPage() {
   const updateFaults = useUpdateFaults();
   const updateProxy = useUpdateProxy();
   const updateProtocols = useUpdateProtocols();
+  const updateAiMode = useUpdateAiMode();
   const updateValidation = useUpdateValidation();
   const restartServers = useRestartServers();
   const { data: restartStatus } = useRestartStatus();
@@ -100,7 +101,7 @@ export function ConfigPage() {
       ai_mode: 'live' as 'generate_once_freeze' | 'live'
     },
     restartInProgress: false,
-    latency: { base_ms: 0, jitter_ms: 0 },
+    latency: { base_ms: 0, jitter_ms: 0, tag_overrides: {} as Record<string, number> },
     faults: { enabled: false, failure_rate: 0, status_codes: [] as number[] },
     trafficShaping: {
       enabled: false,
@@ -134,7 +135,8 @@ export function ConfigPage() {
       ftp: false,
       kafka: false,
       rabbitmq: false,
-      amqp: false
+      amqp: false,
+      tcp: false
     },
     templateTest: ''
   });
@@ -182,7 +184,8 @@ export function ConfigPage() {
         ...prev,
         latency: {
           base_ms: config.latency.base_ms,
-          jitter_ms: config.latency.jitter_ms
+          jitter_ms: config.latency.jitter_ms,
+          tag_overrides: config.latency.tag_overrides ?? {}
         }
       }));
     }
@@ -204,6 +207,38 @@ export function ConfigPage() {
           upstream_url: config.proxy.upstream_url || '',
           timeout_seconds: config.proxy.timeout_seconds
         }
+      }));
+    }
+    if (config?.protocols) {
+      setFormData(prev => ({
+        ...prev,
+        protocols: { ...prev.protocols, ...config.protocols }
+      }));
+    }
+    if (config?.traffic_shaping) {
+      setFormData(prev => ({
+        ...prev,
+        trafficShaping: {
+          enabled: config.traffic_shaping!.enabled,
+          bandwidth: {
+            enabled: config.traffic_shaping!.bandwidth.enabled,
+            max_bytes_per_sec: config.traffic_shaping!.bandwidth.max_bytes_per_sec,
+            burst_capacity_bytes: config.traffic_shaping!.bandwidth.burst_capacity_bytes
+          },
+          burstLoss: {
+            enabled: config.traffic_shaping!.burst_loss.enabled,
+            burst_probability: config.traffic_shaping!.burst_loss.burst_probability,
+            burst_duration_ms: config.traffic_shaping!.burst_loss.burst_duration_ms,
+            loss_rate_during_burst: config.traffic_shaping!.burst_loss.loss_rate_during_burst,
+            recovery_time_ms: config.traffic_shaping!.burst_loss.recovery_time_ms
+          }
+        }
+      }));
+    }
+    if (config?.ai_mode) {
+      setFormData(prev => ({
+        ...prev,
+        general: { ...prev.general, ai_mode: config.ai_mode! }
       }));
     }
   }, [config]);
@@ -254,11 +289,15 @@ export function ConfigPage() {
         hasChanges = true;
       }
     }
+    if ((config?.ai_mode ?? 'live') !== formData.general.ai_mode) {
+      hasChanges = true;
+    }
 
     // Check latency settings
     if (config?.latency) {
       if (formData.latency.base_ms !== config.latency.base_ms ||
-          formData.latency.jitter_ms !== config.latency.jitter_ms) {
+          formData.latency.jitter_ms !== config.latency.jitter_ms ||
+          JSON.stringify(formData.latency.tag_overrides) !== JSON.stringify(config.latency.tag_overrides ?? {})) {
         hasChanges = true;
       }
     }
@@ -285,7 +324,8 @@ export function ConfigPage() {
     if (validation) {
       if (formData.validation.mode !== validation.mode ||
           formData.validation.aggregate_errors !== validation.aggregate_errors ||
-          formData.validation.validate_responses !== validation.validate_responses) {
+          formData.validation.validate_responses !== validation.validate_responses ||
+          JSON.stringify(formData.validation.overrides) !== JSON.stringify(validation.overrides)) {
         hasChanges = true;
       }
     }
@@ -349,7 +389,7 @@ export function ConfigPage() {
             name: 'default',
             base_ms: formData.latency.base_ms,
             jitter_ms: formData.latency.jitter_ms,
-            tag_overrides: {}
+            tag_overrides: formData.latency.tag_overrides
           });
           toast.success('Latency configuration saved successfully');
           break;
@@ -385,9 +425,24 @@ export function ConfigPage() {
           break;
 
         case 'general': {
-          // Show confirmation dialog — ports are only persisted to localStorage
-          // after the restart is verified to have taken effect.
-          setShowRestartDialog(true);
+          // If ports changed, prompt the restart flow; otherwise persist ai_mode now.
+          const currentHttpPort = parseInt(extractPort(serverInfo?.http_server)) || 3000;
+          const currentWsPort = parseInt(extractPort(serverInfo?.ws_server)) || 3001;
+          const currentGrpcPort = parseInt(extractPort(serverInfo?.grpc_server)) || 50051;
+          const currentAdminPort = serverInfo?.admin_port || 9080;
+          const portsChanged =
+            formData.general.http_port !== currentHttpPort ||
+            formData.general.ws_port !== currentWsPort ||
+            formData.general.grpc_port !== currentGrpcPort ||
+            formData.general.admin_port !== currentAdminPort;
+
+          if (portsChanged) {
+            // Open the restart dialog synchronously; ai_mode is persisted as part of confirm.
+            setShowRestartDialog(true);
+          } else {
+            await updateAiMode.mutateAsync(formData.general.ai_mode);
+            toast.success('General settings saved successfully');
+          }
           break;
         }
 
@@ -430,6 +485,9 @@ export function ConfigPage() {
     try {
       setFormData(prev => ({ ...prev, restartInProgress: true }));
       toast.info('Saving configuration and restarting server...');
+
+      // Persist ai_mode before restart so the new process picks it up.
+      await updateAiMode.mutateAsync(formData.general.ai_mode);
 
       await restartServers.mutateAsync('Port configuration updated');
 
@@ -488,7 +546,8 @@ export function ConfigPage() {
               http_port: parseInt(extractPort(serverInfo.http_server)) || 3000,
               ws_port: parseInt(extractPort(serverInfo.ws_server)) || 3001,
               grpc_port: parseInt(extractPort(serverInfo.grpc_server)) || 50051,
-              admin_port: serverInfo.admin_port || 9080
+              admin_port: serverInfo.admin_port || 9080,
+              ai_mode: (config?.ai_mode ?? 'live') as 'live' | 'generate_once_freeze'
             }
           }));
           toast.info('General settings reset to server values');
@@ -501,7 +560,8 @@ export function ConfigPage() {
             ...prev,
             latency: {
               base_ms: config.latency.base_ms,
-              jitter_ms: config.latency.jitter_ms
+              jitter_ms: config.latency.jitter_ms,
+              tag_overrides: config.latency.tag_overrides ?? {}
             }
           }));
           toast.info('Latency configuration reset to server values');
@@ -879,6 +939,7 @@ export function ConfigPage() {
                        { key: 'kafka', label: 'Kafka', description: 'Event streaming platform' },
                        { key: 'rabbitmq', label: 'RabbitMQ', description: 'Message queuing system' },
                        { key: 'amqp', label: 'AMQP', description: 'Advanced message queuing' },
+                       { key: 'tcp', label: 'TCP', description: 'Raw TCP socket mocking' },
                      ].map((protocol) => (
                        <div key={protocol.key} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
                          <div>
@@ -947,6 +1008,90 @@ export function ConfigPage() {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Random delay variation (± jitter)
                       </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                      Per-Tag Overrides
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Override the base latency for specific route tags. Uses the global base_ms unless a matching tag is found.
+                    </p>
+                    <div className="space-y-2">
+                      {Object.entries(formData.latency.tag_overrides).map(([tag, ms]) => (
+                        <div key={tag} className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={tag}
+                            placeholder="users"
+                            className="flex-1"
+                            onChange={(e) => {
+                              const newTag = e.target.value;
+                              setFormData(prev => {
+                                const next = { ...prev.latency.tag_overrides };
+                                delete next[tag];
+                                if (newTag.length > 0) next[newTag] = ms;
+                                return { ...prev, latency: { ...prev.latency, tag_overrides: next } };
+                              });
+                            }}
+                          />
+                          <Input
+                            type="number"
+                            min="0"
+                            value={ms}
+                            placeholder="ms"
+                            className="w-32"
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value) || 0;
+                              setFormData(prev => ({
+                                ...prev,
+                                latency: {
+                                  ...prev.latency,
+                                  tag_overrides: { ...prev.latency.tag_overrides, [tag]: v }
+                                }
+                              }));
+                            }}
+                          />
+                          <span className="text-xs text-gray-500 dark:text-gray-400">ms</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => {
+                                const next = { ...prev.latency.tag_overrides };
+                                delete next[tag];
+                                return { ...prev, latency: { ...prev.latency, tag_overrides: next } };
+                              });
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFormData(prev => {
+                            let i = 1;
+                            let tag = 'tag';
+                            while (tag in prev.latency.tag_overrides) {
+                              i += 1;
+                              tag = `tag${i}`;
+                            }
+                            return {
+                              ...prev,
+                              latency: {
+                                ...prev.latency,
+                                tag_overrides: { ...prev.latency.tag_overrides, [tag]: 100 }
+                              }
+                            };
+                          });
+                        }}
+                      >
+                        Add tag override
+                      </Button>
                     </div>
                   </div>
 
@@ -1481,6 +1626,91 @@ export function ConfigPage() {
                         }))}
                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                       />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                      Per-Route Overrides
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Override the validation mode for specific routes (e.g. <code>GET /users/{`{id}`}</code>). Use the global mode by default; add an entry only when a route should differ.
+                    </p>
+                    <div className="space-y-2">
+                      {Object.entries(formData.validation.overrides).map(([key, value]) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={key}
+                            placeholder="GET /users/{id}"
+                            className="flex-1"
+                            onChange={(e) => {
+                              const newKey = e.target.value;
+                              setFormData(prev => {
+                                const next = { ...prev.validation.overrides };
+                                delete next[key];
+                                if (newKey.length > 0) next[newKey] = value;
+                                return { ...prev, validation: { ...prev.validation, overrides: next } };
+                              });
+                            }}
+                          />
+                          <select
+                            value={value}
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                validation: {
+                                  ...prev.validation,
+                                  overrides: { ...prev.validation.overrides, [key]: newValue }
+                                }
+                              }));
+                            }}
+                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="enforce">enforce</option>
+                            <option value="warn">warn</option>
+                            <option value="off">off</option>
+                          </select>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => {
+                                const next = { ...prev.validation.overrides };
+                                delete next[key];
+                                return { ...prev, validation: { ...prev.validation, overrides: next } };
+                              });
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setFormData(prev => {
+                            // Pick a placeholder key that isn't already taken
+                            let i = 1;
+                            let key = 'GET /path';
+                            while (key in prev.validation.overrides) {
+                              i += 1;
+                              key = `GET /path${i}`;
+                            }
+                            return {
+                              ...prev,
+                              validation: {
+                                ...prev.validation,
+                                overrides: { ...prev.validation.overrides, [key]: 'warn' }
+                              }
+                            };
+                          });
+                        }}
+                      >
+                        Add override
+                      </Button>
                     </div>
                   </div>
 
