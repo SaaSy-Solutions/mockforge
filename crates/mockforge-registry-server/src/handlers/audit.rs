@@ -102,7 +102,7 @@ pub async fn get_audit_logs(
             id: log.id,
             org_id: log.org_id,
             user_id: log.user_id,
-            event_type: format!("{:?}", log.event_type),
+            event_type: log.event_type.as_str().to_string(),
             description: log.description,
             metadata: log.metadata,
             ip_address: log.ip_address,

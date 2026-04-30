@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -709,9 +710,50 @@ function SettingsTab({ org }: { org: Organization }) {
   );
 }
 
+// Format a snake_case audit event type into a human-readable label.
+// Special-cases acronyms ("api", "sso", "byok") so we get "API Token Created"
+// rather than "Api Token Created".
+const ACRONYMS = new Set(['api', 'sso', 'byok', 'ip']);
+function humanizeEventType(eventType: string): string {
+  return eventType
+    .split('_')
+    .map((part) =>
+      ACRONYMS.has(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join(' ');
+}
+
+// Filter dropdown options. Values must match the backend's snake_case
+// `AuditEventType::from_str` mapping or the filter is silently a no-op.
+// The backend accepts a comma-separated list, so a "group" option (e.g. all
+// API token events) is just a CSV value.
+const AUDIT_EVENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'api_token_created,api_token_deleted,api_token_rotated', label: 'API Token (any)' },
+  { value: 'api_token_created', label: 'API Token Created' },
+  { value: 'api_token_deleted', label: 'API Token Deleted' },
+  { value: 'api_token_rotated', label: 'API Token Rotated' },
+  { value: 'org_updated', label: 'Organization Updated' },
+  { value: 'org_deleted', label: 'Organization Deleted' },
+  { value: 'member_added', label: 'Member Added' },
+  { value: 'member_removed', label: 'Member Removed' },
+  { value: 'member_role_changed', label: 'Role Changed' },
+  { value: 'settings_updated', label: 'Settings Updated' },
+  { value: 'org_plan_changed', label: 'Plan Changed' },
+  { value: 'byok_config_updated', label: 'BYOK Config Updated' },
+  { value: 'byok_config_deleted', label: 'BYOK Config Deleted' },
+  { value: 'deployment_created', label: 'Deployment Created' },
+  { value: 'deployment_deleted', label: 'Deployment Deleted' },
+  { value: 'password_changed', label: 'Password Changed' },
+  { value: 'two_factor_enabled', label: 'Two-Factor Enabled' },
+  { value: 'two_factor_disabled', label: 'Two-Factor Disabled' },
+];
+
 function AuditLogTab({ org }: { org: Organization }) {
+  const [searchParams] = useSearchParams();
   const [offset, setOffset] = useState(0);
-  const [eventTypeFilter, setEventTypeFilter] = useState('');
+  const [eventTypeFilter, setEventTypeFilter] = useState(
+    () => searchParams.get('event_type') ?? '',
+  );
   const limit = 20;
 
   const { data, isLoading } = useQuery({
@@ -729,14 +771,9 @@ function AuditLogTab({ org }: { org: Organization }) {
           onChange={(e) => { setEventTypeFilter(e.target.value); setOffset(0); }}
         >
           <option value="">All events</option>
-          <option value="org.updated">Organization Updated</option>
-          <option value="org.deleted">Organization Deleted</option>
-          <option value="member.added">Member Added</option>
-          <option value="member.removed">Member Removed</option>
-          <option value="member.role_changed">Role Changed</option>
-          <option value="settings.updated">Settings Updated</option>
-          <option value="sso.configured">SSO Configured</option>
-          <option value="plan.changed">Plan Changed</option>
+          {AUDIT_EVENT_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
         </select>
       </div>
 
@@ -748,7 +785,9 @@ function AuditLogTab({ org }: { org: Organization }) {
             {data.logs.map((log) => (
               <div key={log.id} className="p-3 border rounded-lg text-sm">
                 <div className="flex items-center justify-between mb-1">
-                  <Badge variant="secondary" className="text-xs">{log.event_type}</Badge>
+                  <Badge variant="secondary" className="text-xs" title={log.event_type}>
+                    {humanizeEventType(log.event_type)}
+                  </Badge>
                   <span className="text-xs text-muted-foreground">
                     {new Date(log.created_at).toLocaleString()}
                   </span>
@@ -1553,13 +1592,36 @@ function AISettingsTab({ org }: { org: Organization }) {
 
 // ─── Main Page Component ─────────────────────────────────────────────────────
 
+// Tab values that the OrganizationPage will honor via the `?tab=` URL param
+// (e.g. when ApiTokensPage deep-links into the audit log).
+const VALID_TABS = new Set([
+  'members', 'settings', 'invitations', 'audit', 'templates',
+  'sso', 'usage', 'ai', 'security',
+]);
+
 export function OrganizationPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgSlug, setNewOrgSlug] = useState('');
+
+  const tabParam = searchParams.get('tab');
+  const activeTab = tabParam && VALID_TABS.has(tabParam) ? tabParam : 'members';
+  const handleTabChange = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === 'members') {
+      params.delete('tab');
+    } else {
+      params.set('tab', next);
+    }
+    // Don't preserve a stale event_type filter when the user manually
+    // navigates away from the audit log tab.
+    if (next !== 'audit') params.delete('event_type');
+    setSearchParams(params, { replace: true });
+  };
 
   const { data: organizations, isLoading: orgsLoading } = useQuery({
     queryKey: ['organizations'],
@@ -1667,7 +1729,7 @@ export function OrganizationPage() {
               <CardDescription>@{selectedOrg.slug}</CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="members" className="w-full">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
                 <TabsList className="flex w-full overflow-x-auto">
                   <TabsTrigger value="members">
                     <Users className="w-4 h-4 mr-1" />

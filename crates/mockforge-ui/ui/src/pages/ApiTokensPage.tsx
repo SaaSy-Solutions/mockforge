@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -23,6 +24,7 @@ import {
   EyeOff,
   Calendar,
   AlertTriangle,
+  ScrollText,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
 
@@ -332,10 +334,20 @@ export function ApiTokensPage() {
             Manage personal access tokens for CLI and API access
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Token
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <RouterLink
+              to="/organization?tab=audit&event_type=api_token_created,api_token_deleted,api_token_rotated"
+            >
+              <ScrollText className="w-4 h-4 mr-2" />
+              View Audit Log
+            </RouterLink>
+          </Button>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Create Token
+          </Button>
+        </div>
       </div>
 
       {/* Rotation Reminder Banner */}
