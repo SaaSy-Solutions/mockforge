@@ -2130,6 +2130,19 @@ async fn check_org_access(
     Ok(deployment)
 }
 
+/// Get current recorder enabled state. Proxies GET /api/recorder/status so
+/// the UI's Captures tab can render the toggle as a real read+write — the
+/// Enable/Disable buttons used to be fire-and-forget with no read side.
+pub async fn get_recorder_status(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<axum::http::Response<axum::body::Body>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    proxy_to_deployment_recorder(&deployment, "/api/recorder/status").await
+}
+
 /// Enable recording on the deployment. Proxies POST /api/recorder/enable.
 pub async fn enable_recorder(
     State(state): State<AppState>,
@@ -2460,6 +2473,10 @@ pub struct DeploymentResponse {
     pub health_status: String,
     pub error_message: Option<String>,
     pub enabled_protocols: Vec<crate::models::Protocol>,
+    /// Upstream URL the deployment proxies to when the reality slider is > 0.
+    /// Persisted inside `config_json["upstream_url"]`; surfaced here so the
+    /// UI can display and (eventually) edit it without reparsing config_json.
+    pub upstream_url: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -2469,6 +2486,7 @@ impl From<HostedMock> for DeploymentResponse {
         let status = mock.status().to_string();
         let health_status = mock.health_status().to_string();
         let enabled_protocols = mock.enabled_protocols();
+        let upstream_url = mock.upstream_url();
         Self {
             id: mock.id,
             org_id: mock.org_id,
@@ -2484,6 +2502,7 @@ impl From<HostedMock> for DeploymentResponse {
             health_status,
             error_message: mock.error_message,
             enabled_protocols,
+            upstream_url,
             created_at: mock.created_at,
             updated_at: mock.updated_at,
         }
@@ -2579,18 +2598,32 @@ pub async fn set_domain(
 
     let hostname = format!("{}.{}", deployment.slug, request.domain);
 
-    // Update deployment URL to use the custom domain.
-    // A wildcard TLS cert on the registry app covers all subdomains,
-    // so no per-deployment certificate management is needed.
+    // Update deployment URL to use the custom domain. A wildcard TLS cert
+    // on the registry app covers all subdomains, so no per-deployment
+    // certificate management is needed. Persist `custom_domain` in
+    // metadata_json so we have an authoritative read-side for the lifecycle
+    // endpoints below — `deployment_url` alone is ambiguous (it could be a
+    // MOCKFORGE_MOCKS_DOMAIN-based default).
     let new_url = format!("https://{}", hostname);
-    sqlx::query("UPDATE hosted_mocks SET deployment_url = $1, updated_at = NOW() WHERE id = $2")
-        .bind(&new_url)
-        .bind(deployment_id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update deployment URL: {}", e))
-        })?;
+    sqlx::query(
+        r#"
+        UPDATE hosted_mocks
+        SET deployment_url = $1,
+            metadata_json = jsonb_set(
+                COALESCE(metadata_json, '{}'::jsonb),
+                '{custom_domain}',
+                to_jsonb($2::text)
+            ),
+            updated_at = NOW()
+        WHERE id = $3
+        "#,
+    )
+    .bind(&new_url)
+    .bind(&hostname)
+    .bind(deployment_id)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update deployment URL: {}", e)))?;
 
     DeploymentLog::create(
         pool,
@@ -2605,5 +2638,87 @@ pub async fn set_domain(
     Ok(Json(serde_json::json!({
         "hostname": hostname,
         "deployment_url": new_url,
+    })))
+}
+
+/// Read the currently bound custom domain for a deployment, if any. Returns
+/// `{ "hostname": null }` when the deployment is on its default URL.
+pub async fn get_custom_domain(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let deployment = check_org_access(&state, user_id, &headers, deployment_id).await?;
+    let hostname = deployment
+        .metadata_json
+        .get("custom_domain")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    Ok(Json(serde_json::json!({
+        "hostname": hostname,
+        "deployment_url": deployment.deployment_url,
+    })))
+}
+
+/// Remove the custom domain mapping. Reverts `deployment_url` to the
+/// MOCKFORGE_MOCKS_DOMAIN-based default if configured, or the Fly.io
+/// default `https://<fly_app>.fly.dev` otherwise. The wildcard TLS cert
+/// on the registry app stays — there is no per-deployment cert to clean
+/// up because the set path never created one.
+pub async fn clear_custom_domain(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(deployment_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let pool = state.db.pool();
+
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
+        .await?;
+
+    let deployment = HostedMock::find_by_id(pool, deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+    if deployment.org_id != org_ctx.org_id {
+        return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
+    }
+
+    let app_name = deployment.fly_app_name();
+    let default_url = if let Ok(domain) = std::env::var("MOCKFORGE_MOCKS_DOMAIN") {
+        format!("https://{}.{}", deployment.slug, domain)
+    } else {
+        format!("https://{}.fly.dev", app_name)
+    };
+
+    sqlx::query(
+        r#"
+        UPDATE hosted_mocks
+        SET deployment_url = $1,
+            metadata_json = COALESCE(metadata_json, '{}'::jsonb) - 'custom_domain',
+            updated_at = NOW()
+        WHERE id = $2
+        "#,
+    )
+    .bind(&default_url)
+    .bind(deployment_id)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to clear custom domain: {}", e)))?;
+
+    DeploymentLog::create(pool, deployment_id, "info", "Custom domain removed", None)
+        .await
+        .ok();
+
+    Ok(Json(serde_json::json!({
+        "hostname": serde_json::Value::Null,
+        "deployment_url": default_url,
     })))
 }

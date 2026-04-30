@@ -76,6 +76,9 @@ import {
   Language as LanguageIcon,
   UploadFile as UploadFileIcon,
   PlayArrow as PlayArrowIcon,
+  InfoOutlined as InfoOutlinedIcon,
+  Timeline as TimelineIcon,
+  FiberManualRecord as FiberManualRecordIcon,
 } from '@mui/icons-material';
 
 const FLY_REGIONS: { code: string; label: string }[] = [
@@ -92,6 +95,18 @@ const FLY_REGIONS: { code: string; label: string }[] = [
   { code: 'syd', label: 'Sydney, Australia' },
   { code: 'gru', label: 'São Paulo, Brazil' },
 ];
+
+// Null-tolerant byte formatter for runtime-request rows where the shipper may
+// omit byte counts. SI units (base-1000) to match formatBytes in
+// UsageDashboardPage and the backend's egress accounting.
+const formatBytes = (bytes?: number | null): string => {
+  if (bytes === null || bytes === undefined) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1000;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
 
 type DeploymentProtocol =
   | 'http'
@@ -119,6 +134,7 @@ interface Deployment {
   health_status: 'healthy' | 'unhealthy' | 'unknown';
   error_message?: string;
   enabled_protocols?: DeploymentProtocol[];
+  upstream_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -319,6 +335,72 @@ export const HostedMocksPage: React.FC = () => {
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayError, setReplayError] = useState<string | null>(null);
 
+  // Currently bound custom domain (null = none). Read on Overview tab
+  // open; cleared with the Remove button. Used to show the user what's
+  // wired vs. let them set a new one without first looking at the URL.
+  const [activeCustomDomain, setActiveCustomDomain] = useState<string | null>(null);
+  const [activeCustomDomainLoading, setActiveCustomDomainLoading] = useState(false);
+  const [removingDomain, setRemovingDomain] = useState(false);
+  const refreshCustomDomain = useCallback(async (deploymentId: string) => {
+    setActiveCustomDomainLoading(true);
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setActiveCustomDomainLoading(false);
+      return;
+    }
+    try {
+      const resp = await fetch(
+        `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/custom-domain`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      setActiveCustomDomain(typeof data?.hostname === 'string' ? data.hostname : null);
+    } catch {
+      setActiveCustomDomain(null);
+    } finally {
+      setActiveCustomDomainLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (detailsOpen && detailsTab === 0 && selectedDeployment) {
+      void refreshCustomDomain(selectedDeployment.id);
+    } else if (!detailsOpen) {
+      setActiveCustomDomain(null);
+    }
+  }, [detailsOpen, detailsTab, selectedDeployment, refreshCustomDomain]);
+
+  // Recorder enable state (null = unknown, true/false = known). Lets the
+  // Captures tab render the Enable/Disable buttons as a real read+write
+  // toggle instead of fire-and-forget POSTs the user can't verify.
+  const [recorderEnabled, setRecorderEnabled] = useState<boolean | null>(null);
+  const [recorderStatusError, setRecorderStatusError] = useState<string | null>(null);
+  const refreshRecorderStatus = useCallback(async (deploymentId: string) => {
+    setRecorderStatusError(null);
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    try {
+      const resp = await fetch(
+        `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/status`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      setRecorderEnabled(typeof data?.enabled === 'boolean' ? data.enabled : null);
+    } catch (err) {
+      setRecorderEnabled(null);
+      setRecorderStatusError(err instanceof Error ? err.message : 'status fetch failed');
+    }
+  }, []);
+  useEffect(() => {
+    if (detailsOpen && detailsTab === 4 && selectedDeployment) {
+      void refreshRecorderStatus(selectedDeployment.id);
+    } else if (!detailsOpen) {
+      setRecorderEnabled(null);
+      setRecorderStatusError(null);
+    }
+  }, [detailsOpen, detailsTab, selectedDeployment, refreshRecorderStatus]);
+
   // OTLP traces (#233). Same proxy-pattern as captures: the deployment's
   // mockforge-cli sends spans via OTLP/HTTP-JSON to the registry; we
   // surface them here so the user can drill into a single request's
@@ -362,6 +444,29 @@ export const HostedMocksPage: React.FC = () => {
       }
     },
     [selectedDeployment],
+  );
+
+  // Open a trace by id when only the id is known (e.g. deep-link from a
+  // recorder capture's trace_id). Switches the deployment dialog to the
+  // Traces tab so the user has context, prefers a TraceSummary already in
+  // the polled list, and synthesises a minimal one as a placeholder
+  // otherwise — `openTrace` only reads `trace_id` for the span fetch.
+  const openTraceById = useCallback(
+    async (traceId: string) => {
+      setDetailsTab(5);
+      const existing = deploymentTraces.find((t) => t.trace_id === traceId);
+      const trace: TraceSummary = existing ?? {
+        trace_id: traceId,
+        span_count: 0,
+        start: new Date().toISOString(),
+        duration_ms: 0,
+        root_name: 'Trace',
+        service_name: null,
+        has_error: false,
+      };
+      await openTrace(trace);
+    },
+    [deploymentTraces, openTrace],
   );
 
   const openCapture = useCallback(
@@ -768,11 +873,53 @@ export const HostedMocksPage: React.FC = () => {
         setSelectedDeployment({ ...selectedDeployment, deployment_url: data.deployment_url });
       }
       setCustomDomain('');
+      await refreshCustomDomain(selectedDeployment.id);
       loadDeployments();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set custom domain');
     } finally {
       setSettingDomain(false);
+    }
+  };
+
+  const handleRemoveDomain = async () => {
+    if (!selectedDeployment) return;
+    if (!confirm(`Remove custom domain "${activeCustomDomain}" and revert to the default deployment URL?`)) {
+      return;
+    }
+    setRemovingDomain(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Not authenticated');
+      const response = await fetch(
+        `/api/v1/hosted-mocks/${selectedDeployment.id}/custom-domain`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Remove domain failed' }));
+        const raw = errorData?.error ?? errorData?.message;
+        const message =
+          typeof raw === 'string'
+            ? raw
+            : raw
+              ? JSON.stringify(raw)
+              : `Remove domain failed (HTTP ${response.status})`;
+        throw new Error(message);
+      }
+      const data = await response.json();
+      if (typeof data?.deployment_url === 'string') {
+        setSelectedDeployment({ ...selectedDeployment, deployment_url: data.deployment_url });
+      }
+      setActiveCustomDomain(null);
+      loadDeployments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove custom domain');
+    } finally {
+      setRemovingDomain(false);
     }
   };
 
@@ -1404,6 +1551,56 @@ export const HostedMocksPage: React.FC = () => {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="caption" color="text.secondary">
+                        Instance Type
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.instance_type || 'Default'}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="caption" color="text.secondary">
+                        Upstream URL{' '}
+                        <Tooltip title="Real backend the deployment proxies to when the reality slider is > 0. Configured at create time inside config_json.">
+                          <InfoOutlinedIcon sx={{ fontSize: 12, verticalAlign: 'middle' }} />
+                        </Tooltip>
+                      </Typography>
+                      <Typography variant="body2">
+                        {selectedDeployment.upstream_url ? (
+                          <Button
+                            size="small"
+                            startIcon={<OpenInNewIcon />}
+                            href={selectedDeployment.upstream_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {selectedDeployment.upstream_url}
+                          </Button>
+                        ) : (
+                          'None (mock-only)'
+                        )}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Enabled Protocols
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {(selectedDeployment.enabled_protocols && selectedDeployment.enabled_protocols.length > 0
+                          ? selectedDeployment.enabled_protocols
+                          : (['http'] as DeploymentProtocol[])
+                        ).map((proto) => (
+                          <Chip
+                            key={proto}
+                            label={proto.toUpperCase()}
+                            size="small"
+                            color={proto === 'http' ? 'primary' : 'default'}
+                            variant={proto === 'http' ? 'filled' : 'outlined'}
+                          />
+                        ))}
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="caption" color="text.secondary">
                         ID
                       </Typography>
                       <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
@@ -1422,6 +1619,32 @@ export const HostedMocksPage: React.FC = () => {
                       Map this deployment to <strong>{selectedDeployment.slug}.&lt;your-domain&gt;</strong>.
                       The registry wildcard TLS cert terminates traffic and proxies to the deployment.
                     </Typography>
+                    {activeCustomDomainLoading ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <CircularProgress size={14} />
+                        <Typography variant="caption" color="text.secondary">
+                          Checking current domain…
+                        </Typography>
+                      </Box>
+                    ) : activeCustomDomain ? (
+                      <Alert
+                        severity="success"
+                        sx={{ mb: 1 }}
+                        action={
+                          <Button
+                            color="inherit"
+                            size="small"
+                            startIcon={removingDomain ? <CircularProgress size={14} /> : <DeleteIcon />}
+                            onClick={handleRemoveDomain}
+                            disabled={removingDomain}
+                          >
+                            {removingDomain ? 'Removing…' : 'Remove'}
+                          </Button>
+                        }
+                      >
+                        Custom domain bound: <strong>{activeCustomDomain}</strong>
+                      </Alert>
+                    ) : null}
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                       <TextField
                         size="small"
@@ -1430,6 +1653,11 @@ export const HostedMocksPage: React.FC = () => {
                         value={customDomain}
                         onChange={(e) => setCustomDomain(e.target.value)}
                         disabled={settingDomain}
+                        helperText={
+                          activeCustomDomain
+                            ? 'Setting a new domain replaces the current one.'
+                            : undefined
+                        }
                       />
                       <Button
                         variant="contained"
@@ -1729,9 +1957,13 @@ export const HostedMocksPage: React.FC = () => {
                             <TableCell>Time</TableCell>
                             <TableCell>Method</TableCell>
                             <TableCell>Path</TableCell>
+                            <TableCell>Route</TableCell>
                             <TableCell>Status</TableCell>
                             <TableCell align="right">Latency</TableCell>
+                            <TableCell align="right">In</TableCell>
+                            <TableCell align="right">Out</TableCell>
                             <TableCell>IP</TableCell>
+                            <TableCell>User-Agent</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -1754,6 +1986,9 @@ export const HostedMocksPage: React.FC = () => {
                               <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                 {row.path}
                               </TableCell>
+                              <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: 'text.secondary' }}>
+                                {row.matched_route ?? '—'}
+                              </TableCell>
                               <TableCell>
                                 <Chip
                                   label={row.status}
@@ -1770,8 +2005,27 @@ export const HostedMocksPage: React.FC = () => {
                               <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                 {row.latency_ms}ms
                               </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {formatBytes(row.bytes_in)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+                                {formatBytes(row.bytes_out)}
+                              </TableCell>
                               <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                 {row.client_ip ?? '—'}
+                              </TableCell>
+                              <TableCell
+                                sx={{
+                                  fontSize: 12,
+                                  maxWidth: 220,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                <Tooltip title={row.user_agent ?? ''}>
+                                  <span>{row.user_agent ?? '—'}</span>
+                                </Tooltip>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1790,13 +2044,39 @@ export const HostedMocksPage: React.FC = () => {
                       Full request/response pairs from the deployment's recorder. Captures live on
                       the deployment's local storage and are wiped on machine restart.
                     </Typography>
+                    <Tooltip
+                      title={
+                        recorderStatusError
+                          ? `Recorder status unavailable: ${recorderStatusError}`
+                          : recorderEnabled === null
+                            ? 'Loading recorder status…'
+                            : recorderEnabled
+                              ? 'Recorder is currently capturing requests'
+                              : 'Recorder is currently paused'
+                      }
+                    >
+                      <Chip
+                        size="small"
+                        icon={<FiberManualRecordIcon sx={{ fontSize: 12 }} />}
+                        label={
+                          recorderEnabled === null
+                            ? 'Recorder: …'
+                            : recorderEnabled
+                              ? 'Recorder: ON'
+                              : 'Recorder: OFF'
+                        }
+                        color={recorderEnabled ? 'success' : 'default'}
+                        variant={recorderEnabled === null ? 'outlined' : 'filled'}
+                      />
+                    </Tooltip>
                     <Button
                       size="small"
                       variant="outlined"
-                      disabled={!selectedDeployment}
+                      disabled={!selectedDeployment || recorderEnabled === true}
                       onClick={async () => {
                         if (!selectedDeployment) return;
                         await toggleRecorder(selectedDeployment.id, 'enable');
+                        await refreshRecorderStatus(selectedDeployment.id);
                         refetchCaptures();
                       }}
                     >
@@ -1805,10 +2085,11 @@ export const HostedMocksPage: React.FC = () => {
                     <Button
                       size="small"
                       variant="outlined"
-                      disabled={!selectedDeployment}
+                      disabled={!selectedDeployment || recorderEnabled === false}
                       onClick={async () => {
                         if (!selectedDeployment) return;
                         await toggleRecorder(selectedDeployment.id, 'disable');
+                        await refreshRecorderStatus(selectedDeployment.id);
                         refetchCaptures();
                       }}
                     >
@@ -2168,12 +2449,28 @@ export const HostedMocksPage: React.FC = () => {
                       <CircularProgress />
                     </Box>
                   ) : !metrics && !streamMetrics ? (
-                    <Alert severity="info">No metrics available</Alert>
+                    <Alert severity="info">
+                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                        No metrics yet
+                      </Typography>
+                      <Typography variant="caption" sx={{ display: 'block' }}>
+                        Live metrics need a Fly Prometheus token configured on the registry
+                        (FLY_PROMETHEUS_TOKEN). Aggregated metrics roll up from the request
+                        log shipper as soon as the deployment serves traffic — send a request
+                        to the deployment URL and the cards will populate within ~1 minute.
+                      </Typography>
+                    </Alert>
                   ) : metrics ? (
                     <Box>
                       <Typography variant="subtitle2" sx={{ mb: 1 }}>
                         Aggregated Metrics
                       </Typography>
+                      {metrics.requests === 0 && (
+                        <Alert severity="info" sx={{ mb: 2 }}>
+                          The shipper is reporting in but no requests have been served yet
+                          for the current period.
+                        </Alert>
+                      )}
                       <Grid container spacing={2}>
                         <Grid item xs={6} md={3}>
                           <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
@@ -2416,6 +2713,26 @@ export const HostedMocksPage: React.FC = () => {
               </Box>
             </DialogTitle>
             <DialogContent dividers>
+              {(selectedCapture.trace_id || selectedCapture.span_id) && (
+                <Box sx={{ display: 'flex', gap: 2, mb: 2, fontSize: 12, color: 'text.secondary', flexWrap: 'wrap' }}>
+                  {selectedCapture.trace_id && (
+                    <Box>
+                      Trace:{' '}
+                      <Box component="span" sx={{ fontFamily: 'monospace' }}>
+                        {selectedCapture.trace_id}
+                      </Box>
+                    </Box>
+                  )}
+                  {selectedCapture.span_id && (
+                    <Box>
+                      Span:{' '}
+                      <Box component="span" sx={{ fontFamily: 'monospace' }}>
+                        {selectedCapture.span_id}
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              )}
               <Typography variant="subtitle2" gutterBottom>
                 Request
               </Typography>
@@ -2518,6 +2835,22 @@ export const HostedMocksPage: React.FC = () => {
               >
                 Replay
               </Button>
+              {selectedCapture.trace_id && (
+                <Button
+                  startIcon={<TimelineIcon />}
+                  onClick={() => {
+                    const traceId = selectedCapture.trace_id;
+                    if (!traceId) return;
+                    setSelectedCapture(null);
+                    setSelectedCaptureResponse(null);
+                    setReplayResult(null);
+                    setReplayError(null);
+                    void openTraceById(traceId);
+                  }}
+                >
+                  View trace
+                </Button>
+              )}
               <Box sx={{ flex: 1 }} />
               <Button
                 onClick={() => {
