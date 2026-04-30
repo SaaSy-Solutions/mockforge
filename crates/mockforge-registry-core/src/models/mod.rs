@@ -22,6 +22,7 @@ pub mod saml_assertion;
 pub mod scenario;
 pub mod scenario_promotion;
 pub mod scenario_review;
+pub mod scenario_star;
 pub mod settings;
 pub mod sso;
 pub mod subscription;
@@ -79,6 +80,8 @@ pub use audit_log::AuditLog;
 pub use project::Project;
 pub use scenario::ScenarioVersion;
 pub use scenario_review::ScenarioReview;
+#[cfg(feature = "postgres")]
+pub use scenario_star::ScenarioStar;
 pub use settings::UserSetting;
 pub use template::{Template, TemplateCategory, TemplateVersion};
 pub use template_review::TemplateReview;

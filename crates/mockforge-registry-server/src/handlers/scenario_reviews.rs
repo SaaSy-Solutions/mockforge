@@ -6,6 +6,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
@@ -161,4 +162,33 @@ pub struct SubmitReviewResponse {
     pub success: bool,
     pub review_id: String,
     pub message: String,
+}
+
+/// Increment a review's "helpful" counter. Mirrors the plugin equivalent —
+/// fire-and-forget; we don't track per-user votes, so the UI is responsible
+/// for not clicking twice. Auth is required so anonymous botnets can't run
+/// the count up.
+pub async fn vote_scenario_review(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path((name, review_id)): Path<(String, String)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
+
+    let review_uuid = Uuid::parse_str(&review_id)
+        .map_err(|_| ApiError::InvalidRequest("Invalid review ID".to_string()))?;
+
+    state
+        .store
+        .increment_scenario_review_helpful_count(scenario.id, review_uuid)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "Vote recorded"
+    })))
 }
