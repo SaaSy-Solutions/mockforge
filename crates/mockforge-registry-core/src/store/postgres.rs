@@ -16,7 +16,7 @@ use super::{
     StoreResult, SubscriptionRow, UserSettingRow,
 };
 use crate::models::api_token::{ApiToken, TokenScope};
-use crate::models::attestation::UserPublicKey;
+use crate::models::attestation::{UserPublicKey, UserPublicKeyWithUsage};
 use crate::models::audit_log::{record_audit_event, AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
 use crate::models::cloud_service::CloudService;
@@ -1650,6 +1650,72 @@ impl RegistryStore for PgRegistryStore {
         .fetch_all(&self.pool)
         .await
         .map_err(Into::into)
+    }
+
+    async fn list_user_public_keys_with_usage(
+        &self,
+        user_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>> {
+        // The same query for both modes; the WHERE clause toggles on the
+        // boolean so we don't keep two near-identical SQL strings in sync.
+        // The LEFT JOIN means revoked keys still get usage_count=N if
+        // they signed something before revocation.
+        let rows: Vec<(
+            Uuid,
+            Uuid,
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            Option<DateTime<Utc>>,
+            i64,
+        )> = sqlx::query_as(
+            r#"
+                SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                       k.created_at, k.revoked_at,
+                       COUNT(pv.id) AS usage_count
+                FROM user_public_keys k
+                LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+                WHERE k.user_id = $1 AND ($2 OR k.revoked_at IS NULL)
+                GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
+                         k.label, k.created_at, k.revoked_at
+                ORDER BY k.created_at ASC
+                "#,
+        )
+        .bind(user_id)
+        .bind(include_revoked)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(
+                    id,
+                    uid,
+                    algorithm,
+                    public_key_b64,
+                    label,
+                    created_at,
+                    revoked_at,
+                    usage_count,
+                )| {
+                    UserPublicKeyWithUsage {
+                        key: UserPublicKey {
+                            id,
+                            user_id: uid,
+                            algorithm,
+                            public_key_b64,
+                            label,
+                            created_at,
+                            revoked_at,
+                        },
+                        usage_count,
+                    }
+                },
+            )
+            .collect())
     }
 
     async fn create_user_public_key(

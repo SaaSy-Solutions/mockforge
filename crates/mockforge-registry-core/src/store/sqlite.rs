@@ -30,7 +30,7 @@ use super::{
 };
 use crate::error::{StoreError, StoreResult};
 use crate::models::api_token::{ApiToken, TokenScope};
-use crate::models::attestation::UserPublicKey;
+use crate::models::attestation::{UserPublicKey, UserPublicKeyWithUsage};
 use crate::models::audit_log::{AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
 use crate::models::cloud_service::CloudService;
@@ -2687,6 +2687,59 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(out)
     }
 
+    async fn list_user_public_keys_with_usage(
+        &self,
+        user_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>> {
+        use sqlx::Row;
+        // SQLite doesn't take a boolean bind cleanly through query(); use
+        // the literal integer in the predicate instead and key the second
+        // half off of `revoked_at IS NULL` so the active-only path keeps
+        // hitting the partial index.
+        let revoked_predicate = if include_revoked {
+            "1=1"
+        } else {
+            "k.revoked_at IS NULL"
+        };
+        let sql = format!(
+            r#"
+            SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                   k.created_at, k.revoked_at,
+                   COUNT(pv.id) AS usage_count
+            FROM user_public_keys k
+            LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+            WHERE k.user_id = ? AND {revoked_predicate}
+            GROUP BY k.id
+            ORDER BY k.created_at ASC
+            "#
+        );
+        let rows = sqlx::query(&sql).bind(user_id.to_string()).fetch_all(&self.pool).await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_str: String = row.try_get("id")?;
+            let user_id_str: String = row.try_get("user_id")?;
+            let created_at_str: String = row.try_get("created_at")?;
+            let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+            // SQLite returns COUNT() as INTEGER; sqlx maps it to i64 here.
+            let usage_count: i64 = row.try_get("usage_count")?;
+            out.push(UserPublicKeyWithUsage {
+                key: UserPublicKey {
+                    id: parse_uuid(&id_str)?,
+                    user_id: parse_uuid(&user_id_str)?,
+                    algorithm: row.try_get("algorithm")?,
+                    public_key_b64: row.try_get("public_key_b64")?,
+                    label: row.try_get("label")?,
+                    created_at: parse_dt(&created_at_str)?,
+                    revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                },
+                usage_count,
+            });
+        }
+        Ok(out)
+    }
+
     async fn create_user_public_key(
         &self,
         user_id: Uuid,
@@ -4407,6 +4460,95 @@ mod tests {
         // Trying to revoke someone else's key (or a random id) returns false.
         let someone_else = Uuid::new_v4();
         assert!(!store.revoke_user_public_key(someone_else, b.id).await.unwrap());
+    }
+
+    /// `list_user_public_keys_with_usage` is the user-facing list path.
+    /// It must (a) include revoked keys when asked and (b) return the
+    /// count of plugin versions whose attestation each key verified.
+    /// Without this, the UI's "you have signed N versions with this
+    /// key" pill silently shows zero.
+    #[tokio::test]
+    async fn test_list_user_public_keys_with_usage() {
+        use base64::Engine;
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+               VALUES (?, 'usage-user', 'u@example.com', 'x', datetime('now'), datetime('now'))"#,
+        )
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // Register two keys.
+        let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+        let key_a = store
+            .create_user_public_key(user_id, "ed25519", &b64(&[0x11u8; 32]), "laptop")
+            .await
+            .unwrap();
+        let key_b = store
+            .create_user_public_key(user_id, "ed25519", &b64(&[0x22u8; 32]), "ci")
+            .await
+            .unwrap();
+
+        // Seed a plugin + two versions, attribute one signature to key_a.
+        let plugin_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO plugins (id, name, description, current_version, category,
+                                    license, author_id)
+               VALUES (?, 'usage-plugin', 'd', '1.0.0', 'other', 'MIT', ?)"#,
+        )
+        .bind(plugin_id.to_string())
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+        for v in ["1.0.0", "1.0.1"] {
+            let version_id = Uuid::new_v4();
+            sqlx::query(
+                r#"INSERT INTO plugin_versions
+                       (id, plugin_id, version, download_url, checksum, file_size)
+                   VALUES (?, ?, ?, 'https://example.invalid', 'cs', 0)"#,
+            )
+            .bind(version_id.to_string())
+            .bind(plugin_id.to_string())
+            .bind(v)
+            .execute(pool)
+            .await
+            .unwrap();
+            // Only the first version gets attributed to key_a.
+            if v == "1.0.0" {
+                store
+                    .record_plugin_version_attestation(version_id, Some(key_a.id))
+                    .await
+                    .unwrap();
+            }
+        }
+
+        // include_revoked=false returns both active keys, key_a counts 1.
+        let active_listing = store.list_user_public_keys_with_usage(user_id, false).await.unwrap();
+        assert_eq!(active_listing.len(), 2);
+        let a = active_listing.iter().find(|k| k.key.id == key_a.id).unwrap();
+        let b = active_listing.iter().find(|k| k.key.id == key_b.id).unwrap();
+        assert_eq!(a.usage_count, 1);
+        assert_eq!(b.usage_count, 0);
+
+        // Revoke key_a — active-only listing drops it.
+        assert!(store.revoke_user_public_key(user_id, key_a.id).await.unwrap());
+        let after_revoke = store.list_user_public_keys_with_usage(user_id, false).await.unwrap();
+        assert_eq!(after_revoke.len(), 1);
+        assert_eq!(after_revoke[0].key.id, key_b.id);
+
+        // include_revoked=true brings it back, with its historical
+        // usage_count preserved so users can audit revoked keys.
+        let history = store.list_user_public_keys_with_usage(user_id, true).await.unwrap();
+        assert_eq!(history.len(), 2);
+        let revoked = history.iter().find(|k| k.key.id == key_a.id).unwrap();
+        assert!(revoked.key.revoked_at.is_some());
+        assert_eq!(revoked.usage_count, 1);
     }
 
     /// End-to-end scenarios CRUD on SQLite. Seeds a user + org, creates

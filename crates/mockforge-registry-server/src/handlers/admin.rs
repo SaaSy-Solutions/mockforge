@@ -167,6 +167,28 @@ pub async fn get_plugin_badges(
         badges.push("trending".to_string());
     }
 
+    // "Signed" badge — set when the plugin's current version was
+    // published with a verified Ed25519 SBOM attestation. The scanner
+    // also surfaces this inside security findings, but the badge here
+    // makes it visible at the marketplace card level so users can spot
+    // signed plugins without opening the security tab.
+    let signed: Option<bool> = sqlx::query_scalar(
+        r#"
+        SELECT (sbom_signed_key_id IS NOT NULL) AS signed
+        FROM plugin_versions
+        WHERE plugin_id = $1 AND version = $2
+        LIMIT 1
+        "#,
+    )
+    .bind(plugin.id)
+    .bind(&plugin.current_version)
+    .fetch_optional(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    if matches!(signed, Some(true)) {
+        badges.push("signed".to_string());
+    }
+
     Ok(Json(PluginWithBadges {
         name: plugin.name,
         version: plugin.current_version,

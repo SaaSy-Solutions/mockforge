@@ -19,7 +19,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::models::api_token::{ApiToken, TokenScope};
-use crate::models::attestation::UserPublicKey;
+use crate::models::attestation::{UserPublicKey, UserPublicKeyWithUsage};
 use crate::models::audit_log::{AuditEventType, AuditLog};
 use crate::models::cloud_fixture::CloudFixture;
 use crate::models::cloud_service::CloudService;
@@ -1654,6 +1654,21 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// List every non-revoked public key registered against a user. The
     /// attestation verifier tries each one at publish time.
     async fn list_user_public_keys(&self, user_id: Uuid) -> StoreResult<Vec<UserPublicKey>>;
+
+    /// List a user's keys for the user-facing settings page. Unlike
+    /// [`Self::list_user_public_keys`] (which is the verifier hot path
+    /// and only ever returns active keys), this variant:
+    ///
+    /// * optionally includes revoked keys when `include_revoked` is true,
+    ///   so the UI can render a revocation history;
+    /// * joins `plugin_versions.sbom_signed_key_id` so each row carries
+    ///   the count of versions it has verified — a single round-trip
+    ///   instead of N+1 per-key counts.
+    async fn list_user_public_keys_with_usage(
+        &self,
+        user_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>>;
 
     /// Register a new public key on a user's account. The caller has
     /// already validated that `public_key_b64` decodes to the right

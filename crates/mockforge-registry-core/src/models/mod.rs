@@ -41,6 +41,7 @@ pub use verification_token::VerificationToken;
 pub use api_token::{ApiToken, TokenScope};
 pub use attestation::{
     verify_sbom_attestation, SbomAttestationInput, SbomVerifyOutcome, UserPublicKey,
+    UserPublicKeyWithUsage,
 };
 #[cfg(feature = "postgres")]
 pub use audit_log::record_audit_event;

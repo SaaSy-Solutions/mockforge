@@ -36,6 +36,19 @@ impl UserPublicKey {
     }
 }
 
+/// A publisher key paired with the count of plugin versions whose
+/// attestation it has verified. Returned by the user-facing list path
+/// so the UI can show "this key has signed N versions" without an
+/// extra round-trip per key.
+#[derive(Debug, Clone)]
+pub struct UserPublicKeyWithUsage {
+    pub key: UserPublicKey,
+    /// Number of `plugin_versions` rows where `sbom_signed_key_id` equals
+    /// this key's id. Computed by a `LEFT JOIN ... GROUP BY` so revoked
+    /// keys still show their historical usage.
+    pub usage_count: i64,
+}
+
 /// Input passed to [`verify_sbom_attestation`]. Kept as a named struct
 /// rather than a long argument list so each field can be documented
 /// independently.
