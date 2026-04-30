@@ -359,6 +359,7 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_plugins_published": 1,
             "max_templates_published": 3,
             "max_scenarios_published": 1,
+            "max_publisher_keys": 3, // ed25519 keys per user (active count)
             "ai_tokens_per_month": 0, // BYOK only
             "hosted_mocks": false,
             "max_hosted_mocks": 0
@@ -372,6 +373,7 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_plugins_published": 10,
             "max_templates_published": 50,
             "max_scenarios_published": 20,
+            "max_publisher_keys": 25,
             "ai_tokens_per_month": 100000,
             "hosted_mocks": true,
             "max_hosted_mocks": 3
@@ -385,6 +387,7 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_plugins_published": -1, // unlimited
             "max_templates_published": -1, // unlimited
             "max_scenarios_published": -1, // unlimited
+            "max_publisher_keys": -1, // unlimited
             "ai_tokens_per_month": 1000000,
             "hosted_mocks": true,
             "max_hosted_mocks": -1 // unlimited

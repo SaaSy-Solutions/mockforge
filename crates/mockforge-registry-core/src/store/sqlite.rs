@@ -2658,7 +2658,7 @@ impl RegistryStore for SqliteRegistryStore {
         let rows = sqlx::query(
             r#"
             SELECT id, user_id, algorithm, public_key_b64, label,
-                   created_at, revoked_at
+                   created_at, revoked_at, org_id
             FROM user_public_keys
             WHERE user_id = ? AND revoked_at IS NULL
             ORDER BY created_at ASC
@@ -2674,6 +2674,7 @@ impl RegistryStore for SqliteRegistryStore {
             let user_id_str: String = row.try_get("user_id")?;
             let created_at_str: String = row.try_get("created_at")?;
             let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+            let org_id_str: Option<String> = row.try_get("org_id")?;
             out.push(UserPublicKey {
                 id: parse_uuid(&id_str)?,
                 user_id: parse_uuid(&user_id_str)?,
@@ -2682,6 +2683,7 @@ impl RegistryStore for SqliteRegistryStore {
                 label: row.try_get("label")?,
                 created_at: parse_dt(&created_at_str)?,
                 revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                org_id: org_id_str.as_deref().map(parse_uuid).transpose()?,
             });
         }
         Ok(out)
@@ -2705,7 +2707,7 @@ impl RegistryStore for SqliteRegistryStore {
         let sql = format!(
             r#"
             SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
-                   k.created_at, k.revoked_at,
+                   k.created_at, k.revoked_at, k.org_id,
                    COUNT(pv.id) AS usage_count
             FROM user_public_keys k
             LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
@@ -2722,6 +2724,7 @@ impl RegistryStore for SqliteRegistryStore {
             let user_id_str: String = row.try_get("user_id")?;
             let created_at_str: String = row.try_get("created_at")?;
             let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+            let org_id_str: Option<String> = row.try_get("org_id")?;
             // SQLite returns COUNT() as INTEGER; sqlx maps it to i64 here.
             let usage_count: i64 = row.try_get("usage_count")?;
             out.push(UserPublicKeyWithUsage {
@@ -2733,6 +2736,7 @@ impl RegistryStore for SqliteRegistryStore {
                     label: row.try_get("label")?,
                     created_at: parse_dt(&created_at_str)?,
                     revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                    org_id: org_id_str.as_deref().map(parse_uuid).transpose()?,
                 },
                 usage_count,
             });
@@ -2746,6 +2750,7 @@ impl RegistryStore for SqliteRegistryStore {
         algorithm: &str,
         public_key_b64: &str,
         label: &str,
+        org_id: Option<Uuid>,
     ) -> StoreResult<UserPublicKey> {
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -2753,8 +2758,8 @@ impl RegistryStore for SqliteRegistryStore {
         sqlx::query(
             r#"
             INSERT INTO user_public_keys
-                (id, user_id, algorithm, public_key_b64, label, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (id, user_id, algorithm, public_key_b64, label, created_at, org_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(id.to_string())
@@ -2763,6 +2768,7 @@ impl RegistryStore for SqliteRegistryStore {
         .bind(public_key_b64)
         .bind(label)
         .bind(&now_str)
+        .bind(org_id.map(|o| o.to_string()))
         .execute(&self.pool)
         .await?;
 
@@ -2774,6 +2780,7 @@ impl RegistryStore for SqliteRegistryStore {
             label: label.to_string(),
             created_at: now,
             revoked_at: None,
+            org_id,
         })
     }
 
@@ -2790,6 +2797,243 @@ impl RegistryStore for SqliteRegistryStore {
         .execute(&self.pool)
         .await?;
         Ok(res.rows_affected() > 0)
+    }
+
+    async fn find_user_public_key_by_id(&self, key_id: Uuid) -> StoreResult<Option<UserPublicKey>> {
+        use sqlx::Row;
+        let row = sqlx::query(
+            r#"
+            SELECT id, user_id, algorithm, public_key_b64, label,
+                   created_at, revoked_at, org_id
+            FROM user_public_keys
+            WHERE id = ?
+            "#,
+        )
+        .bind(key_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            None => Ok(None),
+            Some(row) => {
+                let id_str: String = row.try_get("id")?;
+                let user_id_str: String = row.try_get("user_id")?;
+                let created_at_str: String = row.try_get("created_at")?;
+                let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+                let org_id_str: Option<String> = row.try_get("org_id")?;
+                Ok(Some(UserPublicKey {
+                    id: parse_uuid(&id_str)?,
+                    user_id: parse_uuid(&user_id_str)?,
+                    algorithm: row.try_get("algorithm")?,
+                    public_key_b64: row.try_get("public_key_b64")?,
+                    label: row.try_get("label")?,
+                    created_at: parse_dt(&created_at_str)?,
+                    revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                    org_id: org_id_str.as_deref().map(parse_uuid).transpose()?,
+                }))
+            }
+        }
+    }
+
+    async fn revoke_org_public_key(&self, org_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
+        // Org-scoped revocation: the predicate doesn't constrain on
+        // user_id since any Owner/Admin of the org may pull a key.
+        // Handler-level role check is the gate.
+        let res = sqlx::query(
+            r#"
+            UPDATE user_public_keys
+            SET revoked_at = datetime('now')
+            WHERE id = ? AND org_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(key_id.to_string())
+        .bind(org_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
+    }
+
+    async fn list_org_public_keys_with_usage(
+        &self,
+        org_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>> {
+        use sqlx::Row;
+        let revoked_predicate = if include_revoked {
+            "1=1"
+        } else {
+            "k.revoked_at IS NULL"
+        };
+        let sql = format!(
+            r#"
+            SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                   k.created_at, k.revoked_at, k.org_id,
+                   COUNT(pv.id) AS usage_count
+            FROM user_public_keys k
+            LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+            WHERE k.org_id = ? AND {revoked_predicate}
+            GROUP BY k.id
+            ORDER BY k.created_at ASC
+            "#
+        );
+        let rows = sqlx::query(&sql).bind(org_id.to_string()).fetch_all(&self.pool).await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_str: String = row.try_get("id")?;
+            let user_id_str: String = row.try_get("user_id")?;
+            let created_at_str: String = row.try_get("created_at")?;
+            let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+            let org_id_str: Option<String> = row.try_get("org_id")?;
+            let usage_count: i64 = row.try_get("usage_count")?;
+            out.push(UserPublicKeyWithUsage {
+                key: UserPublicKey {
+                    id: parse_uuid(&id_str)?,
+                    user_id: parse_uuid(&user_id_str)?,
+                    algorithm: row.try_get("algorithm")?,
+                    public_key_b64: row.try_get("public_key_b64")?,
+                    label: row.try_get("label")?,
+                    created_at: parse_dt(&created_at_str)?,
+                    revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                    org_id: org_id_str.as_deref().map(parse_uuid).transpose()?,
+                },
+                usage_count,
+            });
+        }
+        Ok(out)
+    }
+
+    async fn list_keys_for_publisher(&self, author_id: Uuid) -> StoreResult<Vec<UserPublicKey>> {
+        use sqlx::Row;
+        // Single statement returning the union of:
+        //   * the author's own active keys, and
+        //   * any active key tagged to an org the author owns or is a
+        //     member of.
+        // The verifier dedupes if a key matches both branches (own +
+        // org-tagged), so a UNION (not UNION ALL) is what we want.
+        let rows = sqlx::query(
+            r#"
+            SELECT id, user_id, algorithm, public_key_b64, label,
+                   created_at, revoked_at, org_id
+            FROM user_public_keys
+            WHERE revoked_at IS NULL AND (
+                user_id = ?1
+                OR org_id IN (
+                    SELECT id FROM organizations WHERE owner_id = ?1
+                    UNION
+                    SELECT org_id FROM org_members WHERE user_id = ?1
+                )
+            )
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(author_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id_str: String = row.try_get("id")?;
+            let user_id_str: String = row.try_get("user_id")?;
+            let created_at_str: String = row.try_get("created_at")?;
+            let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+            let org_id_str: Option<String> = row.try_get("org_id")?;
+            out.push(UserPublicKey {
+                id: parse_uuid(&id_str)?,
+                user_id: parse_uuid(&user_id_str)?,
+                algorithm: row.try_get("algorithm")?,
+                public_key_b64: row.try_get("public_key_b64")?,
+                label: row.try_get("label")?,
+                created_at: parse_dt(&created_at_str)?,
+                revoked_at: revoked_at_str.as_deref().map(parse_dt).transpose()?,
+                org_id: org_id_str.as_deref().map(parse_uuid).transpose()?,
+            });
+        }
+        Ok(out)
+    }
+
+    async fn rotate_user_public_key(
+        &self,
+        user_id: Uuid,
+        old_key_id: Uuid,
+        algorithm: &str,
+        new_public_key_b64: &str,
+        new_label: &str,
+    ) -> StoreResult<UserPublicKey> {
+        use sqlx::Row;
+        let mut tx = self.pool.begin().await?;
+        // Re-read the old key inside the transaction so the new key
+        // inherits the same org tag (or lack thereof). Bail if the
+        // caller can't actually revoke it.
+        let row = sqlx::query(
+            r#"
+            SELECT org_id, revoked_at
+            FROM user_public_keys
+            WHERE id = ? AND user_id = ?
+            "#,
+        )
+        .bind(old_key_id.to_string())
+        .bind(user_id.to_string())
+        .fetch_optional(&mut *tx)
+        .await?;
+        let row = match row {
+            Some(r) => r,
+            None => return Err(crate::error::StoreError::NotFound),
+        };
+        let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
+        if revoked_at_str.is_some() {
+            // Treat "already revoked" the same as "not found" — same
+            // user-facing shape, and the handler maps both to a 400.
+            return Err(crate::error::StoreError::NotFound);
+        }
+        let inherited_org_id_str: Option<String> = row.try_get("org_id")?;
+        let inherited_org_id = inherited_org_id_str.as_deref().map(parse_uuid).transpose()?;
+
+        let new_id = Uuid::new_v4();
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO user_public_keys
+                (id, user_id, algorithm, public_key_b64, label, created_at, org_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(new_id.to_string())
+        .bind(user_id.to_string())
+        .bind(algorithm)
+        .bind(new_public_key_b64)
+        .bind(new_label)
+        .bind(&now_str)
+        .bind(inherited_org_id.map(|o| o.to_string()))
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            UPDATE user_public_keys
+            SET revoked_at = ?
+            WHERE id = ? AND user_id = ?
+            "#,
+        )
+        .bind(&now_str)
+        .bind(old_key_id.to_string())
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(UserPublicKey {
+            id: new_id,
+            user_id,
+            algorithm: algorithm.to_string(),
+            public_key_b64: new_public_key_b64.to_string(),
+            label: new_label.to_string(),
+            created_at: now,
+            revoked_at: None,
+            org_id: inherited_org_id,
+        })
     }
 
     async fn record_plugin_version_attestation(
@@ -4305,7 +4549,7 @@ mod tests {
 
         // 2. Register via the SQLite store.
         let registered = store
-            .create_user_public_key(user_id, "ed25519", &public_b64, "laptop")
+            .create_user_public_key(user_id, "ed25519", &public_b64, "laptop", None)
             .await
             .unwrap();
         assert!(registered.is_active());
@@ -4435,11 +4679,11 @@ mod tests {
         let key_b_bytes = [0x22u8; 32];
         let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
         let a = store
-            .create_user_public_key(user_id, "ed25519", &b64(&key_a_bytes), "laptop")
+            .create_user_public_key(user_id, "ed25519", &b64(&key_a_bytes), "laptop", None)
             .await
             .unwrap();
         let b = store
-            .create_user_public_key(user_id, "ed25519", &b64(&key_b_bytes), "ci")
+            .create_user_public_key(user_id, "ed25519", &b64(&key_b_bytes), "ci", None)
             .await
             .unwrap();
         assert_ne!(a.id, b.id);
@@ -4486,11 +4730,11 @@ mod tests {
         // Register two keys.
         let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
         let key_a = store
-            .create_user_public_key(user_id, "ed25519", &b64(&[0x11u8; 32]), "laptop")
+            .create_user_public_key(user_id, "ed25519", &b64(&[0x11u8; 32]), "laptop", None)
             .await
             .unwrap();
         let key_b = store
-            .create_user_public_key(user_id, "ed25519", &b64(&[0x22u8; 32]), "ci")
+            .create_user_public_key(user_id, "ed25519", &b64(&[0x22u8; 32]), "ci", None)
             .await
             .unwrap();
 
@@ -4549,6 +4793,154 @@ mod tests {
         let revoked = history.iter().find(|k| k.key.id == key_a.id).unwrap();
         assert!(revoked.key.revoked_at.is_some());
         assert_eq!(revoked.usage_count, 1);
+    }
+
+    /// Org-scoped publisher keys: register a key tagged to an org, the
+    /// org-scoped lister returns it, the verifier hands it to a
+    /// teammate publish, and an admin (non-owner) can revoke it.
+    #[tokio::test]
+    async fn test_org_scoped_publisher_keys_lifecycle() {
+        use base64::Engine;
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        // Seed: owner user, admin user, org, member rows.
+        let owner_id = Uuid::new_v4();
+        let admin_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+               VALUES (?, 'owner', 'o@example.com', 'x', datetime('now'), datetime('now')),
+                      (?, 'admin', 'a@example.com', 'x', datetime('now'), datetime('now'))"#,
+        )
+        .bind(owner_id.to_string())
+        .bind(admin_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let org_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO organizations (id, name, slug, owner_id, plan, limits_json,
+                                          stripe_customer_id, created_at, updated_at)
+               VALUES (?, 'AcmeOrg', 'acme', ?, 'team', '{}', NULL,
+                       datetime('now'), datetime('now'))"#,
+        )
+        .bind(org_id.to_string())
+        .bind(owner_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO org_members (id, org_id, user_id, role, created_at)
+               VALUES (?, ?, ?, 'admin', datetime('now'))"#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(org_id.to_string())
+        .bind(admin_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // Owner registers an org-scoped key.
+        let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+        let team_key = store
+            .create_user_public_key(
+                owner_id,
+                "ed25519",
+                &b64(&[0x33u8; 32]),
+                "ci-bot",
+                Some(org_id),
+            )
+            .await
+            .unwrap();
+        assert_eq!(team_key.org_id, Some(org_id));
+
+        // Org listing returns it.
+        let listed = store.list_org_public_keys_with_usage(org_id, false).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].key.id, team_key.id);
+
+        // The admin user (a member, not owner) gets that key offered to
+        // the verifier when *they* publish.
+        let publisher_keys = store.list_keys_for_publisher(admin_id).await.unwrap();
+        assert!(publisher_keys.iter().any(|k| k.id == team_key.id));
+
+        // Org-admin revoke succeeds even though admin isn't the owner.
+        assert!(store.revoke_org_public_key(org_id, team_key.id).await.unwrap());
+
+        // After revocation the verifier no longer sees it.
+        let publisher_keys_after = store.list_keys_for_publisher(admin_id).await.unwrap();
+        assert!(publisher_keys_after.iter().all(|k| k.id != team_key.id));
+
+        // The org listing (active-only) drops it; including revoked
+        // brings it back so admins can audit retired keys.
+        let active = store.list_org_public_keys_with_usage(org_id, false).await.unwrap();
+        assert!(active.is_empty());
+        let history = store.list_org_public_keys_with_usage(org_id, true).await.unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].key.revoked_at.is_some());
+    }
+
+    /// Atomic key rotation: new key inherits the old's org tag, old key
+    /// is revoked in the same transaction.
+    #[tokio::test]
+    async fn test_rotate_user_public_key_inherits_org() {
+        use base64::Engine;
+        let store = memory_store().await;
+        let pool = store.pool();
+
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
+               VALUES (?, 'rot', 'r@example.com', 'x', datetime('now'), datetime('now'))"#,
+        )
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+        let org_id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO organizations (id, name, slug, owner_id, plan, limits_json,
+                                          stripe_customer_id, created_at, updated_at)
+               VALUES (?, 'RotOrg', 'rot-org', ?, 'free', '{}', NULL,
+                       datetime('now'), datetime('now'))"#,
+        )
+        .bind(org_id.to_string())
+        .bind(user_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+        let old = store
+            .create_user_public_key(
+                user_id,
+                "ed25519",
+                &b64(&[0x44u8; 32]),
+                "old-laptop",
+                Some(org_id),
+            )
+            .await
+            .unwrap();
+
+        let new = store
+            .rotate_user_public_key(user_id, old.id, "ed25519", &b64(&[0x55u8; 32]), "new-laptop")
+            .await
+            .unwrap();
+        assert_ne!(new.id, old.id);
+        assert_eq!(new.org_id, Some(org_id), "new key inherits org tag");
+        assert!(new.is_active());
+
+        // Old is revoked.
+        let lookup = store.find_user_public_key_by_id(old.id).await.unwrap().unwrap();
+        assert!(lookup.revoked_at.is_some());
+
+        // Re-rotating the now-revoked old key fails.
+        let err = store
+            .rotate_user_public_key(user_id, old.id, "ed25519", &b64(&[0x66u8; 32]), "another")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, crate::error::StoreError::NotFound));
     }
 
     /// End-to-end scenarios CRUD on SQLite. Seeds a user + org, creates

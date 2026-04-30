@@ -26,10 +26,14 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputLabel,
   LinearProgress,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -42,6 +46,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   Key as KeyIcon,
   ContentCopy as CopyIcon,
+  Autorenew as RotateIcon,
   Terminal as TerminalIcon,
   VerifiedUser as VerifiedIcon,
 } from '@mui/icons-material';
@@ -58,10 +63,20 @@ interface PublicKey {
   /// this key. Server-computed via a JOIN on `plugin_versions` so we
   /// don't ship N+1 queries from the browser.
   usageCount: number;
+  /// Optional org tag. When set, the key is also accepted by the
+  /// attestation verifier when other org members publish.
+  orgId?: string | null;
 }
 
 interface ListResponse {
   keys: PublicKey[];
+}
+
+interface OrganizationOption {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string;
 }
 
 async function fetchKeys(includeRevoked: boolean): Promise<PublicKey[]> {
@@ -77,10 +92,24 @@ async function fetchKeys(includeRevoked: boolean): Promise<PublicKey[]> {
   return data.keys;
 }
 
+async function fetchOrgs(): Promise<OrganizationOption[]> {
+  // Soft-fail: org-tagged keys are an opt-in feature. If the user has
+  // no orgs (or the endpoint is unavailable), the dialog falls back to
+  // a personal-only key with no fanfare.
+  try {
+    const resp = await authenticatedFetch('/api/v1/organizations');
+    if (!resp.ok) return [];
+    return await resp.json();
+  } catch {
+    return [];
+  }
+}
+
 async function addKey(req: {
   algorithm: string;
   publicKeyB64: string;
   label: string;
+  orgId?: string | null;
 }): Promise<PublicKey> {
   const resp = await authenticatedFetch('/api/v1/users/me/public-keys', {
     method: 'POST',
@@ -102,6 +131,25 @@ async function revokeKey(id: string): Promise<void> {
     const body = await resp.text().catch(() => '');
     throw new Error(`Failed to revoke key (${resp.status}): ${body}`);
   }
+}
+
+async function rotateKey(
+  id: string,
+  req: { newPublicKeyB64: string; newLabel: string }
+): Promise<PublicKey> {
+  const resp = await authenticatedFetch(
+    `/api/v1/users/me/public-keys/${id}/rotate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    }
+  );
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '');
+    throw new Error(`Failed to rotate key (${resp.status}): ${body}`);
+  }
+  return resp.json();
 }
 
 /// Short fingerprint for UI display — first 16 hex chars of SHA-256 of
@@ -334,8 +382,14 @@ const PublisherKeysPage: React.FC = () => {
   const [showAdd, setShowAdd] = useState(false);
   const [label, setLabel] = useState('');
   const [publicKeyB64, setPublicKeyB64] = useState('');
+  // '' = personal key. Otherwise an org id from the orgs query.
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<PublicKey | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<PublicKey | null>(null);
+  const [rotateLabel, setRotateLabel] = useState('');
+  const [rotateKeyB64, setRotateKeyB64] = useState('');
+  const [rotateError, setRotateError] = useState<string | null>(null);
   const [fingerprints, setFingerprints] = useState<Record<string, string>>({});
   // Off by default — most of the time users care about active keys.
   // Flipping this on makes the server return revoked rows too so the
@@ -350,6 +404,15 @@ const PublisherKeysPage: React.FC = () => {
   } = useQuery({
     queryKey: ['publisher-public-keys', includeRevoked],
     queryFn: () => fetchKeys(includeRevoked),
+  });
+
+  // Lazy-load orgs only when the Add dialog opens. Keeps the page
+  // load cheap for users who never tag a key.
+  const { data: orgs } = useQuery({
+    queryKey: ['publisher-keys-orgs'],
+    queryFn: fetchOrgs,
+    enabled: showAdd,
+    staleTime: 60_000,
   });
 
   // Derive fingerprints whenever the key list changes. Done in an
@@ -377,9 +440,23 @@ const PublisherKeysPage: React.FC = () => {
       setShowAdd(false);
       setLabel('');
       setPublicKeyB64('');
+      setSelectedOrgId('');
       setError(null);
     },
     onError: (e: Error) => setError(e.message),
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { newPublicKeyB64: string; newLabel: string } }) =>
+      rotateKey(id, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['publisher-public-keys'] });
+      setRotateTarget(null);
+      setRotateLabel('');
+      setRotateKeyB64('');
+      setRotateError(null);
+    },
+    onError: (e: Error) => setRotateError(e.message),
   });
 
   const revokeMutation = useMutation({
@@ -417,6 +494,33 @@ const PublisherKeysPage: React.FC = () => {
       algorithm: 'ed25519',
       publicKeyB64: trimmedKey,
       label: trimmedLabel,
+      orgId: selectedOrgId || null,
+    });
+  };
+
+  const handleRotateSubmit = () => {
+    setRotateError(null);
+    if (!rotateTarget) return;
+    const trimmedLabel = rotateLabel.trim();
+    if (!trimmedLabel) {
+      setRotateError('New label is required.');
+      return;
+    }
+    const trimmedKey = rotateKeyB64.trim();
+    if (!trimmedKey) {
+      setRotateError('New public key is required.');
+      return;
+    }
+    const stripped = normalizeBase64(trimmedKey);
+    if (stripped.length !== 44) {
+      setRotateError(
+        `Expected 44 base64 characters for an Ed25519 public key; got ${stripped.length}.`
+      );
+      return;
+    }
+    rotateMutation.mutate({
+      id: rotateTarget.id,
+      body: { newPublicKeyB64: trimmedKey, newLabel: trimmedLabel },
     });
   };
 
@@ -518,6 +622,16 @@ const PublisherKeysPage: React.FC = () => {
                         />
                       </Tooltip>
                     )}
+                    {key.orgId && (
+                      <Tooltip title="Org-scoped key — accepted by the verifier when any member of this org publishes">
+                        <Chip
+                          label="org-scoped"
+                          size="small"
+                          color="info"
+                          variant="outlined"
+                        />
+                      </Tooltip>
+                    )}
                     {key.revokedAt && (
                       <Chip label="Revoked" color="default" size="small" />
                     )}
@@ -554,6 +668,21 @@ const PublisherKeysPage: React.FC = () => {
                     <CopyIcon />
                   </IconButton>
                 </Tooltip>
+                {!key.revokedAt && (
+                  <Tooltip title="Rotate key (atomically register a replacement and revoke this one)">
+                    <IconButton
+                      onClick={() => {
+                        setRotateTarget(key);
+                        setRotateLabel('');
+                        setRotateKeyB64('');
+                        setRotateError(null);
+                      }}
+                      disabled={rotateMutation.isPending}
+                    >
+                      <RotateIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 {!key.revokedAt && (
                   <Tooltip title="Revoke key">
                     <IconButton
@@ -598,6 +727,30 @@ const PublisherKeysPage: React.FC = () => {
               fullWidth
               placeholder="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
             />
+            {/* Org dropdown is only useful when the user owns at least
+                one org. We surface owned orgs only — admin-but-not-owner
+                membership requires a separate /members lookup we don't
+                want to do per dialog open. */}
+            {orgs && orgs.length > 0 && (
+              <FormControl fullWidth>
+                <InputLabel id="key-org-label">Scope</InputLabel>
+                <Select
+                  labelId="key-org-label"
+                  label="Scope"
+                  value={selectedOrgId}
+                  onChange={(e) => setSelectedOrgId(e.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>Personal — only me</em>
+                  </MenuItem>
+                  {orgs.map((o) => (
+                    <MenuItem key={o.id} value={o.id}>
+                      Org: {o.name} <code style={{ marginLeft: 6, opacity: 0.6 }}>{o.slug}</code>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             {error && (
               <Typography color="error" variant="body2">
                 {error}
@@ -615,6 +768,63 @@ const PublisherKeysPage: React.FC = () => {
             disabled={addMutation.isPending}
           >
             {addMutation.isPending ? 'Registering…' : 'Register'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rotate dialog — register a new key and revoke the old one in
+          a single backend transaction so the org tag (if any) is
+          preserved and there's no window where neither is active. */}
+      <Dialog
+        open={!!rotateTarget}
+        onClose={() => setRotateTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Rotate key</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Register a replacement for <b>{rotateTarget?.label}</b>. The
+            new key inherits the same scope (personal vs. org). The old
+            key is revoked in the same transaction and stops verifying
+            new signatures immediately.
+          </DialogContentText>
+          <Stack spacing={2}>
+            <TextField
+              label="New label"
+              placeholder="e.g. laptop-2026"
+              value={rotateLabel}
+              onChange={(e) => setRotateLabel(e.target.value)}
+              inputProps={{ maxLength: 128 }}
+              fullWidth
+              autoFocus
+            />
+            <TextField
+              label="New public key (base64)"
+              value={rotateKeyB64}
+              onChange={(e) => setRotateKeyB64(e.target.value)}
+              multiline
+              minRows={2}
+              fullWidth
+              placeholder="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            />
+            {rotateError && (
+              <Typography color="error" variant="body2">
+                {rotateError}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRotateTarget(null)} disabled={rotateMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRotateSubmit}
+            disabled={rotateMutation.isPending}
+          >
+            {rotateMutation.isPending ? 'Rotating…' : 'Rotate'}
           </Button>
         </DialogActions>
       </Dialog>

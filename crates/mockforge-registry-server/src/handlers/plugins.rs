@@ -434,7 +434,11 @@ pub async fn publish_plugin(
             verify_sbom_attestation, SbomAttestationInput, SbomVerifyOutcome,
         };
 
-        let keys = state.store.list_user_public_keys(author_id).await?;
+        // Pull both the author's own keys and any keys tagged to orgs
+        // they belong to. Lets a CI bot's key registered against an org
+        // verify a teammate's publish without requiring every member to
+        // re-register the same key personally.
+        let keys = state.store.list_keys_for_publisher(author_id).await?;
         // Canonicalize via RFC 8785 (JCS) — the CLI signs the same form,
         // so publishers using different JSON libraries produce
         // byte-identical inputs to the verifier. Without this step, two

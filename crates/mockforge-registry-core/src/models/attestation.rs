@@ -25,6 +25,11 @@ pub struct UserPublicKey {
     pub label: String,
     pub created_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// Optional org tag. When set, the key is also accepted by the
+    /// attestation verifier when other members of that org publish and
+    /// is visible to org Owners/Admins via the org-scoped listing
+    /// endpoint. `None` keeps the historical user-only behavior.
+    pub org_id: Option<Uuid>,
 }
 
 impl UserPublicKey {
@@ -181,6 +186,7 @@ mod tests {
             label: "test".to_string(),
             created_at: Utc::now(),
             revoked_at: None,
+            org_id: None,
         };
         (signing, key)
     }
@@ -412,6 +418,7 @@ mod jcs_fuzz {
                 label: "prop".to_string(),
                 created_at: Utc::now(),
                 revoked_at: None,
+                org_id: None,
             };
 
             let sbom = serde_jcs::to_vec(&v).unwrap();

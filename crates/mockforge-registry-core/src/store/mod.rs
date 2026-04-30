@@ -1672,14 +1672,16 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     /// Register a new public key on a user's account. The caller has
     /// already validated that `public_key_b64` decodes to the right
-    /// length for the algorithm. Returns the persisted record so the
-    /// handler can echo the id to the client.
+    /// length for the algorithm. `org_id` is `Some` when the key is
+    /// scoped to an organization (caller must be an Owner/Admin of that
+    /// org — handler-level check). Returns the persisted record.
     async fn create_user_public_key(
         &self,
         user_id: Uuid,
         algorithm: &str,
         public_key_b64: &str,
         label: &str,
+        org_id: Option<Uuid>,
     ) -> StoreResult<UserPublicKey>;
 
     /// Soft-revoke a key (sets `revoked_at`). Revoked keys are skipped
@@ -1688,6 +1690,44 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// updated, so the handler can distinguish "not yours" (or "already
     /// revoked") from "done."
     async fn revoke_user_public_key(&self, user_id: Uuid, key_id: Uuid) -> StoreResult<bool>;
+
+    /// Soft-revoke a key on behalf of an org Owner/Admin. The handler is
+    /// responsible for verifying the caller's role; this method only
+    /// guards on the key actually being scoped to the supplied org.
+    /// Returns `true` if a row updated.
+    async fn revoke_org_public_key(&self, org_id: Uuid, key_id: Uuid) -> StoreResult<bool>;
+
+    /// Look up a single key by id, regardless of owner. Used by the
+    /// revoke handler to resolve an org-scoped revoke when the caller
+    /// isn't the key's owner but is an org admin.
+    async fn find_user_public_key_by_id(&self, key_id: Uuid) -> StoreResult<Option<UserPublicKey>>;
+
+    /// List keys tagged with `org_id`. Mirrors
+    /// [`Self::list_user_public_keys_with_usage`] for the org listing
+    /// endpoint — joins usage and respects `include_revoked`.
+    async fn list_org_public_keys_with_usage(
+        &self,
+        org_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>>;
+
+    /// Pull every active key the verifier should try when `author_id`
+    /// publishes — i.e. the author's own keys plus any keys tagged with
+    /// orgs the author is a member of. Single round-trip.
+    async fn list_keys_for_publisher(&self, author_id: Uuid) -> StoreResult<Vec<UserPublicKey>>;
+
+    /// Atomic publisher-key rotation: register a new key with the same
+    /// org tag as `old_key_id` and revoke the old one in one
+    /// transaction. Returns the new key. Callers (handler) audit-log
+    /// the rotation as a single event.
+    async fn rotate_user_public_key(
+        &self,
+        user_id: Uuid,
+        old_key_id: Uuid,
+        algorithm: &str,
+        new_public_key_b64: &str,
+        new_label: &str,
+    ) -> StoreResult<UserPublicKey>;
 
     /// Record a verified SBOM attestation against a plugin version. No-op
     /// when `key_id` is `None` (publisher didn't submit a signature).
