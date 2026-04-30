@@ -42,15 +42,19 @@ async fn test_admin_ui_build_and_serve() {
     let dev_dependencies = package_json["devDependencies"].as_object().unwrap();
     assert!(dev_dependencies.contains_key("vite"), "Vite dev dependency should be present");
 
-    // Test that the UI build process works (without actually running the build)
-    // This verifies the build configuration is correct
+    // Test that the UI build process works (without actually running the build).
+    // This verifies the build configuration is correct.
+    //
+    // NOTE: gate on `index.html`, not `dist/`, because `build.rs` always
+    // creates an empty `ui/dist/` directory (line 65-67) so the binary can
+    // be compiled with placeholder HTML when `pnpm build` hasn't been run
+    // (e.g. release.yml's `Run tests` step never invokes pnpm). If we
+    // gated on `dist.exists()` the assertion would fire in every CI
+    // environment that doesn't pre-build the UI.
     let ui_dist = ui_dir.join("dist");
-    if ui_dist.exists() {
-        // If dist exists, verify it has the expected structure
-        let index_html = ui_dist.join("index.html");
+    let index_html = ui_dist.join("index.html");
+    if index_html.exists() {
         let assets_dir = ui_dist.join("assets");
-
-        assert!(index_html.exists(), "index.html should exist in dist directory");
         assert!(assets_dir.exists(), "assets directory should exist in dist directory");
 
         // Verify index.html content
@@ -86,10 +90,20 @@ async fn test_admin_ui_build_and_serve() {
     }
 }
 
-/// Test that the admin UI serves correctly when built assets exist
+/// Test that the admin UI serves correctly when built assets exist.
+///
+/// NOTE: skips the React-root assertion when the binary was compiled
+/// without a real Vite build — `build.rs` embeds `PLACEHOLDER_HTML`
+/// ("Admin UI not bundled") in that case, which intentionally has no
+/// `<div id="root">`. The release.yml `Run tests` step runs without
+/// invoking `pnpm build`, so without this guard the test fails on
+/// every release.
 #[tokio::test]
 async fn test_admin_ui_serves_built_assets() {
     setup_test_env();
+    let crate_dir = env!("CARGO_MANIFEST_DIR");
+    let real_ui_built = Path::new(crate_dir).join("ui/dist/index.html").exists();
+
     let app = create_admin_router(
         None,
         None,
@@ -123,7 +137,8 @@ async fn test_admin_ui_serves_built_assets() {
     let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let html_content = String::from_utf8(body_bytes.to_vec()).unwrap();
 
-    // Basic HTML structure checks
+    // Basic HTML structure checks (true for both real Vite output and the
+    // build.rs placeholder).
     assert!(
         html_content.to_lowercase().contains("<!doctype html>"),
         "HTML should have DOCTYPE"
@@ -132,11 +147,14 @@ async fn test_admin_ui_serves_built_assets() {
     assert!(html_content.contains("<head>"), "HTML should have head tag");
     assert!(html_content.contains("<body>"), "HTML should have body tag");
 
-    // Check for typical React/Vite build artifacts
-    assert!(
-        html_content.contains("<div id=\"root\">") || html_content.contains("root"),
-        "HTML should have React root element"
-    );
+    if real_ui_built {
+        // Only the real Vite build has a React root; the placeholder is a
+        // static "Admin UI not bundled" notice.
+        assert!(
+            html_content.contains("<div id=\"root\">") || html_content.contains("root"),
+            "HTML should have React root element"
+        );
+    }
 
     // Test CSS asset serving
     let app2 = create_admin_router(
