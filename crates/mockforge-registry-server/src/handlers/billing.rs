@@ -4,7 +4,8 @@ use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use stripe::{
     BillingPortalSession, CheckoutSession, CheckoutSessionMode, Client, CreateBillingPortalSession,
-    CreateCheckoutSession, CreateCheckoutSessionLineItems, EventObject, EventType,
+    CreateCheckoutSession, CreateCheckoutSessionLineItems, EventObject, EventType, Invoice,
+    ListInvoices,
 };
 use uuid::Uuid;
 
@@ -41,8 +42,8 @@ pub async fn get_subscription(
         .await
         .map_err(ApiError::Database)?;
 
-    // Get plan limits
-    let limits = org_ctx.org.limits_json.clone();
+    // Effective limits = plan defaults + custom org quota overrides
+    let limits = super::usage::effective_limits(&state, &org_ctx.org).await?;
 
     Ok(Json(SubscriptionResponse {
         org_id: org_ctx.org_id,
@@ -68,6 +69,13 @@ pub async fn get_subscription(
             storage_bytes: usage.storage_bytes,
             storage_limit_bytes: limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1)
                 * 1_000_000_000, // Convert GB to bytes
+            egress_bytes: usage.egress_bytes,
+            // -1 = no plan-defined cap (egress is tracked but not capped today)
+            egress_limit_bytes: limits
+                .get("egress_gb")
+                .and_then(|v| v.as_i64())
+                .map(|gb| gb * 1_000_000_000)
+                .unwrap_or(-1),
             ai_tokens_used: usage.ai_tokens_used,
             ai_tokens_limit: limits
                 .get("ai_tokens_per_month")
@@ -95,6 +103,8 @@ pub struct UsageStats {
     pub requests_limit: i64,
     pub storage_bytes: i64,
     pub storage_limit_bytes: i64,
+    pub egress_bytes: i64,
+    pub egress_limit_bytes: i64,
     pub ai_tokens_used: i64,
     pub ai_tokens_limit: i64,
 }
@@ -290,6 +300,103 @@ pub async fn create_portal_session(
 
     Ok(Json(CreatePortalResponse {
         portal_url: session.url,
+    }))
+}
+
+/// Single invoice line in the API response (subset of Stripe's full Invoice).
+#[derive(Debug, Serialize)]
+pub struct InvoiceItem {
+    pub id: String,
+    pub number: Option<String>,
+    pub status: Option<String>,
+    pub amount_due: i64,
+    pub amount_paid: i64,
+    pub currency: Option<String>,
+    pub created: Option<i64>,
+    pub period_start: Option<i64>,
+    pub period_end: Option<i64>,
+    pub hosted_invoice_url: Option<String>,
+    pub invoice_pdf: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListInvoicesResponse {
+    pub org_id: Uuid,
+    pub invoices: Vec<InvoiceItem>,
+}
+
+/// GET /api/v1/billing/invoices
+///
+/// Lists the org's invoices via Stripe. Returns an empty list if the org has
+/// no Stripe customer ID yet (e.g. free tier never upgraded).
+pub async fn list_invoices(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<ListInvoicesResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Owner-only — invoices contain financial info
+    if org_ctx.org.owner_id != user_id {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // No customer yet → empty list (not an error). Same for un-configured Stripe.
+    let stripe_customer_id = match org_ctx.org.stripe_customer_id.as_ref() {
+        Some(id) => id,
+        None => {
+            return Ok(Json(ListInvoicesResponse {
+                org_id: org_ctx.org_id,
+                invoices: vec![],
+            }));
+        }
+    };
+    let stripe_secret = match state.config.stripe_secret_key.as_ref() {
+        Some(s) => s,
+        None => {
+            return Ok(Json(ListInvoicesResponse {
+                org_id: org_ctx.org_id,
+                invoices: vec![],
+            }));
+        }
+    };
+
+    let customer_id = stripe_customer_id
+        .parse()
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("Invalid Stripe customer ID")))?;
+    let client = Client::new(stripe_secret);
+
+    let mut params = ListInvoices::new();
+    params.customer = Some(customer_id);
+    params.limit = Some(20);
+
+    let list = Invoice::list(&client, &params)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Stripe invoices error: {}", e)))?;
+
+    let invoices = list
+        .data
+        .into_iter()
+        .map(|inv| InvoiceItem {
+            id: inv.id.to_string(),
+            number: inv.number,
+            status: inv.status.map(|s| s.as_str().to_string()),
+            amount_due: inv.amount_due.unwrap_or(0),
+            amount_paid: inv.amount_paid.unwrap_or(0),
+            currency: inv.currency.map(|c| c.to_string()),
+            created: inv.created,
+            period_start: inv.period_start,
+            period_end: inv.period_end,
+            hosted_invoice_url: inv.hosted_invoice_url,
+            invoice_pdf: inv.invoice_pdf,
+        })
+        .collect();
+
+    Ok(Json(ListInvoicesResponse {
+        org_id: org_ctx.org_id,
+        invoices,
     }))
 }
 

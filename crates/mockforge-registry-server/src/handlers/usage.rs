@@ -3,7 +3,11 @@
 //! Provides endpoints for organizations to view their current usage
 //! and limits across requests, storage, AI tokens, etc.
 
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{
+    extract::{Path, State},
+    http::HeaderMap,
+    Json,
+};
 use chrono::Datelike;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -11,9 +15,35 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::UsageCounter,
+    models::{Organization, UsageAlert, UsageCounter},
     AppState,
 };
+
+/// Effective per-key limits = plan defaults (org.limits_json) shallow-merged with
+/// the org's optional `quota` setting (org_settings.setting_key = "quota"). The
+/// admin-set quota overrides plan defaults per top-level key; missing keys fall
+/// back to the plan.
+pub(crate) async fn effective_limits(
+    state: &AppState,
+    org: &Organization,
+) -> ApiResult<serde_json::Value> {
+    let mut limits = org.limits_json.clone();
+    let setting = state.store.get_org_setting(org.id, "quota").await?;
+    if let Some(setting) = setting {
+        merge_quota_overrides(&mut limits, &setting.setting_value);
+    }
+    Ok(limits)
+}
+
+/// Shallow-merge `overrides` into `limits` in-place. Both must be JSON objects
+/// for any change to occur; otherwise this is a no-op.
+fn merge_quota_overrides(limits: &mut serde_json::Value, overrides: &serde_json::Value) {
+    if let (Some(base), Some(over)) = (limits.as_object_mut(), overrides.as_object()) {
+        for (k, v) in over {
+            base.insert(k.clone(), v.clone());
+        }
+    }
+}
 
 /// Get current usage statistics for the organization
 pub async fn get_usage(
@@ -29,8 +59,8 @@ pub async fn get_usage(
     // Get current usage counter
     let usage = state.store.get_or_create_current_usage_counter(org_ctx.org_id).await?;
 
-    // Get plan limits
-    let limits = &org_ctx.org.limits_json;
+    // Effective limits = plan defaults + custom org quota overrides
+    let limits = effective_limits(&state, &org_ctx.org).await?;
 
     // Build response with usage and limits
     Ok(Json(UsageResponse {
@@ -200,4 +230,129 @@ fn calculate_period_end(period_start: chrono::NaiveDate) -> chrono::NaiveDate {
     NaiveDate::from_ymd_opt(next_year, next_month, 1)
         .and_then(|d| d.pred_opt())
         .unwrap_or(period_start)
+}
+
+/// First day of the current month — used to scope alerts to a billing period.
+pub(crate) fn current_period_start() -> chrono::NaiveDate {
+    let today = chrono::Utc::now().date_naive();
+    chrono::NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap_or(today)
+}
+
+#[derive(Debug, Serialize)]
+pub struct UsageAlertItem {
+    pub id: Uuid,
+    pub metric: String,
+    pub period_start: chrono::NaiveDate,
+    pub threshold_pct: i16,
+    pub notified_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ListUsageAlertsResponse {
+    pub org_id: Uuid,
+    pub period_start: chrono::NaiveDate,
+    pub alerts: Vec<UsageAlertItem>,
+}
+
+/// GET /api/v1/usage/alerts — active (non-dismissed) alerts for the org's
+/// current billing period.
+pub async fn list_usage_alerts(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<ListUsageAlertsResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let period_start = current_period_start();
+    let rows = UsageAlert::list_active_for_period(state.db.pool(), org_ctx.org_id, period_start)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let alerts = rows
+        .into_iter()
+        .map(|a| UsageAlertItem {
+            id: a.id,
+            metric: a.metric,
+            period_start: a.period_start,
+            threshold_pct: a.threshold_pct,
+            notified_at: a.notified_at,
+        })
+        .collect();
+
+    Ok(Json(ListUsageAlertsResponse {
+        org_id: org_ctx.org_id,
+        period_start,
+        alerts,
+    }))
+}
+
+#[derive(Debug, Serialize)]
+pub struct DismissUsageAlertResponse {
+    pub dismissed: bool,
+}
+
+/// POST /api/v1/usage/alerts/{alert_id}/dismiss — soft-dismiss an alert.
+pub async fn dismiss_usage_alert(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path(alert_id): Path<Uuid>,
+) -> ApiResult<Json<DismissUsageAlertResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let result = UsageAlert::dismiss(state.db.pool(), alert_id, org_ctx.org_id)
+        .await
+        .map_err(ApiError::Database)?;
+
+    Ok(Json(DismissUsageAlertResponse {
+        dismissed: result.is_some(),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn merge_quota_overrides_replaces_existing_keys() {
+        let mut limits = json!({"requests_per_30d": 10_000, "storage_gb": 1});
+        let overrides = json!({"requests_per_30d": 50_000});
+        merge_quota_overrides(&mut limits, &overrides);
+        assert_eq!(limits["requests_per_30d"], 50_000);
+        assert_eq!(limits["storage_gb"], 1);
+    }
+
+    #[test]
+    fn merge_quota_overrides_adds_new_keys() {
+        let mut limits = json!({"requests_per_30d": 10_000});
+        let overrides = json!({"egress_gb": 5});
+        merge_quota_overrides(&mut limits, &overrides);
+        assert_eq!(limits["requests_per_30d"], 10_000);
+        assert_eq!(limits["egress_gb"], 5);
+    }
+
+    #[test]
+    fn merge_quota_overrides_noop_for_non_objects() {
+        let mut limits = json!({"requests_per_30d": 10_000});
+        let original = limits.clone();
+        merge_quota_overrides(&mut limits, &json!("not an object"));
+        assert_eq!(limits, original);
+
+        let mut not_object = json!(42);
+        merge_quota_overrides(&mut not_object, &json!({"x": 1}));
+        assert_eq!(not_object, json!(42));
+    }
+
+    #[test]
+    fn merge_quota_overrides_empty_override_keeps_plan() {
+        let mut limits = json!({"requests_per_30d": 10_000, "storage_gb": 1});
+        let original = limits.clone();
+        merge_quota_overrides(&mut limits, &json!({}));
+        assert_eq!(limits, original);
+    }
 }

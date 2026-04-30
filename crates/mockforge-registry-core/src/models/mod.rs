@@ -63,7 +63,7 @@ pub use scenario::Scenario;
 pub use scenario_promotion::{PromotionStatus, ScenarioEnvironmentVersion, ScenarioPromotion};
 pub use settings::{BYOKConfig, OrgAiSettings, OrgSetting};
 pub use sso::{SSOConfiguration, SSOSession};
-pub use subscription::{Subscription, SubscriptionStatus, UsageCounter};
+pub use subscription::{Subscription, SubscriptionStatus, UsageAlert, UsageCounter};
 pub use user::User;
 
 // Re-export deployment-related models for convenience

@@ -164,6 +164,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/billing/subscription", get(handlers::billing::get_subscription))
         .route("/api/v1/billing/checkout", post(handlers::billing::create_checkout))
         .route("/api/v1/billing/portal", post(handlers::billing::create_portal_session))
+        .route("/api/v1/billing/invoices", get(handlers::billing::list_invoices))
         // Email verification (resend requires auth)
         .route("/api/v1/auth/verify-email/resend", post(handlers::verification::resend_verification))
         // Hosted mocks deployment routes
@@ -213,6 +214,11 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
         .route("/api/v1/usage/ai-tokens", post(handlers::usage::report_ai_tokens))
+        .route("/api/v1/usage/alerts", get(handlers::usage::list_usage_alerts))
+        .route(
+            "/api/v1/usage/alerts/{alert_id}/dismiss",
+            post(handlers::usage::dismiss_usage_alert),
+        )
         // Audit logs
         .route("/api/v1/organizations/{org_id}/audit-logs", get(handlers::audit::get_audit_logs))
         // GDPR compliance

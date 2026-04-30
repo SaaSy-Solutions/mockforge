@@ -333,6 +333,87 @@ impl UsageCounter {
     }
 }
 
+/// One alert row per (org, metric, period, threshold_pct) — see migration
+/// 20250101000054_usage_alerts.sql.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct UsageAlert {
+    pub id: Uuid,
+    pub org_id: Uuid,
+    pub metric: String,
+    pub period_start: NaiveDate,
+    pub threshold_pct: i16,
+    pub notified_at: DateTime<Utc>,
+    pub dismissed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[cfg(feature = "postgres")]
+impl UsageAlert {
+    /// Idempotent insert. Returns `Some(row)` if newly inserted (worker should
+    /// then send an email), `None` if a matching alert already exists.
+    pub async fn try_insert(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        metric: &str,
+        period_start: NaiveDate,
+        threshold_pct: i16,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            INSERT INTO usage_alerts (org_id, metric, period_start, threshold_pct)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (org_id, metric, period_start, threshold_pct) DO NOTHING
+            RETURNING *
+            "#,
+        )
+        .bind(org_id)
+        .bind(metric)
+        .bind(period_start)
+        .bind(threshold_pct)
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Active (non-dismissed) alerts for the given period, newest first.
+    pub async fn list_active_for_period(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        period_start: NaiveDate,
+    ) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT * FROM usage_alerts
+            WHERE org_id = $1 AND period_start = $2 AND dismissed_at IS NULL
+            ORDER BY notified_at DESC
+            "#,
+        )
+        .bind(org_id)
+        .bind(period_start)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Dismiss an alert. Returns the updated row if it was active and owned by
+    /// the given org; `None` if it was already dismissed or didn't exist.
+    pub async fn dismiss(
+        pool: &sqlx::PgPool,
+        id: Uuid,
+        org_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            UPDATE usage_alerts SET dismissed_at = NOW()
+            WHERE id = $1 AND org_id = $2 AND dismissed_at IS NULL
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(org_id)
+        .fetch_optional(pool)
+        .await
+    }
+}
+
 #[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;

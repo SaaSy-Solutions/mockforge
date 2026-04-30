@@ -724,6 +724,108 @@ Privacy: https://mockforge.dev/privacy
         }
     }
 
+    /// Generate usage-threshold warning email (e.g. crossed 75% or 90% of a
+    /// metric limit on the current billing period).
+    pub fn generate_usage_threshold_warning(
+        username: &str,
+        email: &str,
+        metric_label: &str,
+        plan: &str,
+        used_pretty: &str,
+        limit_pretty: &str,
+        threshold_pct: u16,
+    ) -> EmailMessage {
+        let html_body = format!(
+            r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: #f59e0b; color: white; padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; }}
+        .button {{ display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+        .info-box {{ background: #fff7ed; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; }}
+        .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Usage Approaching Limit</h1>
+    </div>
+    <div class="content">
+        <p>Hi {username},</p>
+        <p>Your MockForge Cloud organization has crossed <strong>{threshold_pct}%</strong> of its <strong>{metric_label}</strong> limit on the current billing period.</p>
+        <div class="info-box">
+            <p><strong>Metric:</strong> {metric_label}</p>
+            <p><strong>Plan:</strong> {plan}</p>
+            <p><strong>Used:</strong> {used_pretty} of {limit_pretty}</p>
+        </div>
+        <p>If you continue at the current rate, you may hit your plan limit before the end of the period. Consider upgrading or contacting us if you expect a temporary spike.</p>
+        <p style="text-align: center;">
+            <a href="https://app.mockforge.dev/usage" class="button">View Usage</a>
+        </p>
+        <p>You can dismiss this alert from the usage dashboard.</p>
+        <p>Best regards,<br>The MockForge Team</p>
+    </div>
+    <div class="footer">
+        <p>© {year} MockForge. All rights reserved.</p>
+        <p><a href="https://mockforge.dev/terms">Terms of Service</a> | <a href="https://mockforge.dev/privacy">Privacy Policy</a></p>
+    </div>
+</body>
+</html>
+"#,
+            username = username,
+            plan = plan,
+            metric_label = metric_label,
+            used_pretty = used_pretty,
+            limit_pretty = limit_pretty,
+            threshold_pct = threshold_pct,
+            year = chrono::Utc::now().year()
+        );
+
+        let text_body = format!(
+            r#"
+Usage Approaching Limit
+
+Hi {username},
+
+Your MockForge Cloud organization has crossed {threshold_pct}% of its {metric_label} limit on the current billing period.
+
+Metric: {metric_label}
+Plan: {plan}
+Used: {used_pretty} of {limit_pretty}
+
+If you continue at the current rate, you may hit your plan limit before the end of the period. Consider upgrading or contact us if you expect a temporary spike.
+
+View usage: https://app.mockforge.dev/usage
+
+Best regards,
+The MockForge Team
+
+© {year} MockForge. All rights reserved.
+"#,
+            username = username,
+            plan = plan,
+            metric_label = metric_label,
+            used_pretty = used_pretty,
+            limit_pretty = limit_pretty,
+            threshold_pct = threshold_pct,
+            year = chrono::Utc::now().year()
+        );
+
+        EmailMessage {
+            to: email.to_string(),
+            subject: format!(
+                "MockForge: {}% of {} used on {} plan",
+                threshold_pct, metric_label, plan
+            ),
+            html_body,
+            text_body,
+        }
+    }
+
     /// Generate support request confirmation email
     pub fn generate_support_confirmation(
         username: &str,
