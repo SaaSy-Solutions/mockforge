@@ -6,7 +6,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useWebSocket } from '../useWebSocket';
 
-// Mock WebSocket
+// Mock WebSocket — opens the moment `onopen` is assigned so the hook's
+// state setter lands inside the test's render window. A microtask-based
+// async open is racy under React 19's effect-cleanup timing.
 class MockWebSocket {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -14,9 +16,9 @@ class MockWebSocket {
   static CLOSED = 3;
 
   static instances: MockWebSocket[] = [];
-  readyState = MockWebSocket.CONNECTING;
+  readyState = MockWebSocket.OPEN;
   url: string;
-  onopen: ((event: Event) => void) | null = null;
+  private _onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
@@ -24,16 +26,19 @@ class MockWebSocket {
   constructor(url: string) {
     this.url = url;
     MockWebSocket.instances.push(this);
-    // Simulate connection after a short delay
-    Promise.resolve().then(() => {
-      this.readyState = MockWebSocket.OPEN;
-      if (this.onopen) {
-        this.onopen(new Event('open'));
-      }
-    });
   }
 
-  send(data: string | object) {
+  set onopen(handler: ((event: Event) => void) | null) {
+    this._onopen = handler;
+    if (handler && this.readyState === MockWebSocket.OPEN) {
+      handler(new Event('open'));
+    }
+  }
+  get onopen(): ((event: Event) => void) | null {
+    return this._onopen;
+  }
+
+  send(_data: string | object) {
     // Mock send
   }
 
@@ -49,21 +54,28 @@ describe('useWebSocket', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     global.WebSocket = MockWebSocket as any;
-    window.WebSocket = MockWebSocket as any;
+    (globalThis as any).WebSocket = MockWebSocket;
+    if (typeof window !== 'undefined') {
+      window.WebSocket = MockWebSocket as any;
+    }
+    // The shared test setup configures cloud mode, but useWebSocket
+    // intentionally refuses relative paths in cloud mode. These tests
+    // exercise the local-mode connection path, so drop cloud mode here.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('should create WebSocket connection', () => {
     const options = { autoConnect: true };
-    const { result } = renderHook(() =>
-      useWebSocket('/test', options)
-    );
+    renderHook(() => useWebSocket('/test', options));
 
-    // Initially not connected (connection happens asynchronously)
-    expect(result.current.connected).toBe(false);
+    // The hook should have constructed at least one underlying WebSocket.
+    expect(MockWebSocket.instances.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should connect when autoConnect is true', async () => {

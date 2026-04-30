@@ -55,6 +55,7 @@ const mockUseApi = vi.hoisted(() => {
     useUpdateLatency: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateFaults: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateProxy: vi.fn(() => ({ mutateAsync: vi.fn() })),
+    useUpdateProtocols: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useUpdateValidation: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useRestartServers: vi.fn(() => ({ mutateAsync: vi.fn() })),
     useRestartStatus: vi.fn(() => ({ data: { restarting: false } })),
@@ -109,6 +110,7 @@ describe('ConfigPage', () => {
     mockUseApi.useUpdateLatency.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateFaults.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateProxy.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateProtocols.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useUpdateValidation.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useRestartServers.mockReturnValue({ mutateAsync: vi.fn() });
     mockUseApi.useRestartStatus.mockReturnValue({ data: { restarting: false } });
@@ -366,7 +368,10 @@ describe('ConfigPage', () => {
     });
   });
 
-  it('saves port config to localStorage', () => {
+  it('opens restart confirmation dialog before persisting port changes', () => {
+    // Port config is intentionally not persisted to localStorage until the
+    // restart is verified to have taken effect — clicking "Save & Restart
+    // Server" should only open the confirmation dialog.
     render(<ConfigPage />, { wrapper: createWrapper() });
 
     const httpPortInput = screen.getByDisplayValue('3000');
@@ -375,9 +380,8 @@ describe('ConfigPage', () => {
     const saveButton = screen.getByText('Save & Restart Server');
     fireEvent.click(saveButton);
 
-    const savedConfig = localStorage.getItem('mockforge_pending_port_config');
-    expect(savedConfig).toBeTruthy();
-    expect(JSON.parse(savedConfig!)).toMatchObject({ http_port: 8080 });
+    expect(screen.getByText('Restart Server Required')).toBeInTheDocument();
+    expect(localStorage.getItem('mockforge_pending_port_config')).toBeNull();
   });
 
   it('loads pending port config on mount', () => {
