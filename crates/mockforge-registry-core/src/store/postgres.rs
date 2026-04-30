@@ -34,6 +34,7 @@ use crate::models::review::Review;
 use crate::models::saml_assertion::SAMLAssertionId;
 use crate::models::scenario::Scenario;
 use crate::models::scenario_review::ScenarioReview;
+use crate::models::scenario_star::ScenarioStar;
 use crate::models::settings::OrgSetting;
 use crate::models::sso::{SSOConfiguration, SSOProvider};
 use crate::models::subscription::UsageCounter;
@@ -2240,6 +2241,64 @@ impl RegistryStore for PgRegistryStore {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|(id,)| id))
+    }
+
+    async fn increment_scenario_review_helpful_count(
+        &self,
+        scenario_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE scenario_reviews
+             SET helpful_count = helpful_count + 1, updated_at = NOW()
+             WHERE id = $1 AND scenario_id = $2",
+        )
+        .bind(review_id)
+        .bind(scenario_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    // --- Scenario stars ---
+
+    async fn toggle_scenario_star(
+        &self,
+        scenario_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)> {
+        ScenarioStar::toggle(&self.pool, scenario_id, user_id).await.map_err(Into::into)
+    }
+
+    async fn is_scenario_starred_by(&self, scenario_id: Uuid, user_id: Uuid) -> StoreResult<bool> {
+        ScenarioStar::is_starred_by(&self.pool, scenario_id, user_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_scenario_stars(&self, scenario_id: Uuid) -> StoreResult<i64> {
+        ScenarioStar::count_for_scenario(&self.pool, scenario_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn count_scenario_stars_batch(
+        &self,
+        scenario_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>> {
+        ScenarioStar::counts_for_scenarios(&self.pool, scenario_ids)
+            .await
+            .map_err(Into::into)
+    }
+
+    // --- Scenario version yank ---
+
+    async fn yank_scenario_version(&self, version_id: Uuid) -> StoreResult<()> {
+        sqlx::query("UPDATE scenario_versions SET yanked = TRUE WHERE id = $1")
+            .bind(version_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     // --- Admin analytics snapshots ---

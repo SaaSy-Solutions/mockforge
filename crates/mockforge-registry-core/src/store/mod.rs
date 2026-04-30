@@ -1881,6 +1881,45 @@ pub trait RegistryStore: Send + Sync + 'static {
         reviewer_id: Uuid,
     ) -> StoreResult<Option<Uuid>>;
 
+    /// Fire-and-forget increment of a review's helpful counter. Mirrors the
+    /// plugin equivalent — no per-user vote tracking; the UI is responsible
+    /// for not letting a user click "helpful" twice in a row.
+    async fn increment_scenario_review_helpful_count(
+        &self,
+        scenario_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<()>;
+
+    // --- Scenario stars ---
+
+    /// Toggle a scenario star for a user.
+    /// Returns `(now_starred, new_count)`.
+    async fn toggle_scenario_star(
+        &self,
+        scenario_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)>;
+
+    /// Whether `user_id` has starred `scenario_id`.
+    async fn is_scenario_starred_by(&self, scenario_id: Uuid, user_id: Uuid) -> StoreResult<bool>;
+
+    /// Live star count for a single scenario.
+    async fn count_scenario_stars(&self, scenario_id: Uuid) -> StoreResult<i64>;
+
+    /// Batch-fetch star counts for many scenarios in a single query.
+    /// Scenarios with zero stars are absent from the map — callers default to 0.
+    async fn count_scenario_stars_batch(
+        &self,
+        scenario_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>>;
+
+    // --- Scenario version yank ---
+
+    /// Mark a scenario version as yanked. The version row stays in the DB so
+    /// download URLs continue to resolve for users who pinned to it, but
+    /// search/list paths filter out yanked versions.
+    async fn yank_scenario_version(&self, version_id: Uuid) -> StoreResult<()>;
+
     // --- Admin analytics snapshots ---
 
     /// Fetch a single aggregated snapshot covering every metric surfaced by

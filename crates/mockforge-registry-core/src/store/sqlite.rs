@@ -3669,6 +3669,143 @@ impl RegistryStore for SqliteRegistryStore {
         }
     }
 
+    async fn increment_scenario_review_helpful_count(
+        &self,
+        scenario_id: Uuid,
+        review_id: Uuid,
+    ) -> StoreResult<()> {
+        sqlx::query(
+            "UPDATE scenario_reviews
+             SET helpful_count = helpful_count + 1, updated_at = datetime('now')
+             WHERE id = ? AND scenario_id = ?",
+        )
+        .bind(review_id.to_string())
+        .bind(scenario_id.to_string())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    // --- Scenario stars ---
+
+    async fn toggle_scenario_star(
+        &self,
+        scenario_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<(bool, i64)> {
+        use sqlx::Row;
+        // Wrap the flip + recount in a transaction so the count we return
+        // reflects the state the caller just set, without racing other
+        // concurrent toggles. Postgres uses the same pattern.
+        let mut tx = self.pool.begin().await?;
+
+        let already = sqlx::query(
+            "SELECT 1 AS present FROM scenario_stars
+             WHERE scenario_id = ? AND user_id = ?",
+        )
+        .bind(scenario_id.to_string())
+        .bind(user_id.to_string())
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+
+        let now_starred = if already {
+            sqlx::query("DELETE FROM scenario_stars WHERE scenario_id = ? AND user_id = ?")
+                .bind(scenario_id.to_string())
+                .bind(user_id.to_string())
+                .execute(&mut *tx)
+                .await?;
+            false
+        } else {
+            sqlx::query(
+                "INSERT INTO scenario_stars (scenario_id, user_id) VALUES (?, ?)
+                 ON CONFLICT (scenario_id, user_id) DO NOTHING",
+            )
+            .bind(scenario_id.to_string())
+            .bind(user_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+            true
+        };
+
+        let count_row =
+            sqlx::query("SELECT COUNT(*) AS cnt FROM scenario_stars WHERE scenario_id = ?")
+                .bind(scenario_id.to_string())
+                .fetch_one(&mut *tx)
+                .await?;
+        let count: i64 = count_row.try_get("cnt")?;
+
+        tx.commit().await?;
+        Ok((now_starred, count))
+    }
+
+    async fn is_scenario_starred_by(&self, scenario_id: Uuid, user_id: Uuid) -> StoreResult<bool> {
+        let row = sqlx::query("SELECT 1 FROM scenario_stars WHERE scenario_id = ? AND user_id = ?")
+            .bind(scenario_id.to_string())
+            .bind(user_id.to_string())
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.is_some())
+    }
+
+    async fn count_scenario_stars(&self, scenario_id: Uuid) -> StoreResult<i64> {
+        let (count,): (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM scenario_stars WHERE scenario_id = ?")
+                .bind(scenario_id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(count)
+    }
+
+    async fn count_scenario_stars_batch(
+        &self,
+        scenario_ids: &[Uuid],
+    ) -> StoreResult<std::collections::HashMap<Uuid, i64>> {
+        use sqlx::Row;
+        if scenario_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        // SQLite caps bound parameters at SQLITE_MAX_VARIABLE_NUMBER. Match
+        // count_template_stars_batch: chunk at 900 to stay safely below the
+        // conservative 999 default cap regardless of how libsqlite3-sys was
+        // compiled downstream.
+        const CHUNK: usize = 900;
+
+        let mut out = std::collections::HashMap::new();
+        for chunk in scenario_ids.chunks(CHUNK) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql = format!(
+                "SELECT scenario_id, COUNT(*) AS cnt
+                 FROM scenario_stars
+                 WHERE scenario_id IN ({})
+                 GROUP BY scenario_id",
+                placeholders
+            );
+            let mut q = sqlx::query(&sql);
+            for id in chunk {
+                q = q.bind(id.to_string());
+            }
+            let rows = q.fetch_all(&self.pool).await?;
+            for row in rows {
+                let id_str: String = row.try_get("scenario_id")?;
+                let cnt: i64 = row.try_get("cnt")?;
+                out.insert(parse_uuid(&id_str)?, cnt);
+            }
+        }
+        Ok(out)
+    }
+
+    // --- Scenario version yank ---
+
+    async fn yank_scenario_version(&self, version_id: Uuid) -> StoreResult<()> {
+        sqlx::query("UPDATE scenario_versions SET yanked = TRUE WHERE id = ?")
+            .bind(version_id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     #[allow(unused_variables)]
     async fn get_admin_analytics_snapshot(&self) -> StoreResult<AdminAnalyticsSnapshot> {
         Ok(AdminAnalyticsSnapshot {

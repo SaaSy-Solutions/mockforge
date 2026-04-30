@@ -81,6 +81,10 @@ pub async fn search_scenarios(
         )
         .await?;
 
+    // Batch-fetch star counts for the whole page in one query (avoids N+1).
+    let scenario_ids: Vec<Uuid> = scenarios.iter().map(|s| s.id).collect();
+    let star_counts = state.store.count_scenario_stars_batch(&scenario_ids).await?;
+
     // Convert to registry entries
     let mut entries = Vec::new();
     for scenario in scenarios {
@@ -147,18 +151,22 @@ pub async fn search_scenarios(
             })
             .collect();
 
+        let stars = star_counts.get(&scenario.id).copied().unwrap_or(0) as u64;
+
         entries.push(ScenarioRegistryEntry {
             name: scenario.name,
             description: scenario.description,
             version: scenario.current_version,
             versions: version_entries,
             author: author.username,
+            author_id: author.id.to_string(),
             author_email: Some(author.email),
             tags: scenario.tags,
             category: scenario.category,
             downloads: scenario.downloads_total as u64,
             rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
             reviews_count: scenario.rating_count as u32,
+            stars,
             reviews: review_responses,
             repository: scenario.repository,
             homepage: scenario.homepage,
@@ -256,6 +264,8 @@ pub async fn get_scenario(
         })
         .collect();
 
+    let stars = state.store.count_scenario_stars(scenario.id).await? as u64;
+
     // Record metrics
     metrics.record_download_success();
 
@@ -265,12 +275,14 @@ pub async fn get_scenario(
         version: scenario.current_version,
         versions: version_entries,
         author: author.username,
+        author_id: author.id.to_string(),
         author_email: Some(author.email),
         tags: scenario.tags,
         category: scenario.category,
         downloads: scenario.downloads_total as u64,
         rating: scenario.rating_avg.to_string().parse::<f64>().unwrap_or(0.0),
         reviews_count: scenario.rating_count as u32,
+        stars,
         reviews: review_responses,
         repository: scenario.repository,
         homepage: scenario.homepage,
@@ -579,12 +591,18 @@ pub struct ScenarioRegistryEntry {
     pub version: String,
     pub versions: Vec<ScenarioVersionEntry>,
     pub author: String,
+    /// Stringified UUID of the scenario's author. The UI compares this
+    /// against `useAuthStore.user.id` to decide whether to show the
+    /// "Yank version" button on each version row.
+    pub author_id: String,
     pub author_email: Option<String>,
     pub tags: Vec<String>,
     pub category: String,
     pub downloads: u64,
     pub rating: f64,
     pub reviews_count: u32,
+    /// Live count of `scenario_stars` rows for this scenario.
+    pub stars: u64,
     pub reviews: Vec<ScenarioReviewResponse>,
     pub repository: Option<String>,
     pub homepage: Option<String>,
@@ -719,4 +737,85 @@ pub async fn get_org_scenario_by_id(
     }
 
     Ok(Json(OrgScenarioEntry::from_model(scenario)))
+}
+
+/// Toggle a star for (current user, scenario by name).
+/// Returns the new star state and updated count.
+pub async fn toggle_scenario_star(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(name): Path<String>,
+) -> ApiResult<Json<ScenarioStarToggleResponse>> {
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
+
+    let (starred, stars) = state.store.toggle_scenario_star(scenario.id, user_id).await?;
+
+    Ok(Json(ScenarioStarToggleResponse { starred, stars }))
+}
+
+/// Whether the current user has starred a scenario.
+pub async fn get_scenario_star_state(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(name): Path<String>,
+) -> ApiResult<Json<ScenarioStarStateResponse>> {
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
+
+    let starred = state.store.is_scenario_starred_by(scenario.id, user_id).await?;
+    let stars = state.store.count_scenario_stars(scenario.id).await?;
+
+    Ok(Json(ScenarioStarStateResponse { starred, stars }))
+}
+
+/// Yank a scenario version. The version row stays but is hidden from
+/// search/list paths. Only the scenario's author may yank.
+pub async fn yank_scenario_version(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((name, version)): Path<(String, String)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let scenario = state
+        .store
+        .find_scenario_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::ScenarioNotFound(name.clone()))?;
+
+    if scenario.author_id != user_id {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    let pool = state.db.pool();
+    let scenario_version = ScenarioVersion::find(pool, scenario.id, &version)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
+
+    state.store.yank_scenario_version(scenario_version.id).await?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": format!("Version {} of {} yanked successfully", version, name)
+    })))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioStarToggleResponse {
+    pub starred: bool,
+    pub stars: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioStarStateResponse {
+    pub starred: bool,
+    pub stars: i64,
 }

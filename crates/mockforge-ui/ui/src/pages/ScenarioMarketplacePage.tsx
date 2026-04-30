@@ -26,6 +26,7 @@ import {
   MenuItem,
   List,
   ListItem,
+  ListItemText,
   Divider,
   Alert,
   Snackbar,
@@ -33,11 +34,17 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
+  Star as StarIcon,
+  StarBorder as StarBorderIcon,
+  ThumbUpAltOutlined as ThumbUpOutlinedIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
   Upload as UploadIcon,
   Launch as LaunchIcon,
+  DeleteForever as YankIcon,
 } from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import { PublishScenarioModal } from '../components/marketplace/PublishScenarioModal';
 import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
 import { authenticatedFetch } from '../utils/apiClient';
@@ -48,6 +55,7 @@ interface Scenario {
   name: string;
   description: string;
   author: string;
+  author_id: string;
   author_email?: string;
   version: string;
   category: string;
@@ -55,6 +63,7 @@ interface Scenario {
   downloads: number;
   rating: number;
   reviews_count: number;
+  stars: number;
   repository?: string;
   homepage?: string;
   license: string;
@@ -89,6 +98,7 @@ type Snack = { severity: 'success' | 'error' | 'info'; message: string } | null;
 
 export const ScenarioMarketplacePage: React.FC = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [filteredScenarios, setFilteredScenarios] = useState<Scenario[]>([]);
@@ -104,6 +114,15 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const [reviewComment, setReviewComment] = useState('');
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  // Star state: map of scenario.name → starred bool
+  const [starred, setStarred] = useState<Record<string, boolean>>({});
+  const [starringName, setStarringName] = useState<string | null>(null);
+
+  // Track which review IDs have been voted in this session, so the UI
+  // disables the button after a successful click. (The backend does not
+  // track per-user votes, so this is best-effort.)
+  const [votedReviews, setVotedReviews] = useState<Record<string, boolean>>({});
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -307,6 +326,134 @@ export const ScenarioMarketplacePage: React.FC = () => {
     }
   };
 
+  const handleToggleStar = async (scenario: Scenario, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!isAuthenticated) {
+      setSnack({ severity: 'info', message: 'Sign in to star scenarios.' });
+      return;
+    }
+    setStarringName(scenario.name);
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenario.name)}/star`,
+        { method: 'POST' }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to toggle star'));
+      }
+      const data = (await response.json()) as { starred: boolean; stars: number };
+      setStarred((prev) => ({ ...prev, [scenario.name]: data.starred }));
+      setScenarios((prev) =>
+        prev.map((s) =>
+          s.name === scenario.name ? { ...s, stars: data.stars } : s
+        )
+      );
+      // Keep the open details dialog in sync if it's the same scenario
+      setSelectedScenario((prev) =>
+        prev && prev.name === scenario.name ? { ...prev, stars: data.stars } : prev
+      );
+    } catch (error) {
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to toggle star',
+      });
+    } finally {
+      setStarringName(null);
+    }
+  };
+
+  const handleYankVersion = async (scenarioName: string, version: string) => {
+    const ok = window.confirm(
+      `Yank version ${version}? Existing pinned downloads keep working but the version will be hidden from search.`
+    );
+    if (!ok) return;
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(version)}/yank`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to yank version'));
+      }
+      setSnack({ severity: 'success', message: `Version ${version} yanked` });
+      // Refresh both list + details so the yanked row drops out of view
+      loadScenarios();
+      if (selectedScenario && selectedScenario.name === scenarioName) {
+        setSelectedScenario({
+          ...selectedScenario,
+          versions: selectedScenario.versions.map((v) =>
+            v.version === version ? { ...v, yanked: true } : v
+          ),
+        });
+      }
+    } catch (error) {
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to yank version',
+      });
+    }
+  };
+
+  const handleVoteReview = async (reviewId: string) => {
+    if (!selectedScenario) return;
+    if (!isAuthenticated) {
+      setSnack({ severity: 'info', message: 'Sign in to vote on reviews.' });
+      return;
+    }
+    if (votedReviews[reviewId]) return;
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/marketplace/scenarios/${encodeURIComponent(selectedScenario.name)}/reviews/${encodeURIComponent(reviewId)}/vote`,
+        { method: 'POST' }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(response, errorData, 'Failed to record vote'));
+      }
+      setVotedReviews((prev) => ({ ...prev, [reviewId]: true }));
+      setReviews((prev) =>
+        prev.map((r) =>
+          r.id === reviewId ? { ...r, helpful_count: r.helpful_count + 1 } : r
+        )
+      );
+    } catch (error) {
+      setSnack({
+        severity: 'error',
+        message: error instanceof Error ? error.message : 'Failed to record vote',
+      });
+    }
+  };
+
+  // When authenticated, preload per-scenario starred state for what's on screen.
+  useEffect(() => {
+    if (!isAuthenticated || scenarios.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        scenarios.map(async (s) => {
+          try {
+            const resp = await authenticatedFetch(
+              `/api/v1/marketplace/scenarios/${encodeURIComponent(s.name)}/star`
+            );
+            if (!resp.ok) return [s.name, false] as const;
+            const data = (await resp.json()) as { starred: boolean };
+            return [s.name, !!data.starred] as const;
+          } catch {
+            return [s.name, false] as const;
+          }
+        })
+      );
+      if (!cancelled) {
+        setStarred(Object.fromEntries(entries));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scenarios, isAuthenticated]);
+
   return (
     <Box sx={{ p: 3 }}>
       <MarketplaceTabs />
@@ -461,6 +608,12 @@ export const ScenarioMarketplacePage: React.FC = () => {
                       size="small"
                       variant="outlined"
                     />
+                    <Chip
+                      icon={<StarIcon />}
+                      label={(scenario.stars ?? 0).toLocaleString()}
+                      size="small"
+                      variant="outlined"
+                    />
                   </Box>
 
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
@@ -483,6 +636,30 @@ export const ScenarioMarketplacePage: React.FC = () => {
                   >
                     Download
                   </Button>
+                  <Tooltip
+                    title={
+                      isAuthenticated
+                        ? starred[scenario.name]
+                          ? 'Unstar'
+                          : 'Star'
+                        : 'Sign in to star'
+                    }
+                  >
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleToggleStar(scenario, e)}
+                        disabled={starringName === scenario.name}
+                        aria-label={starred[scenario.name] ? 'Unstar scenario' : 'Star scenario'}
+                      >
+                        {starred[scenario.name] ? (
+                          <StarIcon fontSize="small" color="warning" />
+                        ) : (
+                          <StarBorderIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                 </CardActions>
               </Card>
             </Grid>
@@ -532,7 +709,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
                 </Box>
 
                 <Grid container spacing={2} sx={{ mb: 3 }}>
-                  <Grid item xs={4}>
+                  <Grid item xs={3}>
                     <Card variant="outlined">
                       <CardContent>
                         <Typography variant="caption" color="text.secondary">
@@ -544,7 +721,19 @@ export const ScenarioMarketplacePage: React.FC = () => {
                       </CardContent>
                     </Card>
                   </Grid>
-                  <Grid item xs={8}>
+                  <Grid item xs={3}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="caption" color="text.secondary">
+                          Stars
+                        </Typography>
+                        <Typography variant="h6">
+                          {(selectedScenario.stars ?? 0).toLocaleString()}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={6}>
                     <Card variant="outlined">
                       <CardContent>
                         <Typography variant="caption" color="text.secondary">
@@ -560,6 +749,22 @@ export const ScenarioMarketplacePage: React.FC = () => {
                     </Card>
                   </Grid>
                 </Grid>
+
+                <Alert severity="info" sx={{ mb: 3 }} icon={<LaunchIcon fontSize="small" />}>
+                  Need to roll this scenario through dev → test → prod? Use{' '}
+                  <Link
+                    component="button"
+                    type="button"
+                    onClick={() => {
+                      setDetailsOpen(false);
+                      window.location.assign('/workspaces?tab=promotions');
+                    }}
+                    sx={{ verticalAlign: 'baseline' }}
+                  >
+                    Workspace Promotions
+                  </Link>{' '}
+                  to gate the change behind approval.
+                </Alert>
 
                 {(selectedScenario.repository ||
                   selectedScenario.homepage ||
@@ -604,17 +809,42 @@ export const ScenarioMarketplacePage: React.FC = () => {
                       {selectedScenario.versions
                         .filter((v) => !v.yanked)
                         .map((version) => (
-                          <ListItem key={version.version}>
+                          <ListItem
+                            key={version.version}
+                            secondaryAction={
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  size="small"
+                                  onClick={() =>
+                                    handleDownload(selectedScenario.name, version.version)
+                                  }
+                                >
+                                  Download
+                                </Button>
+                                {currentUserId === selectedScenario.author_id && (
+                                  <Tooltip title="Yank this version (hides it from search; pinned downloads still resolve)">
+                                    <Button
+                                      size="small"
+                                      color="warning"
+                                      startIcon={<YankIcon fontSize="small" />}
+                                      onClick={() =>
+                                        handleYankVersion(
+                                          selectedScenario.name,
+                                          version.version
+                                        )
+                                      }
+                                    >
+                                      Yank
+                                    </Button>
+                                  </Tooltip>
+                                )}
+                              </Box>
+                            }
+                          >
                             <ListItemText
                               primary={version.version}
                               secondary={`Published ${new Date(version.published_at).toLocaleDateString()}`}
                             />
-                            <Button
-                              size="small"
-                              onClick={() => handleDownload(selectedScenario.name, version.version)}
-                            >
-                              Download
-                            </Button>
                           </ListItem>
                         ))}
                     </List>
@@ -697,6 +927,38 @@ export const ScenarioMarketplacePage: React.FC = () => {
                             </Typography>
                           )}
                           <Typography variant="body2">{review.comment}</Typography>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              mt: 1,
+                            }}
+                          >
+                            <Tooltip
+                              title={
+                                isAuthenticated
+                                  ? votedReviews[review.id]
+                                    ? 'You marked this review as helpful'
+                                    : 'Mark this review as helpful'
+                                  : 'Sign in to vote'
+                              }
+                            >
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleVoteReview(review.id)}
+                                  disabled={!isAuthenticated || !!votedReviews[review.id]}
+                                  aria-label="Mark review as helpful"
+                                >
+                                  <ThumbUpOutlinedIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Typography variant="caption" color="text.secondary">
+                              Helpful ({review.helpful_count})
+                            </Typography>
+                          </Box>
                         </Box>
                       </ListItem>
                       <Divider component="li" />
