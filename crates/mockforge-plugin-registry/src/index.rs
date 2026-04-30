@@ -70,8 +70,8 @@ fn matches_category(entry_cat: &crate::PluginCategory, query_cat: &crate::Plugin
 /// Sort results by the specified order
 fn sort_results(results: &mut [RegistryEntry], sort: &SortOrder) {
     results.sort_by(|a, b| match sort {
-        SortOrder::Relevance => {
-            // For relevance, prioritize by downloads and rating
+        SortOrder::Relevance | SortOrder::Popular => {
+            // For relevance/popularity, prioritize by downloads and rating.
             let score_a = a.downloads as f64 + a.rating * 1000.0;
             let score_b = b.downloads as f64 + b.rating * 1000.0;
             score_b.partial_cmp(&score_a).unwrap_or(CmpOrdering::Equal)
@@ -80,6 +80,10 @@ fn sort_results(results: &mut [RegistryEntry], sort: &SortOrder) {
         SortOrder::Rating => b.rating.partial_cmp(&a.rating).unwrap_or(CmpOrdering::Equal),
         SortOrder::Recent => b.updated_at.cmp(&a.updated_at),
         SortOrder::Name => a.name.cmp(&b.name),
+        SortOrder::Security => b
+            .security_score
+            .cmp(&a.security_score)
+            .then_with(|| b.downloads.cmp(&a.downloads)),
     });
 }
 

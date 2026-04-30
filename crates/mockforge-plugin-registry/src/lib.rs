@@ -213,6 +213,12 @@ pub enum SortOrder {
     Rating,
     Recent,
     Name,
+    /// Combined score of downloads + rating — backed by `downloads_total`
+    /// since rating_count alone produces noisy ranking for new plugins.
+    Popular,
+    /// Order by `verified_at IS NOT NULL` then downloads — best proxy for
+    /// the heuristic security score derived in `derive_security_score`.
+    Security,
 }
 
 /// Search results
@@ -453,6 +459,8 @@ mod tests {
         assert_eq!(serde_json::to_string(&SortOrder::Rating).unwrap(), "\"rating\"");
         assert_eq!(serde_json::to_string(&SortOrder::Recent).unwrap(), "\"recent\"");
         assert_eq!(serde_json::to_string(&SortOrder::Name).unwrap(), "\"name\"");
+        assert_eq!(serde_json::to_string(&SortOrder::Popular).unwrap(), "\"popular\"");
+        assert_eq!(serde_json::to_string(&SortOrder::Security).unwrap(), "\"security\"");
     }
 
     #[test]

@@ -99,7 +99,17 @@ interface VersionInfo {
   yanked: boolean;
   downloadUrl: string;
   checksum: string;
+  size?: number;
+  minMockforgeVersion?: string | null;
+  dependencies?: Record<string, string>;
 }
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+};
 
 interface Review {
   id: string;
@@ -112,10 +122,6 @@ interface Review {
   helpfulCount: number;
   unhelpfulCount: number;
   verified: boolean;
-  authorResponse?: {
-    text: string;
-    createdAt: string;
-  };
 }
 
 interface SecurityScanResult {
@@ -198,25 +204,36 @@ export const PluginRegistryPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    // Reset paging whenever the server-side sort or language filter changes.
+    // Reset paging whenever a server-side filter changes. Search query is
+    // debounced separately below so each keystroke doesn't fire a request.
     setPage(0);
     loadPlugins(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortBy, selectedLanguage]);
+  }, [sortBy, selectedLanguage, selectedCategory]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setPage(0);
+      loadPlugins(0, false);
+    }, 300);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
 
   useEffect(() => {
     filterPlugins();
-  }, [plugins, searchQuery, selectedCategory, selectedLanguage, sortBy, minRating, minSecurityScore]);
+  }, [plugins, minRating, minSecurityScore]);
 
   const loadPlugins = async (nextPage: number, append: boolean) => {
     setPageLoading(true);
     try {
+      const trimmedQuery = searchQuery.trim();
       const response = await authenticatedFetch('/api/v1/plugins/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: null,
-          category: null,
+          query: trimmedQuery.length > 0 ? trimmedQuery : null,
+          category: selectedCategory === 'all' ? null : selectedCategory,
           language: selectedLanguage === 'all' ? null : selectedLanguage,
           tags: [],
           sort: sortBy,
@@ -263,63 +280,18 @@ export const PluginRegistryPage: React.FC = () => {
   };
 
   const filterPlugins = () => {
+    // Search query, category, language, and sort are applied server-side via
+    // /api/v1/plugins/search so they reflect the entire catalog rather than
+    // just the currently-loaded page. Min-rating and min-security are applied
+    // here because the backend search API doesn't accept those filters yet.
     let filtered = [...plugins];
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.description.toLowerCase().includes(query) ||
-          p.author.name.toLowerCase().includes(query) ||
-          p.tags.some((tag) => tag.toLowerCase().includes(query))
-      );
-    }
-
-    // Category filter
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter((p) => p.category === selectedCategory);
-    }
-
-    // Language filter
-    if (selectedLanguage !== 'all') {
-      filtered = filtered.filter((p) => p.language === selectedLanguage);
-    }
-
-    // Rating filter
     if (minRating > 0) {
       filtered = filtered.filter((p) => p.rating >= minRating);
     }
 
-    // Security score filter
     if (minSecurityScore > 0) {
       filtered = filtered.filter((p) => p.securityScore >= minSecurityScore);
-    }
-
-    // Sort
-    switch (sortBy) {
-      case 'popular':
-        filtered.sort((a, b) => {
-          const scoreA = a.downloads + a.rating * 100;
-          const scoreB = b.downloads + b.rating * 100;
-          return scoreB - scoreA;
-        });
-        break;
-      case 'downloads':
-        filtered.sort((a, b) => b.downloads - a.downloads);
-        break;
-      case 'rating':
-        filtered.sort((a, b) => b.rating - a.rating);
-        break;
-      case 'recent':
-        filtered.sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-        break;
-      case 'security':
-        filtered.sort((a, b) => b.securityScore - a.securityScore);
-        break;
     }
 
     setFilteredPlugins(filtered);
@@ -1004,14 +976,6 @@ export const PluginRegistryPage: React.FC = () => {
                                   Not helpful ({review.unhelpfulCount})
                                 </Button>
                               </Box>
-                              {review.authorResponse && (
-                                <Box sx={{ mt: 2, ml: 4, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
-                                  <Typography variant="caption" color="primary" fontWeight="bold">
-                                    Author Response
-                                  </Typography>
-                                  <Typography variant="body2">{review.authorResponse.text}</Typography>
-                                </Box>
-                              )}
                             </Box>
                           </ListItem>
                           <Divider component="li" />
@@ -1115,15 +1079,59 @@ export const PluginRegistryPage: React.FC = () => {
                         >
                           <ListItemText
                             primary={
-                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                                 <Typography variant="subtitle1">{version.version}</Typography>
                                 {version.version === selectedPlugin.version && (
                                   <Chip label="Latest" size="small" color="primary" />
                                 )}
                                 {version.yanked && <Chip label="Yanked" size="small" color="error" />}
+                                {version.minMockforgeVersion && (
+                                  <Tooltip title="Minimum MockForge version required to run this plugin">
+                                    <Chip
+                                      label={`MockForge ≥ ${version.minMockforgeVersion}`}
+                                      size="small"
+                                      variant="outlined"
+                                    />
+                                  </Tooltip>
+                                )}
+                                {typeof version.size === 'number' && version.size > 0 && (
+                                  <Chip label={formatFileSize(version.size)} size="small" variant="outlined" />
+                                )}
                               </Box>
                             }
-                            secondary={`Published: ${new Date(version.publishedAt).toLocaleDateString()}`}
+                            secondary={
+                              <Box component="span" sx={{ display: 'block' }}>
+                                <Typography variant="caption" color="text.secondary" component="span">
+                                  Published {new Date(version.publishedAt).toLocaleDateString()}
+                                </Typography>
+                                {version.checksum && (
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    component="span"
+                                    sx={{ display: 'block', fontFamily: 'monospace', mt: 0.25, wordBreak: 'break-all' }}
+                                  >
+                                    sha256: {version.checksum}
+                                  </Typography>
+                                )}
+                                {version.dependencies && Object.keys(version.dependencies).length > 0 && (
+                                  <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+                                    <Typography variant="caption" color="text.secondary" component="span">
+                                      Depends on:{' '}
+                                    </Typography>
+                                    {Object.entries(version.dependencies).map(([dep, range]) => (
+                                      <Chip
+                                        key={dep}
+                                        label={`${dep} ${range}`}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ mr: 0.5, mt: 0.25 }}
+                                      />
+                                    ))}
+                                  </Box>
+                                )}
+                              </Box>
+                            }
                           />
                         </ListItem>
                       );

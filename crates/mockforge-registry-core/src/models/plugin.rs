@@ -140,12 +140,22 @@ impl Plugin {
             sql.push_str(&conditions.join(" AND "));
         }
 
-        // Add sorting
+        // Add sorting. "popular" weights ratings into the ranking so
+        // well-loved-but-less-downloaded plugins surface above silently
+        // popular ones; "security" floats verified plugins to the top
+        // (matching how `derive_security_score` boosts verified entries
+        // by 35 points).
         match sort_by {
             "downloads" => sql.push_str(" ORDER BY p.downloads_total DESC"),
-            "rating" => sql.push_str(" ORDER BY p.rating_avg DESC"),
-            "recent" => sql.push_str(" ORDER BY p.created_at DESC"),
+            "rating" => sql.push_str(" ORDER BY p.rating_avg DESC, p.rating_count DESC"),
+            "recent" => sql.push_str(" ORDER BY p.updated_at DESC"),
             "name" => sql.push_str(" ORDER BY p.name ASC"),
+            "popular" => sql.push_str(
+                " ORDER BY (p.downloads_total + (p.rating_avg * p.rating_count * 100)::bigint) DESC",
+            ),
+            "security" => sql.push_str(
+                " ORDER BY (p.verified_at IS NOT NULL) DESC, p.rating_avg DESC, p.downloads_total DESC",
+            ),
             _ => sql.push_str(" ORDER BY p.downloads_total DESC"),
         }
 

@@ -29,6 +29,8 @@ pub async fn search_plugins(
         SortOrder::Rating => "rating",
         SortOrder::Recent => "recent",
         SortOrder::Name => "name",
+        SortOrder::Popular => "popular",
+        SortOrder::Security => "security",
         _ => "downloads",
     };
 
