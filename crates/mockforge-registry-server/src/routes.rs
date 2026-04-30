@@ -106,6 +106,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/users/me/public-keys/{id}",
             delete(handlers::public_keys::revoke_my_public_key),
         )
+        .route(
+            "/api/v1/users/me/public-keys/{id}/rotate",
+            post(handlers::public_keys::rotate_my_public_key),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/public-keys",
+            get(handlers::public_keys::list_org_public_keys),
+        )
         // 2FA routes
         .route("/api/v1/auth/2fa/setup", get(handlers::two_factor::setup_2fa))
         .route("/api/v1/auth/2fa/verify-setup", post(handlers::two_factor::verify_2fa_setup_with_secret))

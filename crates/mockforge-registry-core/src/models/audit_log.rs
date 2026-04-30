@@ -41,6 +41,10 @@ pub enum AuditEventType {
     PluginPublished,
     TemplatePublished,
     ScenarioPublished,
+    // Publisher attestation keys (user-scoped — recorded with org_id=nil)
+    PublisherKeyCreated,
+    PublisherKeyRevoked,
+    PublisherKeyRotated,
     // Security
     PasswordChanged,
     EmailChanged,
@@ -99,6 +103,9 @@ impl AuditEventType {
             "plugin_published" => Some(Self::PluginPublished),
             "template_published" => Some(Self::TemplatePublished),
             "scenario_published" => Some(Self::ScenarioPublished),
+            "publisher_key_created" => Some(Self::PublisherKeyCreated),
+            "publisher_key_revoked" => Some(Self::PublisherKeyRevoked),
+            "publisher_key_rotated" => Some(Self::PublisherKeyRotated),
             "password_changed" => Some(Self::PasswordChanged),
             "email_changed" => Some(Self::EmailChanged),
             "two_factor_enabled" => Some(Self::TwoFactorEnabled),

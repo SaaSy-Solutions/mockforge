@@ -1640,7 +1640,7 @@ impl RegistryStore for PgRegistryStore {
         sqlx::query_as::<_, UserPublicKey>(
             r#"
             SELECT id, user_id, algorithm, public_key_b64, label,
-                   created_at, revoked_at
+                   created_at, revoked_at, org_id
             FROM user_public_keys
             WHERE user_id = $1 AND revoked_at IS NULL
             ORDER BY created_at ASC
@@ -1661,7 +1661,7 @@ impl RegistryStore for PgRegistryStore {
         // boolean so we don't keep two near-identical SQL strings in sync.
         // The LEFT JOIN means revoked keys still get usage_count=N if
         // they signed something before revocation.
-        let rows: Vec<(
+        type Row = (
             Uuid,
             Uuid,
             String,
@@ -1669,17 +1669,19 @@ impl RegistryStore for PgRegistryStore {
             String,
             DateTime<Utc>,
             Option<DateTime<Utc>>,
+            Option<Uuid>,
             i64,
-        )> = sqlx::query_as(
+        );
+        let rows: Vec<Row> = sqlx::query_as(
             r#"
                 SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
-                       k.created_at, k.revoked_at,
+                       k.created_at, k.revoked_at, k.org_id,
                        COUNT(pv.id) AS usage_count
                 FROM user_public_keys k
                 LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
                 WHERE k.user_id = $1 AND ($2 OR k.revoked_at IS NULL)
                 GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
-                         k.label, k.created_at, k.revoked_at
+                         k.label, k.created_at, k.revoked_at, k.org_id
                 ORDER BY k.created_at ASC
                 "#,
         )
@@ -1699,6 +1701,7 @@ impl RegistryStore for PgRegistryStore {
                     label,
                     created_at,
                     revoked_at,
+                    org_id,
                     usage_count,
                 )| {
                     UserPublicKeyWithUsage {
@@ -1710,6 +1713,7 @@ impl RegistryStore for PgRegistryStore {
                             label,
                             created_at,
                             revoked_at,
+                            org_id,
                         },
                         usage_count,
                     }
@@ -1724,22 +1728,208 @@ impl RegistryStore for PgRegistryStore {
         algorithm: &str,
         public_key_b64: &str,
         label: &str,
+        org_id: Option<Uuid>,
     ) -> StoreResult<UserPublicKey> {
         sqlx::query_as::<_, UserPublicKey>(
             r#"
-            INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label, org_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, user_id, algorithm, public_key_b64, label,
-                      created_at, revoked_at
+                      created_at, revoked_at, org_id
             "#,
         )
         .bind(user_id)
         .bind(algorithm)
         .bind(public_key_b64)
         .bind(label)
+        .bind(org_id)
         .fetch_one(&self.pool)
         .await
         .map_err(Into::into)
+    }
+
+    async fn find_user_public_key_by_id(&self, key_id: Uuid) -> StoreResult<Option<UserPublicKey>> {
+        sqlx::query_as::<_, UserPublicKey>(
+            r#"
+            SELECT id, user_id, algorithm, public_key_b64, label,
+                   created_at, revoked_at, org_id
+            FROM user_public_keys
+            WHERE id = $1
+            "#,
+        )
+        .bind(key_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn revoke_org_public_key(&self, org_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
+        let res = sqlx::query(
+            r#"
+            UPDATE user_public_keys
+            SET revoked_at = NOW()
+            WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(key_id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
+    }
+
+    async fn list_org_public_keys_with_usage(
+        &self,
+        org_id: Uuid,
+        include_revoked: bool,
+    ) -> StoreResult<Vec<UserPublicKeyWithUsage>> {
+        type Row = (
+            Uuid,
+            Uuid,
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            Option<DateTime<Utc>>,
+            Option<Uuid>,
+            i64,
+        );
+        let rows: Vec<Row> = sqlx::query_as(
+            r#"
+                SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                       k.created_at, k.revoked_at, k.org_id,
+                       COUNT(pv.id) AS usage_count
+                FROM user_public_keys k
+                LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+                WHERE k.org_id = $1 AND ($2 OR k.revoked_at IS NULL)
+                GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
+                         k.label, k.created_at, k.revoked_at, k.org_id
+                ORDER BY k.created_at ASC
+                "#,
+        )
+        .bind(org_id)
+        .bind(include_revoked)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(
+                    id,
+                    uid,
+                    algorithm,
+                    public_key_b64,
+                    label,
+                    created_at,
+                    revoked_at,
+                    org_id,
+                    usage_count,
+                )| {
+                    UserPublicKeyWithUsage {
+                        key: UserPublicKey {
+                            id,
+                            user_id: uid,
+                            algorithm,
+                            public_key_b64,
+                            label,
+                            created_at,
+                            revoked_at,
+                            org_id,
+                        },
+                        usage_count,
+                    }
+                },
+            )
+            .collect())
+    }
+
+    async fn list_keys_for_publisher(&self, author_id: Uuid) -> StoreResult<Vec<UserPublicKey>> {
+        // UNION (not UNION ALL) so a key tagged to an org the author
+        // also owns isn't returned twice.
+        sqlx::query_as::<_, UserPublicKey>(
+            r#"
+            SELECT id, user_id, algorithm, public_key_b64, label,
+                   created_at, revoked_at, org_id
+            FROM user_public_keys
+            WHERE revoked_at IS NULL AND (
+                user_id = $1
+                OR org_id IN (
+                    SELECT id FROM organizations WHERE owner_id = $1
+                    UNION
+                    SELECT org_id FROM org_members WHERE user_id = $1
+                )
+            )
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(author_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(Into::into)
+    }
+
+    async fn rotate_user_public_key(
+        &self,
+        user_id: Uuid,
+        old_key_id: Uuid,
+        algorithm: &str,
+        new_public_key_b64: &str,
+        new_label: &str,
+    ) -> StoreResult<UserPublicKey> {
+        let mut tx = self.pool.begin().await?;
+        // Read inside the txn so the new key inherits the same org tag
+        // and we can reject revoked/foreign keys atomically.
+        let row: Option<(Option<Uuid>, Option<DateTime<Utc>>)> = sqlx::query_as(
+            r#"
+            SELECT org_id, revoked_at
+            FROM user_public_keys
+            WHERE id = $1 AND user_id = $2
+            "#,
+        )
+        .bind(old_key_id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let (inherited_org_id, revoked_at) = match row {
+            Some(r) => r,
+            None => return Err(crate::error::StoreError::NotFound),
+        };
+        if revoked_at.is_some() {
+            return Err(crate::error::StoreError::NotFound);
+        }
+
+        let new_key: UserPublicKey = sqlx::query_as::<_, UserPublicKey>(
+            r#"
+            INSERT INTO user_public_keys
+                (user_id, algorithm, public_key_b64, label, org_id)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, user_id, algorithm, public_key_b64, label,
+                      created_at, revoked_at, org_id
+            "#,
+        )
+        .bind(user_id)
+        .bind(algorithm)
+        .bind(new_public_key_b64)
+        .bind(new_label)
+        .bind(inherited_org_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            UPDATE user_public_keys
+            SET revoked_at = NOW()
+            WHERE id = $1 AND user_id = $2
+            "#,
+        )
+        .bind(old_key_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(new_key)
     }
 
     async fn revoke_user_public_key(&self, user_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
