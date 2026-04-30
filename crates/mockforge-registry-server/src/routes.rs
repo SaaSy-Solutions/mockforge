@@ -209,6 +209,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // API token management routes
         .route("/api/v1/tokens", post(handlers::tokens::create_token))
         .route("/api/v1/tokens", get(handlers::tokens::list_tokens))
+        // Static path — must be registered before `{token_id}` matchers.
+        .route("/api/v1/tokens/scopes", get(handlers::tokens::list_scopes))
         .route("/api/v1/tokens/{token_id}", delete(handlers::tokens::delete_token))
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))

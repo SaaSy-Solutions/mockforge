@@ -42,12 +42,17 @@ interface ApiToken {
 interface CreateTokenRequest {
   name: string;
   scopes: string[];
-  expires_days?: number;
+  expires_at?: string; // ISO 8601 timestamp
 }
 
 interface CreateTokenResponse {
   token: string; // Full token (only shown once)
-  token_info: ApiToken;
+  token_id: string;
+  token_prefix: string;
+  name: string;
+  scopes: string[];
+  expires_at?: string;
+  created_at: string;
 }
 
 interface RotateTokenResponse {
@@ -57,6 +62,27 @@ interface RotateTokenResponse {
   new_token_prefix: string;
   old_token_deleted: boolean;
   message: string;
+}
+
+interface TokenScopeInfo {
+  value: string;
+  label: string;
+  description: string;
+}
+
+interface TokenRotationStatus {
+  token_id: string;
+  name: string;
+  token_prefix: string;
+  age_days: number;
+  needs_rotation: boolean;
+  last_used_at?: string;
+  created_at: string;
+}
+
+interface TokenRotationStatusResponse {
+  tokens_needing_rotation: TokenRotationStatus[];
+  rotation_threshold_days: number;
 }
 
 // API base URL
@@ -107,6 +133,34 @@ async function deleteToken(tokenId: string): Promise<void> {
   }
 }
 
+async function fetchRotationStatus(): Promise<TokenRotationStatusResponse> {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_BASE}/tokens/rotation-status`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch rotation status');
+  }
+  return response.json();
+}
+
+async function fetchScopes(): Promise<TokenScopeInfo[]> {
+  const token = localStorage.getItem('auth_token');
+  const response = await fetch(`${API_BASE}/tokens/scopes`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch scopes');
+  }
+  return response.json();
+}
+
 async function rotateToken(tokenId: string, newName?: string, deleteOld?: boolean): Promise<RotateTokenResponse> {
   const token = localStorage.getItem('auth_token');
   const response = await fetch(`${API_BASE}/tokens/${tokenId}/rotate`, {
@@ -124,7 +178,8 @@ async function rotateToken(tokenId: string, newName?: string, deleteOld?: boolea
   return response.json();
 }
 
-const AVAILABLE_SCOPES = [
+// Fallback if the scopes endpoint is unavailable (e.g. older backend).
+const FALLBACK_SCOPES: TokenScopeInfo[] = [
   { value: 'read:packages', label: 'Read Packages', description: 'Read and search packages' },
   { value: 'publish:packages', label: 'Publish Packages', description: 'Publish new package versions' },
   { value: 'deploy:mocks', label: 'Deploy Mocks', description: 'Deploy hosted mock services' },
@@ -152,12 +207,30 @@ export function ApiTokensPage() {
     queryFn: fetchTokens,
   });
 
+  // Fetch the scope catalogue from the backend (falls back if unavailable).
+  const { data: scopesFromApi } = useQuery({
+    queryKey: ['api-token-scopes'],
+    queryFn: fetchScopes,
+    staleTime: 60 * 60 * 1000, // 1 hour
+    retry: false,
+  });
+  const availableScopes: TokenScopeInfo[] =
+    scopesFromApi && scopesFromApi.length > 0 ? scopesFromApi : FALLBACK_SCOPES;
+
+  // Server-side rotation status (powers the summary banner).
+  const { data: rotationStatus } = useQuery({
+    queryKey: ['api-token-rotation-status'],
+    queryFn: fetchRotationStatus,
+    retry: false,
+  });
+
   // Create token mutation
   const createTokenMutation = useMutation({
     mutationFn: createToken,
     onSuccess: (data) => {
       setNewToken(data.token);
       queryClient.invalidateQueries({ queryKey: ['api-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['api-token-rotation-status'] });
       setIsCreateDialogOpen(false);
       // Reset form
       setNewTokenName('');
@@ -174,6 +247,7 @@ export function ApiTokensPage() {
     mutationFn: deleteToken,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['api-token-rotation-status'] });
       showToast('success', 'Success', 'Token deleted successfully');
     },
     onError: (error: Error) => {
@@ -191,6 +265,7 @@ export function ApiTokensPage() {
       setRotateNewName('');
       setRotateDeleteOld(false);
       queryClient.invalidateQueries({ queryKey: ['api-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['api-token-rotation-status'] });
       showToast('success', 'Success', data.message);
     },
     onError: (error: Error) => {
@@ -216,10 +291,14 @@ export function ApiTokensPage() {
       showToast('error', 'Error', 'At least one scope is required');
       return;
     }
+    const expiresAt =
+      expiresDays && expiresDays > 0
+        ? new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
     createTokenMutation.mutate({
       name: newTokenName,
       scopes: selectedScopes,
-      expires_days: expiresDays,
+      expires_at: expiresAt,
     });
   };
 
@@ -258,6 +337,30 @@ export function ApiTokensPage() {
           Create Token
         </Button>
       </div>
+
+      {/* Rotation Reminder Banner */}
+      {rotationStatus && rotationStatus.tokens_needing_rotation.length > 0 && (
+        <div
+          className="rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                {rotationStatus.tokens_needing_rotation.length === 1
+                  ? '1 token is older than '
+                  : `${rotationStatus.tokens_needing_rotation.length} tokens are older than `}
+                {rotationStatus.rotation_threshold_days} days and should be rotated.
+              </p>
+              <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
+                Rotating long-lived tokens reduces the blast radius of leaked credentials.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New Token Display Dialog */}
       {newToken && (
@@ -336,7 +439,7 @@ export function ApiTokensPage() {
             <div>
               <Label>Scopes</Label>
               <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                {AVAILABLE_SCOPES.map((scope) => (
+                {availableScopes.map((scope) => (
                   <div
                     key={scope.value}
                     className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-accent cursor-pointer"
@@ -478,7 +581,7 @@ export function ApiTokensPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {token.scopes.map((scope) => {
-                        const scopeInfo = AVAILABLE_SCOPES.find((s) => s.value === scope);
+                        const scopeInfo = availableScopes.find((s) => s.value === scope);
                         return (
                           <Badge key={scope} variant="outline">
                             {scopeInfo?.label || scope}
