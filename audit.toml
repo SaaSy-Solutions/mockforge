@@ -28,6 +28,7 @@ ignore = [
     { id = "RUSTSEC-2026-0094", reason = "wasmtime Winch table.grow return masking — blocked by wasmtime major bump" },
     { id = "RUSTSEC-2026-0095", reason = "wasmtime Winch sandbox-escaping memory access — blocked by wasmtime major bump" },
     { id = "RUSTSEC-2026-0096", reason = "wasmtime aarch64 Cranelift sandbox escape — blocked by wasmtime major bump" },
+    { id = "RUSTSEC-2026-0114", reason = "wasmtime oversize-table allocation panic (DoS) — fixed in 36.0.8 but pinned at 36.0.6 by plugin-loader; clears with same wasmtime major bump" },
 
     # rustls-webpki pinned at multiple versions by transitive deps
     # (aws-sdk via rustls 0.21, rumqttc via rustls 0.22, axum-server via

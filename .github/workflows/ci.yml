@@ -279,7 +279,11 @@ jobs:
         cargo install cargo-deny --locked
 
     - name: Run RustSec advisory scan
-      run: cargo audit --ignore RUSTSEC-2023-0071
+      # Delegate to scripts/precommit/cargo_audit.py so audit.toml is the
+      # single source of truth for ignored advisories (the cargo-audit CLI
+      # has no native config-file support). Keeps CI in sync with the
+      # pre-commit hook.
+      run: python3 scripts/precommit/cargo_audit.py
 
     - name: Run license and source compliance check
       run: cargo deny check licenses sources bans
