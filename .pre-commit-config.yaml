@@ -53,6 +53,16 @@ repos:
     name: check-shebang-scripts-are-executable
     entry: python3 scripts/precommit/offline_checks.py check-shebang-scripts-are-executable
     language: system
+  - id: check-migration-collisions
+    name: check-migration-collisions
+    # Catches the failure mode that crashed the registry server on 2026-04-30:
+    # PR #297 and PR #298 both added migrations at version 20250101000057,
+    # neither CI run saw the other, sqlx refused the second on first deploy.
+    # Local guard for the same-commit case; CI (.github/workflows/migration-guard.yml)
+    # catches the cross-PR race.
+    entry: python3 scripts/precommit/check_migration_collisions.py
+    language: system
+    files: ^crates/[^/]+/migrations/.+\.sql$
   - id: clippy
     name: clippy
     entry: cargo clippy --all-targets --all-features --workspace --exclude mockforge-desktop
