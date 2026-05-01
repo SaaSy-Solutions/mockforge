@@ -30,6 +30,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
 
@@ -53,21 +54,39 @@ jobs:
           fi
 
           # New migrations must use unique version prefixes (the YYYYMMDDHHMMSS timestamp).
-          # Catches the orphan-branch renumbering pattern from #261.
+          # Catches the orphan-branch renumbering pattern from #261 *and* the
+          # concurrent-PR race that crashed the registry on 2026-04-30 (#297 +
+          # #298 both added 20250101000057): we union the working tree with the
+          # target branch's current tip so a prefix that landed there *after*
+          # this PR forked is still flagged.
+          target_ref="origin/${BASE_REF:-main}"
+          git fetch --quiet origin "${BASE_REF:-main}"
+
           new_files=$(echo "$changed" | awk '$1 == "A" {print $2}' | grep -E 'crates/.*/migrations/[0-9]+_.+\.sql$' || true)
           if [ -n "$new_files" ]; then
             for crate_dir in $(echo "$new_files" | xargs -n1 dirname | sort -u); do
-              # All version prefixes in this dir on HEAD.
-              dupes=$(ls "$crate_dir" 2>/dev/null \
+              # Prefixes in this dir on HEAD (PR's working tree).
+              head_prefixes=$(ls "$crate_dir" 2>/dev/null \
                 | grep -E '^[0-9]+_' \
-                | awk -F_ '{print $1}' \
+                | awk -F_ '{print $1}')
+              # Prefixes in this dir on the target branch's tip — catches
+              # collisions with migrations that merged after this PR was opened
+              # but before it lands. Empty if the dir doesn't exist there.
+              main_prefixes=$(git ls-tree --name-only "$target_ref" -- "$crate_dir/" 2>/dev/null \
+                | xargs -n1 -I{} basename {} 2>/dev/null \
+                | grep -E '^[0-9]+_' \
+                | awk -F_ '{print $1}' || true)
+              dupes=$(printf '%s\n%s\n' "$head_prefixes" "$main_prefixes" \
+                | grep -v '^$' \
                 | sort | uniq -d)
               if [ -n "$dupes" ]; then
                 echo "::error::Duplicate migration version prefix in $crate_dir:"
                 echo "$dupes"
+                echo "::error::A migration with this prefix exists on $target_ref or in this PR."
+                echo "::error::Bump your new migration to the next free prefix and rebase."
                 exit 1
               fi
             done
           fi
 
-          echo "Migration changes are append-only and version-unique."
+          echo "Migration changes are append-only and version-unique vs $target_ref."
