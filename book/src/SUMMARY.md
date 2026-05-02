@@ -55,6 +55,9 @@
 
 - [Load Testing](user-guide/load-testing.md)
 - [Chaos Engineering](user-guide/chaos-engineering.md)
+- [Rate Limiting & Traffic Shaping](user-guide/rate-limiting.md)
+- [Observability & Metrics](user-guide/observability.md)
+- [TUI Dashboard](user-guide/tui-dashboard.md)
 
 ## Team and Cloud
 
