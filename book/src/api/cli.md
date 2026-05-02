@@ -399,6 +399,34 @@ mockforge bench-chunked --target http://localhost:3000/upload [OPTIONS]
 
 Reports req/s, p50/p95/p99 latency, and a status-code distribution at the end.
 
+### `git-watch` - Watch a Git Repo for Spec Changes
+
+Monitor a Git repository for changes to OpenAPI / spec files and automatically
+reload the local mock server when they change. Useful for teams that store
+specs in a separate repo from their mock config.
+
+```bash
+mockforge git-watch https://github.com/user/api-specs \
+  --reload-command "mockforge serve --spec"
+```
+
+Common options: `--branch`, `--poll-interval`, `--auth-token` (for private
+repos), `--cache-dir`, `--spec-paths` (comma-separated globs to watch).
+
+### `contract-sync` - Sync Contracts from a Git Repo
+
+One-shot pull of OpenAPI / contract specs from a Git repository, with an
+optional report comparing the new spec against the current mock config.
+
+```bash
+mockforge contract-sync https://github.com/user/api-specs \
+  --update --output report.md
+```
+
+Use `--update` to overwrite local copies; omit it for a dry-run report.
+Pairs well with CI — fail the build if the upstream contract drifted from
+what the mock returns.
+
 ### `validate-fixtures` - Validate Fixture Files
 
 Lint a directory or single file of fixture data against MockForge's schema.
