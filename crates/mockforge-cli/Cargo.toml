@@ -149,6 +149,6 @@ tui = ["dep:mockforge-tui"]
 vue = []
 
 [dev-dependencies]
-assert_cmd = "2.0"
+assert_cmd = "2.2"
 predicates = "3.0"
 tempfile = "3.8"
