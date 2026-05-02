@@ -156,10 +156,65 @@ core:
 ### Fault Types
 
 - **HTTP Error**: Return specific status codes
-- **Connection Error**: Simulate connection failures
-- **Timeout**: Simulate request timeouts
-- **Partial Response**: Truncate responses
+- **Connection Error**: Simulate connection failures (HTTP-503 by default; see below for TCP-level)
+- **Timeout**: Real `tokio::sleep(timeout_ms)` then `504 Gateway Timeout`
+- **Partial Response**: Truncate responses (chunked-aware: keeps Content-Length on non-chunked, drops the terminator on chunked)
 - **Payload Corruption**: Corrupt response payloads
+
+### Per-Request Matchers (v0.3.125+)
+
+By default, fault probabilities apply to every request. To gate fault injection
+on properties of the incoming request — useful for targeting specific clients,
+headers, body sizes, or `Transfer-Encoding: chunked` traffic without affecting
+baseline traffic — add a `request_matcher` block:
+
+```yaml
+fault_injection:
+  enabled: true
+  http_errors: [503]
+  http_error_probability: 0.5     # 50% of *matching* requests get 503
+  request_matcher:
+    source_ips:
+      - "10.0.0.0/8"              # CIDR or bare IP
+      - "192.168.1.42"
+    headers:
+      - name: "x-test"            # case-insensitive name
+        value: "yes"              # omit `value` for presence-only
+    min_body_size_bytes: 1048576  # only requests with body >= 1 MB
+    chunked_only: true            # only Transfer-Encoding: chunked
+```
+
+Semantics: AND across fields, OR within a list. Empty matcher matches every
+request. Applies to all five fault paths (HTTP errors, timeouts, partial
+responses, payload corruption, connection errors).
+
+### Connection Error Wire-Level Behavior (v0.3.125+)
+
+The `connection_error_kind` knob picks what "connection error" means at the
+TCP level:
+
+| Kind | What clients see |
+|---|---|
+| `http_503` (default) | HTTP 503 on a healthy connection — application layer only |
+| `tcp_reset` | TCP RST sent at accept time. Clients see `ECONNRESET`. |
+| `tcp_close` | TCP FIN at accept time. Clients see EOF before any HTTP response. |
+
+```yaml
+fault_injection:
+  enabled: true
+  connection_errors: true
+  connection_error_probability: 0.05
+  connection_error_kind: tcp_reset    # http_503 | tcp_reset | tcp_close
+```
+
+The TCP-level kinds wrap the listener with a chaos accept loop, so the fault
+is per-connection (every request that would have pipelined onto that socket
+is affected). Auto-installed by `mockforge serve` when chaos is enabled and
+the kind is not `http_503`. Plain HTTP only — TLS path doesn't yet support
+TCP-level injection.
+
+For the full reference (every fault config field, hot-reload API, predefined
+scenarios), see the [Chaos Engineering chapter](./chaos-engineering.md).
 
 ## Per-Route Latency Simulation
 

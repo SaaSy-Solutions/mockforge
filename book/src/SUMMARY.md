@@ -51,6 +51,11 @@
 - [Admin UI](user-guide/admin-ui.md)
 - [IDE Integration](user-guide/ide-integration.md)
 
+## Testing & Resilience
+
+- [Load Testing](user-guide/load-testing.md)
+- [Chaos Engineering](user-guide/chaos-engineering.md)
+
 ## Team and Cloud
 
 - [Cloud Workspaces](user-guide/cloud-workspaces.md)

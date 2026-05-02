@@ -76,19 +76,95 @@ graph TB
 
 ## Crate Structure
 
-MockForge is organized as a Cargo workspace with the following crates:
+MockForge is organized as a Cargo workspace with **56 crates** grouped by
+concern. The current authoritative list is in the root `Cargo.toml`'s
+`[workspace.members]`; the table below summarizes the major groupings.
 
-```
-mockforge/
-  crates/
-    mockforge-cli/     # Command-line interface
-    mockforge-core/    # Shared functionality
-    mockforge-http/    # HTTP REST API mocking
-    mockforge-ws/      # WebSocket connection mocking
-    mockforge-grpc/    # gRPC service mocking
-    mockforge-data/   # Synthetic data generation
-    mockforge-ui/      # Web-based admin interface
-```
+### Foundation
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-foundation` | Shared error types, encryption primitives |
+| `mockforge-core` | Server, routing, OpenAPI parsing, middleware |
+| `mockforge-config` | Configuration types and loading |
+| `mockforge-security-core` | Auth/security primitives |
+| `mockforge-template-expansion` | Handlebars rendering |
+| `mockforge-data` | Data models, synthesis, RAG |
+| `mockforge-world-state` | Stateful mock behavior |
+| `mockforge-scenarios` | Test scenario management |
+
+### Protocol implementations
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-http` | HTTP REST (primary protocol) |
+| `mockforge-grpc` | gRPC services |
+| `mockforge-ws` | WebSocket connections |
+| `mockforge-graphql` | GraphQL |
+| `mockforge-kafka` | Kafka event streaming |
+| `mockforge-mqtt` | MQTT pub/sub |
+| `mockforge-amqp` | AMQP message queuing |
+| `mockforge-smtp` | SMTP email |
+| `mockforge-ftp` | FTP |
+| `mockforge-tcp` | Raw TCP |
+
+### Plugin & extension layer
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-plugin-core` | Plugin trait definitions |
+| `mockforge-plugin-sdk` | SDK for plugin authors |
+| `mockforge-plugin-loader` | WASM dynamic loading |
+| `mockforge-plugin-cli` | Plugin management CLI |
+| `mockforge-plugin-registry` | Local plugin registry |
+| `mockforge-registry-server` | Multi-tenant marketplace API |
+| `mockforge-registry-core` | Shared registry types |
+
+### Bench, test & observability
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-bench` | k6 generation, OWASP testing, native chunked bench |
+| `mockforge-chaos` | Chaos engineering (latency, faults, TCP-level errors) |
+| `mockforge-chaos-orchestration` | Multi-step chaos scenarios |
+| `mockforge-chaos-ml` | ML-driven chaos analysis |
+| `mockforge-route-chaos` | Per-route chaos injection |
+| `mockforge-recorder` | Traffic recording |
+| `mockforge-test` | Test framework utilities |
+| `mockforge-observability` | Metrics, OTLP, dashboards |
+| `mockforge-tracing` | Distributed tracing |
+| `mockforge-analytics` | Usage analytics |
+| `mockforge-reporting` | Report generation |
+| `mockforge-performance` | Performance profiling |
+| `mockforge-pipelines` | Request/response pipelines |
+
+### User-facing
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-cli` | Main `mockforge` binary |
+| `mockforge-ui` | React admin UI (Vite + React 19) |
+| `mockforge-tui` | Terminal UI dashboard |
+| `mockforge-sdk` | Client SDK |
+
+### Infrastructure / extension
+
+| Crate | Purpose |
+|---|---|
+| `mockforge-proxy` | Pass-through / record-replay proxy |
+| `mockforge-tunnel` | Tunnel support |
+| `mockforge-vbr` | Virtual branch resilience |
+| `mockforge-collab` | Collaborative features (SQLite/SQLx) |
+| `mockforge-federation` | Cross-instance federation |
+| `mockforge-k8s-operator` | Kubernetes operator |
+| `mockforge-runtime-daemon` | Runtime daemon |
+| `mockforge-import` | Spec import (HAR, Postman, etc.) |
+| `mockforge-intelligence` | AI-driven mocking |
+| `mockforge-ai-core` | AI primitives |
+| `mockforge-behavioral-cloning` | Record real traffic, replay synthetically |
+| `mockforge-contracts` | Contract testing |
+| `mockforge-openapi` | OpenAPI types and helpers |
+| `mockforge-workspace` | Workspace persistence |
 
 ### Crate Responsibilities
 

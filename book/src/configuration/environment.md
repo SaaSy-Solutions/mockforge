@@ -144,6 +144,31 @@ MockForge supports extensive configuration through environment variables. This p
   - Enable/disable faker token expansion
   - Controls whether `{{faker.email}}` etc. work
 
+### RAG / LLM Provider
+
+- `MOCKFORGE_RAG_PROVIDER=openai|anthropic|ollama` (default: `openai`)
+  - LLM provider for retrieval-augmented generation.
+- `MOCKFORGE_RAG_API_KEY=<key>` — provider API key (falls back to `OPENAI_API_KEY` when unset).
+- `MOCKFORGE_RAG_API_ENDPOINT=<url>` — custom endpoint, overrides the provider default.
+- `MOCKFORGE_RAG_MODEL=<name>` — e.g. `gpt-4`, `claude-3-5-sonnet`, `llama3`.
+- `MOCKFORGE_RAG_TEMPERATURE=<float>` (default: `0.7`).
+- `MOCKFORGE_RAG_MAX_TOKENS=<int>` (default: `2048`).
+- `MOCKFORGE_RAG_CONTEXT_WINDOW=<int>` (default: `4096`).
+- `MOCKFORGE_RAG_TIMEOUT_SECONDS=<int>` (default: `30`).
+- `MOCKFORGE_RAG_MAX_RETRIES=<int>` (default: `3`).
+- `OPENAI_API_KEY=<key>` — fallback when `MOCKFORGE_RAG_API_KEY` is unset.
+
+### Embedding (vector search)
+
+- `MOCKFORGE_EMBEDDING_PROVIDER=openai|local|ollama` — provider for embeddings used by RAG.
+- `MOCKFORGE_EMBEDDING_MODEL=<name>` — e.g. `text-embedding-3-small`.
+- `MOCKFORGE_EMBEDDING_ENDPOINT=<url>` — custom endpoint.
+- `MOCKFORGE_SIMILARITY_THRESHOLD=<float>` (`0.0`–`1.0`) — minimum match score.
+
+## Registry / Marketplace
+
+- `MOCKFORGE_REGISTRY_TOKEN=<token>` — auth token for publishing scenarios or plugins to the registry. Required for `mockforge scenario publish` and similar commands.
+
 ## Fixtures and Testing
 
 ### Fixtures Configuration
