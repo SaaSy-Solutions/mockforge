@@ -1280,6 +1280,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         path: Option<&str>,
         method: Option<&str>,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
     ) -> StoreResult<Option<CloudFixture>>;
 

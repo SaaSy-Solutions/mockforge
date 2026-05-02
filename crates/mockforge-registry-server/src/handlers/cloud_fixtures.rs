@@ -141,6 +141,7 @@ pub struct UpdateFixtureRequest {
     pub path: Option<String>,
     pub method: Option<String>,
     pub content: Option<serde_json::Value>,
+    pub protocol: Option<String>,
     pub tags: Option<serde_json::Value>,
 }
 
@@ -176,6 +177,7 @@ pub async fn update_fixture(
             request.path.as_deref(),
             request.method.as_deref(),
             request.content.as_ref(),
+            request.protocol.as_deref(),
             request.tags.as_ref(),
         )
         .await?

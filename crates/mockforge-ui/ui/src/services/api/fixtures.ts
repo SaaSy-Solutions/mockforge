@@ -28,6 +28,7 @@ export interface FixtureUpdatePayload {
   path?: string;
   method?: string;
   description?: string;
+  protocol?: string;
   tags?: string[];
   content?: unknown;
 }

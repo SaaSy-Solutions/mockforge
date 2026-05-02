@@ -957,11 +957,22 @@ impl RegistryStore for PgRegistryStore {
         path: Option<&str>,
         method: Option<&str>,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
     ) -> StoreResult<Option<CloudFixture>> {
-        CloudFixture::update(&self.pool, id, name, description, path, method, content, tags)
-            .await
-            .map_err(Into::into)
+        CloudFixture::update(
+            &self.pool,
+            id,
+            name,
+            description,
+            path,
+            method,
+            content,
+            protocol,
+            tags,
+        )
+        .await
+        .map_err(Into::into)
     }
 
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {

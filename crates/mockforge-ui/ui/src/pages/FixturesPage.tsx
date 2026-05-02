@@ -227,6 +227,7 @@ export function FixturesPage() {
           path: editForm.path,
           method: editForm.method,
           description: editForm.description,
+          protocol: editForm.protocol || undefined,
           tags: parseTagsInput(editForm.tagsInput),
           content: contentResult.value ?? null,
         },
@@ -887,6 +888,29 @@ export function FixturesPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Protocol
+              </label>
+              <select
+                value={editForm.protocol}
+                onChange={(e) => setEditForm({ ...editForm, protocol: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">— unspecified —</option>
+                <option value="http">http</option>
+                <option value="grpc">grpc</option>
+                <option value="websocket">websocket</option>
+                <option value="graphql">graphql</option>
+                <option value="mqtt">mqtt</option>
+                <option value="kafka">kafka</option>
+                <option value="amqp">amqp</option>
+                <option value="smtp">smtp</option>
+                <option value="ftp">ftp</option>
+                <option value="tcp">tcp</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Description
               </label>
               <Input
@@ -967,6 +991,14 @@ export function FixturesPage() {
                     <span className="font-medium">Size:</span>{' '}
                     {formatFileSize(
                       selectedFixture?.file_size ?? selectedFixture?.size_bytes ?? 0
+                    )}
+                  </div>
+                )}
+                {(selectedFixture?.created_at || selectedFixture?.createdAt) && (
+                  <div>
+                    <span className="font-medium">Created:</span>{' '}
+                    {formatDate(
+                      selectedFixture?.created_at || selectedFixture?.createdAt
                     )}
                   </div>
                 )}

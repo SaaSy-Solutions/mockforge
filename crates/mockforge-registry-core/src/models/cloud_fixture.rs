@@ -84,6 +84,7 @@ impl CloudFixture {
         path: Option<&str>,
         method: Option<&str>,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
@@ -95,7 +96,8 @@ impl CloudFixture {
                 path = COALESCE($4, path),
                 method = COALESCE($5, method),
                 content = COALESCE($6, content),
-                tags = COALESCE($7, tags),
+                protocol = COALESCE($7, protocol),
+                tags = COALESCE($8, tags),
                 updated_at = NOW()
             WHERE id = $1
             RETURNING *
@@ -107,6 +109,7 @@ impl CloudFixture {
         .bind(path)
         .bind(method)
         .bind(content)
+        .bind(protocol)
         .bind(tags)
         .fetch_optional(pool)
         .await
