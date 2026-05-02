@@ -253,6 +253,103 @@ chaos:
   failure_status_codes: [500, 502, 503, 504]
 ```
 
+### Full Chaos Engineering Surface (v0.3.125+)
+
+The simple flat fields above are kept for back-compat. The richer chaos
+surface is configured under `observability.chaos` with these blocks:
+
+#### `observability.chaos.fault_injection`
+
+```yaml
+observability:
+  chaos:
+    enabled: true
+    fault_injection:
+      enabled: true
+
+      # HTTP errors
+      http_errors: [500, 502, 503, 504]
+      http_error_probability: 0.1
+      error_pattern:               # optional, takes precedence over flat probability
+        type: burst                # burst | random | sequential
+        count: 3
+        interval_ms: 1000
+
+      # Connection errors
+      connection_errors: false
+      connection_error_probability: 0.05
+      connection_error_kind: http_503   # http_503 | tcp_reset | tcp_close
+
+      # Real timeouts (sleep then 504)
+      timeout_errors: false
+      timeout_ms: 5000
+      timeout_probability: 0.05
+
+      # Truncated responses (chunked-aware)
+      partial_responses: false
+      partial_response_probability: 0.05
+
+      # Body corruption
+      payload_corruption: false
+      payload_corruption_probability: 0.05
+      corruption_type: none        # none | random_bytes | truncate | bit_flip
+
+      # Per-request matcher: gate fault injection on request properties.
+      # AND across fields, OR within a list. Empty matcher = match all.
+      request_matcher:
+        source_ips:
+          - "10.0.0.0/8"
+          - "192.168.1.42"
+        headers:
+          - name: "x-test"
+            value: "yes"            # omit `value` for presence-only
+        min_body_size_bytes: 1048576
+        chunked_only: true
+```
+
+#### `observability.chaos.rate_limit`
+
+```yaml
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst_size: 10
+  per_ip: true
+  per_endpoint: false
+```
+
+#### `observability.chaos.traffic_shaping`
+
+```yaml
+traffic_shaping:
+  enabled: true
+  bandwidth_limit_bps: 1000000   # 1 MB/s
+  packet_loss_percent: 2.0
+  max_connections: 100
+  connection_timeout_ms: 30000
+```
+
+#### `observability.chaos.circuit_breaker` and `bulkhead`
+
+```yaml
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  success_threshold: 2
+  timeout_ms: 60000
+
+bulkhead:
+  enabled: true
+  max_concurrent_requests: 100
+  max_queue_size: 10
+```
+
+For a tour of the resulting behavior — including which faults get injected
+per-request vs per-connection, and how `connection_error_kind` interacts
+with the chaos listener wrapper — see the
+[Chaos Engineering chapter](../user-guide/chaos-engineering.md) and the
+[reference doc](https://github.com/SaaSy-Solutions/mockforge/blob/main/docs/CHAOS_ENGINEERING.md).
+
 ## gRPC Configuration
 
 ### `grpc.proto_dir` (string, default: "proto/")

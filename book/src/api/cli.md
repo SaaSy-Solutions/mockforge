@@ -343,6 +343,75 @@ mockforge-cli admin
 mockforge-cli admin --port 9090
 ```
 
+### `bench` - OpenAPI-driven Load Testing
+
+Generate and run a k6 load test from an OpenAPI spec.
+
+```bash
+mockforge bench --spec api.yaml --target http://localhost:3000 [OPTIONS]
+```
+
+#### Common Options
+
+- `-s, --spec <PATH>` — OpenAPI spec file (repeatable for multi-spec mode).
+- `--spec-dir <DIR>` — Directory of specs (auto-discovered).
+- `-t, --target <URL>` — Target server URL.
+- `-d, --duration <SECS>` — Run length (default: 60).
+- `--vus <N>` — Virtual users (default: 10).
+- `--scenario <NAME>` — `constant` | `ramp-up` | `spike` | `stress` | `soak`.
+- `--operations <FILTER>` — Comma-separated operation filter (e.g. `"GET /users,POST /orders"`).
+- `--auth <HEADER>` — Authorization header value (e.g. `"Bearer $TOKEN"`).
+- `--headers <KV>` — Comma-separated extra headers (e.g. `"X-Tenant: a,X-Region: b"`).
+- `--threshold-percentile <P>` / `--threshold-ms <N>` — Latency SLO.
+- `--max-error-rate <RATE>` — Error-rate SLO (`0.01` = 1%).
+- `--generate-only` — Write the k6 script without running it.
+- `--script-output <PATH>` — Where to write the generated script.
+- `--targets-file <PATH>` — Multi-target mode (one URL per line).
+- `--max-concurrency <N>` — Parallel target limit (default: 10).
+- `--insecure` — Skip TLS verification (test self-signed certs).
+- `--chunked-request-bodies` — Add `Transfer-Encoding: chunked` to every k6 request body. NOTE: k6 runs on Go's `net/http`, which may still send `Content-Length` based on body type. For guaranteed wire chunking use [`bench-chunked`](#bench-chunked---native-chunked-traffic-generator) instead.
+
+See the [Load Testing chapter](../user-guide/load-testing.md) for the full
+options surface (security testing, OWASP API top 10, conformance mode,
+data-driven testing) and end-to-end examples.
+
+### `bench-chunked` - Native Chunked Traffic Generator
+
+Send guaranteed `Transfer-Encoding: chunked` request bodies via hyper. Useful
+when `bench --chunked-request-bodies` falls back to `Content-Length` (Go's
+transport heuristics) and you need real chunked traffic on the wire.
+
+```bash
+mockforge bench-chunked --target http://localhost:3000/upload [OPTIONS]
+```
+
+#### Options
+
+- `--target <URL>` — Target URL (required).
+- `--method <METHOD>` — `POST` (default), `PUT`, or `PATCH`.
+- `-c, --concurrency <N>` — Concurrent workers (default: 10).
+- `-d, --duration <SECS>` — Run length (default: 30).
+- `--chunk-size-bytes <N>` — Bytes per chunk (default: 1024).
+- `--total-size-bytes <N>` — Total body size per request (default: 1048576 = 1 MiB).
+- `--chunk-interval-ms <MS>` — Sleep between chunks (default: 0 = back-to-back).
+- `--header <NAME: VALUE>` — Extra header (repeatable).
+- `--insecure` — Skip TLS verification.
+
+Reports req/s, p50/p95/p99 latency, and a status-code distribution at the end.
+
+### `tui` - Terminal Dashboard
+
+Live dashboard in the terminal showing server status, system metrics
+(current and lifetime peak CPU / memory / error rate), request stats, and
+recent logs. Auto-refreshes every 2 s.
+
+```bash
+mockforge tui
+```
+
+Optionally pair with `MOCKFORGE_METRICS_LOG_FILE=path.csv` to also append a
+persistent CSV record while the server runs.
+
 ### `sync` - Workspace Synchronization Daemon
 
 Start a background daemon that monitors a workspace directory for file changes and automatically syncs them to MockForge workspaces.
