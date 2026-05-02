@@ -171,7 +171,7 @@ jobs:
 
       - name: Create issue on failure
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # `PR_URL` is the output of peter-evans/create-pull-request.
           # It's only set when the auto-PR step ran and succeeded, so
