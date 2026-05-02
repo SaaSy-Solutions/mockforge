@@ -76,7 +76,7 @@ jobs:
           k6 run --out json=load-test-results.json http_load.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: load-test-results-standard
@@ -129,7 +129,7 @@ jobs:
           k6 run --out json=load-test-results-extended.json http_load_high_scale.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: load-test-results-extended
@@ -177,7 +177,7 @@ jobs:
           cargo bench --bench core_benchmarks -- --output-format json | tee benchmark-results.json
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: benchmark-results
