@@ -190,23 +190,17 @@ The validator automatically checks that:
 
 ### Environment Variables
 
+Data synthesis is YAML-only (configured under `grpc.data_synthesis.*`).
+The cross-cutting RAG knobs that DO have env vars:
+
 ```bash
-# Enable advanced data synthesis
-MOCKFORGE_DATA_SYNTHESIS_ENABLED=true
-
-# Deterministic generation  
-MOCKFORGE_DATA_SYNTHESIS_SEED=12345
-MOCKFORGE_DATA_SYNTHESIS_DETERMINISTIC=true
-
-# RAG configuration
 MOCKFORGE_RAG_ENABLED=true
 MOCKFORGE_RAG_API_KEY=your-api-key
 MOCKFORGE_RAG_MODEL=gpt-3.5-turbo
-
-# Validation settings
-MOCKFORGE_VALIDATION_ENABLED=true
-MOCKFORGE_VALIDATION_STRICT_MODE=false
 ```
+
+For deterministic generation, set the seed in the YAML config rather than
+via env var:
 
 ### Configuration File
 
@@ -246,22 +240,29 @@ grpc:
 
 ### Basic Smart Generation
 
+Configure data synthesis in `mockforge.yaml`:
+
+```yaml
+grpc:
+  port: 50051
+  data_synthesis:
+    enabled: true
+    deterministic: true
+    seed: 12345
+```
+
+Then start the server normally:
+
 ```bash
-# Start MockForge with advanced data synthesis
-MOCKFORGE_DATA_SYNTHESIS_ENABLED=true \
-MOCKFORGE_DATA_SYNTHESIS_SEED=12345 \
-mockforge serve --grpc-port 50051
+mockforge serve --config mockforge.yaml
 ```
 
 ### With RAG Enhancement
 
-```bash  
-# Start with RAG-powered domain awareness
-MOCKFORGE_DATA_SYNTHESIS_ENABLED=true \
+```bash
 MOCKFORGE_RAG_ENABLED=true \
 MOCKFORGE_RAG_API_KEY=your-api-key \
-MOCKFORGE_VALIDATION_ENABLED=true \
-mockforge serve --grpc-port 50051
+mockforge serve --config mockforge.yaml --grpc-port 50051
 ```
 
 ### Testing Deterministic Generation

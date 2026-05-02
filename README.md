@@ -519,8 +519,8 @@ docker pull ghcr.io/saasy-solutions/mockforge:0.3.116
 # Run with the bundled example spec + admin UI
 docker run -p 3000:3000 -p 3001:3001 -p 50051:50051 -p 9080:9080 \
   -e MOCKFORGE_ADMIN_ENABLED=true \
-  -e MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json \
-  ghcr.io/saasy-solutions/mockforge:latest
+  ghcr.io/saasy-solutions/mockforge:latest \
+  serve --spec examples/openapi-demo.json --admin --admin-port 9080
 ```
 
 The admin UI is then at <http://localhost:9080> — sign in with the default
@@ -992,12 +992,10 @@ grpc:
       timeout_seconds: 30       # Request timeout
 ```
 
-Or via environment variables:
-```bash
-export MOCKFORGE_GRPC_DYNAMIC_ENABLED=true
-export MOCKFORGE_GRPC_HTTP_BRIDGE_ENABLED=true
-export MOCKFORGE_GRPC_PROTO_DIR=proto
-```
+The HTTP bridge and dynamic gRPC are configured via YAML — there are no
+dedicated env-var overrides for these knobs. Set `MOCKFORGE_GRPC_PORT`,
+`MOCKFORGE_GRPC_HOST`, and `MOCKFORGE_GRPC_ENABLED` for the underlying
+listener; everything else lives in `grpc.dynamic.*` in `config.yaml`.
 
 #### Bridge Endpoints
 

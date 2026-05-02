@@ -41,16 +41,6 @@ auth:
     json_format: true              # Use JSON format for structured logging
 ```
 
-### Environment Variables
-
-```bash
-export MOCKFORGE_AUTH_AUDIT_ENABLED=true
-export MOCKFORGE_AUTH_AUDIT_FILE_PATH=/var/log/mockforge/auth-audit.log
-export MOCKFORGE_AUTH_AUDIT_LOG_SUCCESS=true
-export MOCKFORGE_AUTH_AUDIT_LOG_FAILURES=true
-export MOCKFORGE_AUTH_AUDIT_JSON_FORMAT=true
-```
-
 ### Log Format
 
 #### JSON Format

@@ -141,13 +141,11 @@ collaboration:
         - "metrics:read"
 ```
 
-### Environment Variables
-
-```bash
-export MOCKFORGE_COLLAB_ENABLED=true
-export MOCKFORGE_COLLAB_DATABASE_URL=sqlite://mockforge-collab.db
-export MOCKFORGE_COLLAB_JWT_SECRET=your-secure-secret
-```
+RBAC / collab settings are YAML-only — the `MOCKFORGE_DB_TYPE` and
+`MOCKFORGE_DB_CONNECTION` env vars cover database connection (see
+[Environment Variables](../book/src/configuration/environment.md#database-registry-server--collab)),
+and the JWT secret comes from the registry-server `JWT_SECRET` env var,
+not a MockForge-prefixed one.
 
 ## User Management
 

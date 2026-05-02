@@ -153,17 +153,14 @@ plugins:
 
 ### Environment Variables
 
+Plugin system settings (registry URL, runtime limits, directory)
+are YAML-only — configure under `plugins.*` in `mockforge.yaml`.
+The token for publishing to the registry is the only env var:
+
 ```bash
-# Plugin system settings
-export MOCKFORGE_PLUGINS_ENABLED=true
-export MOCKFORGE_PLUGINS_DIRECTORY=~/.mockforge/plugins
+export MOCKFORGE_REGISTRY_TOKEN=mfreg_...
 
-# Runtime limits
-export MOCKFORGE_PLUGIN_MEMORY_LIMIT=64
-export MOCKFORGE_PLUGIN_CPU_LIMIT=10
-export MOCKFORGE_PLUGIN_TIMEOUT=5000
-
-# Plugin-specific settings
+# Plugin-specific settings (per-plugin auth/data, NOT MockForge core)
 export JWT_SECRET=your-secret-key
 export CSV_DATA_DIR=./test-data
 ```

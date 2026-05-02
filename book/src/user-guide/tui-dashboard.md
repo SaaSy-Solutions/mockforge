@@ -14,7 +14,7 @@ mockforge tui
 ```
 
 The TUI talks to the admin server's HTTP API (default
-`http://localhost:9080`); set `MOCKFORGE_ADMIN_URL` if it's elsewhere.
+`http://localhost:9080`); set the `--admin-url` flag if it's elsewhere.
 
 ## Navigation
 
@@ -124,7 +124,7 @@ for details.
 ## Troubleshooting
 
 **"Failed to fetch dashboard"** — the admin server isn't running, or it's
-on a different host/port. Set `MOCKFORGE_ADMIN_URL=http://host:port` and
+on a different host/port. Use `--admin-url http://host:port` and
 retry. Make sure you started `mockforge serve` with `--admin`.
 
 **Metrics show all zeroes** — system monitoring runs in a background task

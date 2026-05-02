@@ -322,18 +322,23 @@ setTimeout(() => {
 
 ## Streaming Configuration
 
-### Environment Variables
+### Configuration
 
-```bash
-# Streaming behavior
-MOCKFORGE_GRPC_STREAM_TIMEOUT=30000        # Stream timeout in ms
-MOCKFORGE_GRPC_MAX_STREAM_MESSAGES=1000    # Max messages per stream
-MOCKFORGE_GRPC_STREAM_BUFFER_SIZE=1024     # Buffer size for streaming
+Streaming behavior is YAML-only — there are no `MOCKFORGE_GRPC_STREAM_*`
+env vars. Configure under `grpc.streaming.*`:
 
-# Response timing
-MOCKFORGE_GRPC_LATENCY_MIN_MS=10          # Minimum response latency
-MOCKFORGE_GRPC_LATENCY_MAX_MS=100         # Maximum response latency
+```yaml
+grpc:
+  port: 50051
+  streaming:
+    stream_timeout_ms: 30000
+    max_stream_messages: 1000
+    buffer_size: 1024
 ```
+
+For per-call latency, use the
+[chaos engine](../chaos-engineering.md) — it applies uniformly across
+HTTP / WS / gRPC.
 
 ### Stream Control Templates
 

@@ -380,7 +380,8 @@ grep "WARN" mockforge.log
 1. **Reduce concurrent connections**:
    ```bash
    # Limit connection pool
-   MOCKFORGE_MAX_CONNECTIONS=100 mockforge serve
+   # config: core.max_connections; or use --max-connections at boot
+mockforge serve
    ```
 
 2. **Disable unnecessary features**:

@@ -316,37 +316,27 @@ responses:
 ### Response Latency Simulation
 
 ```bash
-# Add random latency (100-500ms)
-MOCKFORGE_LATENCY_ENABLED=true \
-MOCKFORGE_LATENCY_MIN_MS=100 \
-MOCKFORGE_LATENCY_MAX_MS=500 \
-mockforge serve --spec api-spec.json
+# Add random latency via the chaos engine
+mockforge serve --spec api-spec.json \
+  --chaos --chaos-latency-range "100-500"
 ```
+
+For full control (jitter, probability, fixed delay, per-route), use
+`observability.chaos.latency.*` in YAML. See
+[Chaos Engineering](./chaos-engineering.md).
 
 ### Failure Injection
 
 ```bash
-# Enable random failures (10% chance)
-MOCKFORGE_FAILURES_ENABLED=true \
-MOCKFORGE_FAILURE_RATE=0.1 \
-mockforge serve --spec api-spec.json
+# 10% of requests get 500/503
+mockforge serve --spec api-spec.json \
+  --chaos --chaos-http-errors "500,503" --chaos-http-error-probability 0.1
 ```
 
-### Request/Response Recording
+### Request/Response Recording & Replay
 
-```bash
-# Record all HTTP interactions
-MOCKFORGE_RECORD_ENABLED=true \
-mockforge serve --spec api-spec.json
-```
-
-### Response Replay
-
-```bash
-# Replay recorded responses
-MOCKFORGE_REPLAY_ENABLED=true \
-mockforge serve --spec api-spec.json
-```
+Recording, replay, and proxy modes are configured via CLI flags or YAML —
+see `mockforge serve --help` for `--record`, `--replay`, `--proxy-target`.
 
 ## Testing Your Mocks
 
@@ -438,7 +428,7 @@ echo "API tests completed!"
 
 ### Common Issues
 
-**Templates not expanding**: Ensure `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true`
+**Templates not expanding**: ensure `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true` is set in your environment (it's off by default to keep responses literal)
 
 **OpenAPI spec not loading**: Check file path and JSON/YAML syntax
 

@@ -133,13 +133,16 @@ Always use environment variables or configuration files:
 MOCKFORGE_HTTP_PORT=3000
 MOCKFORGE_ADMIN_ENABLED=true
 
-# Observability
-MOCKFORGE_METRICS_ENABLED=true
-MOCKFORGE_TRACING_ENABLED=true
+# Persistent metrics record (CSV)
+MOCKFORGE_METRICS_LOG_FILE=/app/logs/metrics.csv
 
-# Storage
-MOCKFORGE_RECORDER_DB=/app/data/mockforge.db
+# Distributed tracing
+MOCKFORGE_OTLP_ENDPOINT=http://otel-collector:4317
 ```
+
+For everything beyond ports/admin/metrics/tracing, mount a YAML config
+file via `--config /path/to/mockforge.yaml`. See [Environment Variables](../../book/src/configuration/environment.md)
+for the full env-var surface.
 
 ### 2. **Secrets Management**
 

@@ -40,7 +40,7 @@ All configuration options can be overridden with environment variables:
 ```bash
 export MOCKFORGE_KAFKA_PORT=9093
 export MOCKFORGE_KAFKA_HOST=127.0.0.1
-export MOCKFORGE_KAFKA_MAX_CONNECTIONS=500
+export # Configure via kafka.max_connections in YAML; max_connections=500
 ```
 
 ## Advanced Configuration
