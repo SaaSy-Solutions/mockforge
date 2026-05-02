@@ -25,21 +25,20 @@ mockforge serve --ws-port 3001 --ws-replay-file ws-scenario.jsonl
 
 ```bash
 # WebSocket configuration
-MOCKFORGE_WS_ENABLED=true                    # Enable WebSocket support (default: false)
 MOCKFORGE_WS_PORT=3001                       # WebSocket server port
-MOCKFORGE_WS_BIND=0.0.0.0                    # Bind address
+MOCKFORGE_WS_HOST=0.0.0.0                    # Bind address
 MOCKFORGE_WS_REPLAY_FILE=path/to/file.jsonl  # Path to replay file
-MOCKFORGE_WS_PATH=/ws                         # WebSocket endpoint path (default: /ws)
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true      # Enable template processing
 ```
+
+The endpoint path is fixed at `/ws` (and `/ws/{*path}` for routed servers).
 
 ### Command Line Options
 
 ```bash
 mockforge serve \
   --ws-port 3001 \
-  --ws-replay-file examples/ws-demo.jsonl \
-  --ws-path /websocket
+  --ws-replay-file examples/ws-demo.jsonl
 ```
 
 ## Replay Mode
@@ -295,13 +294,13 @@ setTimeout(() => {
 
 ## Advanced Features
 
-### Connection Pooling
+### Concurrent connections
 
-```bash
-# Support multiple concurrent connections
-MOCKFORGE_WS_MAX_CONNECTIONS=100
-MOCKFORGE_WS_CONNECTION_TIMEOUT=30000
-```
+The WebSocket server accepts unlimited concurrent connections by default;
+each spawns its own task and runs the configured replay/interactive script
+independently. To rate-limit or cap connection count, use the
+[chaos engine's `traffic_shaping.max_connections`](./chaos-engineering.md)
+setting — it applies to all protocols (HTTP / WS / gRPC) on the same listener.
 
 ### Message Filtering
 
