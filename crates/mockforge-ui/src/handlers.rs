@@ -122,6 +122,14 @@ pub struct SystemMetrics {
     pub cpu_usage_percent: f64,
     /// Active threads
     pub active_threads: u32,
+    /// Peak memory usage in MB observed since metrics collection started
+    pub peak_memory_usage_mb: u64,
+    /// Peak CPU usage percentage observed since metrics collection started
+    pub peak_cpu_usage_percent: f64,
+    /// Peak error rate (5xx + 4xx / total) observed since collection started
+    pub peak_error_rate: f64,
+    /// Timestamp peaks were last reset / metrics started — gives a window for long runs
+    pub peaks_since: chrono::DateTime<Utc>,
 }
 
 /// Time series data point
@@ -326,12 +334,44 @@ pub struct AdminState {
 }
 
 impl AdminState {
-    /// Start system monitoring background task
+    /// Start system monitoring background task.
+    ///
+    /// If `MOCKFORGE_METRICS_LOG_FILE` is set, appends a CSV row
+    /// (timestamp,cpu_pct,mem_mb,total_reqs,err_rate) on each tick — gives
+    /// a multi-day, restart-surviving record that can be charted in any
+    /// spreadsheet, Grafana, or dashboarding tool.
     pub async fn start_system_monitoring(&self) {
+        use std::io::Write as _;
         let state_clone = self.clone();
+        let metrics_log_path = std::env::var("MOCKFORGE_METRICS_LOG_FILE").ok();
         tokio::spawn(async move {
             let mut sys = System::new_all();
             let mut refresh_count = 0u64;
+
+            // Open the metrics-log file in append mode if configured. Write a
+            // header row when the file is new/empty.
+            let mut metrics_log: Option<std::fs::File> = match metrics_log_path.as_deref() {
+                Some(p) if !p.is_empty() => {
+                    match std::fs::OpenOptions::new().create(true).append(true).open(p) {
+                        Ok(mut f) => {
+                            let needs_header =
+                                std::fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true);
+                            if needs_header {
+                                let _ = writeln!(f, "timestamp,cpu_pct,mem_mb,total_reqs,err_rate");
+                            }
+                            tracing::info!("system metrics CSV → {}", p);
+                            Some(f)
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                            "MOCKFORGE_METRICS_LOG_FILE={p}: open failed ({e}); running without metrics log"
+                        );
+                            None
+                        }
+                    }
+                }
+                _ => None,
+            };
 
             tracing::info!("Starting system monitoring background task");
 
@@ -366,6 +406,28 @@ impl AdminState {
                 state_clone
                     .update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads)
                     .await;
+
+                if let Some(file) = metrics_log.as_mut() {
+                    let m = state_clone.metrics.read().await;
+                    let total_reqs = m.total_requests;
+                    let err_rate = if total_reqs == 0 {
+                        0.0
+                    } else {
+                        let err: u64 = m.errors_by_endpoint.values().sum();
+                        err as f64 / total_reqs as f64
+                    };
+                    drop(m);
+                    let _ = writeln!(
+                        file,
+                        "{},{:.2},{},{},{:.6}",
+                        Utc::now().to_rfc3339(),
+                        cpu_usage,
+                        memory_mb_u64,
+                        total_reqs,
+                        err_rate
+                    );
+                    let _ = file.flush();
+                }
 
                 refresh_count += 1;
 
@@ -424,6 +486,10 @@ impl AdminState {
                 memory_usage_mb: 0,
                 cpu_usage_percent: 0.0,
                 active_threads: 0,
+                peak_memory_usage_mb: 0,
+                peak_cpu_usage_percent: 0.0,
+                peak_error_rate: 0.0,
+                peaks_since: Utc::now(),
             })),
             config: Arc::new(RwLock::new(ConfigurationState {
                 latency_profile: LatencyProfile {
@@ -588,15 +654,48 @@ impl AdminState {
         self.metrics.read().await.clone()
     }
 
-    /// Update system metrics
+    /// Update system metrics, also tracking lifetime peaks of memory, CPU,
+    /// and error rate so long-running test runs can see worst-case resource use.
     pub async fn update_system_metrics(&self, memory_mb: u64, cpu_percent: f64, threads: u32) {
+        // Compute current error rate from request metrics first (read lock).
+        // RequestMetrics tracks errors per-endpoint (status >= 400 — see logs aggregation),
+        // so total errors is the sum of those buckets.
+        let cur_err_rate = {
+            let m = self.metrics.read().await;
+            if m.total_requests == 0 {
+                0.0
+            } else {
+                let errors: u64 = m.errors_by_endpoint.values().sum();
+                errors as f64 / m.total_requests as f64
+            }
+        };
+
         let mut system_metrics = self.system_metrics.write().await;
         system_metrics.memory_usage_mb = memory_mb;
         system_metrics.cpu_usage_percent = cpu_percent;
         system_metrics.active_threads = threads;
+        if memory_mb > system_metrics.peak_memory_usage_mb {
+            system_metrics.peak_memory_usage_mb = memory_mb;
+        }
+        if cpu_percent > system_metrics.peak_cpu_usage_percent {
+            system_metrics.peak_cpu_usage_percent = cpu_percent;
+        }
+        if cur_err_rate > system_metrics.peak_error_rate {
+            system_metrics.peak_error_rate = cur_err_rate;
+        }
+        drop(system_metrics);
 
         // Update time series data
         self.update_time_series_data(memory_mb as f64, cpu_percent).await;
+    }
+
+    /// Reset peak counters to current values. Useful at the start of a new test run.
+    pub async fn reset_metric_peaks(&self) {
+        let mut sm = self.system_metrics.write().await;
+        sm.peak_memory_usage_mb = sm.memory_usage_mb;
+        sm.peak_cpu_usage_percent = sm.cpu_usage_percent;
+        sm.peak_error_rate = 0.0;
+        sm.peaks_since = Utc::now();
     }
 
     /// Update time series data with new metrics
@@ -969,6 +1068,10 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         active_threads: system_metrics.active_threads as usize,
         total_routes: metrics.requests_by_endpoint.len(),
         total_fixtures: count_fixtures().unwrap_or(0),
+        peak_memory_usage_mb: system_metrics.peak_memory_usage_mb,
+        peak_cpu_usage_percent: system_metrics.peak_cpu_usage_percent,
+        peak_error_rate: system_metrics.peak_error_rate,
+        peaks_since: system_metrics.peaks_since,
     };
 
     let servers = vec![
@@ -4312,6 +4415,7 @@ pub async fn set_reality_level(
                 http_error_probability: config.chaos.error_rate,
                 connection_errors: false,
                 connection_error_probability: 0.0,
+                connection_error_kind: mockforge_chaos::config::ConnectionErrorKind::Http503,
                 timeout_errors: config.chaos.inject_timeouts,
                 timeout_ms: config.chaos.timeout_ms,
                 timeout_probability: if config.chaos.inject_timeouts {
@@ -4328,6 +4432,7 @@ pub async fn set_reality_level(
                     probability: config.chaos.error_rate,
                 }),
                 mockai_enabled: false,
+                request_matcher: None,
             })
         } else {
             None
@@ -4964,6 +5069,10 @@ mod tests {
             cpu_usage_percent: 45.5,
             memory_usage_mb: 100,
             active_threads: 10,
+            peak_memory_usage_mb: 100,
+            peak_cpu_usage_percent: 45.5,
+            peak_error_rate: 0.0,
+            peaks_since: Utc::now(),
         };
 
         assert_eq!(metrics.active_threads, 10);

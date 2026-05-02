@@ -44,6 +44,9 @@ parking_lot = { workspace = true }
 # Metrics (updated to 0.14+ to fix protobuf vulnerability RUSTSEC-2024-0437)
 prometheus = { version = "0.14", features = ["process"] }
 
+# IP / CIDR matching for per-request fault matchers
+ipnet = "2"
+
 # Cron scheduling
 cron = "0.15"
 

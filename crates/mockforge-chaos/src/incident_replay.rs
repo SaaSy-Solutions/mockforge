@@ -282,6 +282,7 @@ impl IncidentReplayGenerator {
                 http_error_probability: error_rate,
                 connection_errors: false,
                 connection_error_probability: 0.0,
+                connection_error_kind: crate::config::ConnectionErrorKind::Http503,
                 timeout_errors: inject_timeouts,
                 timeout_ms: 5000,
                 timeout_probability: if inject_timeouts { error_rate } else { 0.0 },
@@ -292,6 +293,7 @@ impl IncidentReplayGenerator {
                 corruption_type: crate::config::CorruptionType::None,
                 error_pattern: None,
                 mockai_enabled: false,
+                request_matcher: None,
             })
         } else {
             None

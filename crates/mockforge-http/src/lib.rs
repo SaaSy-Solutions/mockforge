@@ -1411,6 +1411,24 @@ pub async fn serve_router_with_tls_notify(
     tls_config: Option<mockforge_core::config::HttpTlsConfig>,
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_router_with_tls_notify_chaos(port, app, tls_config, bound_port_tx, None).await
+}
+
+/// Serve a router with optional TLS *and* an optional shared chaos config.
+///
+/// When `chaos_config` is `Some`, the TCP listener is wrapped with
+/// [`mockforge_chaos::ChaosTcpListener`], which can inject TCP-level
+/// connection faults (RST or unclean FIN) before axum/hyper see the socket.
+/// This is the only way to surface real transport-level failures rather than
+/// HTTP 503 responses on healthy connections. TLS path does not yet support
+/// chaos listener wrapping (axum-server uses its own accept loop).
+pub async fn serve_router_with_tls_notify_chaos(
+    port: u16,
+    app: Router,
+    tls_config: Option<mockforge_core::config::HttpTlsConfig>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+    chaos_config: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_chaos::ChaosConfig>>>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
     let addr = mockforge_core::wildcard_socket_addr(port);
@@ -1445,11 +1463,42 @@ pub async fn serve_router_with_tls_notify(
     let odata_app = tower::ServiceBuilder::new()
         .layer(mockforge_core::odata_rewrite::ODataRewriteLayer)
         .service(app);
-    let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
-        SocketAddr,
-    >(odata_app);
-    axum::serve(listener, make_svc).await?;
+    if let Some(cfg) = chaos_config {
+        info!("HTTP listener wrapped with chaos TCP listener (RST/FIN injection enabled)");
+        let chaos_listener = mockforge_chaos::ChaosTcpListener::new(listener, cfg);
+        // Layer that copies ConnectInfo<ChaosClientAddr> → ConnectInfo<SocketAddr>
+        // so existing handlers using `ConnectInfo<SocketAddr>` keep working.
+        let app_with_addr_compat = tower::ServiceBuilder::new()
+            .layer(axum::middleware::from_fn(copy_chaos_addr_to_socketaddr))
+            .service(odata_app);
+        let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
+            mockforge_chaos::ChaosClientAddr,
+        >(app_with_addr_compat);
+        axum::serve(chaos_listener, make_svc).await?;
+    } else {
+        let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
+            SocketAddr,
+        >(odata_app);
+        axum::serve(listener, make_svc).await?;
+    }
     Ok(())
+}
+
+/// Mirror `ConnectInfo<ChaosClientAddr>` (set by the chaos listener) onto
+/// `ConnectInfo<SocketAddr>` so handlers extracting `ConnectInfo<SocketAddr>`
+/// keep working when chaos TCP wrapping is enabled.
+async fn copy_chaos_addr_to_socketaddr(
+    mut req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::extract::ConnectInfo;
+    if let Some(ConnectInfo(chaos_addr)) =
+        req.extensions().get::<ConnectInfo<mockforge_chaos::ChaosClientAddr>>().copied()
+    {
+        let sock: std::net::SocketAddr = *chaos_addr;
+        req.extensions_mut().insert(ConnectInfo(sock));
+    }
+    next.run(req).await
 }
 
 /// Serve router with TLS/HTTPS support using axum-server

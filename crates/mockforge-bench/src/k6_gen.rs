@@ -31,6 +31,14 @@ pub struct K6ScriptTemplateData {
     pub dynamic_globals: Vec<String>,
     pub security_testing_enabled: bool,
     pub has_custom_headers: bool,
+    /// When true, emit `Transfer-Encoding: chunked` on every request that has a
+    /// body. NOTE: k6 runs on Go's `net/http`, which decides chunking based on
+    /// the body type — a string body has a known length and Go will normally
+    /// send `Content-Length`. Setting this header explicitly is the closest
+    /// k6-script-level approximation; for true raw chunked traffic, prefer
+    /// `curl --data-binary @file -H "Transfer-Encoding: chunked"` or a custom
+    /// hyper/reqwest harness.
+    pub chunked_request_bodies: bool,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -100,6 +108,9 @@ pub struct K6Config {
     pub custom_headers: HashMap<String, String>,
     pub skip_tls_verify: bool,
     pub security_testing_enabled: bool,
+    /// Emit `Transfer-Encoding: chunked` on every request body. See
+    /// `K6ScriptTemplateData::chunked_request_bodies` for caveats.
+    pub chunked_request_bodies: bool,
 }
 
 /// Generate k6 load test script
@@ -281,6 +292,7 @@ impl K6ScriptGenerator {
             dynamic_globals: required_globals,
             security_testing_enabled: self.config.security_testing_enabled,
             has_custom_headers: !self.config.custom_headers.is_empty(),
+            chunked_request_bodies: self.config.chunked_request_bodies,
         })
     }
 
@@ -296,6 +308,14 @@ impl K6ScriptGenerator {
         // Add custom headers
         for (key, value) in &self.config.custom_headers {
             headers.insert(key.clone(), value.clone());
+        }
+
+        // Force chunked transfer encoding when requested. Only meaningful for
+        // requests with bodies (POST/PUT/PATCH); k6/Go may still send
+        // Content-Length in some cases — see the doc on
+        // `K6ScriptTemplateData::chunked_request_bodies`.
+        if self.config.chunked_request_bodies && template.body.is_some() {
+            headers.insert("Transfer-Encoding".to_string(), "chunked".to_string());
         }
 
         // Convert to JSON string for embedding in k6 script
@@ -434,6 +454,7 @@ mod tests {
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         assert_eq!(config.duration_secs, 60);
@@ -455,6 +476,7 @@ mod tests {
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let templates = vec![];
@@ -533,6 +555,7 @@ mod tests {
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -721,6 +744,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -767,6 +791,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -813,6 +838,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -875,6 +901,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: true,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
@@ -936,6 +963,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -997,6 +1025,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1053,6 +1082,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1109,6 +1139,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1167,6 +1198,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: true,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1263,6 +1295,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1344,6 +1377,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: true,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1461,6 +1495,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: true,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1531,6 +1566,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: true,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1590,6 +1626,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1644,6 +1681,7 @@ export default function() {{}}
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: false,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);

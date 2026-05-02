@@ -7405,10 +7405,12 @@ name = "mockforge-bench"
 version = "0.3.124"
 dependencies = [
  "anyhow",
+ "async-stream",
  "atty",
  "base64 0.22.1",
  "chrono",
  "colored 2.2.0",
+ "futures",
  "glob",
  "handlebars 6.4.0",
  "indicatif",
@@ -7449,6 +7451,7 @@ dependencies = [
  "governor 0.8.1",
  "http 1.4.0",
  "http-body-util",
+ "ipnet",
  "mockforge-core",
  "mockforge-foundation",
  "mockforge-openapi",

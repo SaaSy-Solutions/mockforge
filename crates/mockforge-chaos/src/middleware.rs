@@ -300,16 +300,69 @@ async fn chaos_middleware_core(
         chaos.latency_tracker.record_latency(delay_ms);
     }
 
+    // Detect chunked transfer encoding *before* we collect the body, since
+    // body collection consumes the stream.
+    let is_chunked =
+        req.headers().get_all(http::header::TRANSFER_ENCODING).iter().any(|v| {
+            v.to_str().map(|s| s.to_ascii_lowercase().contains("chunked")).unwrap_or(false)
+        });
+
+    // Extract body size for bandwidth throttling and request-matcher gating.
+    let (parts, body) = req.into_parts();
+    let body_bytes = match body.collect().await {
+        Ok(collected) => collected.to_bytes(),
+        Err(e) => {
+            warn!("Failed to read request body: {}", e);
+            return (StatusCode::BAD_REQUEST, "Failed to read request body").into_response();
+        }
+    };
+
+    let request_size = body_bytes.len();
+
     // Check for fault injection (read from config for hot-reload)
     let config = chaos.config.read().await;
     let fault_config = config.fault_injection.as_ref();
     let should_inject_fault = fault_config.map(|f| f.enabled).unwrap_or(false);
-    let http_error_status = if should_inject_fault {
+    let matcher_passed = fault_config
+        .and_then(|f| f.request_matcher.as_ref())
+        .map(|matcher| {
+            let header_pairs: Vec<(String, String)> = parts
+                .headers
+                .iter()
+                .filter_map(|(k, v)| {
+                    v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string()))
+                })
+                .collect();
+            let header_iter =
+                header_pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>();
+            matcher.matches(Some(ip.as_str()), header_iter, Some(request_size), is_chunked)
+        })
+        .unwrap_or(true);
+
+    let http_error_status = if should_inject_fault && matcher_passed {
         // Check probability and get error status
         fault_config.and_then(|f| {
             let mut rng = rand::rng();
             if rng.random::<f64>() <= f.http_error_probability && !f.http_errors.is_empty() {
                 Some(f.http_errors[rng.random_range(0..f.http_errors.len())])
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
+
+    // Decide whether to inject a true timeout: sleep for timeout_ms then 504.
+    // Decoupled from partial_responses, which has its own probability further down.
+    let timeout_fault = if should_inject_fault && matcher_passed {
+        fault_config.and_then(|f| {
+            if !f.timeout_errors {
+                return None;
+            }
+            let mut rng = rand::rng();
+            if rng.random::<f64>() <= f.timeout_probability {
+                Some(f.timeout_ms)
             } else {
                 None
             }
@@ -328,17 +381,11 @@ async fn chaos_middleware_core(
             .into_response();
     }
 
-    // Extract body size for bandwidth throttling
-    let (parts, body) = req.into_parts();
-    let body_bytes = match body.collect().await {
-        Ok(collected) => collected.to_bytes(),
-        Err(e) => {
-            warn!("Failed to read request body: {}", e);
-            return (StatusCode::BAD_REQUEST, "Failed to read request body").into_response();
-        }
-    };
-
-    let request_size = body_bytes.len();
+    if let Some(timeout_ms) = timeout_fault {
+        warn!("Injecting timeout: sleeping {}ms then returning 504", timeout_ms);
+        tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
+        return (StatusCode::GATEWAY_TIMEOUT, "Injected timeout (Gateway Timeout)").into_response();
+    }
 
     // Throttle request bandwidth
     {
@@ -376,15 +423,24 @@ async fn chaos_middleware_core(
 
     let response_size = response_body_bytes.len();
 
-    // Check if should truncate response (partial response simulation)
-    // Read from config for hot-reload support
+    // Check if should truncate response (partial response simulation).
+    // Gated on the `partial_responses` flag (the dedicated field) and its own
+    // probability. Previously this path was incorrectly tied to `timeout_errors`.
     let config = chaos.config.read().await;
-    let should_truncate = config
-        .fault_injection
-        .as_ref()
-        .map(|f| f.enabled && f.timeout_errors)
-        .unwrap_or(false);
-    let should_corrupt = config.fault_injection.as_ref().map(|f| f.enabled).unwrap_or(false);
+    let should_truncate = matcher_passed
+        && config
+            .fault_injection
+            .as_ref()
+            .map(|f| {
+                if !f.enabled || !f.partial_responses {
+                    return false;
+                }
+                let mut rng = rand::rng();
+                rng.random::<f64>() <= f.partial_response_probability
+            })
+            .unwrap_or(false);
+    let should_corrupt =
+        matcher_passed && config.fault_injection.as_ref().map(|f| f.enabled).unwrap_or(false);
     let corruption_type = config
         .fault_injection
         .as_ref()
@@ -392,9 +448,35 @@ async fn chaos_middleware_core(
         .unwrap_or(CorruptionType::None);
     drop(config);
 
+    // Did the upstream response declare chunked encoding? If so we drop the
+    // chunked terminator by keeping Transfer-Encoding intact but writing fewer
+    // bytes (axum will re-encode without the trailing `0\r\n\r\n`-equivalent
+    // terminator since the body simply ends short). Otherwise we keep the
+    // original Content-Length header so the client perceives a real truncation.
+    let response_was_chunked =
+        parts.headers.get_all(http::header::TRANSFER_ENCODING).iter().any(|v| {
+            v.to_str().map(|s| s.to_ascii_lowercase().contains("chunked")).unwrap_or(false)
+        });
+
+    let mut parts = parts;
     let mut final_body_bytes = if should_truncate {
-        warn!("Injecting partial response");
-        let truncate_at = response_size / 2;
+        warn!(
+            "Injecting partial response (chunked={}, original_size={})",
+            response_was_chunked, response_size
+        );
+        let mut rng = rand::rng();
+        let truncate_at = if response_size > 0 {
+            rng.random_range(0..response_size)
+        } else {
+            0
+        };
+        if !response_was_chunked {
+            // Preserve the original Content-Length so the client reads fewer
+            // bytes than promised and sees an unexpected EOF.
+            if let Ok(orig_len) = http::HeaderValue::from_str(&response_size.to_string()) {
+                parts.headers.insert(http::header::CONTENT_LENGTH, orig_len);
+            }
+        }
         response_body_bytes.slice(0..truncate_at).to_vec()
     } else {
         response_body_bytes.to_vec()

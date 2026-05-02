@@ -80,6 +80,7 @@ async fn test_error_pattern_configuration() {
         http_error_probability: 0.0, // Pattern takes precedence
         connection_errors: false,
         connection_error_probability: 0.0,
+        connection_error_kind: mockforge_chaos::config::ConnectionErrorKind::Http503,
         timeout_errors: false,
         timeout_ms: 5000,
         timeout_probability: 0.0,
@@ -93,6 +94,7 @@ async fn test_error_pattern_configuration() {
             interval_ms: 1000,
         }),
         mockai_enabled: false,
+        request_matcher: None,
     };
 
     let injector = FaultInjector::new(fault_config.clone());
@@ -257,6 +259,7 @@ async fn test_error_pattern_state_management() {
         http_error_probability: 0.0,
         connection_errors: false,
         connection_error_probability: 0.0,
+        connection_error_kind: mockforge_chaos::config::ConnectionErrorKind::Http503,
         timeout_errors: false,
         timeout_ms: 5000,
         timeout_probability: 0.0,
@@ -269,6 +272,7 @@ async fn test_error_pattern_state_management() {
             sequence: vec![500, 502, 503],
         }),
         mockai_enabled: false,
+        request_matcher: None,
     };
 
     let mut injector = FaultInjector::new(fault_config.clone());

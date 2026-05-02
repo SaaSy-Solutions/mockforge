@@ -41,6 +41,7 @@ mod tests {
             custom_headers: HashMap::new(),
             skip_tls_verify: false,
             security_testing_enabled: true,
+            chunked_request_bodies: false,
         };
 
         let generator = K6ScriptGenerator::new(config, templates);

@@ -87,6 +87,18 @@ pub struct SystemInfo {
     pub total_routes: usize,
     /// Total fixtures available
     pub total_fixtures: usize,
+    /// Peak memory usage in MB observed since `peaks_since`
+    #[serde(default)]
+    pub peak_memory_usage_mb: u64,
+    /// Peak CPU usage % observed since `peaks_since`
+    #[serde(default)]
+    pub peak_cpu_usage_percent: f64,
+    /// Peak error rate (0.0–1.0) observed since `peaks_since`
+    #[serde(default)]
+    pub peak_error_rate: f64,
+    /// Timestamp peaks were last reset; gives a window for long-running tests
+    #[serde(default = "chrono::Utc::now")]
+    pub peaks_since: chrono::DateTime<chrono::Utc>,
 }
 
 /// Latency profile configuration
@@ -1210,6 +1222,10 @@ mod tests {
             active_threads: 8,
             total_routes: 50,
             total_fixtures: 100,
+            peak_memory_usage_mb: 256,
+            peak_cpu_usage_percent: 25.5,
+            peak_error_rate: 0.0,
+            peaks_since: chrono::Utc::now(),
         };
 
         assert_eq!(info.version, "0.3.8");

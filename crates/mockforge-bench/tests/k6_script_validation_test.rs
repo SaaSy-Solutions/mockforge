@@ -50,6 +50,7 @@ async fn generate_script(
         custom_headers,
         skip_tls_verify: false,
         security_testing_enabled: security_enabled,
+        chunked_request_bodies: false,
     };
     let generator = K6ScriptGenerator::new(config, templates);
     generator.generate().expect("generate k6 script")

@@ -614,14 +614,27 @@ mockforge serve --chaos \
 
 ### Connection Errors
 
-Simulate network connection failures:
+Simulate network connection failures. The `connection_error_kind` knob picks
+the wire-level behavior:
+
+| Kind | What clients see |
+|---|---|
+| `http_503` (default) | HTTP 503 on a healthy TCP connection — application-layer error only |
+| `tcp_reset` | TCP RST sent at accept time. Clients typically see `ECONNRESET`. |
+| `tcp_close` | TCP FIN sent at accept time, no HTTP response. Clients see `UnexpectedEof` / "connection closed before message completed." |
 
 ```yaml
 fault_injection:
   enabled: true
   connection_errors: true
-  connection_error_probability: 0.05  # 5% of requests
+  connection_error_probability: 0.05   # 5% of accepted connections
+  connection_error_kind: tcp_reset     # http_503 | tcp_reset | tcp_close
 ```
+
+`tcp_reset` and `tcp_close` require the HTTP listener to be wrapped with the
+chaos listener (the CLI does this automatically when chaos is enabled and the
+kind is not `http_503`). The TLS path doesn't yet support TCP-level injection;
+plain HTTP only.
 
 ### Timeout Errors
 
@@ -645,6 +658,76 @@ fault_injection:
   partial_responses: true
   partial_response_probability: 0.05  # 5% of requests
 ```
+
+When the upstream response is **not** chunked, MockForge preserves the original
+`Content-Length` header so the client perceives an unexpected EOF (it expects
+N bytes, receives fewer). For chunked responses, the truncation cuts the body
+short and drops the terminating chunk, surfacing as a real protocol violation.
+
+### Per-Request Fault Matchers
+
+By default, fault probabilities apply to every request. Add a `request_matcher`
+to gate fault injection on properties of the incoming request — useful for
+targeting specific clients, headers, body sizes, or chunked-encoded traffic
+without affecting baseline traffic.
+
+```yaml
+fault_injection:
+  enabled: true
+  http_errors: [503]
+  http_error_probability: 0.5     # 50% of *matching* requests get 503
+  request_matcher:
+    # Any non-empty list/field is AND'd; entries within a list are OR'd.
+    source_ips:
+      - "10.0.0.0/8"              # CIDR range, or bare IP for /32 / /128
+      - "192.168.1.42"
+    headers:
+      - name: "x-test"            # required header (case-insensitive name)
+        value: "yes"              # exact value; omit `value` to match presence only
+    min_body_size_bytes: 1048576  # only requests with body >= 1 MB
+    chunked_only: true            # only requests with Transfer-Encoding: chunked
+```
+
+All five chaos fault paths (HTTP errors, timeouts, partial responses, payload
+corruption, and the legacy connection-error fallback) honor the matcher.
+
+### Timeout Errors
+
+When `timeout_errors: true` fires, MockForge sleeps for `timeout_ms` and then
+returns `504 Gateway Timeout`. The sleep happens *before* the upstream handler
+runs, so the client experiences a true server-side hang followed by a 504. This
+applies uniformly to chunked and non-chunked requests.
+
+### Native chunked traffic generator
+
+`mockforge bench-chunked` sends real `Transfer-Encoding: chunked` requests via
+hyper. Use this when the k6/Go-based `bench --chunked-request-bodies` flow
+doesn't produce on-the-wire chunking (Go's `net/http` decides chunking from
+body type and may send Content-Length instead).
+
+```bash
+mockforge bench-chunked \
+  --target http://localhost:3000/upload \
+  --concurrency 10 --duration 60 \
+  --chunk-size-bytes 4096 --total-size-bytes 10485760 \
+  --chunk-interval-ms 50
+```
+
+Reports req/s, p50/p95/p99 latency, and status-code distribution. Each worker
+holds its own connection and streams chunks until `total-size-bytes` is sent.
+
+### Persistent metric history
+
+Long-running test runs (hours / days) can record system metrics to a CSV file
+that survives server restarts and can be charted in any spreadsheet, Grafana,
+or dashboard tool:
+
+```bash
+MOCKFORGE_METRICS_LOG_FILE=/var/log/mockforge-metrics.csv \
+  mockforge serve --spec api.json --admin
+```
+
+One row every 10 s: `timestamp,cpu_pct,mem_mb,total_reqs,err_rate`.
 
 ## Rate Limiting
 

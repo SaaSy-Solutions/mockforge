@@ -12,6 +12,7 @@ pub mod alerts;
 pub mod analytics;
 pub mod api;
 pub mod auto_remediation;
+pub mod chaos_listener;
 #[cfg(feature = "enterprise")]
 pub mod chaos_mesh;
 #[cfg(feature = "enterprise")]
@@ -54,6 +55,7 @@ pub mod rate_limit;
 pub mod recommendations;
 #[cfg(feature = "ml")]
 pub mod reinforcement_learning;
+pub mod request_matcher;
 pub mod resilience;
 pub mod resilience_api;
 pub mod scenario_orchestrator;
@@ -99,6 +101,7 @@ pub use auto_remediation::{
     RemediationResult, RemediationStats, RemediationStatus, RiskAssessment as AutoRiskAssessment,
     RiskLevel, RollbackData, SafetyCheck, SystemMetrics,
 };
+pub use chaos_listener::{ChaosClientAddr, ChaosTcpListener};
 #[cfg(feature = "enterprise")]
 pub use chaos_mesh::{
     ChaosMeshClient, ChaosMeshExperiment, ExperimentSpec, ExperimentStatus, ExperimentType,
@@ -110,8 +113,9 @@ pub use collaboration::{
     CollaborationSession, CollaborationUser, CursorPosition,
 };
 pub use config::{
-    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, ErrorPattern,
-    FaultInjectionConfig, LatencyConfig, NetworkProfile, RateLimitConfig, TrafficShapingConfig,
+    BulkheadConfig, ChaosConfig, CircuitBreakerConfig, ConnectionErrorKind, CorruptionType,
+    ErrorPattern, FaultInjectionConfig, LatencyConfig, NetworkProfile, RateLimitConfig,
+    TrafficShapingConfig,
 };
 #[cfg(feature = "enterprise")]
 pub use dashboard::{DashboardManager, DashboardQuery, DashboardStats, DashboardUpdate};
@@ -195,6 +199,7 @@ pub use reinforcement_learning::{
     AdaptiveRiskAssessor, QLearningConfig, RLAgent, RemediationAction as RLRemediationAction,
     RiskAssessment, SystemState,
 };
+pub use request_matcher::{HeaderMatch, RequestMatcher};
 pub use resilience::{
     Bulkhead, BulkheadError, BulkheadGuard, BulkheadManager, BulkheadMetrics, BulkheadStats,
     CircuitBreaker, CircuitBreakerManager, CircuitBreakerMetrics, CircuitState, CircuitStats,
