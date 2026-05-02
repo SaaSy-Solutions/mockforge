@@ -615,6 +615,195 @@ Plugins run in a secure sandbox that:
 4. **Use resource limits**: Prevent plugins from consuming excessive resources
 5. **Isolate environments**: Use separate plugin configurations for development and production
 
+## Hook Points Reference
+
+MockForge plugins implement one or more of seven traits, each hooked into a
+specific point in the request / response lifecycle. A single plugin can
+implement several traits to extend multiple stages.
+
+| Trait | When it runs | Use cases |
+|---|---|---|
+| **`TemplatePlugin`** | During response templating | Custom `{{my.fn arg}}` template functions, inline crypto / encoding helpers |
+| **`AuthPlugin`** | Before route matching | Custom JWT/OAuth validators, header-based auth schemes, request signing verification |
+| **`ResponsePlugin`** | After route matching, before write | Generate the response body from scratch (e.g. AI-driven, computed) |
+| **`ResponseModifierPlugin`** | After response generation | Post-process bodies (compression, redaction, watermarking, schema masking) |
+| **`DataSourcePlugin`** | When a route requests external data | CSV / database / external-API connectors backing fixtures |
+| **`BackendGeneratorPlugin`** | At spec import time | Generate full mock backends from non-OpenAPI specs (gRPC reflect, custom DSLs) |
+| **`ClientGeneratorPlugin`** | At spec import time | Emit client SDKs from a spec for testing |
+
+Each trait gets a `PluginContext` with:
+- The current request (method, path, headers, body)
+- A handle to the in-memory storage (`storage.key_value` capability)
+- A logger (`tracing` macros, scoped to the plugin name)
+- Random / time / template helpers from the host
+
+See [`crates/mockforge-plugin-core/src/`](https://github.com/SaaSy-Solutions/mockforge/tree/main/crates/mockforge-plugin-core/src)
+for the canonical trait definitions.
+
+## Publishing to the Registry
+
+The plugin registry at [registry.mockforge.dev](https://registry.mockforge.dev)
+hosts community plugins, signed and checksummed, with semver-pinnable
+versions. Publishing is a four-step flow.
+
+### 1. Generate publisher keys
+
+```bash
+# One-time setup: create a publisher key pair stored in your config dir
+mockforge plugin keygen --name "your-name"
+
+# Inspect: prints the public key + key ID
+mockforge plugin keygen --show
+```
+
+Your private key signs every release; the public key gets registered with
+the registry on first publish. Keep the private key file readable only by
+your user account.
+
+### 2. Authenticate to the registry
+
+```bash
+# Create an account at https://registry.mockforge.dev and copy your token
+export MOCKFORGE_REGISTRY_TOKEN=mfreg_...
+```
+
+You can also store the token in `~/.config/mockforge/registry-token` so
+it's not in your shell history.
+
+### 3. Prepare the manifest
+
+```yaml
+# plugin.yaml in your plugin's repo root
+name: "my-cool-plugin"
+version: "1.0.0"          # semver, monotonically increasing per release
+description: "A short, scannable summary"
+author: "your-name"
+license: "MIT OR Apache-2.0"
+homepage: "https://github.com/you/my-cool-plugin"
+repository: "https://github.com/you/my-cool-plugin"
+
+capabilities:
+  - "network.http.client"
+  - "storage.key_value"
+
+runtime:
+  memory_limit_mb: 64
+  cpu_limit_percent: 5
+  execution_timeout_ms: 1000
+
+# Versions of MockForge this plugin targets
+mockforge:
+  min_version: "0.3.125"
+  max_version: "0.4.0"
+
+# Files to include in the published bundle (relative to repo root)
+include:
+  - "target/wasm32-unknown-unknown/release/my_cool_plugin.wasm"
+  - "plugin.yaml"
+  - "README.md"
+  - "LICENSE-*"
+```
+
+Validate before pushing:
+
+```bash
+mockforge plugin validate ./plugin.yaml
+```
+
+### 4. Publish
+
+```bash
+# Build for WASM target, then publish
+cargo build --target wasm32-unknown-unknown --release
+mockforge plugin publish ./plugin.yaml
+```
+
+Under the hood:
+
+1. Bundle is zipped from the `include:` list
+2. SHA-256 checksum is computed
+3. Bundle + checksum are signed with your publisher key
+4. Signed package is uploaded with the bearer
+   token from `MOCKFORGE_REGISTRY_TOKEN`
+5. Registry validates the signature against your registered public key
+
+### Yanking a release
+
+If a release has a critical bug, yank it (existing pins keep working but
+the version disappears from search):
+
+```bash
+mockforge plugin yank my-cool-plugin@1.0.0 --reason "panics on empty input"
+```
+
+Yanks aren't deletions — they're advisory. To fully remove a release for
+GDPR / legal reasons, contact registry operators.
+
+## Verification & Trust
+
+When you `mockforge plugin install <name>@<version>`, MockForge:
+
+1. Resolves the version constraint against the registry
+2. Downloads the signed bundle
+3. Verifies the SHA-256 checksum matches the registry's stored value
+4. Verifies the package signature against the publisher's registered
+   public key
+5. Caches the bundle locally for reproducibility
+
+If any verification step fails, install aborts with a clear error and
+nothing gets unpacked.
+
+### Lockfile
+
+A `mockforge-plugins.lock` file at your project root pins exact versions
+and checksums:
+
+```toml
+# Generated by `mockforge plugin install` — commit this file.
+[[plugin]]
+name = "auth-jwt"
+version = "1.2.0"
+source = "registry"
+checksum = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+publisher = "did:key:z6Mki..."
+```
+
+Every subsequent `mockforge plugin install` (no version specified) resolves
+to the lockfile, so CI and dev get byte-identical bundles. To intentionally
+upgrade, run `mockforge plugin update <name>` which rewrites the lockfile.
+
+### Air-gapped installs
+
+Mirror the registry to your own filesystem / object store:
+
+```bash
+# Pull the plugins your project uses into a local cache
+mockforge plugin mirror --output ./plugin-mirror
+
+# On the air-gapped box, point installs at the mirror
+export MOCKFORGE_PLUGIN_REGISTRY_URL=file:///path/to/plugin-mirror
+mockforge plugin install my-cool-plugin@1.0.0
+```
+
+The verification flow is identical against a mirror — checksums + signatures
+travel with the bundle, so trust doesn't depend on the registry being online.
+
+### Verifying a third-party plugin manually
+
+```bash
+# Inspect a bundle without installing it
+mockforge plugin inspect ./suspicious-plugin.tar.gz
+
+# Output includes:
+#   - Manifest contents
+#   - Declared capabilities (with red flags highlighted)
+#   - SHA-256 checksum
+#   - Signer public key + first-seen date
+#   - List of WASM imports (host functions called)
+```
+
+Always run `inspect` on plugins from unfamiliar publishers before installing.
+
 ## Troubleshooting
 
 ### Common Issues
