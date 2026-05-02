@@ -42,18 +42,11 @@ traffic_shaping:
       "/api/slow/*": 0.2  # 20% loss for slow endpoints
 ```
 
-### Environment Variables
-
-```bash
-# Bandwidth throttling
-MOCKFORGE_TRAFFIC_SHAPING_BANDWIDTH_ENABLED=true
-MOCKFORGE_TRAFFIC_SHAPING_BANDWIDTH_MAX_BYTES_PER_SEC=1024000
-MOCKFORGE_TRAFFIC_SHAPING_BANDWIDTH_BURST_CAPACITY=1048576
-
-# Packet loss
-MOCKFORGE_TRAFFIC_SHAPING_PACKET_LOSS_ENABLED=true
-MOCKFORGE_TRAFFIC_SHAPING_PACKET_LOSS_RATE=0.05
-```
+Traffic shaping is configured via the chaos engine's
+`observability.chaos.traffic_shaping` block (YAML only — no dedicated
+env vars). See [Chaos Engineering](../user-guide/chaos-engineering.md)
+and [Rate Limiting](../user-guide/rate-limiting.md) for the full
+surface.
 
 ## Time Travel and Temporal Testing
 
@@ -866,48 +859,31 @@ performance:
 
 ## Environment Variables
 
-Advanced configuration through environment variables:
+Most advanced features are YAML-configured rather than env-var-driven —
+the env-var surface is intentionally narrow (see
+[Environment Variables](./environment.md) for the canonical list). For
+toggles you'd want to flip per-deployment, point `--config <path>` at
+a deployment-specific YAML file rather than relying on dozens of
+`MOCKFORGE_*_ENABLED` flags.
+
+The cross-cutting feature toggles that DO have env vars:
 
 ```bash
-# Traffic shaping
-MOCKFORGE_TRAFFIC_SHAPING_ENABLED=true
-MOCKFORGE_BANDWIDTH_MAX_BYTES_PER_SEC=1024000
-MOCKFORGE_PACKET_LOSS_RATE=0.05
+# Core feature flags
+MOCKFORGE_LATENCY_ENABLED=true
+MOCKFORGE_FAILURES_ENABLED=true
+MOCKFORGE_OVERRIDES_ENABLED=true
+MOCKFORGE_RATE_LIMIT_ENABLED=true
 
-# Time travel
-MOCKFORGE_TIME_TRAVEL_ENABLED=true
-MOCKFORGE_VIRTUAL_TIME_SCALE=1.0
+# Persistent metrics record (CSV)
+MOCKFORGE_METRICS_LOG_FILE=/var/log/mockforge.csv
 
-# Anomaly detection
-MOCKFORGE_ANOMALY_DETECTION_ENABLED=true
-MOCKFORGE_ANOMALY_SENSITIVITY=0.7
-
-# Chaos Mesh
-MOCKFORGE_CHAOS_MESH_ENABLED=true
-MOCKFORGE_CHAOS_MESH_NAMESPACE=chaos-testing
-
-# Multi-tenancy
-MOCKFORGE_MULTI_TENANCY_ENABLED=true
-MOCKFORGE_DEFAULT_TENANT_PLAN=professional
-
-# Plugins
-MOCKFORGE_PLUGINS_ENABLED=true
-MOCKFORGE_PLUGIN_AUTO_DISCOVER=true
-
-# Observability
-MOCKFORGE_PROMETHEUS_ENABLED=true
-MOCKFORGE_OPENTELEMETRY_ENABLED=true
-
-# Security
-MOCKFORGE_ENCRYPTION_ENABLED=true
-MOCKFORGE_JWT_ENABLED=true
-MOCKFORGE_TLS_ENABLED=true
-
-# Performance
-MOCKFORGE_MAX_CONCURRENT_REQUESTS=10000
-MOCKFORGE_CACHE_ENABLED=true
-MOCKFORGE_PROFILING_ENABLED=true
+# Distributed tracing
+MOCKFORGE_OTLP_ENDPOINT=http://collector:4317
+MOCKFORGE_OTLP_SAMPLING_RATE=1.0
 ```
+
+Everything else lives in YAML.
 
 ## Best Practices
 

@@ -723,44 +723,23 @@ export MOCKFORGE_GRPC_PORT=50051
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
 export MOCKFORGE_ADMIN_PORT=9080
-export MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
-export MOCKFORGE_ADMIN_SESSION_TIMEOUT=86400
-export MOCKFORGE_ADMIN_AUTH_ENABLED=true
-
-# Validation
-export MOCKFORGE_VALIDATION_MODE=enforce
-export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
-
-# gRPC settings
-export MOCKFORGE_PROTO_DIR=proto/
-export MOCKFORGE_GRPC_REFLECTION_ENABLED=true
 
 # WebSocket settings
 export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
 
-# Plugin system
-export MOCKFORGE_PLUGINS_ENABLED=true
-export MOCKFORGE_PLUGINS_DIRECTORY=~/.mockforge/plugins
-export MOCKFORGE_PLUGIN_MEMORY_LIMIT=64
-export MOCKFORGE_PLUGIN_CPU_LIMIT=10
-export MOCKFORGE_PLUGIN_TIMEOUT=5000
+# gRPC settings
+export MOCKFORGE_PROTO_DIR=proto/
 
-# Encryption
-export MOCKFORGE_ENCRYPTION_ENABLED=true
-export MOCKFORGE_ENCRYPTION_ALGORITHM=aes-256-gcm
-export MOCKFORGE_KEY_STORE_PATH=~/.mockforge/keys
-
-# Synchronization
-export MOCKFORGE_SYNC_ENABLED=true
-export MOCKFORGE_SYNC_DIRECTORY=./workspace-sync
-export MOCKFORGE_SYNC_MODE=bidirectional
-export MOCKFORGE_SYNC_WATCH=true
-
-# Data generation
-export MOCKFORGE_DATA_RAG_ENABLED=true
-export MOCKFORGE_DATA_RAG_PROVIDER=openai
-export MOCKFORGE_DATA_RAG_API_KEY=your-api-key
+# Data generation (RAG)
+export MOCKFORGE_RAG_ENABLED=true
+export MOCKFORGE_RAG_PROVIDER=openai
+export MOCKFORGE_RAG_API_KEY=your-api-key
 ```
+
+For the full env-var surface, see
+[Environment Variables](../configuration/environment.md). Plugin system,
+admin auth, encryption, sync daemon, and validation toggles are configured
+via YAML rather than env vars; see the relevant chapter for each.
 
 ## Exit Codes
 
@@ -832,7 +811,7 @@ mockforge-cli serve \
 
 # Start MockForge in background
 mockforge-cli serve --spec api-spec.yaml --http-port 3000 &
-MOCKFORGE_PID=$!
+SERVER_PID=$!
 
 # Wait for server to start
 sleep 5
@@ -844,7 +823,7 @@ npm test
 mockforge-cli data open-api --endpoint /users --count 100 api-spec.yaml > test-users.json
 
 # Stop MockForge
-kill $MOCKFORGE_PID
+kill $SERVER_PID
 ```
 
 ### Load Testing Setup
@@ -854,7 +833,6 @@ kill $MOCKFORGE_PID
 # load-test-setup.sh
 
 # Start MockForge with minimal validation for performance
-MOCKFORGE_VALIDATION_MODE=off \
 MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=false \
 mockforge-cli serve \
   --spec load-test-spec.yaml \
