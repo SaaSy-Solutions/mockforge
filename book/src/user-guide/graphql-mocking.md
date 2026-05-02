@@ -1,6 +1,24 @@
 # GraphQL Mocking
 
-MockForge provides comprehensive GraphQL API mocking capabilities, allowing you to create realistic GraphQL endpoints with schema-driven response generation, introspection support, and custom resolvers.
+MockForge provides GraphQL API mocking capabilities — schema-driven
+response generation, introspection support, custom resolvers, and a built-in
+Playground.
+
+> **Status legend used in this chapter:**
+> - **Implemented** (default) — sections describing schema, introspection,
+>   playground, custom resolvers, automatic response generation, basic
+>   error responses, and the upstream-passthrough config field.
+> - **Draft / aspirational** — sections describing GraphQL subscriptions,
+>   schema stitching, query-complexity caps, dedicated GraphQL caching,
+>   and `graphql.performance.*` config blocks. The example YAML for these
+>   isn't wired into the current `GraphQLConfig` struct; treat them as
+>   roadmap. For cross-cutting concerns (latency, fault injection, rate
+>   limiting, response truncation), use the
+>   [chaos engine](./chaos-engineering.md) — it covers every protocol on
+>   the same listener.
+>
+> The configuration reference under "Configuration" below lists exactly
+> what `GraphQLConfig` accepts today.
 
 ## Overview
 
@@ -8,11 +26,9 @@ MockForge's GraphQL support includes:
 
 - **Schema-Driven Mocking**: Generate responses based on GraphQL schema definitions
 - **Introspection Support**: Full GraphQL introspection query support
-- **Custom Resolvers**: Implement custom logic for specific fields
-- **Query Validation**: Validate incoming GraphQL queries against schema
-- **Subscription Support**: Mock GraphQL subscriptions with real-time updates
-- **Schema Stitching**: Combine multiple schemas into unified endpoints
-- **Performance Simulation**: Configurable latency and complexity limits
+- **Custom Resolvers**: Implement custom logic for specific fields via the `handlers_dir` config
+- **Upstream Passthrough**: Optionally proxy queries to a real GraphQL server (`upstream_url`)
+- **Built-in Playground**: GraphQL Playground served at the same `/graphql` endpoint
 
 ## Getting Started
 
@@ -116,71 +132,40 @@ input CreatePostInput {
 }
 ```
 
-## Configuration Options
+## Configuration
 
-### Basic Configuration
-
-```yaml
-graphql:
-  # Enable GraphQL support
-  enabled: true
-  
-  # GraphQL endpoint path
-  endpoint: "/graphql"
-  
-  # Schema configuration
-  schema_file: "schema.graphql"
-  schema_url: "https://api.example.com/schema"  # Alternative: fetch from URL
-  
-  # Development features
-  introspection: true
-  playground: true
-  playground_endpoint: "/graphql/playground"
-  
-  # Response generation
-  mock_responses: true
-  default_list_length: 5
-  
-  # Validation
-  validate_queries: true
-  max_query_depth: 10
-  max_query_complexity: 1000
-```
-
-### Advanced Configuration
+The full set of YAML config knobs the GraphQL server reads:
 
 ```yaml
 graphql:
-  # Performance settings
-  performance:
-    enable_query_complexity_analysis: true
-    max_query_depth: 15
-    max_query_complexity: 1000
-    timeout_ms: 30000
-    
-  # Caching
-  caching:
-    enabled: true
-    ttl_seconds: 300
-    max_cache_size: 1000
-    
-  # Custom resolvers
-  resolvers:
-    directory: "./graphql/resolvers"
-    auto_load: true
-    
-  # Subscription settings
-  subscriptions:
-    enabled: true
-    transport: "websocket"
-    heartbeat_interval: 30
-    
-  # Error handling
-  errors:
-    include_stack_trace: true
-    include_extensions: true
-    custom_error_codes: true
+  enabled: true                  # Start the GraphQL server
+  port: 4000                     # Listener port
+  host: "0.0.0.0"                # Bind address
+  schema_path: "schema.graphql"  # Path to .graphql / .gql schema file
+  handlers_dir: "./resolvers"    # Optional directory of custom resolvers
+  playground_enabled: true       # Serve GraphQL Playground at /graphql
+  introspection_enabled: true    # Allow introspection queries
+  upstream_url: null             # Optional: passthrough to a real GraphQL server
 ```
+
+The endpoint path is fixed at `/graphql` (and Playground is served at the
+same path when `playground_enabled` is true; GET → Playground UI, POST →
+GraphQL execution).
+
+### CLI flags
+
+```bash
+mockforge serve --spec api.yaml \
+  --graphql-port 4000 \
+  --graphql              # turn on the server even if config has it disabled
+```
+
+For features that aren't yet first-class GraphQL config (latency injection,
+fault injection, rate limiting, query-complexity caps, response caching),
+use the [chaos engine](./chaos-engineering.md) — it covers every protocol
+on the same listener config surface, so a `latency.fixed_delay_ms: 100`
+under `observability.chaos` adds 100 ms to every GraphQL response just as
+it does to HTTP and gRPC.
 
 ## Response Generation
 

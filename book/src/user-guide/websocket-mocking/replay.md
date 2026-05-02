@@ -32,12 +32,20 @@ interface ReplayMessage {
   ts: number;           // Timestamp offset in milliseconds
   dir: "out" | "in";    // Message direction
   text: string;         // Message content
-  waitFor?: string;     // Optional regex pattern to wait for
-  binary?: boolean;     // Binary message flag
-  close?: boolean;      // Close connection after this message
-  error?: boolean;      // Send as error frame
+  waitFor?: string;     // Optional substring to wait for in next inbound message
 }
 ```
+
+> **Note on `waitFor`:** the current implementation does **substring**
+> matching, not regex. `"waitFor": "ready"` matches any inbound message
+> containing the literal text `ready`. For full regex / JSONPath matching,
+> use the [interactive mode](./interactive.md) which has richer matchers.
+
+> **Note on binary frames:** sending raw binary or close-frame WebSocket
+> messages from a JSONL replay isn't currently supported — every message
+> is sent as a UTF-8 text frame. For binary protocols, drive traffic with
+> a custom client (e.g. `tokio-tungstenite`) and use MockForge for routing
+> only.
 
 ## Basic Replay Examples
 
@@ -89,26 +97,25 @@ While replay mode is inherently linear, you can simulate branching using multipl
 
 ### Template Integration
 
+The replay engine expands the following Handlebars-style templates inline:
+
+| Template | What it expands to |
+|---|---|
+| `{{uuid}}` | A new v4 UUID per message |
+| `{{now}}` | RFC 3339 timestamp at send time |
+| `{{now+1m}}` | RFC 3339 timestamp + 1 minute |
+| `{{now+1h}}` | RFC 3339 timestamp + 1 hour |
+| `{{randInt min max}}` | Random integer in `[min, max]` inclusive |
+
 ```jsonl
 {"ts":0,"dir":"out","text":"Session {{uuid}} established at {{now}}"}
 {"ts":1000,"dir":"out","text":"Your lucky number is: {{randInt 1 100}}"}
-{"ts":2000,"dir":"out","text":"Next maintenance window: {{now+24h}}"}
-{"ts":3000,"dir":"out","text":"Server load: {{randInt 20 80}}%"}
+{"ts":2000,"dir":"out","text":"Next check-in: {{now+1h}}"}
 ```
 
-### Binary Message Support
-
-```jsonl
-{"ts":0,"dir":"out","text":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","binary":true}
-{"ts":1000,"dir":"out","text":"Image sent successfully"}
-```
-
-### Error Simulation
-
-```jsonl
-{"ts":0,"dir":"out","text":"Connection established"}
-{"ts":5000,"dir":"out","text":"Internal server error","error":true}
-{"ts":1000,"dir":"out","text":"Attempting reconnection..."}
+For arbitrary time offsets (e.g. `+24h`, `+30m`), pre-compute the timestamp
+in your test harness and inject it into the JSONL file at fixture-write
+time. The replay engine doesn't currently parse arbitrary intervals.
 {"ts":2000,"dir":"out","text":"Reconnection failed","close":true}
 ```
 

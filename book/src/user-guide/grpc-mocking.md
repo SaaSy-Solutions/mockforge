@@ -300,36 +300,34 @@ impl ServiceImplementation for CustomUserService {
 ### Environment Variables
 
 ```bash
-# Proto file configuration
-MOCKFORGE_PROTO_DIR=proto/              # Directory containing .proto files
-MOCKFORGE_GRPC_PORT=50051               # gRPC server port
-
-# Service behavior
-MOCKFORGE_GRPC_LATENCY_ENABLED=true     # Enable response latency
-MOCKFORGE_GRPC_LATENCY_MIN_MS=10        # Minimum latency
-MOCKFORGE_GRPC_LATENCY_MAX_MS=100       # Maximum latency
-
-# Reflection settings
-MOCKFORGE_GRPC_REFLECTION_ENABLED=true  # Enable gRPC reflection
+MOCKFORGE_PROTO_DIR=proto/   # Directory containing .proto files
+MOCKFORGE_GRPC_PORT=50051    # gRPC server port
+MOCKFORGE_GRPC_HOST=0.0.0.0  # Bind address
 ```
+
+Per-protocol latency is configured via the chaos engine, not gRPC-specific
+env vars. To inject latency on gRPC calls, enable
+[chaos engineering](./chaos-engineering.md) — it applies uniformly across
+HTTP, WS, and gRPC.
 
 ### Configuration File
 
 ```yaml
 grpc:
+  enabled: true
   port: 50051
+  host: "0.0.0.0"
   proto_dir: "proto/"
-  enable_reflection: true
-  latency:
-    enabled: true
-    min_ms: 10
-    max_ms: 100
-  services:
-    - name: "mockforge.user.UserService"
-      implementation: "dynamic"
-    - name: "custom.Service"
-      implementation: "custom_handler"
 ```
+
+Reflection is enabled by default at the runtime level via
+`DynamicGrpcConfig::enable_reflection`. Most users don't need to disable
+it; if you do, configure programmatically when embedding MockForge as a
+library — there's no top-level YAML knob for it yet.
+
+For latency injection, partial-response simulation, or fault injection on
+gRPC calls, use the [chaos engine](./chaos-engineering.md) — it hooks every
+protocol with the same config surface.
 
 ## Streaming Support
 
