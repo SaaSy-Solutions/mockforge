@@ -32,4 +32,3 @@
 - [ ] Complete i18n rollout beyond shell + key pages (many UI strings still hardcoded English).
 - [ ] Add/refresh navigation and route smoke checks for newly added pages/components.
 - [ ] Replace broad brittle text-match assertions with role/semantic queries across legacy suites.
-
