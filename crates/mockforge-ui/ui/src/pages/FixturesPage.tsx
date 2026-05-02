@@ -43,6 +43,7 @@ import {
 } from '../components/ui/Dialog';
 import { toast } from 'sonner';
 import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 
 const isCloud = isCloudMode();
 
@@ -54,6 +55,7 @@ interface FixtureFormState {
   protocol: string;
   tagsInput: string;
   contentText: string;
+  routePath: string;
 }
 
 const EMPTY_FORM: FixtureFormState = {
@@ -64,6 +66,7 @@ const EMPTY_FORM: FixtureFormState = {
   protocol: '',
   tagsInput: '',
   contentText: '',
+  routePath: '',
 };
 
 function parseTagsInput(input: string): string[] {
@@ -115,6 +118,7 @@ function formFromFixture(fixture: FixtureInfo): FixtureFormState {
     protocol: fixture.protocol || '',
     tagsInput: stringifyTags(fixture.tags).join(', '),
     contentText: fixtureContentToString(fixture.content),
+    routePath: fixture.route_path || '',
   };
 }
 
@@ -122,6 +126,7 @@ export function FixturesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspace?.id ?? null);
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureInfo | null>(null);
   const [isViewingFixture, setIsViewingFixture] = useState(false);
@@ -200,6 +205,10 @@ export function FixturesPage() {
         protocol: createForm.protocol || undefined,
         tags: parseTagsInput(createForm.tagsInput),
         content: contentResult.value ?? undefined,
+        route_path: createForm.routePath.trim() || undefined,
+        // Cloud only: attach the active workspace if there is one. Local mode
+        // ignores this field.
+        workspace_id: isCloud ? activeWorkspaceId : undefined,
       });
       toast.success('Fixture created successfully');
       setIsCreateDialogOpen(false);
@@ -230,6 +239,7 @@ export function FixturesPage() {
           protocol: editForm.protocol || undefined,
           tags: parseTagsInput(editForm.tagsInput),
           content: contentResult.value ?? null,
+          route_path: editForm.routePath.trim() || undefined,
         },
       });
       toast.success('Fixture updated successfully');
@@ -750,6 +760,21 @@ export function FixturesPage() {
             {isCloud && (
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Route Path (optional)
+                </label>
+                <Input
+                  value={createForm.routePath}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, routePath: e.target.value })
+                  }
+                  placeholder="e.g., /api/users/{id} — canonical path with placeholders"
+                />
+              </div>
+            )}
+
+            {isCloud && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                   Protocol
                 </label>
                 <select
@@ -911,6 +936,17 @@ export function FixturesPage() {
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Route Path (optional)
+              </label>
+              <Input
+                value={editForm.routePath}
+                onChange={(e) => setEditForm({ ...editForm, routePath: e.target.value })}
+                placeholder="e.g., /api/users/{id} — canonical path with placeholders"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Description
               </label>
               <Input
@@ -1012,6 +1048,28 @@ export function FixturesPage() {
                       selectedFixture?.createdAt
                   )}
                 </div>
+                {selectedFixture?.created_by_username && (
+                  <div>
+                    <span className="font-medium">Created by:</span>{' '}
+                    {selectedFixture.created_by_username}
+                  </div>
+                )}
+                {selectedFixture?.route_path && (
+                  <div>
+                    <span className="font-medium">Route path:</span>{' '}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                      {selectedFixture.route_path}
+                    </code>
+                  </div>
+                )}
+                {selectedFixture?.workspace_id && (
+                  <div>
+                    <span className="font-medium">Workspace:</span>{' '}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                      {selectedFixture.workspace_id}
+                    </code>
+                  </div>
+                )}
               </div>
 
               {selectedFixture?.description && (

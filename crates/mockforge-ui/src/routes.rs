@@ -158,7 +158,7 @@ pub fn create_admin_router(
         .route("/__mockforge/logs", delete(clear_logs))
         .route("/__mockforge/restart", post(restart_servers))
         .route("/__mockforge/restart/status", get(get_restart_status))
-        .route("/__mockforge/fixtures", get(get_fixtures))
+        .route("/__mockforge/fixtures", get(get_fixtures).post(create_fixture))
         .route("/__mockforge/fixtures/{id}", delete(delete_fixture))
         .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
         .route("/__mockforge/audit/logs", get(get_audit_logs))

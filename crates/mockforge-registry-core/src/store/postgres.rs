@@ -924,6 +924,8 @@ impl RegistryStore for PgRegistryStore {
         content: Option<&serde_json::Value>,
         protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        workspace_id: Option<Uuid>,
+        route_path: Option<&str>,
     ) -> StoreResult<CloudFixture> {
         CloudFixture::create(
             &self.pool,
@@ -936,6 +938,8 @@ impl RegistryStore for PgRegistryStore {
             content,
             protocol,
             tags,
+            workspace_id,
+            route_path,
         )
         .await
         .map_err(Into::into)
@@ -945,8 +949,14 @@ impl RegistryStore for PgRegistryStore {
         CloudFixture::find_by_id(&self.pool, id).await.map_err(Into::into)
     }
 
-    async fn list_cloud_fixtures_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudFixture>> {
-        CloudFixture::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+    async fn list_cloud_fixtures_by_org(
+        &self,
+        org_id: Uuid,
+        workspace_id: Option<Uuid>,
+    ) -> StoreResult<Vec<CloudFixture>> {
+        CloudFixture::find_by_org(&self.pool, org_id, workspace_id)
+            .await
+            .map_err(Into::into)
     }
 
     async fn update_cloud_fixture(
@@ -959,6 +969,8 @@ impl RegistryStore for PgRegistryStore {
         content: Option<&serde_json::Value>,
         protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        route_path: Option<&str>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudFixture>> {
         CloudFixture::update(
             &self.pool,
@@ -970,6 +982,8 @@ impl RegistryStore for PgRegistryStore {
             content,
             protocol,
             tags,
+            route_path,
+            workspace_id,
         )
         .await
         .map_err(Into::into)
@@ -977,6 +991,14 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {
         CloudFixture::delete(&self.pool, id).await.map_err(Into::into)
+    }
+
+    async fn delete_cloud_fixtures_bulk(
+        &self,
+        org_id: Uuid,
+        ids: &[Uuid],
+    ) -> StoreResult<Vec<Uuid>> {
+        CloudFixture::delete_many(&self.pool, org_id, ids).await.map_err(Into::into)
     }
 
     async fn create_hosted_mock(
