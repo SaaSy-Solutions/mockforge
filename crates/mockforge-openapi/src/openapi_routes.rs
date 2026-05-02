@@ -117,7 +117,7 @@ pub struct RouterContext {
     /// [`ResponseRewriter::apply_overrides`] call).
     pub overrides_enabled: bool,
     /// AI response generator
-    pub ai_generator: Option<Arc<dyn crate::response::AiGenerator + Send + Sync>>,
+    pub ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
     /// MockAI intelligent behavior handle (type-erased via
     /// [`mockforge_foundation::intelligent_behavior::MockAiBehavior`] so
     /// the OpenAPI router doesn't depend on core's concrete `MockAI`).
@@ -1126,7 +1126,7 @@ impl OpenApiRouteRegistry {
                             // e.g., filter[name]=John&filter[age]=30 -> {"name":"John","age":"30"}
                             let deep_value = if matches!(style, openapiv3::QueryStyle::DeepObject) {
                                 let prefix_bracket = format!("{}[", parameter_data.name);
-                                let mut obj = serde_json::Map::new();
+                                let mut obj = Map::new();
                                 for (key, val) in query_params.iter() {
                                     if let Some(rest) = key.strip_prefix(&prefix_bracket) {
                                         if let Some(prop) = rest.strip_suffix(']') {

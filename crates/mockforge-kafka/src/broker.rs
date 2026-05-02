@@ -653,7 +653,7 @@ impl KafkaMockBroker {
                 // returned when any are available past fetch_offset, even
                 // when that exceeds max_bytes.
                 let max_bytes = p.partition_max_bytes.max(0) as usize;
-                let mut selected: Vec<&crate::partitions::KafkaMessage> = Vec::new();
+                let mut selected: Vec<&KafkaMessage> = Vec::new();
                 let mut estimated_size: usize = 0;
                 for msg in &part.messages {
                     if msg.offset < p.fetch_offset {

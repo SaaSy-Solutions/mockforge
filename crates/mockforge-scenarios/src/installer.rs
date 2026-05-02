@@ -70,7 +70,7 @@ impl ScenarioInstaller {
     /// Create a new scenario installer with a custom base directory
     ///
     /// This is useful for testing or when you want to isolate the installer from the default location.
-    pub fn with_dir(base_path: impl AsRef<std::path::Path>) -> Result<Self> {
+    pub fn with_dir(base_path: impl AsRef<Path>) -> Result<Self> {
         let base_path = base_path.as_ref();
         let storage = ScenarioStorage::with_dir(base_path)?;
 

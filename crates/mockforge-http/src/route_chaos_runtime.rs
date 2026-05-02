@@ -26,7 +26,7 @@
 
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{header::CONTENT_TYPE, HeaderName, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -166,9 +166,9 @@ pub async fn runtime_route_chaos_middleware(
         let mut resp = Response::new(Body::from(body));
         *resp.status_mut() = status;
         resp.headers_mut()
-            .insert(axum::http::header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         resp.headers_mut().insert(
-            axum::http::HeaderName::from_static("x-mockforge-source"),
+            HeaderName::from_static("x-mockforge-source"),
             HeaderValue::from_static("route-chaos-runtime"),
         );
         return resp;

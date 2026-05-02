@@ -75,7 +75,7 @@ pub struct LlmGenerationRequest {
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
     /// Expected response schema (JSON Schema).
-    pub schema: Option<serde_json::Value>,
+    pub schema: Option<Value>,
 }
 
 impl LlmGenerationRequest {
@@ -106,7 +106,7 @@ impl LlmGenerationRequest {
 
     /// Set expected schema.
     #[must_use]
-    pub fn with_schema(mut self, schema: serde_json::Value) -> Self {
+    pub fn with_schema(mut self, schema: Value) -> Self {
         self.schema = Some(schema);
         self
     }

@@ -309,7 +309,9 @@ async fn load_persona_from_config() -> Option<Arc<Persona>> {
     None
 }
 
+use axum::body::Body;
 use axum::extract::State;
+use axum::http::Request;
 use axum::middleware::from_fn_with_state;
 use axum::response::Json;
 use axum::Router;
@@ -929,7 +931,7 @@ pub async fn build_router_with_multi_tenant(
     // API and have requests actually reach them. Falls through to 404 when
     // no mock matches.
     app = app.fallback_service(
-        axum::routing::any(crate::management::dynamic_mock_fallback)
+        axum::routing::any(management::dynamic_mock_fallback)
             .with_state(management_state_for_fallback),
     );
 
@@ -1443,7 +1445,9 @@ pub async fn serve_router_with_tls_notify(
     let odata_app = tower::ServiceBuilder::new()
         .layer(mockforge_core::odata_rewrite::ODataRewriteLayer)
         .service(app);
-    let make_svc = axum::ServiceExt::<axum::http::Request<axum::body::Body>>::into_make_service_with_connect_info::<SocketAddr>(odata_app);
+    let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
+        SocketAddr,
+    >(odata_app);
     axum::serve(listener, make_svc).await?;
     Ok(())
 }
@@ -1480,7 +1484,9 @@ async fn serve_with_tls(
     let odata_app = tower::ServiceBuilder::new()
         .layer(mockforge_core::odata_rewrite::ODataRewriteLayer)
         .service(app);
-    let make_svc = axum::ServiceExt::<axum::http::Request<axum::body::Body>>::into_make_service_with_connect_info::<SocketAddr>(odata_app);
+    let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
+        SocketAddr,
+    >(odata_app);
 
     // Serve with TLS using axum-server
     axum_server::bind_rustls(addr, rustls_config)
@@ -1816,7 +1822,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             app = app.route(
                 &path,
                 #[allow(clippy::non_send_fields_in_send_ty)]
-                axum::routing::any(move |req: http::Request<axum::body::Body>| {
+                axum::routing::any(move |req: Request<Body>| {
                     let body = body.clone();
                     let headers = headers.clone();
                     let expand = template_expand;
@@ -1832,7 +1838,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                             return axum::response::Response::builder()
                                 .status(StatusCode::METHOD_NOT_ALLOWED)
                                 .header("Allow", &expected)
-                                .body(axum::body::Body::empty())
+                                .body(Body::empty())
                                 .unwrap()
                                 .into_response();
                         }
@@ -2065,7 +2071,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     app = app.nest("/__mockforge/api", management_router(management_state));
     // Dynamic-mock fallback; see identical block earlier in this file.
     app = app.fallback_service(
-        axum::routing::any(crate::management::dynamic_mock_fallback)
+        axum::routing::any(management::dynamic_mock_fallback)
             .with_state(management_state_for_fallback),
     );
 
@@ -2132,7 +2138,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // virtual time on a deployed mock. The handlers consult a process-
     // wide TimeTravelManager that serve.rs initialises alongside the
     // existing admin-server registration; both paths see the same Arc.
-    app = app.nest("/__mockforge/time-travel", crate::time_travel_api::time_travel_router());
+    app = app.nest("/__mockforge/time-travel", time_travel_api::time_travel_router());
 
     // Runtime route-chaos rules API + middleware. This sits in front of
     // the static per-route handlers so operators can add/remove fault and
@@ -2144,10 +2150,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         };
         let runtime_state = RuntimeRouteChaosState::new(Vec::new());
         let middleware_state = runtime_state.clone();
-        app = app.layer(axum::middleware::from_fn_with_state(
-            middleware_state,
-            runtime_route_chaos_middleware,
-        ));
+        app = app.layer(from_fn_with_state(middleware_state, runtime_route_chaos_middleware));
         app = app.nest("/__mockforge/api/route-chaos", route_chaos_api_router(runtime_state));
     }
 
@@ -2164,10 +2167,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
             mockforge_core::network_profiles::NetworkProfileCatalog::new(),
         );
         let middleware_state = runtime_state.clone();
-        app = app.layer(axum::middleware::from_fn_with_state(
-            middleware_state,
-            network_profile_middleware,
-        ));
+        app = app.layer(from_fn_with_state(middleware_state, network_profile_middleware));
         app = app
             .nest("/__mockforge/api/network-profiles", network_profile_api_router(runtime_state));
     }
@@ -2735,20 +2735,17 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // that state and either forwards to upstream or falls through to
         // the mock chain. Activated only when MOCKFORGE_PROXY_UPSTREAM is
         // set; absent that, the layer isn't even installed.
-        if let Some(reality_cfg) = crate::reality_proxy::RealityProxyConfig::from_env() {
+        if let Some(reality_cfg) = reality_proxy::RealityProxyConfig::from_env() {
             tracing::info!(
                 upstream = %reality_cfg.upstream_base,
                 "Reality-driven proxy middleware enabled — requests will be split between mock and upstream based on reality_continuum_ratio"
             );
-            app =
-                app.layer(axum::middleware::from_fn(
-                    move |req: axum::extract::Request, next: axum::middleware::Next| {
-                        let cfg = reality_cfg.clone();
-                        async move {
-                            crate::reality_proxy::reality_proxy_middleware(cfg, req, next).await
-                        }
-                    },
-                ));
+            app = app.layer(axum::middleware::from_fn(
+                move |req: axum::extract::Request, next: axum::middleware::Next| {
+                    let cfg = reality_cfg.clone();
+                    async move { reality_proxy::reality_proxy_middleware(cfg, req, next).await }
+                },
+            ));
         }
 
         // Add consistency middleware (before other middleware to inject state early)

@@ -2979,13 +2979,13 @@ impl RegistryStore for SqliteRegistryStore {
         .await?;
         let row = match row {
             Some(r) => r,
-            None => return Err(crate::error::StoreError::NotFound),
+            None => return Err(StoreError::NotFound),
         };
         let revoked_at_str: Option<String> = row.try_get("revoked_at")?;
         if revoked_at_str.is_some() {
             // Treat "already revoked" the same as "not found" — same
             // user-facing shape, and the handler maps both to a 400.
-            return Err(crate::error::StoreError::NotFound);
+            return Err(StoreError::NotFound);
         }
         let inherited_org_id_str: Option<String> = row.try_get("org_id")?;
         let inherited_org_id = inherited_org_id_str.as_deref().map(parse_uuid).transpose()?;
@@ -3067,7 +3067,7 @@ impl RegistryStore for SqliteRegistryStore {
     async fn get_plugin_version_attestation(
         &self,
         plugin_version_id: Uuid,
-    ) -> StoreResult<Option<(Uuid, chrono::DateTime<chrono::Utc>)>> {
+    ) -> StoreResult<Option<(Uuid, DateTime<Utc>)>> {
         use sqlx::Row;
         let row = sqlx::query(
             "SELECT sbom_signed_key_id, sbom_signed_at FROM plugin_versions WHERE id = ?",
@@ -3338,7 +3338,7 @@ impl RegistryStore for SqliteRegistryStore {
         &self,
         plugin_id: Uuid,
         review_id: Uuid,
-    ) -> StoreResult<Option<crate::models::Review>> {
+    ) -> StoreResult<Option<Review>> {
         use sqlx::Row;
         let row = sqlx::query(
             "SELECT id, plugin_id, version, user_id, rating, title, comment, \
@@ -3357,7 +3357,7 @@ impl RegistryStore for SqliteRegistryStore {
         let created_at_str: String = row.try_get("created_at")?;
         let updated_at_str: String = row.try_get("updated_at")?;
         let author_response_at_str: Option<String> = row.try_get("author_response_at")?;
-        Ok(Some(crate::models::Review {
+        Ok(Some(Review {
             id: Uuid::parse_str(&id).map_err(|e| StoreError::Hash(e.to_string()))?,
             plugin_id: Uuid::parse_str(&plugin_id_str)
                 .map_err(|e| StoreError::Hash(e.to_string()))?,

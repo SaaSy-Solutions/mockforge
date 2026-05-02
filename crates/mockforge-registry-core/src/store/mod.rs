@@ -1747,7 +1747,7 @@ pub trait RegistryStore: Send + Sync + 'static {
     async fn get_plugin_version_attestation(
         &self,
         plugin_version_id: Uuid,
-    ) -> StoreResult<Option<(Uuid, chrono::DateTime<Utc>)>>;
+    ) -> StoreResult<Option<(Uuid, DateTime<Utc>)>>;
 
     // --- Plugin reviews ---
 
@@ -1817,7 +1817,7 @@ pub trait RegistryStore: Send + Sync + 'static {
     /// All currently taken-down plugins, newest takedown first. Powers
     /// the admin moderation page; the public search excludes these so
     /// this is the only programmatic way to enumerate them.
-    async fn list_taken_down_plugins(&self) -> StoreResult<Vec<crate::models::Plugin>>;
+    async fn list_taken_down_plugins(&self) -> StoreResult<Vec<Plugin>>;
 
     /// Look up a single review by id, scoped to the plugin path param so the
     /// author-response endpoint can return 404 (not 403) when the path/body
@@ -1826,7 +1826,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         &self,
         plugin_id: Uuid,
         review_id: Uuid,
-    ) -> StoreResult<Option<crate::models::Review>>;
+    ) -> StoreResult<Option<Review>>;
 
     /// Set or clear the author response on a review. None clears both
     /// columns so authors can retract a response.

@@ -1474,7 +1474,7 @@ pub async fn handle_serve(
             let openapi_groups = group_specs_by_openapi_version(specs);
 
             // Process each OpenAPI version group
-            let mut merged_specs: Vec<(String, mockforge_openapi::spec::OpenApiSpec)> = Vec::new();
+            let mut merged_specs: Vec<(String, OpenApiSpec)> = Vec::new();
             for (_openapi_version, version_specs) in openapi_groups {
                 // Apply API versioning grouping if enabled
                 let api_versioning = serve_args.api_versioning.as_str();
@@ -1527,8 +1527,7 @@ pub async fn handle_serve(
             } else if merged_specs.is_empty() {
                 config.http.openapi_spec.clone()
             } else if serve_args.api_versioning == "path-prefix" {
-                let mut prefixed_specs: Vec<(PathBuf, mockforge_openapi::spec::OpenApiSpec)> =
-                    Vec::new();
+                let mut prefixed_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
 
                 for (api_version, spec) in merged_specs {
                     let version_suffix = api_version.trim().trim_start_matches('v');
@@ -1553,13 +1552,12 @@ pub async fn handle_serve(
                         *paths_obj = new_paths;
                     }
 
-                    let prefixed_spec = mockforge_openapi::spec::OpenApiSpec::from_json(spec_json)
-                        .map_err(|e| {
-                            format!(
-                                "Failed to build prefixed spec for API version '{}': {}",
-                                api_version, e
-                            )
-                        })?;
+                    let prefixed_spec = OpenApiSpec::from_json(spec_json).map_err(|e| {
+                        format!(
+                            "Failed to build prefixed spec for API version '{}': {}",
+                            api_version, e
+                        )
+                    })?;
 
                     prefixed_specs
                         .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
@@ -1910,6 +1908,7 @@ pub async fn handle_serve(
             use axum::extract::Request as AxumRequest;
             use axum::middleware::{from_fn, Next};
             use std::net::SocketAddr;
+            use std::sync::Arc;
 
             match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path).await {
                 Ok(db) => {
@@ -1920,9 +1919,8 @@ pub async fn handle_serve(
                     if cloud_sync.is_active() {
                         println!("✅ Recorder cloud-sync enabled — captures will mirror to MockForge Cloud");
                     }
-                    let recorder = std::sync::Arc::new(
-                        mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync),
-                    );
+                    let recorder =
+                        Arc::new(mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync));
 
                     // Wire the recording middleware so HTTP requests actually
                     // populate the recorder's database. Without this layer
@@ -2437,21 +2435,21 @@ pub async fn handle_serve(
             // never awaited, so silent Err would vanish — surface failures
             // through tracing before returning them (otherwise a bad
             // fixtures_dir etc. leaves the port unbound with no log at all).
-            let result: std::result::Result<(), String> =
-                match KafkaMockBroker::new(kafka_config.clone()).await {
-                    Ok(broker) => {
-                        tokio::select! {
-                            result = broker.start() => {
-                                result.map_err(|e| format!("Kafka broker error: {:?}", e))
-                            }
-                            _ = kafka_shutdown.cancelled() => {
-                                println!("🛑 Shutting down Kafka broker...");
-                                Ok(())
-                            }
+            let result: Result<(), String> = match KafkaMockBroker::new(kafka_config.clone()).await
+            {
+                Ok(broker) => {
+                    tokio::select! {
+                        result = broker.start() => {
+                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
+                        }
+                        _ = kafka_shutdown.cancelled() => {
+                            println!("🛑 Shutting down Kafka broker...");
+                            Ok(())
                         }
                     }
-                    Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
-                };
+                }
+                Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+            };
 
             if let Err(msg) = &result {
                 tracing::error!("{}", msg);

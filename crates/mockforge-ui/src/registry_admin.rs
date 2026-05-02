@@ -1030,7 +1030,7 @@ mod tests {
     }
 
     /// Build a fully bootstrapped router + test fixtures for the HTTP tests.
-    async fn test_router_with_seed() -> (Router, uuid::Uuid, uuid::Uuid) {
+    async fn test_router_with_seed() -> (Router, Uuid, Uuid) {
         let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
         let user = store.create_user("route-admin", "route@example.com", "hash").await.unwrap();
         let org = store
@@ -1041,7 +1041,7 @@ mod tests {
         (router(state), user.id, org.id)
     }
 
-    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+    async fn body_json(resp: Response) -> serde_json::Value {
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }

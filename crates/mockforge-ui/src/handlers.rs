@@ -1942,7 +1942,7 @@ pub async fn get_config(State(state): State<AdminState>) -> Json<ApiResponse<ser
 /// Body: `{ "config_type": "ai_mode", "data": { "ai_mode": "live" | "generate_once_freeze" | null } }`.
 pub async fn update_ai_mode(
     State(state): State<AdminState>,
-    Json(update): Json<crate::models::ConfigUpdate>,
+    Json(update): Json<ConfigUpdate>,
 ) -> Json<ApiResponse<String>> {
     if update.config_type != "ai_mode" {
         return Json(ApiResponse::error("Invalid config type".to_string()));

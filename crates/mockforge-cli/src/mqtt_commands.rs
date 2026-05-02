@@ -351,7 +351,7 @@ async fn handle_fixtures_command(
 
 /// Load MQTT fixtures from directory
 async fn handle_fixtures_load(
-    path: std::path::PathBuf,
+    path: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("📁 Loading MQTT fixtures from: {}", path.display());
 
@@ -651,7 +651,7 @@ mod tests {
     fn test_mqtt_fixtures_command_construction() {
         let cmd = MqttCommands::Fixtures {
             fixtures_command: MqttFixturesCommands::Load {
-                path: std::path::PathBuf::from("/tmp/fixtures"),
+                path: PathBuf::from("/tmp/fixtures"),
             },
         };
         assert!(matches!(cmd, MqttCommands::Fixtures { .. }));

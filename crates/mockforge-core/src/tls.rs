@@ -17,6 +17,7 @@
 //! ```
 
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::{ClientConfig, ServerConfig};
 use rustls_pemfile::{certs, private_key};
 use std::fs::File;
 use std::io::BufReader;
@@ -124,9 +125,7 @@ fn load_private_key(path: &Path) -> Result<PrivateKeyDer<'static>, TlsError> {
 ///
 /// Returns [`TlsError`] if certificate/key files cannot be read or the
 /// configuration is invalid.
-pub fn build_server_tls_config(
-    config: &TlsConfig,
-) -> Result<Arc<tokio_rustls::rustls::ServerConfig>, TlsError> {
+pub fn build_server_tls_config(config: &TlsConfig) -> Result<Arc<ServerConfig>, TlsError> {
     // Verify files exist
     if !config.cert_path.exists() {
         return Err(TlsError::CertNotFound(config.cert_path.display().to_string()));
@@ -164,7 +163,7 @@ pub fn build_server_tls_config(
                 TlsError::ConfigError(format!("Failed to create client verifier: {}", e))
             })?;
 
-        rustls::ServerConfig::builder_with_provider(Arc::new(provider))
+        ServerConfig::builder_with_provider(Arc::new(provider))
             .with_safe_default_protocol_versions()
             .map_err(|e| TlsError::ConfigError(e.to_string()))?
             .with_client_cert_verifier(client_verifier)
@@ -172,7 +171,7 @@ pub fn build_server_tls_config(
             .map_err(|e| TlsError::ConfigError(e.to_string()))?
     } else {
         // No client auth.
-        rustls::ServerConfig::builder_with_provider(Arc::new(provider))
+        ServerConfig::builder_with_provider(Arc::new(provider))
             .with_safe_default_protocol_versions()
             .map_err(|e| TlsError::ConfigError(e.to_string()))?
             .with_no_client_auth()
@@ -194,9 +193,7 @@ pub fn build_server_tls_config(
 ///
 /// Returns [`TlsError`] if certificate/key files cannot be read or the
 /// configuration is invalid.
-pub fn build_client_tls_config(
-    config: &TlsConfig,
-) -> Result<Arc<tokio_rustls::rustls::ClientConfig>, TlsError> {
+pub fn build_client_tls_config(config: &TlsConfig) -> Result<Arc<ClientConfig>, TlsError> {
     // Verify files exist
     if !config.cert_path.exists() {
         return Err(TlsError::CertNotFound(config.cert_path.display().to_string()));
@@ -228,7 +225,7 @@ pub fn build_client_tls_config(
         root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     }
 
-    let client_config = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
+    let client_config = ClientConfig::builder_with_provider(Arc::new(provider))
         .with_safe_default_protocol_versions()
         .map_err(|e| TlsError::ConfigError(e.to_string()))?
         .with_root_certificates(root_store)

@@ -118,7 +118,7 @@ pub struct ScenarioManifest {
     /// (outside of a federation). Federation activation merges these on top
     /// of the workspace's defaults.
     #[serde(default)]
-    pub service_overrides: std::collections::HashMap<String, ServiceScenarioOverride>,
+    pub service_overrides: HashMap<String, ServiceScenarioOverride>,
 }
 
 /// Per-service knobs a scenario can adjust at activation time.
