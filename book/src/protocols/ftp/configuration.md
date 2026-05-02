@@ -13,8 +13,8 @@ mockforge ftp serve [OPTIONS]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--port <PORT>` | FTP server port | `2121` |
-| `--host <HOST>` | FTP server host | `127.0.0.1` |
-| `--virtual-root <PATH>` | Virtual file system root path | `/` |
+| `--host <HOST>` | FTP server host | `0.0.0.0` |
+| `--virtual-root <PATH>` | Virtual file system root path | `/mockforge` |
 | `--config <FILE>` | Configuration file path | - |
 
 ### Examples
@@ -182,9 +182,25 @@ Currently, MockForge FTP servers support anonymous access only. Authentication c
 - Consider using file-based storage for large uploads
 
 ### Connection Limits
-- No built-in connection limits
-- Consider system ulimits for production use
+
+`FtpConfig::max_connections` (default `100`) caps concurrent control-channel
+sessions; new clients beyond that are refused at TCP accept time. Adjust
+upward for production-like setups; consider system `ulimit -n` (open file
+descriptors) as the platform-level ceiling.
+
+```yaml
+ftp:
+  max_connections: 500
+```
 
 ### Timeouts
-- No configurable timeouts
-- Uses libunftp defaults
+
+`FtpConfig::timeout_secs` (default `300` — 5 minutes) is the per-connection
+idle timeout. Sessions that go quiet longer than this get closed by the
+server. Set lower for aggressive cleanup of stuck clients; raise for
+long-running batch transfers.
+
+```yaml
+ftp:
+  timeout_secs: 600     # 10 minutes
+```

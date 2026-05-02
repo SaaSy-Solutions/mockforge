@@ -113,6 +113,7 @@
   - [Configuration](protocols/ftp/configuration.md)
   - [Fixtures](protocols/ftp/fixtures.md)
   - [Examples](protocols/ftp/examples.md)
+- [TCP](protocols/tcp/getting-started.md)
 
 ## Configuration
 

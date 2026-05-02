@@ -111,7 +111,7 @@ smtp:
   max_mailbox_messages: 1000
 
   # Timeouts
-  timeout_secs: 30
+  timeout_secs: 300
   max_connections: 100
 ```
 
