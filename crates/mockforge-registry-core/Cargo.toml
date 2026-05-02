@@ -95,5 +95,5 @@ pep440_rs = "0.7"
 # generate arbitrary JSON values and assert `canonicalize` is
 # idempotent and re-canonicalizes to identical bytes — catches silent
 # regressions in the serde_jcs dependency or in our pipeline around it.
-proptest = "1.5"
+proptest = "1.11"
 tempfile = "3"
