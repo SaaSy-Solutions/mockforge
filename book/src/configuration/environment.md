@@ -156,6 +156,20 @@ MockForge supports extensive configuration through environment variables. This p
   - When recording, only record GET requests
   - Reduces fixture file size for read-only APIs
 
+## Observability
+
+### Metrics CSV Log
+
+- `MOCKFORGE_METRICS_LOG_FILE=path/to/metrics.csv`
+  - When set, the admin server's system-monitoring task appends one CSV row
+    every 10 s with `timestamp,cpu_pct,mem_mb,total_reqs,err_rate`.
+  - Survives restarts; chartable in any spreadsheet, Grafana, or
+    dashboarding tool.
+  - Example: `MOCKFORGE_METRICS_LOG_FILE=/var/log/mockforge-metrics.csv`
+  - The TUI dashboard also tracks lifetime peak CPU%, memory MB, and
+    error rate in-memory and renders them as `current (peak X)` next to
+    the live values.
+
 ## Configuration Files
 
 ### Configuration Loading
