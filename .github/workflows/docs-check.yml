@@ -58,3 +58,11 @@ jobs:
         # exists in code without a single mention in user-facing docs.
         # See scripts/check_docs_drift.py for the allowlist.
         run: python3 scripts/check_docs_drift.py
+
+      - name: Config-field drift gate
+        # Fails if any public field on a serde-derived config struct in
+        # crates/mockforge-chaos/src/config.rs (and its companions) is
+        # not mentioned anywhere in user-facing docs. See
+        # scripts/check_config_field_drift.py for the target list and
+        # allowlist.
+        run: python3 scripts/check_config_field_drift.py

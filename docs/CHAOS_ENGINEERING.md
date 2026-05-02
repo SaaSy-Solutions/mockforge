@@ -685,6 +685,7 @@ fault_injection:
       - name: "x-test"            # required header (case-insensitive name)
         value: "yes"              # exact value; omit `value` to match presence only
     min_body_size_bytes: 1048576  # only requests with body >= 1 MB
+    max_body_size_bytes: 10485760 # AND <= 10 MB (omit either side)
     chunked_only: true            # only requests with Transfer-Encoding: chunked
 ```
 

@@ -279,6 +279,13 @@ spellcheck: ## Check for typos
 docs-drift: ## Verify every MOCKFORGE_* env var and CLI subcommand has docs
 	python3 scripts/check_docs_drift.py
 
+# Config-field drift gate (also runs in docs-check.yml on PRs)
+config-field-drift: ## Verify every public serde-config field has docs
+	python3 scripts/check_config_field_drift.py
+
+# Run both drift gates
+docs-drift-all: docs-drift config-field-drift ## Run all docs / code drift gates
+
 # Workspace sync targets
 sync-git: ## Sync workspaces to a git repository directory
 	@echo "Syncing workspaces to git repository..."
