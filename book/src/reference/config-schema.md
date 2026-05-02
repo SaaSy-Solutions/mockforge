@@ -304,6 +304,7 @@ observability:
           - name: "x-test"
             value: "yes"            # omit `value` for presence-only
         min_body_size_bytes: 1048576
+        max_body_size_bytes: 10485760
         chunked_only: true
 ```
 

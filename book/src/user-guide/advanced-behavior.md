@@ -181,6 +181,7 @@ fault_injection:
       - name: "x-test"            # case-insensitive name
         value: "yes"              # omit `value` for presence-only
     min_body_size_bytes: 1048576  # only requests with body >= 1 MB
+    max_body_size_bytes: 10485760 # AND <= 10 MB (omit either side)
     chunked_only: true            # only Transfer-Encoding: chunked
 ```
 
