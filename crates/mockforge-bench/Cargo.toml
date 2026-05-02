@@ -29,7 +29,7 @@ serde_yaml = "0.9"
 base64.workspace = true
 
 # Async runtime
-tokio = { version = "1.49", features = ["full"] }
+tokio = { version = "1.50", features = ["full"] }
 
 # HTTP client (for target validation + native chunked traffic generator).
 # `stream` enables `Body::wrap_stream`, which is how chunked encoding gets
