@@ -16,7 +16,7 @@ smtp:
   hostname: "mockforge-smtp"
 
   # Connection settings
-  timeout_secs: 30
+  timeout_secs: 300
   max_connections: 100
 
   # Mailbox settings
@@ -89,7 +89,7 @@ smtp:
 #### `timeout_secs`
 
 - **Type**: `integer`
-- **Default**: `30`
+- **Default**: `300` (5 minutes — matches the SMTP RFC 5321 recommendation)
 - **Description**: Connection timeout in seconds
 - **Range**: `1` to `3600` (1 second to 1 hour)
 
@@ -214,7 +214,7 @@ smtp:
   port: 1025
   host: "127.0.0.1"
   hostname: "dev-smtp"
-  timeout_secs: 30
+  timeout_secs: 300
   max_connections: 50
   enable_mailbox: true
   max_mailbox_messages: 500
@@ -312,7 +312,7 @@ smtp:
 
 3. **Set realistic timeouts**:
    ```yaml
-   timeout_secs: 30  # Not too short, not too long
+   timeout_secs: 300  # 5-minute SMTP RFC default, not too long
    ```
 
 ### CI/CD

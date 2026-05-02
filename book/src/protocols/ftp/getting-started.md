@@ -11,7 +11,7 @@ MockForge provides comprehensive FTP server mocking capabilities, allowing you t
 mockforge ftp serve --port 2121
 
 # Start with custom configuration
-mockforge ftp serve --host 0.0.0.0 --port 2121 --virtual-root /ftp
+mockforge ftp serve --host 0.0.0.0 --port 2121 --virtual-root /mockforge
 ```
 
 ### Connecting with an FTP Client
