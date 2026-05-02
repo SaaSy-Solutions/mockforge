@@ -381,10 +381,32 @@ All configuration options can be overridden using environment variables.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `MOCKFORGE_RAG_PROVIDER` | LLM provider | `openai` |
+| `MOCKFORGE_RAG_PROVIDER` | LLM provider (`openai`, `anthropic`, `ollama`) | `openai` |
 | `MOCKFORGE_RAG_MODEL` | Model name | `gpt-4` |
 | `MOCKFORGE_RAG_API_KEY` | API key | `sk-...` |
-| `MOCKFORGE_RAG_TEMPERATURE` | Temperature | `0.7` |
+| `MOCKFORGE_RAG_API_ENDPOINT` | Custom API endpoint (overrides provider default) | `https://api.openai.com/v1` |
+| `MOCKFORGE_RAG_TEMPERATURE` | Sampling temperature | `0.7` |
+| `MOCKFORGE_RAG_MAX_TOKENS` | Maximum tokens per response | `2048` |
+| `MOCKFORGE_RAG_CONTEXT_WINDOW` | Context window size | `4096` |
+| `MOCKFORGE_RAG_TIMEOUT_SECONDS` | Request timeout (seconds) | `30` |
+| `MOCKFORGE_RAG_MAX_RETRIES` | Max retries on transient errors | `3` |
+| `MOCKFORGE_EMBEDDING_PROVIDER` | Embedding provider (`openai`, `local`, `ollama`) | `openai` |
+| `MOCKFORGE_EMBEDDING_MODEL` | Embedding model name | `text-embedding-3-small` |
+| `MOCKFORGE_EMBEDDING_ENDPOINT` | Custom embedding API endpoint | `http://localhost:11434` |
+| `MOCKFORGE_SIMILARITY_THRESHOLD` | Minimum similarity score (0.0–1.0) | `0.75` |
+| `OPENAI_API_KEY` | OpenAI API key (fallback when `MOCKFORGE_RAG_API_KEY` unset) | `sk-...` |
+
+### Observability
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `MOCKFORGE_METRICS_LOG_FILE` | Path to a CSV file where the admin server appends `timestamp,cpu_pct,mem_mb,total_reqs,err_rate` every 10 s. Survives restarts; chartable in any spreadsheet/Grafana/etc. | `/var/log/mockforge-metrics.csv` |
+
+### Registry / Marketplace
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `MOCKFORGE_REGISTRY_TOKEN` | Auth token for publishing scenarios / plugins to the registry | `mfreg_…` |
 
 See [config.example.yaml](./config.example.yaml) for the complete list of environment variables.
 
@@ -536,6 +558,33 @@ profiles:
           enabled: true
           fixed_delay_ms: 150
           probability: 0.5
+        # See docs/CHAOS_ENGINEERING.md for the full schema. Highlights:
+        fault_injection:
+          enabled: true
+          http_errors: [503]
+          http_error_probability: 0.1
+          # Optional per-request matcher; only inject faults on matching requests.
+          # AND across fields, OR within a list. Empty = match every request.
+          request_matcher:
+            source_ips: ["10.0.0.0/8"]    # CIDR or bare IP
+            headers:
+              - name: "x-test"            # case-insensitive name
+                value: "yes"              # omit `value` for presence-only
+            min_body_size_bytes: 1048576  # >= 1 MB
+            chunked_only: true            # only Transfer-Encoding: chunked
+          # Wire-level behavior of "connection error". `tcp_reset`/`tcp_close`
+          # require the chaos listener wrapper, auto-installed by serve.
+          connection_errors: false
+          connection_error_probability: 0.05
+          connection_error_kind: http_503  # http_503 | tcp_reset | tcp_close
+          # Real timeouts: sleep then return 504. Decoupled from partial.
+          timeout_errors: false
+          timeout_ms: 5000
+          timeout_probability: 0.05
+          # Truncated body: preserves Content-Length on non-chunked, drops the
+          # terminator on chunked responses.
+          partial_responses: false
+          partial_response_probability: 0.05
 
     core:
       latency_enabled: true

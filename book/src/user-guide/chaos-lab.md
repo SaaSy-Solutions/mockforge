@@ -2,6 +2,15 @@
 
 Chaos Lab is an interactive module that enables you to simulate various real-world network conditions and errors directly from the UI. Test application resilience, debug network-related issues, and validate error handling logic.
 
+> **Looking for the YAML / programmatic chaos engineering surface?**
+> This page covers the in-app Chaos Lab UI and predefined network profiles.
+> For the full YAML config (latency, fault injection, per-request matchers,
+> TCP-level connection errors, partial responses, native chunked traffic
+> generation), see the
+> [Chaos Engineering reference](https://github.com/SaaSy-Solutions/mockforge/blob/main/docs/CHAOS_ENGINEERING.md)
+> and
+> [bench command examples](https://github.com/SaaSy-Solutions/mockforge/blob/main/docs/bench-command-examples.md).
+
 ## Overview
 
 Chaos Lab provides:

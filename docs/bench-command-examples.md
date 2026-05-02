@@ -430,8 +430,70 @@ k6 version
 6. **Automate**: Integrate load tests into CI/CD pipelines
 7. **Set Realistic Thresholds**: Base thresholds on actual requirements
 
+## Chunked-Encoding Traffic
+
+If your server needs to be exercised with `Transfer-Encoding: chunked` request
+bodies (e.g. uploads from real-world clients that don't know the body size in
+advance, or chaos scenarios that match `chunked_only`), there are two paths:
+
+### k6 path — `bench --chunked-request-bodies`
+
+Adds `Transfer-Encoding: chunked` to the headers map of every k6 request that
+has a body. Best-effort: k6 runs on Go's `net/http`, which decides chunking
+based on body type — a string body has a known length and Go will normally
+send `Content-Length` regardless. Useful when you only need the *header*
+present; for guaranteed wire chunking, use `bench-chunked` below.
+
+```bash
+mockforge bench --spec api.yaml \
+  --target http://localhost:3000 \
+  --chunked-request-bodies
+```
+
+### Native path — `mockforge bench-chunked` (recommended)
+
+A separate subcommand that bypasses k6 entirely. Built on hyper / reqwest with
+`Body::wrap_stream` and no `Content-Length`, so the wire is always chunked.
+Reports req/s, p50/p95/p99 latency, and a status-code distribution.
+
+```bash
+mockforge bench-chunked \
+  --target http://localhost:3000/upload \
+  --concurrency 10 --duration 60 \
+  --chunk-size-bytes 4096 \
+  --total-size-bytes 10485760 \
+  --chunk-interval-ms 50 \
+  --header "Authorization: Bearer $TOKEN" \
+  --header "Content-Type: application/octet-stream"
+```
+
+| Flag | Meaning |
+|---|---|
+| `--target` | URL to POST chunked bodies at |
+| `--method` | `POST` (default), `PUT`, or `PATCH` |
+| `--concurrency` | Number of concurrent workers (each holds one connection) |
+| `--duration` | Run length in seconds |
+| `--chunk-size-bytes` | Bytes per chunk emitted into the body stream |
+| `--total-size-bytes` | Total body size per request |
+| `--chunk-interval-ms` | Sleep between chunks (0 = back-to-back) |
+| `--header` | Extra `Name: Value` header; may be repeated |
+| `--insecure` | Skip TLS certificate verification |
+
+Common use cases:
+
+- **Slow upload simulation** — set a high `--chunk-interval-ms` to keep the
+  connection open for minutes per request and stress the server's idle/slow-
+  connection handling.
+- **Large body soak** — set a large `--total-size-bytes` to test the server's
+  max-body-size limits and memory behavior.
+- **Chunked + chaos matching** — pair with `chunked_only: true` in
+  `fault_injection.request_matcher` (see [CHAOS_ENGINEERING.md](./CHAOS_ENGINEERING.md))
+  to inject faults *only* on chunked traffic.
+
 ## Additional Resources
 
 - [k6 Documentation](https://k6.io/docs/)
 - [Load Testing Best Practices](https://k6.io/docs/testing-guides/)
 - [OpenAPI Specification](https://spec.openapis.org/oas/latest.html)
+- [Chaos Engineering Guide](./CHAOS_ENGINEERING.md) — pair load tests with
+  fault injection (latency, HTTP errors, TCP RST/FIN, partial responses)

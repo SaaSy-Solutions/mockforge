@@ -195,6 +195,11 @@ All commands, options, and features documented in each protocol section (HTTP, g
   - **Team Collaboration**: Shared workspaces with conflict resolution
 - **Dynamic Response Generation**: Create realistic mock responses with configurable latency and failure rates
 - **Cross-Endpoint Validation**: Ensure referential integrity across different endpoints
+- **Load Testing & Chaos Engineering**: First-class tooling for stressing real APIs and your own mocks:
+  - **`mockforge bench`**: k6 script generation from an OpenAPI spec — ramp/spike/soak/constant scenarios with configurable VUs, thresholds, auth, and operation filtering
+  - **`mockforge bench-chunked`**: native Rust hyper-based generator for guaranteed `Transfer-Encoding: chunked` traffic when k6's Go transport falls short
+  - **Chaos engineering**: latency, HTTP errors, **TCP-level connection errors** (RST / FIN at accept time), real timeouts (sleep + 504), partial responses (chunked-aware), payload corruption — all gateable by per-request matchers (source IP / CIDR, header, body size, chunked-only)
+  - **Live observability**: TUI dashboard with current and lifetime peak CPU / memory / error-rate; optional CSV metrics log (`MOCKFORGE_METRICS_LOG_FILE`) for multi-day runs you can chart in Grafana / spreadsheets / anything
 - **Admin UI v2**: Modern React-based interface with:
   - **Role-Based Authentication**: ✅ Complete JWT-based authentication with Admin, Editor, and Viewer roles
   - **Real-time Collaboration**: ✅ WebSocket-based collaborative editing with presence awareness and cursor tracking
