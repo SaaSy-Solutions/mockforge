@@ -203,6 +203,7 @@ impl FailureDesigner {
                     http_error_probability: rule.probability,
                     connection_errors: false,
                     connection_error_probability: 0.0,
+                    connection_error_kind: crate::config::ConnectionErrorKind::Http503,
                     timeout_errors: false,
                     timeout_ms: 5000,
                     timeout_probability: 0.0,
@@ -213,6 +214,7 @@ impl FailureDesigner {
                     corruption_type: crate::config::CorruptionType::None,
                     error_pattern: None,
                     mockai_enabled: false,
+                    request_matcher: None,
                 };
 
                 ChaosConfig {
@@ -251,6 +253,7 @@ impl FailureDesigner {
                     http_error_probability: 0.0,
                     connection_errors: false,
                     connection_error_probability: 0.0,
+                    connection_error_kind: crate::config::ConnectionErrorKind::Http503,
                     timeout_errors: true,
                     timeout_ms: *timeout_ms,
                     timeout_probability: rule.probability,
@@ -261,6 +264,7 @@ impl FailureDesigner {
                     corruption_type: crate::config::CorruptionType::None,
                     error_pattern: None,
                     mockai_enabled: false,
+                    request_matcher: None,
                 };
 
                 ChaosConfig {
@@ -280,6 +284,7 @@ impl FailureDesigner {
                     http_error_probability: 0.0,
                     connection_errors: true,
                     connection_error_probability: rule.probability,
+                    connection_error_kind: crate::config::ConnectionErrorKind::Http503,
                     timeout_errors: false,
                     timeout_ms: 5000,
                     timeout_probability: 0.0,
@@ -290,6 +295,7 @@ impl FailureDesigner {
                     corruption_type: crate::config::CorruptionType::None,
                     error_pattern: None,
                     mockai_enabled: false,
+                    request_matcher: None,
                 };
 
                 ChaosConfig {
@@ -311,6 +317,7 @@ impl FailureDesigner {
                     http_error_probability: 0.0,
                     connection_errors: false,
                     connection_error_probability: 0.0,
+                    connection_error_kind: crate::config::ConnectionErrorKind::Http503,
                     timeout_errors: false,
                     timeout_ms: 5000,
                     timeout_probability: 0.0,
@@ -321,6 +328,7 @@ impl FailureDesigner {
                     corruption_type: crate::config::CorruptionType::None,
                     error_pattern: None,
                     mockai_enabled: false,
+                    request_matcher: None,
                 };
 
                 ChaosConfig {

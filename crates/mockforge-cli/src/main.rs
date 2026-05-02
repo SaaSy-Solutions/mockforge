@@ -1729,6 +1729,15 @@ enum Commands {
         #[arg(long)]
         insecure: bool,
 
+        /// Set `Transfer-Encoding: chunked` on every k6 request body. NOTE:
+        /// k6 runs on Go's `net/http`, which decides chunking based on body
+        /// type — a string body has known length and Go normally sends
+        /// `Content-Length`. Setting this flag is the closest k6-script
+        /// approximation; for true raw chunked traffic, use `curl
+        /// --data-binary @file -H 'Transfer-Encoding: chunked'`.
+        #[arg(long)]
+        chunked_request_bodies: bool,
+
         /// Maximum number of parallel test executions (for multi-target mode)
         /// Only used when --targets-file is specified
         #[arg(long, default_value = "10")]
@@ -2075,6 +2084,59 @@ enum Commands {
         /// Violations are written to conformance-request-violations.json.
         #[arg(long)]
         validate_requests: bool,
+    },
+
+    /// Native Rust chunked-encoding traffic generator.
+    ///
+    /// Sends real `Transfer-Encoding: chunked` requests via hyper. Use this
+    /// when the k6/Go-based `bench --chunked-request-bodies` flow doesn't
+    /// produce on-the-wire chunking (Go's `net/http` decides chunking from
+    /// body type and may send Content-Length instead).
+    ///
+    /// Examples:
+    ///   mockforge bench-chunked --target http://localhost:3000/upload
+    ///   mockforge bench-chunked --target http://localhost:3000/upload \
+    ///     --concurrency 10 --duration 60 \
+    ///     --chunk-size-bytes 4096 --total-size-bytes 10485760 \
+    ///     --chunk-interval-ms 50
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchChunked {
+        /// Target URL to send chunked requests to.
+        #[arg(short, long)]
+        target: String,
+
+        /// HTTP method (POST, PUT, PATCH).
+        #[arg(short, long, default_value = "POST")]
+        method: String,
+
+        /// Number of concurrent workers.
+        #[arg(short, long, default_value = "10")]
+        concurrency: u32,
+
+        /// Duration in seconds.
+        #[arg(short, long, default_value = "30")]
+        duration: u64,
+
+        /// Bytes per chunk emitted into the body stream.
+        #[arg(long, default_value = "1024")]
+        chunk_size_bytes: usize,
+
+        /// Total body size per request, in bytes.
+        #[arg(long, default_value = "1048576")]
+        total_size_bytes: usize,
+
+        /// Sleep between chunks (ms). 0 = back-to-back.
+        #[arg(long, default_value = "0")]
+        chunk_interval_ms: u64,
+
+        /// Extra header (`Name: Value`); may be repeated.
+        #[arg(long, action = clap::ArgAction::Append)]
+        header: Vec<String>,
+
+        /// Skip TLS certificate verification (for self-signed test servers).
+        #[arg(long)]
+        insecure: bool,
     },
 
     /// Convert a HAR file to conformance custom-checks YAML
@@ -2733,6 +2795,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_error_rate,
             verbose,
             insecure,
+            chunked_request_bodies,
             max_concurrency,
             results_format,
             params_file,
@@ -2820,6 +2883,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 max_error_rate,
                 verbose,
                 skip_tls_verify: insecure,
+                chunked_request_bodies,
                 targets_file,
                 max_concurrency: Some(max_concurrency),
                 results_format,
@@ -2868,6 +2932,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             if let Err(e) = bench_cmd.execute().await {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchChunked {
+            target,
+            method,
+            concurrency,
+            duration,
+            chunk_size_bytes,
+            total_size_bytes,
+            chunk_interval_ms,
+            header,
+            insecure,
+        } => {
+            use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig};
+            use std::collections::HashMap;
+            let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
+                Ok(m) => m,
+                Err(_) => {
+                    eprintln!("Invalid HTTP method: {}", method);
+                    std::process::exit(1);
+                }
+            };
+            let mut headers = HashMap::new();
+            for h in header {
+                if let Some((k, v)) = h.split_once(':') {
+                    headers.insert(k.trim().to_string(), v.trim().to_string());
+                }
+            }
+            let cfg = ChunkedBenchConfig {
+                target_url: target,
+                method,
+                concurrency,
+                duration: std::time::Duration::from_secs(duration),
+                chunk_size_bytes,
+                total_size_bytes,
+                chunk_interval_ms,
+                headers,
+                skip_tls_verify: insecure,
+            };
+            match run(cfg).await {
+                Ok(r) => {
+                    println!("Chunked bench complete in {:?}", r.elapsed);
+                    println!("  Total requests: {}", r.total_requests);
+                    println!("  Successful:     {}", r.successful);
+                    println!("  Failed:         {}", r.failed);
+                    println!("  Bytes sent:     {}", r.bytes_sent);
+                    println!("  Throughput:     {:.2} req/s", r.req_per_sec);
+                    println!(
+                        "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
+                        r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
+                    );
+                    if !r.status_counts.is_empty() {
+                        println!("  Status codes:");
+                        let mut codes: Vec<_> = r.status_counts.iter().collect();
+                        codes.sort_by_key(|(k, _)| **k);
+                        for (code, n) in codes {
+                            println!("    {} = {}", code, n);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Chunked bench failed: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
 

@@ -3,6 +3,7 @@
 //! This module provides functionality to run load tests against real API endpoints
 //! using OpenAPI specifications to generate realistic traffic patterns.
 
+pub mod chunked_bench;
 pub mod command;
 pub mod conformance;
 pub mod crud_flow;

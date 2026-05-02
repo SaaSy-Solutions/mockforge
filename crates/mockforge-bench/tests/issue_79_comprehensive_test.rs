@@ -61,6 +61,7 @@ async fn test_issue_79_comprehensive_summary() {
         custom_headers: headers,
         skip_tls_verify: true,
         security_testing_enabled: false,
+        chunked_request_bodies: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);
@@ -194,6 +195,7 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         custom_headers: HashMap::new(),
         skip_tls_verify: false,
         security_testing_enabled: true,
+        chunked_request_bodies: false,
     };
 
     // Step 4: Generate base script (same as K6ScriptGenerator::generate)
@@ -513,6 +515,7 @@ tests:
         custom_headers: HashMap::new(),
         skip_tls_verify: false,
         security_testing_enabled: true,
+        chunked_request_bodies: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);

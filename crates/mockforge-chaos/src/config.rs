@@ -1,6 +1,28 @@
 //! Chaos engineering configuration
 
+use crate::request_matcher::RequestMatcher;
 use serde::{Deserialize, Serialize};
+
+/// What "connection error" means at the wire level when injected.
+///
+/// `Http503` is the default for backwards compatibility — chaos returns an
+/// HTTP 503 on a healthy TCP connection. The `Tcp*` variants drop the socket
+/// at accept time so the client experiences a real transport-layer failure.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionErrorKind {
+    /// Default: respond at the application layer with 503 Service Unavailable.
+    /// No transport-level signal — the connection is healthy.
+    #[default]
+    Http503,
+    /// Accept the TCP connection then drop it with `SO_LINGER=0`, sending an
+    /// RST. The client typically sees `ECONNRESET` / `ConnectionReset`.
+    TcpReset,
+    /// Accept the TCP connection then drop it cleanly (FIN). The client sees
+    /// EOF before any HTTP response — typically `UnexpectedEof` or "connection
+    /// closed before message completed."
+    TcpClose,
+}
 
 /// Payload corruption type
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -104,6 +126,13 @@ pub struct FaultInjectionConfig {
     pub connection_errors: bool,
     /// Probability of connection errors (0.0-1.0)
     pub connection_error_probability: f64,
+    /// What "connection error" means at the wire level. `Http503` (default)
+    /// keeps the legacy behavior of returning an HTTP 503 on a healthy
+    /// connection; `TcpReset` / `TcpClose` drop the socket at accept time.
+    /// TCP-level kinds require the chaos listener wrapper to be installed
+    /// at server startup (see `mockforge_chaos::chaos_listener`).
+    #[serde(default)]
+    pub connection_error_kind: ConnectionErrorKind,
     /// Inject timeout errors
     pub timeout_errors: bool,
     /// Timeout duration in milliseconds
@@ -126,6 +155,12 @@ pub struct FaultInjectionConfig {
     /// Enable MockAI for dynamic error message generation
     #[serde(default)]
     pub mockai_enabled: bool,
+    /// Optional per-request matcher. When set, faults are only injected for
+    /// requests that match (e.g. specific source IP/CIDR, header presence/value,
+    /// body size threshold, or `Transfer-Encoding: chunked`). An empty/omitted
+    /// matcher applies fault injection to every request, preserving prior behavior.
+    #[serde(default)]
+    pub request_matcher: Option<RequestMatcher>,
 }
 
 impl Default for FaultInjectionConfig {
@@ -136,6 +171,7 @@ impl Default for FaultInjectionConfig {
             http_error_probability: 0.1,
             connection_errors: false,
             connection_error_probability: 0.05,
+            connection_error_kind: ConnectionErrorKind::default(),
             timeout_errors: false,
             timeout_ms: 5000,
             timeout_probability: 0.05,
@@ -146,6 +182,7 @@ impl Default for FaultInjectionConfig {
             corruption_type: CorruptionType::None,
             error_pattern: None,
             mockai_enabled: false,
+            request_matcher: None,
         }
     }
 }
@@ -366,6 +403,7 @@ impl NetworkProfile {
                         http_error_probability: 0.05, // 5% chance of connection errors
                         connection_errors: true,
                         connection_error_probability: 0.03, // 3% chance of disconnects
+                        connection_error_kind: ConnectionErrorKind::Http503,
                         timeout_errors: false,
                         timeout_ms: 5000,
                         timeout_probability: 0.0,
@@ -376,6 +414,7 @@ impl NetworkProfile {
                         corruption_type: CorruptionType::None,
                         error_pattern: None,
                         mockai_enabled: false,
+                        request_matcher: None,
                     }),
                     rate_limit: None,
                     traffic_shaping: Some(TrafficShapingConfig {

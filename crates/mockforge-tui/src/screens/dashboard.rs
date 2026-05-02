@@ -188,8 +188,9 @@ impl DashboardScreen {
         ])
         .split(inner);
 
-        // CPU gauge
+        // CPU gauge with peak readout
         let cpu = data.system.cpu_usage_percent;
+        let cpu_peak = data.system.peak_cpu_usage_percent.max(cpu);
         let cpu_color = if cpu > 80.0 {
             Theme::RED
         } else if cpu > 50.0 {
@@ -197,7 +198,7 @@ impl DashboardScreen {
         } else {
             Theme::GREEN
         };
-        let cpu_label = format!("CPU: {cpu:.0}%");
+        let cpu_label = format!("CPU: {cpu:.0}% (peak {cpu_peak:.0}%)");
         let cpu_gauge = Gauge::default()
             .label(cpu_label)
             .ratio(cpu / 100.0)
@@ -213,9 +214,10 @@ impl DashboardScreen {
         };
         frame.render_widget(cpu_gauge, gauge_area);
 
-        // Memory gauge
+        // Memory gauge with peak readout
         let mem_mb = data.system.memory_usage_mb;
-        let mem_label = format!("Mem: {mem_mb} MB");
+        let mem_peak = data.system.peak_memory_usage_mb.max(mem_mb);
+        let mem_label = format!("Mem: {mem_mb} MB (peak {mem_peak} MB)");
         let mem_gauge = Gauge::default()
             .label(mem_label)
             .ratio((mem_mb as f64 / 1024.0).min(1.0))
@@ -260,6 +262,7 @@ impl DashboardScreen {
         let total = data.metrics.total_requests;
         let avg_rt = data.metrics.average_response_time;
         let err_rate = data.metrics.error_rate;
+        let peak_err = data.system.peak_error_rate.max(err_rate);
 
         let stats = vec![
             Line::from(vec![
@@ -277,6 +280,7 @@ impl DashboardScreen {
                         Theme::success()
                     },
                 ),
+                Span::styled(format!(" (peak {:.1}%)", peak_err * 100.0), Theme::dim()),
             ]),
             Line::from(vec![
                 Span::styled(" Avg RT: ", Theme::dim()),

@@ -92,6 +92,11 @@ pub struct BenchCommand {
     pub max_error_rate: f64,
     pub verbose: bool,
     pub skip_tls_verify: bool,
+    /// When true, set `Transfer-Encoding: chunked` on every k6 request body so
+    /// the server experiences chunked-encoded traffic. See
+    /// `K6ScriptTemplateData::chunked_request_bodies` for caveats — k6's Go
+    /// transport may still send Content-Length in some cases.
+    pub chunked_request_bodies: bool,
     /// Optional file containing multiple targets
     pub targets_file: Option<PathBuf>,
     /// Maximum number of parallel executions (for multi-target mode)
@@ -414,6 +419,7 @@ impl BenchCommand {
             custom_headers,
             skip_tls_verify: self.skip_tls_verify,
             security_testing_enabled,
+            chunked_request_bodies: self.chunked_request_bodies,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -552,6 +558,7 @@ impl BenchCommand {
                 max_error_rate: self.max_error_rate,
                 verbose: self.verbose,
                 skip_tls_verify: self.skip_tls_verify,
+                chunked_request_bodies: self.chunked_request_bodies,
                 targets_file: None,
                 max_concurrency: None,
                 results_format: self.results_format.clone(),
@@ -1553,6 +1560,7 @@ impl BenchCommand {
             custom_headers,
             skip_tls_verify: self.skip_tls_verify,
             security_testing_enabled,
+            chunked_request_bodies: self.chunked_request_bodies,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -2763,6 +2771,7 @@ mod tests {
             max_error_rate: 0.05,
             verbose: false,
             skip_tls_verify: false,
+            chunked_request_bodies: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),
@@ -2838,6 +2847,7 @@ mod tests {
             max_error_rate: 0.05,
             verbose: false,
             skip_tls_verify: false,
+            chunked_request_bodies: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),
@@ -2909,6 +2919,7 @@ mod tests {
             max_error_rate: 0.05,
             verbose: false,
             skip_tls_verify: false,
+            chunked_request_bodies: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),

@@ -125,6 +125,14 @@ pub struct SystemInfo {
     pub total_routes: usize,
     #[serde(default)]
     pub total_fixtures: usize,
+    #[serde(default)]
+    pub peak_memory_usage_mb: u64,
+    #[serde(default)]
+    pub peak_cpu_usage_percent: f64,
+    #[serde(default)]
+    pub peak_error_rate: f64,
+    #[serde(default)]
+    pub peaks_since: Option<DateTime<Utc>>,
 }
 
 // ── Request logs ─────────────────────────────────────────────────────

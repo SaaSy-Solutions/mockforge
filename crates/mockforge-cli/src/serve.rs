@@ -1725,6 +1725,7 @@ pub async fn handle_serve(
                     http_error_probability: f.http_error_probability,
                     connection_errors: f.connection_errors,
                     connection_error_probability: f.connection_error_probability,
+                    connection_error_kind: mockforge_chaos::config::ConnectionErrorKind::Http503,
                     timeout_errors: f.timeout_errors,
                     timeout_ms: f.timeout_ms,
                     timeout_probability: f.timeout_probability,
@@ -1735,6 +1736,7 @@ pub async fn handle_serve(
                     corruption_type: mockforge_chaos::config::CorruptionType::None,
                     error_pattern: None,
                     mockai_enabled: false,
+                    request_matcher: None,
                 }
             }),
             rate_limit: chaos_eng_config.rate_limit.as_ref().map(|r| {
@@ -2130,9 +2132,31 @@ pub async fn handle_serve(
             }
         }
     });
+    // If chaos is enabled AND uses TCP-level connection errors, wrap the HTTP
+    // listener so RST / FIN faults are surfaced before axum/hyper see the socket.
+    // For HTTP-503 mode (or chaos disabled), use the plain serve path so existing
+    // `ConnectInfo<SocketAddr>` handlers keep working.
+    let chaos_listener_cfg = if chaos_config.enabled
+        && chaos_config
+            .fault_injection
+            .as_ref()
+            .map(|f| {
+                f.enabled
+                    && f.connection_errors
+                    && !matches!(
+                        f.connection_error_kind,
+                        mockforge_chaos::ConnectionErrorKind::Http503
+                    )
+            })
+            .unwrap_or(false)
+    {
+        Some(chaos_config_arc.clone())
+    } else {
+        None
+    };
     let http_handle = tokio::spawn(async move {
         tokio::select! {
-            result = mockforge_http::serve_router_with_tls_notify(http_port, http_app, http_tls_config_final, Some(http_bound_tx)) => {
+            result = mockforge_http::serve_router_with_tls_notify_chaos(http_port, http_app, http_tls_config_final, Some(http_bound_tx), chaos_listener_cfg) => {
                 result.map_err(|e| format!("HTTP server error: {}", e))
             }
             _ = http_shutdown.cancelled() => {
