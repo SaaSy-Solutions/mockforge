@@ -34,10 +34,14 @@ amqp:
 You can override configuration using environment variables:
 
 ```bash
+export MOCKFORGE_AMQP_ENABLED=true
 export MOCKFORGE_AMQP_PORT=5673
 export MOCKFORGE_AMQP_HOST=0.0.0.0
-export MOCKFORGE_AMQP_FIXTURES_DIR=./custom/fixtures
 ```
+
+`fixtures_dir` is YAML-only — the AMQP config loader doesn't currently
+honor a `MOCKFORGE_AMQP_FIXTURES_DIR` env var. Configure it in the
+`amqp:` YAML block instead.
 
 ## Advanced Configuration
 

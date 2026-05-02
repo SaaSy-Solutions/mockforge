@@ -1,263 +1,123 @@
 # MQTT Configuration Reference
 
-This document provides a comprehensive reference for configuring the MockForge MQTT broker. The MQTT implementation supports all standard MQTT 3.1.1 and 5.0 features with additional MockForge-specific configuration options.
+This document covers MockForge's actual MQTT broker configuration surface
+in v0.3.x. The MQTT implementation supports MQTT 3.1.1 and 5.0 protocol
+features (publish, subscribe, QoS 0/1/2, retained messages, wildcards),
+but the configuration surface itself is intentionally narrow — broader
+concerns (TLS, auth, ACL, rate limiting) are handled at the platform
+level rather than by per-protocol fields.
 
-## Basic Configuration
+> **Status legend used in this chapter:**
+> - **Implemented** (default) — fields under "Configuration" below.
+> - **Roadmap** — TLS-with-cert-paths, authentication / authorization,
+>   topic ACLs, JWT/OAuth2, persistent sessions with custom expiry, and
+>   per-client message-flow tuning. Not yet wired into `MqttConfig`.
+> - **Use the platform alternative** — for cross-cutting concerns (rate
+>   limiting, max connections, latency injection, fault injection),
+>   configure the [chaos engine](../../user-guide/chaos-engineering.md)
+>   instead. It hooks every protocol on the same listener config surface.
 
-```yaml
-mqtt:
-  # Enable/disable MQTT broker
-  enabled: true
+## Configuration
 
-  # Server binding
-  port: 1883
-  host: "0.0.0.0"
-
-  # Connection limits
-  max_connections: 1000
-
-  # Message size limits
-  max_packet_size: 1048576  # 1MB
-
-  # Connection timeouts
-  keep_alive_secs: 60
-```
-
-## Advanced Configuration
-
-### Connection Management
+The full set of YAML config knobs `MqttConfig` accepts in v0.3.x:
 
 ```yaml
 mqtt:
-  # Maximum concurrent connections
-  max_connections: 1000
-
-  # Maximum packet size (bytes)
-  max_packet_size: 1048576  # 1MB
-
-  # Default keep-alive timeout (seconds)
-  keep_alive_secs: 60
-
-  # Maximum QoS 1/2 messages in flight per client
-  max_inflight_messages: 20
-
-  # Maximum queued messages per client
-  max_queued_messages: 100
+  enabled: true                    # Start the MQTT broker
+  port: 1883                       # Listener port (TCP, plaintext)
+  host: "0.0.0.0"                  # Bind address
+  max_connections: 1000            # Reject new clients beyond this count
+  max_packet_size: 268435456       # 256 MiB — packet-size cap
+  keep_alive_secs: 60              # PINGREQ deadline default
+  fixtures_dir: "./fixtures/mqtt"  # Optional: directory of MQTT fixture files
+  enable_retained_messages: true   # Honor RETAIN flag on PUBLISH
+  max_retained_messages: 10000     # Total retained-message cap across all topics
 ```
 
-### Quality of Service (QoS)
+That's the entire struct. Anything else you find in older docs is roadmap.
 
-MockForge supports all MQTT QoS levels:
-
-- **QoS 0**: At most once delivery (fire and forget)
-- **QoS 1**: At least once delivery (acknowledged)
-- **QoS 2**: Exactly once delivery (assured)
-
-QoS levels are configured per fixture and can be overridden by client requests.
-
-### Retained Messages
-
-```yaml
-mqtt:
-  # Enable retained message support
-  retained_messages_enabled: true
-
-  # Maximum retained messages per topic
-  max_retained_per_topic: 1
-
-  # Maximum total retained messages
-  max_total_retained: 10000
-```
-
-### Session Management
-
-```yaml
-mqtt:
-  # Enable persistent sessions
-  persistent_sessions: true
-
-  # Session expiry (seconds)
-  session_expiry_secs: 3600
-
-  # Clean session behavior
-  force_clean_session: false
-```
-
-## TLS/SSL Configuration
-
-For secure MQTT (MQTT over TLS):
-
-```yaml
-mqtt:
-  # Use TLS
-  tls_enabled: true
-  tls_port: 8883
-
-  # Certificate paths
-  tls_cert_path: "/path/to/server.crt"
-  tls_key_path: "/path/to/server.key"
-
-  # Client certificate verification
-  tls_require_client_cert: false
-  tls_ca_path: "/path/to/ca.crt"
-```
-
-## Authentication and Authorization
-
-### Basic Authentication
-
-```yaml
-mqtt:
-  # Enable authentication
-  auth_enabled: true
-
-  # Authentication method
-  auth_method: "basic"  # basic, jwt, oauth2
-
-  # User database
-  users:
-    - username: "user1"
-      password: "password1"
-      permissions:
-        - "publish:sensors/#"
-        - "subscribe:actuators/#"
-    - username: "device1"
-      password: "devicepass"
-      permissions:
-        - "publish:devices/device1/#"
-        - "subscribe:commands/device1/#"
-```
-
-### JWT Authentication
-
-```yaml
-mqtt:
-  auth_method: "jwt"
-
-  jwt:
-    # JWT issuer
-    issuer: "mockforge"
-
-    # JWT audience
-    audience: "mqtt-clients"
-
-    # Secret key or public key path
-    secret: "your-jwt-secret"
-    # OR
-    public_key_path: "/path/to/public.pem"
-
-    # Token validation
-    validate_exp: true
-    validate_iat: true
-    validate_nbf: true
-
-    # Custom claims mapping
-    claims_mapping:
-      permissions: "perms"
-      client_id: "client"
-```
-
-## Topic Authorization
-
-```yaml
-mqtt:
-  # Topic access control
-  topic_acl:
-    # Allow anonymous access to these topics
-    anonymous_topics:
-      - "public/#"
-
-    # Deny access to these topics
-    denied_topics:
-      - "admin/#"
-      - "system/#"
-
-    # Require authentication for these topics
-    authenticated_topics:
-      - "private/#"
-      - "secure/#"
-```
-
-## Logging and Monitoring
-
-```yaml
-mqtt:
-  # Log level
-  log_level: "info"
-
-  # Enable connection logging
-  log_connections: true
-
-  # Enable message logging (WARNING: can be verbose)
-  log_messages: false
-
-  # Metrics collection
-  metrics_enabled: true
-
-  # Prometheus metrics
-  metrics_path: "/metrics"
-  metrics_port: 9090
-```
-
-## Performance Tuning
-
-```yaml
-mqtt:
-  # Thread pool size
-  worker_threads: 4
-
-  # Connection backlog
-  connection_backlog: 1024
-
-  # Socket options
-  socket:
-    # TCP_NODELAY
-    no_delay: true
-
-    # SO_KEEPALIVE
-    keep_alive: true
-
-    # Buffer sizes
-    send_buffer_size: 65536
-    recv_buffer_size: 65536
-```
-
-## Environment Variables
-
-Override configuration with environment variables:
+### CLI flags
 
 ```bash
-# Basic settings
-export MOCKFORGE_MQTT_ENABLED=true
-export MOCKFORGE_MQTT_PORT=1883
-export MOCKFORGE_MQTT_HOST=0.0.0.0
-
-# Connection limits
-export MOCKFORGE_MQTT_MAX_CONNECTIONS=1000
-export MOCKFORGE_MQTT_MAX_PACKET_SIZE=1048576
-
-# TLS settings
-export MOCKFORGE_MQTT_TLS_ENABLED=false
-export MOCKFORGE_MQTT_TLS_CERT_PATH=/path/to/cert.pem
-export MOCKFORGE_MQTT_TLS_KEY_PATH=/path/to/key.pem
-
-# Authentication
-export MOCKFORGE_MQTT_AUTH_ENABLED=true
-export MOCKFORGE_MQTT_AUTH_METHOD=basic
+mockforge serve --spec api.yaml --mqtt-port 1883
 ```
 
-## Configuration Validation
+### Environment variables
 
-MockForge validates MQTT configuration on startup:
+```bash
+MOCKFORGE_MQTT_ENABLED=true
+MOCKFORGE_MQTT_PORT=1883
+MOCKFORGE_MQTT_HOST=0.0.0.0
+MOCKFORGE_MQTT_FIXTURES_DIR=./fixtures/mqtt
+```
 
-- **Port conflicts**: Checks if the configured port is available
-- **Certificate validation**: Verifies TLS certificates exist and are valid
-- **ACL consistency**: Ensures topic ACL rules don't conflict
-- **Resource limits**: Validates connection and message limits are reasonable
+These are the only MQTT-specific env vars currently honored by the config
+loader. Setting `MOCKFORGE_MQTT_TLS_ENABLED` / `MOCKFORGE_MQTT_AUTH_*`
+won't error — they'll just be silently ignored, because the corresponding
+config fields don't exist yet.
+
+## QoS support
+
+All three QoS levels work and are honored by the broker:
+
+- **QoS 0** — At most once delivery (fire and forget).
+- **QoS 1** — At least once delivery (PUBACK roundtrip).
+- **QoS 2** — Exactly once delivery (full PUBREC / PUBREL / PUBCOMP).
+
+QoS is a per-message attribute set by publishing clients. Fixtures can
+also set QoS levels on auto-published messages — see
+[fixtures.md](./fixtures.md).
+
+## Retained messages and wildcards
+
+Both work as defined by the MQTT specification:
+
+- `enable_retained_messages: true` (default) makes MockForge honor the
+  `RETAIN` flag on PUBLISH and replay the latest retained message on each
+  topic to new subscribers.
+- Subscriptions support `+` (single-level wildcard) and `#` (multi-level
+  wildcard). A subscription to `sensors/+/temperature` matches
+  `sensors/garage/temperature` but not `sensors/garage/humidity/inside`.
+- Subscriptions to `sensors/#` match every topic under `sensors/`.
+
+## Cross-cutting concerns
+
+For features the per-protocol config doesn't expose, use the chaos engine.
+Examples:
+
+- **Rate limiting**: `chaos.rate_limit.requests_per_second` caps publishes
+  / subscribes per client.
+- **Max connections at a finer scope**: `chaos.traffic_shaping.max_connections`
+  applies platform-wide.
+- **Latency injection**: `chaos.latency.fixed_delay_ms` adds delay to every
+  protocol response — useful for slow-broker simulations.
+- **Fault injection**: drop random messages, force disconnects (TCP-level
+  via `chaos.fault_injection.connection_error_kind: tcp_reset`).
+
+See the [chaos engineering chapter](../../user-guide/chaos-engineering.md)
+for the full surface.
+
+## Roadmap (not yet implemented)
+
+These appeared in older drafts of this chapter; they're tracked but not
+landed. Configuring them in `mqtt:` will be silently ignored:
+
+- TLS with cert / key / CA paths (only the bare `tls_enabled` field exists
+  on AMQP today; MQTT doesn't have any TLS fields)
+- Authentication: basic / JWT / OAuth2 (`auth_*` fields)
+- Topic ACLs (`topic_acl` block)
+- Persistent sessions with custom expiry (`persistent_sessions`,
+  `session_expiry_secs`)
+- Per-client message-flow tuning (`max_inflight_messages`,
+  `max_queued_messages`)
+- Worker-thread / socket buffer tuning
+
+If you need any of these in the meantime, raise an issue describing your
+use case so it can be prioritized.
 
 ## Configuration Examples
 
-### Development Setup
+### Local development
 
 ```yaml
 mqtt:
@@ -265,66 +125,59 @@ mqtt:
   port: 1883
   host: "127.0.0.1"
   max_connections: 100
-  log_connections: true
-  log_messages: true
 ```
 
-### Production Setup
+### IoT-style (lots of slow clients)
 
 ```yaml
 mqtt:
   enabled: true
   port: 1883
   host: "0.0.0.0"
-  max_connections: 10000
-  tls_enabled: true
-  tls_port: 8883
-  tls_cert_path: "/etc/ssl/certs/mqtt.crt"
-  tls_key_path: "/etc/ssl/private/mqtt.key"
-  auth_enabled: true
-  auth_method: "jwt"
-  metrics_enabled: true
+  max_connections: 5000
+  max_packet_size: 524288         # 512 KiB — typical sensor payload
+  keep_alive_secs: 300            # 5 min for battery-powered devices
+  enable_retained_messages: true
+  max_retained_messages: 50000
 ```
 
-### IoT Gateway
+### With chaos for stress testing
 
 ```yaml
 mqtt:
   enabled: true
   port: 1883
   max_connections: 1000
-  max_packet_size: 524288  # 512KB for sensor data
-  keep_alive_secs: 300     # 5 minutes for battery-powered devices
-  retained_messages_enabled: true
-  max_total_retained: 5000
+
+observability:
+  chaos:
+    enabled: true
+    latency:
+      fixed_delay_ms: 100
+    fault_injection:
+      enabled: true
+      connection_errors: true
+      connection_error_probability: 0.01
+      connection_error_kind: tcp_close
 ```
 
 ## Troubleshooting
 
-### Common Issues
+**Connection rejected immediately** — check `max_connections`. The broker
+hard-caps; clients beyond the cap get refused at TCP accept time.
 
-**High CPU Usage**
-- Reduce `max_connections` or `worker_threads`
-- Enable connection rate limiting
-- Check for connection leaks
+**Clients can connect but RETAIN is ignored** — confirm
+`enable_retained_messages: true` and that `max_retained_messages` hasn't
+been exhausted.
 
-**Memory Issues**
-- Lower `max_queued_messages` and `max_inflight_messages`
-- Reduce `max_total_retained`
-- Monitor retained message growth
-
-**Connection Timeouts**
-- Increase `keep_alive_secs`
-- Check network connectivity
-- Verify firewall settings
-
-**TLS Handshake Failures**
-- Verify certificate validity
-- Check certificate chain
-- Ensure correct certificate format (PEM)
+**TLS / auth config silently ignored** — see the Roadmap section. These
+fields aren't wired yet; configure auth at your reverse-proxy / ingress
+layer for now.
 
 ## Next Steps
 
-- [Getting Started](../getting-started.md) - Basic MQTT setup
-- [Fixtures](fixtures.md) - Define MQTT mock scenarios
-- [Examples](examples.md) - Real-world usage examples
+- [Getting Started](./getting-started.md) — basic MQTT setup
+- [Fixtures](./fixtures.md) — define MQTT mock scenarios
+- [Examples](./examples.md) — real-world usage examples
+- [Chaos Engineering](../../user-guide/chaos-engineering.md) — for
+  cross-cutting concerns the per-protocol config doesn't yet cover
