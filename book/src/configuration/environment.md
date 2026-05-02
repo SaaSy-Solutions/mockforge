@@ -20,17 +20,10 @@ MockForge supports extensive configuration through environment variables. This p
 
 ### Recording and Replay
 
-- `MOCKFORGE_RECORD_ENABLED=true|false` (default: `false`)
-  - Enable recording of HTTP requests as fixtures
-  - Recorded fixtures can be replayed later
-
-- `MOCKFORGE_REPLAY_ENABLED=true|false` (default: `false`)
-  - Enable replay of recorded fixtures
-  - When enabled, serves recorded responses instead of generating new ones
-
-- `MOCKFORGE_PROXY_ENABLED=true|false` (default: `false`)
-  - Enable proxy mode for forwarding requests
-  - Useful for testing against real APIs
+Recording, replay, and proxy modes are configured via CLI flags (`--record`,
+`--replay`, `--proxy-target`) and YAML, not env vars. See the
+[Recording & Capture chapter](../user-guide/advanced-behavior.md#record--playback)
+for the full surface.
 
 ## HTTP Server Configuration
 
@@ -42,17 +35,9 @@ MockForge supports extensive configuration through environment variables. This p
 - `MOCKFORGE_HTTP_HOST=127.0.0.1` (default: `0.0.0.0`)
   - Host address for the HTTP server to bind to
 
-- `MOCKFORGE_CORS_ENABLED=true|false` (default: `true`)
-  - Enable/disable CORS headers in responses
-
-- `MOCKFORGE_REQUEST_TIMEOUT_SECS=30` (default: `30`)
-  - Timeout for HTTP requests in seconds
-
-### OpenAPI Integration
-
-- `MOCKFORGE_HTTP_OPENAPI_SPEC=path/to/spec.json`
-  - Path to OpenAPI specification file
-  - Enables automatic endpoint generation from OpenAPI spec
+The OpenAPI spec path is set via `--spec`, `MOCKFORGE_OPENAPI_SPEC_URL`, or
+the `http.spec` YAML field. CORS, request timeouts, and other middleware
+options are YAML-configured under the relevant section (see CLI `--help`).
 
 ### Validation and Templating
 
@@ -89,8 +74,7 @@ MockForge supports extensive configuration through environment variables. This p
 - `MOCKFORGE_WS_HOST=127.0.0.1` (default: `0.0.0.0`)
   - Host address for the WebSocket server to bind to
 
-- `MOCKFORGE_WS_CONNECTION_TIMEOUT_SECS=300` (default: `300`)
-  - WebSocket connection timeout in seconds
+Connection timeouts are YAML-only (`websocket.connection_timeout_secs`).
 
 ### Replay Configuration
 
@@ -105,8 +89,7 @@ MockForge supports extensive configuration through environment variables. This p
 - `MOCKFORGE_GRPC_PORT=50051` (default: `50051`)
   - Port for the gRPC server to listen on
 
-- `MOCKFORGE_GRPC_HOST=127.0.0.1` (default: `0.0.0.0`)
-  - Host address for the gRPC server to bind to
+Host binding for the gRPC server is YAML-only (`grpc.host`).
 
 ## Admin UI Configuration
 
@@ -225,10 +208,6 @@ backend; the OSS local mock server doesn't need them.
   - Directory where fixtures are stored
   - Used for recording and replaying HTTP requests
 
-- `MOCKFORGE_RECORD_GET_ONLY=true|false` (default: `false`)
-  - When recording, only record GET requests
-  - Reduces fixture file size for read-only APIs
-
 ## Observability
 
 ### Metrics CSV Log
@@ -245,11 +224,9 @@ backend; the OSS local mock server doesn't need them.
 
 ## Configuration Files
 
-### Configuration Loading
-
-- `MOCKFORGE_CONFIG_FILE=path/to/config.yaml`
-  - Path to YAML configuration file
-  - Alternative to environment variables
+The config file path is set via `--config <path>`, not env var. MockForge
+also auto-discovers `mockforge.yaml` / `mockforge.yml` / `mockforge.json`
+in the working directory.
 
 ## Usage Examples
 

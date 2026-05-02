@@ -111,6 +111,13 @@ ENV_VAR_RE = re.compile(
     r"""std::env::var(?:_os)?\(\s*['"](MOCKFORGE_[A-Z0-9_]+)['"]\s*\)"""
 )
 
+# `name: "MOCKFORGE_FOO_BAR"` inside a curated EnvVarDef registry that
+# `mockforge-cli` exposes via `mockforge config env`. Treat membership as
+# the project's canonical "we know about this var" list; any var named
+# here counts as in-code even if no `std::env::var` call directly reads it
+# (some are read via figment / config-crate Env::prefixed at runtime).
+ENV_REGISTRY_RE = re.compile(r"""name:\s*['"](MOCKFORGE_[A-Z0-9_]+)['"]""")
+
 # Match `MOCKFORGE_FOO_BAR` references in prose or code blocks.
 DOC_ENV_VAR_RE = re.compile(r"\b(MOCKFORGE_[A-Z0-9_]+)\b")
 
@@ -127,8 +134,17 @@ FLAG_RE = re.compile(r'#\[arg\([^\]]*long\s*=\s*"([a-z][a-z0-9-]+)"')
 
 
 def gather_env_vars() -> set[str]:
-    """All MOCKFORGE_* env vars referenced by `std::env::var(...)` in any
-    crate source file."""
+    """All MOCKFORGE_* env vars known to the workspace.
+
+    Two sources, unioned:
+      1. Direct reads via `std::env::var(...)` / `var_os(...)` in any crate.
+      2. Names registered in `mockforge-cli/src/config_commands.rs`'s
+         curated EnvVarDef table (the canonical 'we know about this var'
+         list, used by `mockforge config env`). This is the source of
+         truth for vars read via figment / config-crate Env::prefixed
+         at runtime, since those don't show up in static `std::env::var`
+         grep.
+    """
     found: set[str] = set()
     for rs in REPO.glob("crates/*/src/**/*.rs"):
         try:
@@ -136,6 +152,11 @@ def gather_env_vars() -> set[str]:
         except OSError:
             continue
         for m in ENV_VAR_RE.finditer(text):
+            found.add(m.group(1))
+    cfg_cmd = REPO / "crates" / "mockforge-cli" / "src" / "config_commands.rs"
+    if cfg_cmd.is_file():
+        text = cfg_cmd.read_text(encoding="utf-8", errors="ignore")
+        for m in ENV_REGISTRY_RE.finditer(text):
             found.add(m.group(1))
     return found
 
