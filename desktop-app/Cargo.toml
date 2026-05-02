@@ -10,7 +10,7 @@ description = "MockForge Desktop Application - Native desktop app for API mockin
 publish = false
 
 [build-dependencies]
-tauri-build = { version = "2.5", features = [] }
+tauri-build = { version = "2.6", features = [] }
 
 [dependencies]
 # Tauri dependencies
