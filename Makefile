@@ -275,6 +275,10 @@ outdated: ## Check for outdated dependencies
 spellcheck: ## Check for typos
 	typos
 
+# Docs / code drift gate (also runs in docs-check.yml on PRs)
+docs-drift: ## Verify every MOCKFORGE_* env var and CLI subcommand has docs
+	python3 scripts/check_docs_drift.py
+
 # Workspace sync targets
 sync-git: ## Sync workspaces to a git repository directory
 	@echo "Syncing workspaces to git repository..."

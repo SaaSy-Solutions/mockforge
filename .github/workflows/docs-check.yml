@@ -52,3 +52,9 @@ jobs:
 
       - name: Run docs verification script
         run: bash scripts/automated-tests/test-docs.sh
+
+      - name: Docs / code drift gate
+        # Fails if any MOCKFORGE_* env var or top-level CLI subcommand
+        # exists in code without a single mention in user-facing docs.
+        # See scripts/check_docs_drift.py for the allowlist.
+        run: python3 scripts/check_docs_drift.py
