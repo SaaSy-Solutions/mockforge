@@ -73,6 +73,7 @@
   - [Temporal Simulation](user-guide/temporal-simulation.md)
   - [Scenario State Machines](user-guide/scenario-state-machines.md)
   - [MockAI](user-guide/mockai.md)
+  - [AI / RAG-Driven Mock Data](user-guide/ai-rag.md)
   - [Generative Schema Mode](user-guide/generative-schema.md)
   - [AI Contract Diff](user-guide/ai-contract-diff.md)
   - [Chaos Lab](user-guide/chaos-lab.md)
