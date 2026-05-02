@@ -265,9 +265,7 @@ impl MockReflectionProxy {
     /// Apply response postprocessing for streaming DynamicMessage responses
     pub async fn postprocess_streaming_dynamic_response(
         &self,
-        response: &mut tonic::Response<
-            tokio_stream::wrappers::ReceiverStream<Result<DynamicMessage, Status>>,
-        >,
+        response: &mut tonic::Response<ReceiverStream<Result<DynamicMessage, Status>>>,
         service_name: &str,
         method_name: &str,
     ) -> Result<(), Status> {

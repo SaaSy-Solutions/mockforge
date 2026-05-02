@@ -243,7 +243,7 @@ impl ContractDiffHandler {
         let breaking_count = results
             .iter()
             .flat_map(|r| &r.mismatches)
-            .filter(|m| m.severity == crate::ai_contract_diff::MismatchSeverity::Critical)
+            .filter(|m| m.severity == MismatchSeverity::Critical)
             .count();
 
         let mut summary = format!(
@@ -270,7 +270,7 @@ impl ContractDiffHandler {
         result
             .mismatches
             .iter()
-            .filter(|m| m.severity == crate::ai_contract_diff::MismatchSeverity::Critical)
+            .filter(|m| m.severity == MismatchSeverity::Critical)
             .map(|m| BreakingChange {
                 path: m.path.clone(),
                 method: m.method.clone(),
@@ -302,7 +302,7 @@ impl ContractDiffHandler {
             let breaking = result
                 .mismatches
                 .iter()
-                .filter(|m| m.severity == crate::ai_contract_diff::MismatchSeverity::Critical)
+                .filter(|m| m.severity == MismatchSeverity::Critical)
                 .count();
             summary = format!("Found {} breaking change(s).", breaking);
         }

@@ -233,12 +233,12 @@ fn convert_operation(
         converted.insert("requestBody".to_string(), request_body);
     } else if !form_data_params.is_empty() {
         // Convert formData parameters to requestBody with form encoding
-        let mut properties = serde_json::Map::new();
+        let mut properties = Map::new();
         let mut required = Vec::new();
         let mut has_file = false;
         for param in &form_data_params {
             if let Some(name) = param.get("name").and_then(|v| v.as_str()) {
-                let mut prop = serde_json::Map::new();
+                let mut prop = Map::new();
                 if let Some(typ) = param.get("type").and_then(|v| v.as_str()) {
                     if typ == "file" {
                         prop.insert("type".to_string(), json!("string"));
@@ -262,7 +262,7 @@ fn convert_operation(
         } else {
             "application/x-www-form-urlencoded"
         };
-        let mut schema = serde_json::Map::new();
+        let mut schema = Map::new();
         schema.insert("type".to_string(), json!("object"));
         schema.insert("properties".to_string(), json!(properties));
         if !required.is_empty() {

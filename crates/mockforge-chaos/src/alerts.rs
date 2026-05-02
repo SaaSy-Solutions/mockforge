@@ -281,7 +281,7 @@ impl AlertRule {
                 window_minutes,
             } => {
                 // Filter metrics within the window
-                let cutoff = chrono::Utc::now() - chrono::Duration::minutes(*window_minutes);
+                let cutoff = Utc::now() - chrono::Duration::minutes(*window_minutes);
                 let windowed: Vec<_> = metrics.iter().filter(|m| m.timestamp >= cutoff).collect();
 
                 if windowed.is_empty() {

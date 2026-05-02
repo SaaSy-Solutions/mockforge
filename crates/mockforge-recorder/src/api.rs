@@ -311,7 +311,7 @@ struct ExportParams {
 #[derive(Debug, Deserialize)]
 struct CompareRequest {
     status_code: i32,
-    headers: std::collections::HashMap<String, String>,
+    headers: HashMap<String, String>,
     body: String,
 }
 
@@ -328,8 +328,8 @@ struct ClearResponse {
 #[derive(Debug, Serialize)]
 struct StatisticsResponse {
     total_requests: i64,
-    by_protocol: std::collections::HashMap<String, i64>,
-    by_status_code: std::collections::HashMap<i32, i64>,
+    by_protocol: HashMap<String, i64>,
+    by_status_code: HashMap<i32, i64>,
     avg_duration_ms: Option<f64>,
 }
 
@@ -856,7 +856,7 @@ async fn get_endpoint_timeline(
     // Build timeline data
     let mut response_time_trends = Vec::new();
     let mut status_code_history = Vec::new();
-    let mut error_patterns = std::collections::HashMap::new();
+    let mut error_patterns = HashMap::new();
 
     for snapshot in &snapshots {
         response_time_trends.push((
@@ -1107,7 +1107,7 @@ mod tests {
 
     #[test]
     fn test_compare_request_creation() {
-        let mut headers = std::collections::HashMap::new();
+        let mut headers = HashMap::new();
         headers.insert("content-type".to_string(), "application/json".to_string());
 
         let req = CompareRequest {
@@ -1142,10 +1142,10 @@ mod tests {
 
     #[test]
     fn test_statistics_response_creation() {
-        let mut by_protocol = std::collections::HashMap::new();
+        let mut by_protocol = HashMap::new();
         by_protocol.insert("http".to_string(), 100);
 
-        let mut by_status_code = std::collections::HashMap::new();
+        let mut by_status_code = HashMap::new();
         by_status_code.insert(200, 80);
         by_status_code.insert(404, 20);
 

@@ -267,7 +267,7 @@ impl ProtocolMiddleware for AuthMiddleware {
                 );
                 Ok(MiddlewareAction::ShortCircuit(ProtocolResponse {
                     status: ResponseStatus::HttpStatus(401),
-                    metadata: std::collections::HashMap::new(),
+                    metadata: HashMap::new(),
                     body: format!(r#"{{"error":"Authentication failed","reason":"{}"}}"#, reason)
                         .into_bytes(),
                     content_type: "application/json".to_string(),
@@ -281,7 +281,7 @@ impl ProtocolMiddleware for AuthMiddleware {
                 );
                 Ok(MiddlewareAction::ShortCircuit(ProtocolResponse {
                     status: ResponseStatus::HttpStatus(503),
-                    metadata: std::collections::HashMap::new(),
+                    metadata: HashMap::new(),
                     body: format!(
                         r#"{{"error":"Authentication service unavailable","reason":"{}"}}"#,
                         reason

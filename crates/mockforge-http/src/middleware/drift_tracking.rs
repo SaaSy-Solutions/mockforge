@@ -86,7 +86,7 @@ pub async fn drift_tracking_middleware_with_extensions(
 
     // Try to parse body as JSON for structured capture
     let captured_body = if !body_bytes.is_empty() {
-        serde_json::from_slice::<serde_json::Value>(&body_bytes).ok()
+        serde_json::from_slice::<Value>(&body_bytes).ok()
     } else {
         None
     };

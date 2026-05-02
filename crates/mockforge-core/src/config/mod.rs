@@ -504,7 +504,7 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
             let otel = config
                 .observability
                 .opentelemetry
-                .get_or_insert_with(crate::config::OpenTelemetryConfig::default);
+                .get_or_insert_with(OpenTelemetryConfig::default);
             otel.enabled = true;
             otel.otlp_endpoint = Some(endpoint);
         }

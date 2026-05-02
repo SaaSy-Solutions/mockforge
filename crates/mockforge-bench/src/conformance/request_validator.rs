@@ -320,7 +320,7 @@ fn validate_parameters(
     method: &str,
     path: &str,
     check_path_no_query: &str,
-    check_headers: &std::collections::HashMap<String, String>,
+    check_headers: &HashMap<String, String>,
     operation: &openapiv3::Operation,
     path_item: &openapiv3::PathItem,
     spec: &OpenAPI,

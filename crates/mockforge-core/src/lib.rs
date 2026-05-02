@@ -675,7 +675,7 @@ pub struct Config {
     /// Enable traffic shaping (bandwidth + burst loss)
     pub traffic_shaping_enabled: bool,
     /// Failure injection configuration
-    pub failure_config: Option<mockforge_foundation::failure_injection::FailureConfig>,
+    pub failure_config: Option<failure_injection::FailureConfig>,
     /// Proxy configuration
     pub proxy: Option<ProxyConfig>,
     /// Default latency profile

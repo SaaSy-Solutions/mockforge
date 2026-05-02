@@ -868,20 +868,20 @@ impl ManagementState {
 /// Build the management API router
 pub fn management_router(state: ManagementState) -> Router {
     let router = Router::new()
-        .route("/capabilities", get(health::get_capabilities))
-        .route("/health", get(health::health_check))
-        .route("/stats", get(health::get_stats))
-        .route("/config", get(health::get_config))
-        .route("/config/validate", post(health::validate_config))
-        .route("/config/bulk", post(health::bulk_update_config))
+        .route("/capabilities", get(get_capabilities))
+        .route("/health", get(health_check))
+        .route("/stats", get(get_stats))
+        .route("/config", get(get_config))
+        .route("/config/validate", post(validate_config))
+        .route("/config/bulk", post(bulk_update_config))
         .route("/mocks", get(mocks::list_mocks))
         .route("/mocks", post(mocks::create_mock))
         .route("/mocks/{id}", get(mocks::get_mock))
         .route("/mocks/{id}", put(mocks::update_mock))
         .route("/mocks/{id}", delete(mocks::delete_mock))
-        .route("/export", get(import_export::export_mocks))
-        .route("/import", post(import_export::import_mocks))
-        .route("/spec", get(health::get_openapi_spec));
+        .route("/export", get(export_mocks))
+        .route("/import", post(import_mocks))
+        .route("/spec", get(get_openapi_spec));
 
     #[cfg(feature = "smtp")]
     let router = router
@@ -944,7 +944,7 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/proxy/inspect", get(proxy::get_proxy_inspect));
 
     // AI-powered features
-    let router = router.route("/ai/generate-spec", post(ai_gen::generate_ai_spec));
+    let router = router.route("/ai/generate-spec", post(generate_ai_spec));
 
     // Snapshot diff endpoints
     let router = router.nest(
@@ -953,17 +953,16 @@ pub fn management_router(state: ManagementState) -> Router {
     );
 
     #[cfg(feature = "behavioral-cloning")]
-    let router =
-        router.route("/mockai/generate-openapi", post(ai_gen::generate_openapi_from_traffic));
+    let router = router.route("/mockai/generate-openapi", post(generate_openapi_from_traffic));
 
     let router = router
-        .route("/mockai/learn", post(ai_gen::learn_from_examples))
-        .route("/mockai/rules/explanations", get(ai_gen::list_rule_explanations))
-        .route("/mockai/rules/{id}/explanation", get(ai_gen::get_rule_explanation))
-        .route("/chaos/config", get(ai_gen::get_chaos_config))
-        .route("/chaos/config", post(ai_gen::update_chaos_config))
-        .route("/network/profiles", get(ai_gen::list_network_profiles))
-        .route("/network/profile/apply", post(ai_gen::apply_network_profile));
+        .route("/mockai/learn", post(learn_from_examples))
+        .route("/mockai/rules/explanations", get(list_rule_explanations))
+        .route("/mockai/rules/{id}/explanation", get(get_rule_explanation))
+        .route("/chaos/config", get(get_chaos_config))
+        .route("/chaos/config", post(update_chaos_config))
+        .route("/network/profiles", get(list_network_profiles))
+        .route("/network/profile/apply", post(apply_network_profile));
 
     // State machine API routes
     let router =

@@ -810,7 +810,7 @@ mod tests {
     fn test_mailbox_export_command() {
         let _cmd = MailboxCommands::Export {
             format: "json".to_string(),
-            output: std::path::PathBuf::from("emails.json"),
+            output: PathBuf::from("emails.json"),
         };
     }
 }

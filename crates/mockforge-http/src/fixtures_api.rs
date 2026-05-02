@@ -24,6 +24,7 @@
 //! - `DELETE /bulk                 → remove many (ids in JSON body)
 
 use axum::extract::{Path as AxumPath, Query, State};
+use axum::http::header::CONTENT_TYPE;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get};
@@ -248,8 +249,7 @@ async fn download_handler(
     };
     let path = state.fixtures_dir.join(format!("{}.json", safe));
     match fs::read_to_string(&path).await {
-        Ok(s) => (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, "application/json")], s)
-            .into_response(),
+        Ok(s) => (StatusCode::OK, [(CONTENT_TYPE, "application/json")], s).into_response(),
         Err(_) => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({

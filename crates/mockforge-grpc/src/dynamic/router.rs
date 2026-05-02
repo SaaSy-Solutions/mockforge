@@ -41,7 +41,7 @@ pub fn generate_message_from_descriptor(
     for field in descriptor.fields() {
         if let Some(v) = mock_value_for_field(&field, depth) {
             if field.is_list() {
-                msg.set_field(&field, prost_reflect::Value::List(vec![v]));
+                msg.set_field(&field, Value::List(vec![v]));
             } else {
                 msg.set_field(&field, v);
             }

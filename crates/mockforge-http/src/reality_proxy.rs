@@ -28,11 +28,15 @@
 use axum::{
     body::{to_bytes, Body},
     extract::Request,
-    http::{HeaderName, HeaderValue, Method, StatusCode, Uri},
+    http::{
+        header::{CONTENT_TYPE, HOST},
+        HeaderName, HeaderValue, Method, StatusCode, Uri,
+    },
     middleware::Next,
     response::Response,
 };
 use mockforge_core::consistency::UnifiedState;
+use reqwest::Method as ReqwestMethod;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::warn;
@@ -118,10 +122,8 @@ pub async fn reality_proxy_middleware(
             .unwrap_or_default();
             let mut resp = Response::new(Body::from(body));
             *resp.status_mut() = StatusCode::BAD_GATEWAY;
-            resp.headers_mut().insert(
-                axum::http::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            );
+            resp.headers_mut()
+                .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
             resp
         }
     }
@@ -149,7 +151,7 @@ async fn forward_to_upstream(
         if is_hop_by_hop(name) {
             continue;
         }
-        if name == axum::http::header::HOST {
+        if name == HOST {
             continue;
         }
         req_builder = req_builder.header(name.as_str(), value);
@@ -193,8 +195,8 @@ fn build_upstream_uri(base: &str, original: &Uri) -> Result<String, ProxyError> 
     Ok(format!("{}{}{}", base, path, query))
 }
 
-fn reqwest_method(m: &Method) -> reqwest::Method {
-    reqwest::Method::from_bytes(m.as_str().as_bytes()).unwrap_or(reqwest::Method::GET)
+fn reqwest_method(m: &Method) -> ReqwestMethod {
+    ReqwestMethod::from_bytes(m.as_str().as_bytes()).unwrap_or(ReqwestMethod::GET)
 }
 
 fn is_hop_by_hop(name: &HeaderName) -> bool {
