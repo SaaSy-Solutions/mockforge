@@ -399,6 +399,24 @@ mockforge bench-chunked --target http://localhost:3000/upload [OPTIONS]
 
 Reports req/s, p50/p95/p99 latency, and a status-code distribution at the end.
 
+### `validate-fixtures` - Validate Fixture Files
+
+Lint a directory or single file of fixture data against MockForge's schema.
+Useful pre-commit guard for repos that check fixtures into source control.
+
+```bash
+# Validate every fixture in a directory
+mockforge validate-fixtures --dir ./fixtures
+
+# Validate one file
+mockforge validate-fixtures --file ./fixtures/users.json
+
+# Verbose mode — show per-fixture details, not just failures
+mockforge validate-fixtures --dir ./fixtures --verbose
+```
+
+Exit code 0 on clean, non-zero on any validation failure.
+
 ### `tui` - Terminal Dashboard
 
 Live dashboard in the terminal showing server status, system metrics

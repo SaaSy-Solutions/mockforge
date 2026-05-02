@@ -168,6 +168,54 @@ MockForge supports extensive configuration through environment variables. This p
 ## Registry / Marketplace
 
 - `MOCKFORGE_REGISTRY_TOKEN=<token>` — auth token for publishing scenarios or plugins to the registry. Required for `mockforge scenario publish` and similar commands.
+- `MOCKFORGE_PLUGIN_REGISTRY_URL=<url>` — registry endpoint used by `mockforge plugin install` / `publish` (default: the public mockforge.dev registry).
+
+## OpenAPI / Spec Loading
+
+- `MOCKFORGE_OPENAPI_SPEC_URL=<url>` — alternative to `--spec`; load the OpenAPI spec from a URL at startup. Useful in containerized deployments where the spec lives behind a static CDN.
+
+## Distributed Tracing (OpenTelemetry / OTLP)
+
+- `MOCKFORGE_OTLP_ENDPOINT=<url>` — OTLP collector endpoint (e.g. `http://jaeger:4317` or `http://otel-collector:4318`).
+- `MOCKFORGE_OTLP_SERVICE_NAME=<name>` — service name attached to spans (default: `mockforge`).
+- `MOCKFORGE_OTLP_SAMPLING_RATE=<float>` — `0.0`–`1.0`. `1.0` = trace every request.
+
+## Rate Limiting
+
+- `MOCKFORGE_RATE_LIMIT_ENABLED=true|false` — toggle the HTTP middleware rate limiter.
+- `MOCKFORGE_RATE_LIMIT_DISABLED=true|false` — explicit opt-out (overrides config-file `enabled: true`). Useful for `--no-rate-limit` parity in containers.
+- `MOCKFORGE_RATE_LIMIT_RPM=<int>` — global requests-per-minute cap.
+
+## Kafka Protocol
+
+- `MOCKFORGE_KAFKA_ENABLED=true|false` — start the Kafka mock listener.
+- `MOCKFORGE_KAFKA_ADVERTISED_PORT=<int>` — port advertised in metadata responses (defaults to the bind port).
+- `MOCKFORGE_KAFKA_FIXTURES_DIR=path/to/kafka-fixtures` — directory of pre-recorded Kafka topic fixtures.
+
+## Federation
+
+- `MOCKFORGE_FEDERATION_POLL_URL=<url>` — upstream MockForge instance to poll for shared workspaces.
+- `MOCKFORGE_FEDERATION_POLL_TOKEN=<token>` — auth token for the upstream poll.
+- `MOCKFORGE_FEDERATION_POLL_INTERVAL_SECS=<int>` — poll cadence (default: 60).
+- `MOCKFORGE_FEDERATION_WORKSPACE_ID=<uuid>` — workspace this instance federates into.
+
+## Encryption / Secret Storage
+
+- `MOCKFORGE_ENCRYPTION_KEY=<base64-key>` — base64-encoded AES-256 key used to encrypt config/data at rest.
+- `MOCKFORGE_MASTER_KEY=<base64-key>` — master KEK that wraps per-workspace data encryption keys.
+- `MOCKFORGE_BYOK_ENCRYPTION_KEY=<base64-key>` — bring-your-own-key override for workspace encryption.
+- `MOCKFORGE_KMS_PROVIDER=aws|gcp|azure|vault` — when set, MockForge fetches the master key from a managed KMS instead of using `MOCKFORGE_MASTER_KEY`.
+- `MOCKFORGE_KMS_REGION=<region>` — region for the KMS provider (e.g. `us-east-1`).
+- `MOCKFORGE_VAULT_ADDR=<url>` — Vault server address when using `MOCKFORGE_KMS_PROVIDER=vault`.
+- `MOCKFORGE_VAULT_TOKEN=<token>` — Vault auth token.
+
+## Database (registry server / collab)
+
+These apply to the multi-tenant registry server and the collab workspace
+backend; the OSS local mock server doesn't need them.
+
+- `MOCKFORGE_DB_TYPE=sqlite|postgres` — backing store for the registry / collab.
+- `MOCKFORGE_DB_CONNECTION=<url>` — connection string (e.g. `postgres://user:pass@host/db` or `sqlite:./mockforge.db`).
 
 ## Fixtures and Testing
 
