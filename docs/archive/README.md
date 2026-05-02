@@ -84,4 +84,12 @@ mv docs/archive/status-reviews/*.md .
 
 ## Last Updated
 
-2025-01-27 - Initial archive organization
+- **2026-05-02** — Tier 3 sweep of the docs/code audit (issue #79). Archived
+  ~86 additional internal status / progress / phase / verification files
+  that had accumulated since the 2025-01 sweep. See `MAPPING.txt` for the
+  full source-path mapping of every file moved in this round (top-level
+  files that originated outside `docs/` are prefixed with `_<origin>_`
+  to preserve where they came from). The companion Tier 4 PR added a CI
+  gate (`make docs-drift`) so future status docs that should be archived
+  can be flagged automatically rather than accumulating again.
+- **2025-01-27** — Initial archive organization.
