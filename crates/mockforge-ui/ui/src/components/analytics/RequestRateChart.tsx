@@ -116,7 +116,7 @@ export const RequestRateChart: React.FC<RequestRateChartProps> = ({ data, isLoad
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Request Rate by Protocol</h3>
         <div className="h-64 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
         </div>
       </Card>
     );
@@ -126,7 +126,7 @@ export const RequestRateChart: React.FC<RequestRateChartProps> = ({ data, isLoad
     return (
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Request Rate by Protocol</h3>
-        <div className="h-64 flex items-center justify-center text-gray-500">
+        <div className="h-64 flex items-center justify-center text-muted-foreground">
           No data available
         </div>
       </Card>

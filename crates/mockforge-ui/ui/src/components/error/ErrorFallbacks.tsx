@@ -28,20 +28,20 @@ export function ErrorFallback({
 }: ErrorFallbackProps) {
   return (
     <div className={`flex flex-col items-center justify-center p-8 text-center ${className}`}>
-      <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-4">
+      <div className="p-4 rounded-full bg-danger-50 dark:bg-danger-900/20 mb-4">
         <StatusIcon status="error" size="lg" />
       </div>
 
-      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
-      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">{description}</p>
+      <h3 className="text-xl font-bold text-foreground mb-2">{title}</h3>
+      <p className="text-base text-muted-foreground mb-6 max-w-md">{description}</p>
 
       {showDetails && error && (
         <details className="mb-6 w-full max-w-md">
-          <summary className="cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100 mb-2">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground mb-2">
             Show error details
           </summary>
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
-            <div className="text-sm font-mono text-red-700 dark:text-red-500 break-all">
+          <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg text-left">
+            <div className="text-sm font-mono text-danger-700 dark:text-danger-500 break-all">
               {error.message}
             </div>
           </div>
@@ -104,8 +104,8 @@ export function DataErrorFallback({ retry, resetError }: { retry?: () => void; r
         <Database className="h-8 w-8 text-orange-600 dark:text-orange-400" />
       </div>
 
-      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Data Loading Failed</h3>
-      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+      <h3 className="text-xl font-bold text-foreground mb-2">Data Loading Failed</h3>
+      <p className="text-base text-muted-foreground mb-6 max-w-md">
         There was a problem loading the data. This might be a temporary issue.
       </p>
 
@@ -138,12 +138,12 @@ export function DataErrorFallback({ retry, resetError }: { retry?: () => void; r
 export function TimeoutErrorFallback({ retry, resetError }: { retry?: () => void; resetError?: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
-      <div className="p-4 rounded-full bg-yellow-50 dark:bg-yellow-900/20 mb-4">
-        <Clock className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
+      <div className="p-4 rounded-full bg-warning-50 dark:bg-warning-900/20 mb-4">
+        <Clock className="h-8 w-8 text-warning-600 dark:text-warning-400" />
       </div>
 
-      <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Request Timed Out</h3>
-      <p className="text-base text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+      <h3 className="text-xl font-bold text-foreground mb-2">Request Timed Out</h3>
+      <p className="text-base text-muted-foreground mb-6 max-w-md">
         The request took too long to complete. This might be due to a slow connection or server issues.
       </p>
 
@@ -184,13 +184,13 @@ export function CompactErrorFallback({
   message?: string;
 }) {
   return (
-    <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+    <div className="flex items-center justify-between p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
       <div className="flex items-center gap-3">
-        <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+        <AlertTriangle className="h-5 w-5 text-danger-600 dark:text-danger-400" />
         <div>
-          <div className="text-sm font-medium text-red-700 dark:text-red-500">{message}</div>
+          <div className="text-sm font-medium text-danger-700 dark:text-danger-500">{message}</div>
           {error && (
-            <div className="text-sm text-gray-600 dark:text-gray-400">{error.message}</div>
+            <div className="text-sm text-muted-foreground">{error.message}</div>
           )}
         </div>
       </div>

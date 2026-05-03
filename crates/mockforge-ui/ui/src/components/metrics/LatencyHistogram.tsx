@@ -118,15 +118,15 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
         <div className="mb-4">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-green-600">{selectedMetric.p50}ms</div>
+              <div className="text-2xl font-bold text-success-600">{selectedMetric.p50}ms</div>
               <div className="text-xs text-muted-foreground">P50 (Median)</div>
             </div>
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-yellow-600">{selectedMetric.p95}ms</div>
+              <div className="text-2xl font-bold text-warning-600">{selectedMetric.p95}ms</div>
               <div className="text-xs text-muted-foreground">P95</div>
             </div>
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-red-600">{selectedMetric.p99}ms</div>
+              <div className="text-2xl font-bold text-danger-600">{selectedMetric.p99}ms</div>
               <div className="text-xs text-muted-foreground">P99</div>
             </div>
           </div>

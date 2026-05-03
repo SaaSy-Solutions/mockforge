@@ -72,7 +72,7 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
                   <ModernBadge
                     variant="outline"
                     size="sm"
-                    className="flex items-center gap-1 border-blue-300 text-blue-700"
+                    className="flex items-center gap-1 border-info-300 text-info-700"
                     title={`Frozen artifact (deterministic mode)${scenario.frozen_path ? `: ${scenario.frozen_path}` : ''}`}
                   >
                     <Snowflake className="h-3 w-3" />

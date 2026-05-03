@@ -98,7 +98,7 @@ export function TimeTravelPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
+            <p className="mt-4 text-muted-foreground">Loading...</p>
           </div>
         </div>
       </div>
@@ -132,10 +132,10 @@ export function TimeTravelPage() {
               <Clock className="h-6 w-6" />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              <h3 className="text-xl font-semibold text-foreground">
                 Time Travel Status
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 {isEnabled ? 'Virtual time is active' : 'Using real time'}
               </p>
             </div>
@@ -148,29 +148,29 @@ export function TimeTravelPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+          <div className="p-4 rounded-lg bg-muted/50 border border-border">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
               {isEnabled ? 'Virtual Time' : 'Real Time'}
             </p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+            <p className="text-2xl font-bold text-foreground tabular-nums">
               {formatTime(virtualTime || status?.real_time)}
             </p>
           </div>
           {isEnabled && (
             <>
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                   Time Scale
                 </p>
                 <p className="text-2xl font-bold text-brand-600 dark:text-brand-400">
                   {scaleFactor.toFixed(1)}x
                 </p>
               </div>
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                   Real Time
                 </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+                <p className="text-2xl font-bold text-foreground tabular-nums">
                   {formatTime(status?.real_time)}
                 </p>
               </div>
@@ -184,7 +184,7 @@ export function TimeTravelPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Initial Time (ISO 8601, optional)
                   </label>
                   <Input
@@ -195,11 +195,11 @@ export function TimeTravelPage() {
                     className="w-full"
                   />
                   {initialTimeError && (
-                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{initialTimeError}</p>
+                    <p className="mt-1 text-sm text-danger-600 dark:text-danger-400">{initialTimeError}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Time Scale (1.0 = real time)
                   </label>
                   <Input
@@ -226,7 +226,7 @@ export function TimeTravelPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Advance Duration (e.g., "1h", "+1 week", "2d")
                   </label>
                   <div className="flex gap-2">
@@ -248,7 +248,7 @@ export function TimeTravelPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-foreground mb-2">
                     Time Scale
                   </label>
                   <div className="flex gap-2">
@@ -316,7 +316,7 @@ export function TimeTravelPage() {
 
         <TabsContent value="cron" className="space-y-4">
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               Scheduled Cron Jobs
             </h3>
             {cronLoading ? (
@@ -328,21 +328,21 @@ export function TimeTravelPage() {
                 {(cronData.jobs as any[]).map((job: any) => (
                   <div
                     key={job.id}
-                    className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                    className="p-4 rounded-lg border border-border bg-muted/50"
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">{job.name}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{job.schedule}</p>
+                        <h4 className="font-semibold text-foreground">{job.name}</h4>
+                        <p className="text-sm text-muted-foreground">{job.schedule}</p>
                         {job.description && (
-                          <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">{job.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{job.description}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={job.enabled ? 'success' : 'default'}>
                           {job.enabled ? 'Enabled' : 'Disabled'}
                         </Badge>
-                        <span className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                           {job.execution_count || 0} executions
                         </span>
                       </div>
@@ -358,7 +358,7 @@ export function TimeTravelPage() {
 
         <TabsContent value="mutations" className="space-y-4">
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               Data Mutation Rules
             </h3>
             {mutationLoading ? (
@@ -370,23 +370,23 @@ export function TimeTravelPage() {
                 {(mutationData.rules as any[]).map((rule: any) => (
                   <div
                     key={rule.id}
-                    className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                    className="p-4 rounded-lg border border-border bg-muted/50"
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">{rule.id}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <h4 className="font-semibold text-foreground">{rule.id}</h4>
+                        <p className="text-sm text-muted-foreground">
                           Entity: {rule.entity_name}
                         </p>
                         {rule.description && (
-                          <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">{rule.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{rule.description}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant={rule.enabled ? 'success' : 'default'}>
                           {rule.enabled ? 'Enabled' : 'Disabled'}
                         </Badge>
-                        <span className="text-xs text-gray-500 dark:text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                           {rule.execution_count || 0} executions
                         </span>
                       </div>
@@ -406,7 +406,7 @@ export function TimeTravelPage() {
 
         <TabsContent value="scenarios" className="space-y-4">
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               Time Travel Scenarios
             </h3>
             <Alert

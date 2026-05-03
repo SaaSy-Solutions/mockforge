@@ -21,7 +21,7 @@ export function ParallelNode({ data, selected }: NodeProps<ParallelNodeData>) {
   return (
     <div
       className={cn(
-        'relative bg-white dark:bg-gray-800 border-2 rounded-lg shadow-lg min-w-[180px]',
+        'relative bg-card border-2 rounded-lg shadow-lg min-w-[180px]',
         selected
           ? 'border-teal-500 dark:border-teal-400'
           : 'border-teal-300 dark:border-teal-600'
@@ -36,7 +36,7 @@ export function ParallelNode({ data, selected }: NodeProps<ParallelNodeData>) {
         {/* Header */}
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-teal-500" />
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">
+          <div className="text-sm font-medium text-foreground flex-1 truncate">
             {data.name}
           </div>
         </div>

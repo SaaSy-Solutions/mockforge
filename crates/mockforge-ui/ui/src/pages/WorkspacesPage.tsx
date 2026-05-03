@@ -447,7 +447,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">{error}</div>
+        <div className="text-danger-500">{error}</div>
       </div>
     );
   }
@@ -468,32 +468,32 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                 New Workspace
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white dark:bg-gray-900">
+            <DialogContent className="bg-card">
               <DialogHeader className="space-y-2">
-                <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Workspace</DialogTitle>
-                <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                <DialogTitle className="text-xl font-semibold text-foreground">Create New Workspace</DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
                   Create a new workspace to organize your mock API endpoints.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
+                  <Label htmlFor="workspace-name" className="text-foreground">Name</Label>
                   <Input
                     id="workspace-name"
                     value={newWorkspace.name}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, name: e.target.value })}
                     placeholder="My Workspace"
-                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
+                  <Label htmlFor="workspace-description" className="text-foreground">Description</Label>
                   <Textarea
                     id="workspace-description"
                     value={newWorkspace.description}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, description: e.target.value })}
                     placeholder="Optional description..."
-                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
                 {!IS_CLOUD && (
@@ -504,17 +504,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                         checked={enableSync}
                         onCheckedChange={setEnableSync}
                       />
-                      <Label htmlFor="enable-sync" className="text-gray-900 dark:text-gray-100">Enable directory sync</Label>
+                      <Label htmlFor="enable-sync" className="text-foreground">Enable directory sync</Label>
                     </div>
                     {enableSync && (
                       <div>
-                        <Label htmlFor="sync-directory" className="text-gray-900 dark:text-gray-100">Sync Directory</Label>
+                        <Label htmlFor="sync-directory" className="text-foreground">Sync Directory</Label>
                         <Input
                           id="sync-directory"
                           value={syncDirectory}
                           onChange={(e) => setSyncDirectory(e.target.value)}
                           placeholder="/path/to/workspace"
-                          className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                          className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                         />
                       </div>
                     )}
@@ -1183,18 +1183,18 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
       {/* Edit Workspace Dialog */}
       <Dialog open={editWorkspaceOpen} onOpenChange={setEditWorkspaceOpen}>
-        <DialogContent className="bg-white dark:bg-gray-900">
+        <DialogContent className="bg-card">
           <DialogHeader className="space-y-2">
-            <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            <DialogTitle className="text-xl font-semibold text-foreground">
               Edit Workspace
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
               Update the workspace name or description.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
+              <Label htmlFor="edit-workspace-name" className="text-foreground">Name</Label>
               <Input
                 id="edit-workspace-name"
                 value={editWorkspaceData?.request.name ?? ''}
@@ -1204,11 +1204,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   )
                 }
                 placeholder="Workspace name"
-                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               />
             </div>
             <div>
-              <Label htmlFor="edit-workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
+              <Label htmlFor="edit-workspace-description" className="text-foreground">Description</Label>
               <Textarea
                 id="edit-workspace-description"
                 value={editWorkspaceData?.request.description ?? ''}
@@ -1218,7 +1218,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   )
                 }
                 placeholder="Optional description..."
-                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               />
             </div>
           </div>

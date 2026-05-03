@@ -90,10 +90,10 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-white dark:bg-gray-900">
+      <DialogContent className="sm:max-w-md bg-card">
         <DialogHeader className="space-y-2">
-          <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">Profile Settings</DialogTitle>
-          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          <DialogTitle className="text-xl font-semibold text-foreground">Profile Settings</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
             Update your account information and preferences.
           </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -107,7 +107,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           )}
 
           <div className="space-y-2">
-            <label htmlFor="username" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <label htmlFor="username" className="text-sm font-medium text-foreground">
               Username
             </label>
             <Input
@@ -116,7 +116,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               value={formData.username}
               onChange={(e) => handleInputChange('username', e.target.value)}
               placeholder="Enter your username"
-              className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.username ? 'border-destructive' : ''}`}
+              className={`bg-card text-foreground placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.username ? 'border-destructive' : ''}`}
             />
             {errors.username && (
               <p className="text-sm text-destructive">{errors.username}</p>
@@ -124,7 +124,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <label htmlFor="email" className="text-sm font-medium text-foreground">
               Email (Optional)
             </label>
             <Input
@@ -133,7 +133,7 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               value={formData.email}
               onChange={(e) => handleInputChange('email', e.target.value)}
               placeholder="Enter your email address"
-              className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.email ? 'border-destructive' : ''}`}
+              className={`bg-card text-foreground placeholder:text-gray-500 dark:placeholder:text-gray-400 ${errors.email ? 'border-destructive' : ''}`}
             />
             {errors.email && (
               <p className="text-sm text-destructive">{errors.email}</p>
@@ -141,18 +141,18 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <label className="text-sm font-medium text-foreground">
               Role
             </label>
             <div className="flex items-center gap-2">
               <span className={`text-xs px-2 py-1 rounded-full ${
                 user.role === 'admin'
-                  ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                  ? 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300'
+                  : 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300'
               }`}>
                 {user.role === 'admin' ? '🔑' : '👁️'} {user.role}
               </span>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-muted-foreground">
                 (Contact administrator to change role)
               </span>
             </div>

@@ -221,30 +221,30 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
   const getSeverityColor = (severity: string) => {
     switch (severity.toLowerCase()) {
       case 'critical':
-        return 'text-red-600 dark:text-red-400';
+        return 'text-danger-600 dark:text-danger-400';
       case 'high':
         return 'text-orange-600 dark:text-orange-400';
       case 'medium':
-        return 'text-yellow-600 dark:text-yellow-400';
+        return 'text-warning-600 dark:text-warning-400';
       case 'low':
-        return 'text-blue-600 dark:text-blue-400';
+        return 'text-info-600 dark:text-info-400';
       default:
-        return 'text-gray-600 dark:text-gray-400';
+        return 'text-muted-foreground';
     }
   };
 
   const getSeverityBadgeClasses = (severity: string) => {
     switch (severity.toLowerCase()) {
       case 'critical':
-        return 'text-red-600 dark:text-red-400 bg-red-600/10';
+        return 'text-danger-600 dark:text-danger-400 bg-danger-600/10';
       case 'high':
         return 'text-orange-600 dark:text-orange-400 bg-orange-600/10';
       case 'medium':
-        return 'text-yellow-600 dark:text-yellow-400 bg-yellow-600/10';
+        return 'text-warning-600 dark:text-warning-400 bg-warning/10';
       case 'low':
-        return 'text-blue-600 dark:text-blue-400 bg-blue-600/10';
+        return 'text-info-600 dark:text-info-400 bg-info/10';
       default:
-        return 'text-gray-600 dark:text-gray-400 bg-gray-600/10';
+        return 'text-muted-foreground bg-muted';
     }
   };
 
@@ -257,9 +257,9 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 dark:text-green-400';
-    if (score >= 60) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (score >= 80) return 'text-success-600 dark:text-success-400';
+    if (score >= 60) return 'text-warning-600 dark:text-warning-400';
+    return 'text-danger-600 dark:text-danger-400';
   };
 
   return (
@@ -363,7 +363,7 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
               <h3 className="text-lg font-semibold">Analysis Summary</h3>
               <div className="flex items-center space-x-2">
                 {artifactId && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     Artifact ID: {artifactId.substring(0, 8)}...
                   </span>
                 )}
@@ -377,27 +377,27 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
             <div className="space-y-4">
               <div className="flex items-center space-x-4">
                 <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Overall Score</div>
+                  <div className="text-sm text-muted-foreground">Overall Score</div>
                   <div className={`text-3xl font-bold ${getScoreColor(critique.overall_score)}`}>
                     {critique.overall_score.toFixed(1)}
                   </div>
                 </div>
                 {critique.tokens_used && (
                   <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Tokens Used</div>
+                    <div className="text-sm text-muted-foreground">Tokens Used</div>
                     <div className="text-lg font-semibold">{critique.tokens_used.toLocaleString()}</div>
                   </div>
                 )}
                 {critique.cost_usd && (
                   <div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Cost</div>
+                    <div className="text-sm text-muted-foreground">Cost</div>
                     <div className="text-lg font-semibold">${critique.cost_usd.toFixed(4)}</div>
                   </div>
                 )}
               </div>
 
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-sm text-gray-700 dark:text-gray-300">{critique.summary}</p>
+              <div className="pt-4 border-t border-border">
+                <p className="text-sm text-foreground">{critique.summary}</p>
               </div>
             </div>
           </Card>
@@ -411,11 +411,11 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
               </h3>
               <div className="space-y-4">
                 {critique.anti_patterns.map((pattern, idx) => (
-                  <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div key={idx} className="p-4 bg-muted rounded-lg">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-medium">{pattern.pattern_type}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">{pattern.location}</div>
+                        <div className="text-sm text-muted-foreground">{pattern.location}</div>
                       </div>
                       {getSeverityBadge(pattern.severity)}
                     </div>
@@ -424,7 +424,7 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
                       <strong>Suggestion:</strong> {pattern.suggestion}
                     </div>
                     {pattern.example && (
-                      <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">
+                      <div className="mt-2 p-2 bg-muted dark:bg-gray-700 rounded text-xs font-mono">
                         {pattern.example}
                       </div>
                     )}
@@ -438,16 +438,16 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
           {critique.redundancies.length > 0 && (
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <RefreshCw className="w-5 h-5 mr-2 text-blue-600 dark:text-blue-400" />
+                <RefreshCw className="w-5 h-5 mr-2 text-info-600 dark:text-info-400" />
                 Redundancies ({critique.redundancies.length})
               </h3>
               <div className="space-y-4">
                 {critique.redundancies.map((redundancy, idx) => (
-                  <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div key={idx} className="p-4 bg-muted rounded-lg">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-medium">{redundancy.redundancy_type}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                        <div className="text-sm text-muted-foreground">
                           Affected: {redundancy.affected_items.join(', ')}
                         </div>
                       </div>
@@ -472,20 +472,20 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
               </h3>
               <div className="space-y-4">
                 {critique.naming_issues.map((issue, idx) => (
-                  <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div key={idx} className="p-4 bg-muted rounded-lg">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <div className="font-medium">{issue.issue_type}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">{issue.location}</div>
+                        <div className="text-sm text-muted-foreground">{issue.location}</div>
                       </div>
                       {getSeverityBadge(issue.severity)}
                     </div>
                     <div className="text-sm mb-2">
-                      <strong>Current:</strong> <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">{issue.current_name}</code>
+                      <strong>Current:</strong> <code className="bg-muted px-1 rounded">{issue.current_name}</code>
                     </div>
                     <p className="text-sm mb-2">{issue.description}</p>
                     <div className="text-sm">
-                      <strong>Suggestion:</strong> <code className="bg-green-100 dark:bg-green-900 px-1 rounded">{issue.suggestion}</code>
+                      <strong>Suggestion:</strong> <code className="bg-success-100 dark:bg-success-900 px-1 rounded">{issue.suggestion}</code>
                     </div>
                   </div>
                 ))}
@@ -509,12 +509,12 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
                   <div className="text-sm font-medium mb-2">Error Message Issues</div>
                   <div className="space-y-2">
                     {critique.tone_analysis.error_message_issues.map((issue, idx) => (
-                      <div key={idx} className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                      <div key={idx} className="p-3 bg-muted rounded">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium">{issue.location}</span>
                           {getSeverityBadge(issue.severity)}
                         </div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        <div className="text-xs text-muted-foreground mb-1">
                           Current: {issue.current_text}
                         </div>
                         <div className="text-xs">
@@ -555,20 +555,20 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
                     <div className="text-sm font-medium mb-3">Hierarchy Improvements</div>
                     <div className="space-y-3">
                       {critique.restructuring.hierarchy_improvements.map((improvement, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div key={idx} className="p-4 bg-muted rounded-lg">
                           <div className="grid grid-cols-2 gap-4 mb-2">
                             <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">Current</div>
+                              <div className="text-xs text-muted-foreground">Current</div>
                               <div className="text-sm font-mono">{improvement.current}</div>
                             </div>
                             <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">Suggested</div>
-                              <div className="text-sm font-mono text-green-600 dark:text-green-400">
+                              <div className="text-xs text-muted-foreground">Suggested</div>
+                              <div className="text-sm font-mono text-success-600 dark:text-success-400">
                                 {improvement.suggested}
                               </div>
                             </div>
                           </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          <div className="text-xs text-muted-foreground mb-1">
                             Impact: {improvement.impact}
                           </div>
                           <div className="text-sm">{improvement.rationale}</div>
@@ -583,7 +583,7 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
                     <div className="text-sm font-medium mb-3">Consolidation Opportunities</div>
                     <div className="space-y-3">
                       {critique.restructuring.consolidation_opportunities.map((opp, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div key={idx} className="p-4 bg-muted rounded-lg">
                           <div className="text-sm mb-2">
                             <strong>Items:</strong> {opp.items.join(', ')}
                           </div>
@@ -612,15 +612,15 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
                     <div className="text-sm font-medium mb-3">Resource Modeling Suggestions</div>
                     <div className="space-y-3">
                       {critique.restructuring.resource_modeling.map((suggestion, idx) => (
-                        <div key={idx} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div key={idx} className="p-4 bg-muted rounded-lg">
                           <div className="grid grid-cols-2 gap-4 mb-2">
                             <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">Current</div>
+                              <div className="text-xs text-muted-foreground">Current</div>
                               <div className="text-sm">{suggestion.current}</div>
                             </div>
                             <div>
-                              <div className="text-xs text-gray-600 dark:text-gray-400">Suggested</div>
-                              <div className="text-sm text-green-600 dark:text-green-400">
+                              <div className="text-xs text-muted-foreground">Suggested</div>
+                              <div className="text-sm text-success-600 dark:text-success-400">
                                 {suggestion.suggested}
                               </div>
                             </div>

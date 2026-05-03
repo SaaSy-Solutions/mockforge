@@ -38,7 +38,7 @@ export const PillarUsageChart: React.FC<PillarUsageChartProps> = ({
   if (isLoading || !data) {
     return (
       <div className="h-64 flex items-center justify-center">
-        <div className="text-gray-500 dark:text-gray-400">Loading chart data...</div>
+        <div className="text-muted-foreground">Loading chart data...</div>
       </div>
     );
   }

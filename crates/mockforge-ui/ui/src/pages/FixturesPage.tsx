@@ -349,13 +349,13 @@ export function FixturesPage() {
   const getMethodBadgeColor = (method?: string): string => {
     switch (method?.toUpperCase()) {
       case 'GET':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
+        return 'bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400';
       case 'POST':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-400';
       case 'PUT':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/20 dark:text-warning-400';
       case 'DELETE':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+        return 'bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400';
       case 'PATCH':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
       default:
@@ -441,11 +441,11 @@ export function FixturesPage() {
         <ModernCard>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Search Fixtures
               </label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by name, path, tag, description…"
                   value={searchTerm}
@@ -456,13 +456,13 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 HTTP Method
               </label>
               <select
                 value={selectedMethod}
                 onChange={(e) => setSelectedMethod(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Methods</option>
                 <option value="GET">GET</option>
@@ -475,14 +475,14 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Tag
               </label>
               <select
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 disabled={allTags.length === 0}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
               >
                 <option value="all">All Tags</option>
                 {allTags.map((tag) => (
@@ -494,24 +494,24 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Summary
               </label>
-              <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="text-lg font-semibold text-foreground">
                     {filteredFixtures.length}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     {filteredFixtures.length === 1 ? 'Fixture' : 'Fixtures'}
                   </div>
                 </div>
                 {!isCloud && (
                   <div className="text-center">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    <div className="text-lg font-semibold text-foreground">
                       {formatFileSize(totalSize)}
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       Total Size
                     </div>
                   </div>
@@ -564,16 +564,16 @@ export function FixturesPage() {
                 return (
                   <div
                     key={fixture.id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+                      <div className="p-3 rounded-xl bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400 flex-shrink-0">
                         <FileText className="h-5 w-5" />
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                          <h3 className="font-semibold text-foreground truncate">
                             {fixtureDisplayName(fixture)}
                           </h3>
                           {fixture.method && (
@@ -591,18 +591,18 @@ export function FixturesPage() {
                         </div>
 
                         {fixture.description && (
-                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate mb-1">
+                          <p className="text-sm text-muted-foreground truncate mb-1">
                             {fixture.description}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="truncate" title={fixture.path}>
                             Path: {fixture.path || '—'}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
+                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground flex-wrap">
                           {sizeBytes ? <span>{formatFileSize(sizeBytes)}</span> : null}
                           {sizeBytes ? <span>•</span> : null}
                           <span>{formatDate(dateStr)}</span>
@@ -614,7 +614,7 @@ export function FixturesPage() {
                                 {tags.map((t) => (
                                   <span
                                     key={t}
-                                    className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                                    className="px-1.5 py-0.5 rounded bg-muted text-foreground"
                                   >
                                     {t}
                                   </span>
@@ -691,7 +691,7 @@ export function FixturesPage() {
                             setFixtureToDelete(fixture);
                             setIsDeleteDialogOpen(true);
                           }}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20"
+                          className="text-danger-600 hover:text-danger-700 hover:bg-danger-50 dark:text-danger-400 dark:hover:text-danger-300 dark:hover:bg-danger-900/20"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -719,7 +719,7 @@ export function FixturesPage() {
           <div className="py-4 space-y-4 overflow-y-auto max-h-[60vh]">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Fixture Name *
                 </label>
                 <Input
@@ -730,13 +730,13 @@ export function FixturesPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   HTTP Method
                 </label>
                 <select
                   value={createForm.method}
                   onChange={(e) => setCreateForm({ ...createForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -749,7 +749,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Path</label>
+              <label className="text-sm font-medium text-foreground">Path</label>
               <Input
                 value={createForm.path}
                 onChange={(e) => setCreateForm({ ...createForm, path: e.target.value })}
@@ -759,7 +759,7 @@ export function FixturesPage() {
 
             {isCloud && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Route Path (optional)
                 </label>
                 <Input
@@ -774,13 +774,13 @@ export function FixturesPage() {
 
             {isCloud && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Protocol
                 </label>
                 <select
                   value={createForm.protocol}
                   onChange={(e) => setCreateForm({ ...createForm, protocol: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">— unspecified —</option>
                   <option value="http">http</option>
@@ -798,7 +798,7 @@ export function FixturesPage() {
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Description
               </label>
               <Input
@@ -812,7 +812,7 @@ export function FixturesPage() {
 
             {isCloud && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Tags
                 </label>
                 <Input
@@ -827,7 +827,7 @@ export function FixturesPage() {
 
             {isCloud && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Response Content (JSON)
                 </label>
                 <Textarea
@@ -840,7 +840,7 @@ export function FixturesPage() {
                   error={createContentError ?? undefined}
                 />
                 {createContentError && (
-                  <p className="text-xs text-red-600 dark:text-red-400">
+                  <p className="text-xs text-danger-600 dark:text-danger-400">
                     Invalid JSON: {createContentError}
                   </p>
                 )}
@@ -876,7 +876,7 @@ export function FixturesPage() {
           <div className="py-4 space-y-4 overflow-y-auto max-h-[60vh]">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   Name
                 </label>
                 <Input
@@ -885,13 +885,13 @@ export function FixturesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <label className="text-sm font-medium text-foreground">
                   HTTP Method
                 </label>
                 <select
                   value={editForm.method}
                   onChange={(e) => setEditForm({ ...editForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -904,7 +904,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">Path</label>
+              <label className="text-sm font-medium text-foreground">Path</label>
               <Input
                 value={editForm.path}
                 onChange={(e) => setEditForm({ ...editForm, path: e.target.value })}
@@ -912,13 +912,13 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Protocol
               </label>
               <select
                 value={editForm.protocol}
                 onChange={(e) => setEditForm({ ...editForm, protocol: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">— unspecified —</option>
                 <option value="http">http</option>
@@ -935,7 +935,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Route Path (optional)
               </label>
               <Input
@@ -946,7 +946,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Description
               </label>
               <Input
@@ -958,7 +958,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Tags (comma-separated)
               </label>
               <Input
@@ -968,7 +968,7 @@ export function FixturesPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 Response Content (JSON)
               </label>
               <Textarea
@@ -980,7 +980,7 @@ export function FixturesPage() {
                 error={editContentError ?? undefined}
               />
               {editContentError && (
-                <p className="text-xs text-red-600 dark:text-red-400">
+                <p className="text-xs text-danger-600 dark:text-danger-400">
                   Invalid JSON: {editContentError}
                 </p>
               )}
@@ -1014,7 +1014,7 @@ export function FixturesPage() {
 
           <div className="py-4 overflow-y-auto max-h-[60vh]">
             <div className="space-y-4">
-              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 flex-wrap">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
                 <div>
                   <span className="font-medium">Method:</span> {selectedFixture?.method || '—'}
                 </div>
@@ -1057,7 +1057,7 @@ export function FixturesPage() {
                 {selectedFixture?.route_path && (
                   <div>
                     <span className="font-medium">Route path:</span>{' '}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                    <code className="text-xs bg-muted px-1 rounded">
                       {selectedFixture.route_path}
                     </code>
                   </div>
@@ -1065,7 +1065,7 @@ export function FixturesPage() {
                 {selectedFixture?.workspace_id && (
                   <div>
                     <span className="font-medium">Workspace:</span>{' '}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 rounded">
+                    <code className="text-xs bg-muted px-1 rounded">
                       {selectedFixture.workspace_id}
                     </code>
                   </div>
@@ -1074,10 +1074,10 @@ export function FixturesPage() {
 
               {selectedFixture?.description && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  <h4 className="text-sm font-medium text-foreground mb-1">
                     Description
                   </h4>
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
+                  <p className="text-sm text-foreground">
                     {selectedFixture.description}
                   </p>
                 </div>
@@ -1085,14 +1085,14 @@ export function FixturesPage() {
 
               {selectedFixture && stringifyTags(selectedFixture.tags).length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
                     Tags
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {stringifyTags(selectedFixture.tags).map((t) => (
                       <span
                         key={t}
-                        className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-300"
+                        className="px-2 py-0.5 rounded bg-muted text-xs text-foreground"
                       >
                         {t}
                       </span>
@@ -1102,11 +1102,11 @@ export function FixturesPage() {
               )}
 
               <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                <h4 className="text-sm font-medium text-foreground mb-2">
                   Response Content
                 </h4>
-                <pre className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
-                  <code className="text-gray-900 dark:text-gray-100">
+                <pre className="bg-muted rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
+                  <code className="text-foreground">
                     {selectedFixture
                       ? fixtureContentToString(selectedFixture.content) ||
                         '(no content stored)'
@@ -1117,11 +1117,11 @@ export function FixturesPage() {
 
               {!isCloud && selectedFixture?.metadata && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
                     Metadata
                   </h4>
-                  <pre className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
-                    <code className="text-gray-900 dark:text-gray-100">
+                  <pre className="bg-muted rounded-lg p-4 text-sm overflow-x-auto max-h-96 overflow-y-auto">
+                    <code className="text-foreground">
                       {JSON.stringify(selectedFixture.metadata, null, 2)}
                     </code>
                   </pre>
@@ -1166,14 +1166,14 @@ export function FixturesPage() {
           </DialogHeader>
           <DialogDescription>
             Current name:{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+            <code className="bg-muted px-2 py-1 rounded">
               {fixtureToRename ? fixtureDisplayName(fixtureToRename) : ''}
             </code>
           </DialogDescription>
 
           <div className="py-4 space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 New Name
               </label>
               <Input
@@ -1211,14 +1211,14 @@ export function FixturesPage() {
           </DialogHeader>
           <DialogDescription>
             Moving:{' '}
-            <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+            <code className="bg-muted px-2 py-1 rounded">
               {fixtureToMove ? fixtureDisplayName(fixtureToMove) : ''}
             </code>
           </DialogDescription>
 
           <div className="py-4 space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <label className="text-sm font-medium text-foreground">
                 New Path
               </label>
               <Input
@@ -1255,12 +1255,12 @@ export function FixturesPage() {
           </DialogDescription>
 
           <div className="py-4">
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+            <div className="bg-muted rounded-lg p-4">
               <div className="text-sm">
-                <div className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                <div className="font-medium text-foreground mb-1">
                   {fixtureToDelete ? fixtureDisplayName(fixtureToDelete) : ''}
                 </div>
-                <div className="text-gray-600 dark:text-gray-400">
+                <div className="text-muted-foreground">
                   {fixtureToDelete?.path} ({fixtureToDelete?.method})
                 </div>
               </div>
@@ -1275,7 +1275,7 @@ export function FixturesPage() {
               variant="default"
               onClick={handleDeleteFixture}
               disabled={deleteFixtureMutation.isPending}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteFixtureMutation.isPending ? 'Deleting…' : 'Delete'}
             </Button>

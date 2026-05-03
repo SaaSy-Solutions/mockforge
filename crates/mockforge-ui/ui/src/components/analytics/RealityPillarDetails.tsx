@@ -23,10 +23,10 @@ export const RealityPillarDetails: React.FC<RealityPillarDetailsProps> = ({
   if (isLoading) {
     return (
       <Card className="p-6 animate-pulse">
-        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-32 mb-4"></div>
+        <div className="h-6 bg-muted rounded w-32 mb-4"></div>
         <div className="space-y-2">
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+          <div className="h-4 bg-muted rounded"></div>
+          <div className="h-4 bg-muted rounded"></div>
         </div>
       </Card>
     );
@@ -43,7 +43,7 @@ export const RealityPillarDetails: React.FC<RealityPillarDetailsProps> = ({
     >
       <div className="flex items-center gap-3 mb-4">
         <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <h3 className="text-lg font-semibold text-foreground">
           Reality Pillar
         </h3>
       </div>
@@ -52,14 +52,14 @@ export const RealityPillarDetails: React.FC<RealityPillarDetailsProps> = ({
         {/* Blended Reality */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span className="text-sm font-medium text-foreground">
               Blended Reality Usage
             </span>
             <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
               {data.blended_reality_percent.toFixed(1)}%
             </span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+          <div className="w-full bg-muted rounded-full h-2">
             <div
               className="bg-purple-600 h-2 rounded-full transition-all"
               style={{ width: `${data.blended_reality_percent}%` }}
@@ -70,23 +70,23 @@ export const RealityPillarDetails: React.FC<RealityPillarDetailsProps> = ({
         {/* Personas vs Fixtures */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <Users className="h-5 w-5 text-success-600 dark:text-success-400" />
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+              <p className="text-sm font-medium text-foreground">
                 {data.smart_personas_percent.toFixed(1)}%
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Smart Personas
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+            <Database className="h-5 w-5 text-muted-foreground" />
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+              <p className="text-sm font-medium text-foreground">
                 {data.static_fixtures_percent.toFixed(1)}%
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Static Fixtures
               </p>
             </div>
@@ -94,23 +94,23 @@ export const RealityPillarDetails: React.FC<RealityPillarDetailsProps> = ({
         </div>
 
         {/* Additional Metrics */}
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="pt-4 border-t border-border">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-gray-500 dark:text-gray-500">Avg Reality Level</p>
-              <p className="font-semibold text-gray-900 dark:text-white">
+              <p className="text-muted-foreground">Avg Reality Level</p>
+              <p className="font-semibold text-foreground">
                 {data.avg_reality_level.toFixed(1)}/5.0
               </p>
             </div>
             <div>
-              <p className="text-gray-500 dark:text-gray-500">Total Scenarios</p>
-              <p className="font-semibold text-gray-900 dark:text-white">
+              <p className="text-muted-foreground">Total Scenarios</p>
+              <p className="font-semibold text-foreground">
                 {data.total_scenarios}
               </p>
             </div>
             <div>
-              <p className="text-gray-500 dark:text-gray-500">Chaos Enabled</p>
-              <p className="font-semibold text-gray-900 dark:text-white">
+              <p className="text-muted-foreground">Chaos Enabled</p>
+              <p className="font-semibold text-foreground">
                 {data.chaos_enabled_count}
               </p>
             </div>

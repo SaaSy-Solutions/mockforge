@@ -18,7 +18,9 @@
     /* Path Mapping */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@mui/material": ["./src/components/ui/mui-shim.tsx"],
+      "@mui/icons-material": ["./src/components/ui/mui-icons-shim.tsx"]
     },
 
     /* Linting */

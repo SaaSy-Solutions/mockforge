@@ -257,7 +257,7 @@ export function ChaosPage() {
         <div className="flex items-center justify-center py-12">
           <div className="text-center space-y-4">
             <Spinner size="lg" />
-            <p className="text-gray-600 dark:text-gray-400">Loading chaos configuration...</p>
+            <p className="text-muted-foreground">Loading chaos configuration...</p>
           </div>
         </div>
       </div>
@@ -290,7 +290,7 @@ export function ChaosPage() {
             <ProfileExporter compact />
             <button
               onClick={fetchStatus}
-              className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2"
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 flex items-center gap-2"
             >
               <RefreshCw className="h-4 w-4" />
               Refresh
@@ -298,7 +298,7 @@ export function ChaosPage() {
             {status.is_enabled && (
               <button
                 onClick={stopChaos}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                className="px-4 py-2 bg-danger-600 text-white rounded-lg hover:bg-destructive/90 flex items-center gap-2"
               >
                 <Square className="h-4 w-4" />
                 Stop All Chaos
@@ -317,7 +317,7 @@ export function ChaosPage() {
           actions={
             <button
               onClick={() => resetChaos.mutate()}
-              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+              className="px-4 py-2 bg-warning text-text-inverse rounded-lg hover:bg-warning-700"
             >
               Reset
             </button>
@@ -349,12 +349,12 @@ export function ChaosPage() {
             <ModernCard key={scenario.name}>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <Zap className="h-6 w-6 text-gray-400" />
+                  <Zap className="h-6 w-6 text-muted-foreground" />
                   <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                    <h3 className="font-semibold text-foreground">
                       {scenario.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                       {scenario.description}
                     </p>
                   </div>
@@ -366,7 +366,7 @@ export function ChaosPage() {
               <button
                 onClick={() => startScenario(scenario.name)}
                 disabled={status.active_scenario === scenario.name}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:bg-muted disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Play className="h-4 w-4" />
                 Start Scenario
@@ -391,7 +391,7 @@ export function ChaosPage() {
           subtitle="Active chaos engineering settings"
         >
           <ModernCard>
-            <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto">
+            <pre className="bg-muted p-4 rounded-lg overflow-x-auto">
               <code className="text-sm font-mono">
                 {JSON.stringify(status.current_config, null, 2)}
               </code>
@@ -416,11 +416,11 @@ export function ChaosPage() {
                     <div className="absolute inset-0 h-6 w-6 bg-orange-400 rounded-full opacity-75 animate-ping" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 text-lg">
+                    <h4 className="font-semibold text-foreground text-lg">
                       Chaos Engineering Active
                     </h4>
                     <div className="flex items-center gap-4 mt-1">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         {[
                           latencyConfig.enabled && `Latency (${latencyConfig.fixed_delay_ms || 0}ms)`,
                           faultConfig.enabled && `Faults (${(faultConfig.http_error_probability * 100).toFixed(0)}%)`,
@@ -460,18 +460,18 @@ export function ChaosPage() {
           </div>
 
           {/* Latency Controls */}
-          <ModernCard className={latencyConfig.enabled ? 'ring-2 ring-blue-500/50 dark:ring-blue-400/50' : ''}>
+          <ModernCard className={latencyConfig.enabled ? 'ring-2 ring-info/50' : ''}>
             <div className="flex items-center gap-3 mb-6">
               <div className="relative">
-                <Zap className={`h-5 w-5 ${latencyConfig.enabled ? 'text-blue-500' : 'text-gray-400'}`} />
+                <Zap className={`h-5 w-5 ${latencyConfig.enabled ? 'text-info' : 'text-muted-foreground'}`} />
                 {latencyConfig.enabled && (
-                  <div className="absolute inset-0 h-5 w-5 bg-blue-400 rounded-full opacity-75 animate-ping" />
+                  <div className="absolute inset-0 h-5 w-5 bg-info/40 rounded-full opacity-75 animate-ping" />
                 )}
               </div>
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Latency Injection</h4>
+              <h4 className="font-semibold text-foreground">Latency Injection</h4>
               <div className="ml-auto flex items-center gap-2">
                 {updatingLatency && (
-                  <Spinner size="sm" className="text-blue-500" />
+                  <Spinner size="sm" className="text-info-500" />
                 )}
                 {latencyConfig.enabled && (
                   <StatusBadge status="running" size="sm" />
@@ -542,15 +542,15 @@ export function ChaosPage() {
           <ModernCard className={faultConfig.enabled ? 'ring-2 ring-red-500/50 dark:ring-red-400/50' : ''}>
             <div className="flex items-center gap-3 mb-6">
               <div className="relative">
-                <AlertCircle className={`h-5 w-5 ${faultConfig.enabled ? 'text-red-500' : 'text-gray-400'}`} />
+                <AlertCircle className={`h-5 w-5 ${faultConfig.enabled ? 'text-danger-500' : 'text-gray-400'}`} />
                 {faultConfig.enabled && (
-                  <div className="absolute inset-0 h-5 w-5 bg-red-400 rounded-full opacity-75 animate-ping" />
+                  <div className="absolute inset-0 h-5 w-5 bg-danger-400 rounded-full opacity-75 animate-ping" />
                 )}
               </div>
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Fault Injection</h4>
+              <h4 className="font-semibold text-foreground">Fault Injection</h4>
               <div className="ml-auto flex items-center gap-2">
                 {updatingFaults && (
-                  <Spinner size="sm" className="text-red-500" />
+                  <Spinner size="sm" className="text-danger-500" />
                 )}
                 {faultConfig.enabled && (
                   <StatusBadge status="warning" size="sm" />
@@ -666,7 +666,7 @@ export function ChaosPage() {
                       disabled={!faultConfig.payload_corruption || updatingFaults || configLoading || !faultConfig.enabled}
                     />
                     <div>
-                      <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">
+                      <label className="block text-sm text-muted-foreground mb-1">
                         Corruption Type
                       </label>
                       <select
@@ -677,7 +677,7 @@ export function ChaosPage() {
                           debouncedUpdate('faults', updateFaults.mutateAsync, newConfig);
                         }}
                         disabled={!faultConfig.payload_corruption || updatingFaults || configLoading || !faultConfig.enabled}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="none">None</option>
                         <option value="random_bytes">Random Bytes</option>
@@ -720,15 +720,15 @@ export function ChaosPage() {
           <ModernCard className={trafficConfig.enabled ? 'ring-2 ring-green-500/50 dark:ring-green-400/50' : ''}>
             <div className="flex items-center gap-3 mb-6">
               <div className="relative">
-                <Wifi className={`h-5 w-5 ${trafficConfig.enabled ? 'text-green-500' : 'text-gray-400'}`} />
+                <Wifi className={`h-5 w-5 ${trafficConfig.enabled ? 'text-success-500' : 'text-gray-400'}`} />
                 {trafficConfig.enabled && (
-                  <div className="absolute inset-0 h-5 w-5 bg-green-400 rounded-full opacity-75 animate-ping" />
+                  <div className="absolute inset-0 h-5 w-5 bg-success-400 rounded-full opacity-75 animate-ping" />
                 )}
               </div>
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">Traffic Shaping</h4>
+              <h4 className="font-semibold text-foreground">Traffic Shaping</h4>
               <div className="ml-auto flex items-center gap-2">
                 {updatingTraffic && (
-                  <Spinner size="sm" className="text-green-500" />
+                  <Spinner size="sm" className="text-success-500" />
                 )}
                 {trafficConfig.enabled && (
                   <StatusBadge status="running" size="sm" />

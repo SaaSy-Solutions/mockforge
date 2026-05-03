@@ -34,7 +34,7 @@ export function DropdownMenuContent({ children, align = 'end', className }: Drop
   return (
     <div
       className={cn(
-        'absolute z-50 mt-2 min-w-[8rem] overflow-hidden rounded-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-1 text-gray-900 dark:text-gray-100 shadow-md',
+        'absolute z-50 mt-2 min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md',
         alignClass,
         className
       )}
@@ -57,7 +57,7 @@ export function DropdownMenuItem({ children, onClick, disabled, className }: Dro
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-gray-100 dark:hover:bg-gray-800 focus:bg-gray-100 dark:focus:bg-gray-800',
+        'relative flex w-full cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
         disabled && 'pointer-events-none opacity-50',
         className
       )}
@@ -74,7 +74,7 @@ interface DropdownMenuLabelProps {
 
 export function DropdownMenuLabel({ children, className }: DropdownMenuLabelProps) {
   return (
-    <div className={cn('px-2 py-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100', className)}>
+    <div className={cn('px-2 py-1.5 text-sm font-semibold text-foreground', className)}>
       {children}
     </div>
   );
@@ -85,5 +85,5 @@ interface DropdownMenuSeparatorProps {
 }
 
 export function DropdownMenuSeparator({ className }: DropdownMenuSeparatorProps) {
-  return <div className={cn('-mx-1 my-1 h-px bg-gray-200 dark:bg-gray-800', className)} />;
+  return <div className={cn('-mx-1 my-1 h-px bg-border', className)} />;
 }

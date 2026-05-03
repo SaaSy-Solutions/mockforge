@@ -42,11 +42,11 @@ export function StateNode({ data, selected }: NodeProps<StateNodeData>) {
   return (
     <div
       className={cn(
-        'relative bg-white dark:bg-gray-800 border-2 rounded-lg shadow-lg min-w-[120px] min-h-[60px]',
+        'relative bg-card border-2 rounded-lg shadow-lg min-w-[120px] min-h-[60px]',
         selected
-          ? 'border-blue-500 dark:border-blue-400'
-          : 'border-gray-300 dark:border-gray-600',
-        isInitial && 'border-green-500 dark:border-green-400',
+          ? 'border-info dark:border-info-400'
+          : 'border-border',
+        isInitial && 'border-success dark:border-success-400',
         isFinal && 'border-purple-500 dark:border-purple-400'
       )}
     >
@@ -85,13 +85,13 @@ export function StateNode({ data, selected }: NodeProps<StateNodeData>) {
         ) : (
           <div
             onDoubleClick={handleDoubleClick}
-            className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-text select-none"
+            className="text-sm font-medium text-foreground cursor-text select-none"
           >
             {label}
           </div>
         )}
 
-        <div className="text-xs text-gray-500 dark:text-gray-400">{data.state}</div>
+        <div className="text-xs text-muted-foreground">{data.state}</div>
       </div>
 
       {/* Output handles */}

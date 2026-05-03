@@ -142,10 +142,10 @@ export function KafkaBrokerPage() {
       </div>
 
       {error && (
-        <Card className="mb-4 border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-800">
+        <Card className="mb-4 border-danger-200 bg-danger-50 dark:bg-danger-900/10 dark:border-danger-800">
           <CardContent className="pt-4 flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800 dark:text-red-200">
+            <AlertCircle className="h-5 w-5 text-danger-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-danger-700 dark:text-danger-200">
               {error instanceof Error ? error.message : 'Failed to load Kafka broker data'}
             </p>
           </CardContent>
@@ -263,7 +263,7 @@ export function KafkaBrokerPage() {
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 rows={5}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 font-mono text-sm"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card font-mono text-sm"
                 placeholder='{"orderId": 123, "total": 99.99}'
               />
             </div>

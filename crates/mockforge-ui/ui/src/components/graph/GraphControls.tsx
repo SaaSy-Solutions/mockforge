@@ -45,11 +45,11 @@ export function GraphControls({
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
-    <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div className="flex items-center justify-between p-4 bg-card border-b border-border">
       <div className="flex items-center gap-4">
         {/* Layout Selector */}
         <div className="flex items-center gap-2">
-          <Layout className="h-4 w-4 text-gray-500" />
+          <Layout className="h-4 w-4 text-muted-foreground" />
           <Label htmlFor="layout" className="text-sm font-medium">
             Layout:
           </Label>
@@ -147,7 +147,7 @@ export function GraphControls({
         </Dialog>
 
         {/* Stats */}
-        <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           <span className="font-medium">{nodeCount}</span> nodes,{' '}
           <span className="font-medium">{edgeCount}</span> edges
         </div>
@@ -160,22 +160,22 @@ export function GraphControls({
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>
-          <div className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+          <div className="absolute right-0 mt-2 w-32 bg-card border border-border rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
             <button
               onClick={() => onExport('png')}
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-md"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-t-md"
             >
               PNG
             </button>
             <button
               onClick={() => onExport('svg')}
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
             >
               SVG
             </button>
             <button
               onClick={() => onExport('json')}
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-md"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-b-md"
             >
               JSON
             </button>

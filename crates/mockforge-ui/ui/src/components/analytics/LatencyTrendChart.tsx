@@ -41,11 +41,11 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
         <div className="h-80 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading...</div>
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       </Card>
     );
@@ -55,10 +55,10 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
-        <div className="h-80 flex items-center justify-center text-gray-400">
+        <div className="h-80 flex items-center justify-center text-muted-foreground">
           {error ? 'Error loading data' : 'No data available'}
         </div>
       </Card>
@@ -168,10 +168,10 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <TrendingUp className="h-5 w-5 text-info-600 dark:text-info-400" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           {data.trends.length} data points
         </div>
       </div>

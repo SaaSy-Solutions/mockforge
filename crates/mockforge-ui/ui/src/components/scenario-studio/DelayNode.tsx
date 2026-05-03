@@ -22,10 +22,10 @@ export function DelayNode({ data, selected }: NodeProps<DelayNodeData>) {
   return (
     <div
       className={cn(
-        'relative bg-white dark:bg-gray-800 border-2 rounded-lg shadow-lg min-w-[150px]',
+        'relative bg-card border-2 rounded-lg shadow-lg min-w-[150px]',
         selected
-          ? 'border-yellow-500 dark:border-yellow-400'
-          : 'border-yellow-300 dark:border-yellow-600'
+          ? 'border-warning dark:border-warning-400'
+          : 'border-warning-300 dark:border-warning-600'
       )}
     >
       {/* Input handles */}
@@ -36,8 +36,8 @@ export function DelayNode({ data, selected }: NodeProps<DelayNodeData>) {
       <div className="p-3 flex flex-col gap-2 items-center">
         {/* Header */}
         <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-yellow-500" />
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          <Clock className="h-4 w-4 text-warning-500" />
+          <div className="text-sm font-medium text-foreground">
             {data.name}
           </div>
         </div>

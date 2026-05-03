@@ -20,10 +20,10 @@ type StatusFilter = 'all' | '2xx' | '4xx' | '5xx';
 type MethodFilter = 'ALL' | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS';
 
 const methodColors = {
-  GET: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-  POST: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-  PUT: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-  DELETE: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+  GET: 'bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400',
+  POST: 'bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-400',
+  PUT: 'bg-warning-100 text-warning-700 dark:bg-warning-900/20 dark:text-warning-400',
+  DELETE: 'bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400',
   PATCH: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
   HEAD: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
   OPTIONS: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400',
@@ -218,11 +218,11 @@ export function LogsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Search Input */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Search Path
               </label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Filter by path..."
                   value={searchTerm}
@@ -234,13 +234,13 @@ export function LogsPage() {
 
             {/* Method Filter */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 HTTP Method
               </label>
               <select
                 value={methodFilter}
                 onChange={(e) => setMethodFilter(e.target.value as MethodFilter)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="ALL">All Methods</option>
                 <option value="GET">GET</option>
@@ -255,13 +255,13 @@ export function LogsPage() {
 
             {/* Status Filter */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Status Code
               </label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Status</option>
                 <option value="2xx">2xx Success</option>
@@ -272,13 +272,13 @@ export function LogsPage() {
 
             {/* Fetch Limit */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label className="text-sm font-medium text-foreground">
                 Fetch Limit
               </label>
               <select
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value={50}>50</option>
                 <option value={100}>100</option>
@@ -312,7 +312,7 @@ export function LogsPage() {
                 {filteredLogs.map((log: RequestLog) => (
                 <div
                   key={log.id}
-                  className={`flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                  className={`flex items-center justify-between rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors ${
                     logPrefs.compactView ? 'p-2' : 'p-4'
                   }`}
                 >
@@ -324,11 +324,11 @@ export function LogsPage() {
 
                     {/* Path and Timestamp */}
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate">
+                      <div className="font-mono text-sm text-foreground truncate">
                         {log.path}
                       </div>
                       {(logPrefs.showTimestamps || log.client_ip) && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <div className="text-xs text-muted-foreground mt-1">
                           {logPrefs.showTimestamps && formatTimestamp(log.timestamp)}
                           {log.client_ip && (
                             <span className={logPrefs.showTimestamps ? 'ml-2' : ''}>
@@ -339,7 +339,7 @@ export function LogsPage() {
                         </div>
                       )}
                       {log.user_agent && !logPrefs.compactView && (
-                        <div className="text-xs text-gray-400 dark:text-gray-500 mt-1 truncate">
+                        <div className="text-xs text-muted-foreground mt-1 truncate">
                           {log.user_agent}
                         </div>
                       )}
@@ -349,10 +349,10 @@ export function LogsPage() {
                   <div className="flex items-center gap-4">
                     {/* Response Time */}
                     <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <div className="text-sm font-medium text-foreground">
                         {log.response_time_ms}ms
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         Response Time
                       </div>
                     </div>
@@ -385,7 +385,7 @@ export function LogsPage() {
 
               {/* Load More Button */}
               {hasMoreToShow && (
-                <div className="flex justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex justify-center pt-4 border-t border-border">
                   <Button
                     variant="outline"
                     onClick={() => setDisplayLimit(prev => prev + 50)}

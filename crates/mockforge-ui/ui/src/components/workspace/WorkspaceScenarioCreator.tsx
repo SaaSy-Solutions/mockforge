@@ -123,7 +123,7 @@ export function WorkspaceScenarioCreator({
   return (
     <div className={cn('flex flex-col gap-4', className)}>
       <div className="space-y-2">
-        <label htmlFor="scenario-description" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="scenario-description" className="block text-sm font-medium text-foreground">
           Describe your workspace scenario
         </label>
         <textarea
@@ -131,10 +131,10 @@ export function WorkspaceScenarioCreator({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder='e.g., Create a workspace that simulates a bank with flaky foreign exchange rates and slow KYC, with 3 existing users and 5 open disputes'
-          className="w-full min-h-[120px] px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-info"
           disabled={isProcessing}
         />
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Describe the domain, chaos characteristics, and initial data requirements
         </p>
       </div>
@@ -160,29 +160,29 @@ export function WorkspaceScenarioCreator({
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md flex items-start gap-3">
-          <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div className="p-4 bg-danger-50 border border-danger-200 rounded-md flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-danger-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
-            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <h3 className="text-sm font-medium text-danger-700">Error</h3>
+            <p className="text-sm text-danger-700 mt-1">{error}</p>
           </div>
         </div>
       )}
 
       {result && !result.error && result.scenario && (
         <div className="space-y-4">
-          <div className="p-4 bg-green-50 border border-green-200 rounded-md flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div className="p-4 bg-success-50 border border-success-200 rounded-md flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-success-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-green-800">Workspace Scenario Created</h3>
-              <p className="text-sm text-green-700 mt-1">
-                Workspace ID: <code className="text-xs bg-white px-1 rounded">{result.scenario.workspace_id}</code>
+              <h3 className="text-sm font-medium text-success-700">Workspace Scenario Created</h3>
+              <p className="text-sm text-success-700 mt-1">
+                Workspace ID: <code className="text-xs bg-card px-1 rounded">{result.scenario.workspace_id}</code>
               </p>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="border-b border-gray-200">
+          <div className="border-b border-border">
             <nav className="-mb-px flex space-x-4">
               {['overview', 'openapi', 'chaos', 'fixtures'].map((tab) => (
                 <button
@@ -207,25 +207,25 @@ export function WorkspaceScenarioCreator({
           {activeTab === 'overview' && (
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">{result.scenario.name}</h3>
-              <p className="text-gray-700 mb-4">{result.scenario.description}</p>
+              <p className="text-foreground mb-4">{result.scenario.description}</p>
 
               <div className="grid md:grid-cols-2 gap-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-gray-600">Endpoints</div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">Endpoints</div>
                   <div className="text-2xl font-bold">{result.scenario.config_summary.endpoint_count}</div>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-gray-600">Models</div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">Models</div>
                   <div className="text-2xl font-bold">{result.scenario.config_summary.model_count}</div>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-gray-600">Chaos Characteristics</div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">Chaos Characteristics</div>
                   <div className="text-2xl font-bold">
                     {result.scenario.config_summary.chaos_characteristic_count}
                   </div>
                 </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="text-sm text-gray-600">Initial Data Entities</div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">Initial Data Entities</div>
                   <div className="text-2xl font-bold">
                     {Object.keys(result.scenario.config_summary.initial_data_counts).length}
                   </div>
@@ -240,7 +240,7 @@ export function WorkspaceScenarioCreator({
                       ([entity, count]) => (
                         <span
                           key={entity}
-                          className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                          className="px-3 py-1 bg-info-100 text-info-700 rounded-full text-sm"
                         >
                           {entity}: {count}
                         </span>
@@ -283,7 +283,7 @@ export function WorkspaceScenarioCreator({
                   </Button>
                 </div>
               </div>
-              <pre className="p-4 bg-gray-50 border border-gray-200 rounded-md overflow-x-auto text-sm">
+              <pre className="p-4 bg-muted border border-border rounded-md overflow-x-auto text-sm">
                 <code>{JSON.stringify(result.scenario.openapi_spec, null, 2)}</code>
               </pre>
             </Card>
@@ -314,7 +314,7 @@ export function WorkspaceScenarioCreator({
                   </Button>
                 </div>
               </div>
-              <pre className="p-4 bg-gray-50 border border-gray-200 rounded-md overflow-x-auto text-sm">
+              <pre className="p-4 bg-muted border border-border rounded-md overflow-x-auto text-sm">
                 <code>{result.scenario.chaos_config}</code>
               </pre>
             </Card>
@@ -325,10 +325,10 @@ export function WorkspaceScenarioCreator({
               <h3 className="text-lg font-semibold mb-4">Initial Fixture Data</h3>
               <div className="space-y-4">
                 {Object.entries(result.scenario.fixtures).map(([entity, data]) => (
-                  <div key={entity} className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <div key={entity} className="border border-border rounded-lg overflow-hidden">
+                    <div className="px-4 py-2 bg-muted border-b border-border">
                       <h4 className="font-medium capitalize">{entity}</h4>
-                      <p className="text-sm text-gray-600">{data.length} items</p>
+                      <p className="text-sm text-muted-foreground">{data.length} items</p>
                     </div>
                     <div className="p-4">
                       <pre className="text-sm overflow-x-auto">

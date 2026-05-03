@@ -361,7 +361,7 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
               nodeTypes={nodeTypes}
               fitView
               attributionPosition="bottom-left"
-              className="bg-gray-50 dark:bg-gray-900"
+              className="bg-muted"
             >
               <Background />
               <Controls />
@@ -389,8 +389,8 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
       </div>
 
       {error && (
-        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-          <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+        <div className="mt-4 p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-md">
+          <p className="text-danger-700 dark:text-danger-200 text-sm">{error}</p>
         </div>
       )}
     </div>

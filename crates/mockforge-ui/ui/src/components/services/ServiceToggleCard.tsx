@@ -119,7 +119,7 @@ export function ServiceToggleCard({
                 aria-label={`Delete ${service.name}`}
                 title="Delete service"
                 onClick={onDeleteService}
-                className="text-red-500 hover:text-red-600"
+                className="text-danger-500 hover:text-danger-600"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -162,10 +162,10 @@ export function ServiceToggleCard({
                   <span className={cn(
                     "text-xs font-mono px-2 py-1 rounded",
                     {
-                      'bg-green-100 text-green-800': route.method === 'GET',
-                      'bg-blue-100 text-blue-800': route.method === 'POST',
-                      'bg-yellow-100 text-yellow-800': route.method === 'PUT',
-                      'bg-red-100 text-red-800': route.method === 'DELETE',
+                      'bg-success-100 text-success-700': route.method === 'GET',
+                      'bg-info-100 text-info-700': route.method === 'POST',
+                      'bg-warning-100 text-warning-700': route.method === 'PUT',
+                      'bg-danger-100 text-danger-700': route.method === 'DELETE',
                       'bg-purple-100 text-purple-800': route.method === 'PATCH',
                       'bg-gray-100 text-gray-800': !route.method,
                     }

@@ -23,7 +23,7 @@ export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
   return (
     <div
       className={cn(
-        'relative bg-white dark:bg-gray-800 border-2 rounded-lg shadow-lg min-w-[180px]',
+        'relative bg-card border-2 rounded-lg shadow-lg min-w-[180px]',
         selected
           ? 'border-indigo-500 dark:border-indigo-400'
           : 'border-indigo-300 dark:border-indigo-600'
@@ -38,7 +38,7 @@ export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
         {/* Header */}
         <div className="flex items-center gap-2">
           <Repeat className="h-4 w-4 text-indigo-500" />
-          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">
+          <div className="text-sm font-medium text-foreground flex-1 truncate">
             {data.name}
           </div>
         </div>
@@ -50,7 +50,7 @@ export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
           </Badge>
         )}
         {condition && (
-          <div className="text-xs text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-700 p-2 rounded truncate">
+          <div className="text-xs text-muted-foreground font-mono bg-muted dark:bg-gray-700 p-2 rounded truncate">
             {condition}
           </div>
         )}
@@ -64,7 +64,7 @@ export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
         className="w-3 h-3"
         style={{ left: '30%' }}
       >
-        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-blue-600 font-medium">
+        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-info-600 font-medium">
           Continue
         </div>
       </Handle>
@@ -75,7 +75,7 @@ export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
         className="w-3 h-3"
         style={{ left: '70%' }}
       >
-        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 font-medium">
+        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground font-medium">
           Exit
         </div>
       </Handle>

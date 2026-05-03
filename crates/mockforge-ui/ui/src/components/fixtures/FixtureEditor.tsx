@@ -83,7 +83,7 @@ export function FixtureEditor({ fixture, onSave, onClose, readOnly = false }: Fi
             </div>
           </div>
           {hasChanges && (
-            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
+            <span className="text-xs bg-warning-100 text-warning-700 px-2 py-1 rounded">
               Unsaved changes
             </span>
           )}

@@ -26,23 +26,23 @@ const protocolIcons: Record<string, React.ReactNode> = {
 };
 
 const protocolColors: Record<string, string> = {
-  http: 'bg-blue-500',
-  grpc: 'bg-green-500',
+  http: 'bg-info-500',
+  grpc: 'bg-success-500',
   websocket: 'bg-purple-500',
   graphql: 'bg-pink-500',
   mqtt: 'bg-orange-500',
-  smtp: 'bg-yellow-500',
-  kafka: 'bg-red-500',
+  smtp: 'bg-warning-500',
+  kafka: 'bg-danger-500',
   amqp: 'bg-indigo-500',
   ftp: 'bg-gray-500',
 };
 
 const stateColors: Record<string, string> = {
-  pending: 'bg-yellow-500',
-  active: 'bg-green-500',
+  pending: 'bg-warning-500',
+  active: 'bg-success-500',
   inactive: 'bg-gray-500',
-  error: 'bg-red-500',
-  processing: 'bg-blue-500',
+  error: 'bg-danger-500',
+  processing: 'bg-info-500',
 };
 
 export function EndpointNode({ data }: NodeProps<EndpointNodeData>) {
@@ -52,7 +52,7 @@ export function EndpointNode({ data }: NodeProps<EndpointNodeData>) {
   const path = data.metadata?.path as string | undefined;
 
   return (
-    <div className="px-4 py-3 shadow-lg rounded-lg border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 min-w-[200px]">
+    <div className="px-4 py-3 shadow-lg rounded-lg border-2 border-border bg-card min-w-[200px]">
       <Handle type="target" position={Position.Top} className="w-3 h-3" />
 
       <div className="flex items-center gap-2 mb-2">
@@ -60,11 +60,11 @@ export function EndpointNode({ data }: NodeProps<EndpointNodeData>) {
           {protocolIcons[protocol] || <Server className="h-4 w-4" />}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+          <div className="font-semibold text-sm text-foreground truncate">
             {data.label}
           </div>
           {method && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+            <div className="text-xs text-muted-foreground font-mono">
               {method} {path || ''}
             </div>
           )}
@@ -74,7 +74,7 @@ export function EndpointNode({ data }: NodeProps<EndpointNodeData>) {
       {state && (
         <div className="flex items-center gap-2 mt-2">
           <div className={`w-2 h-2 rounded-full ${stateColors[state] || 'bg-gray-400'} animate-pulse`} />
-          <span className="text-xs text-gray-600 dark:text-gray-400 capitalize">{state}</span>
+          <span className="text-xs text-muted-foreground capitalize">{state}</span>
         </div>
       )}
 
