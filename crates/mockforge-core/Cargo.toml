@@ -90,7 +90,7 @@ tempfile = "3.10"
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
-proptest = "1.8.0"
+proptest = "1.11.0"
 mockforge-template-expansion = { version = "0.3.70", path = "../mockforge-template-expansion" }
 rcgen = "0.13"
 # Note: mockforge-cli dev-dependency removed to avoid circular dependency during publishing
