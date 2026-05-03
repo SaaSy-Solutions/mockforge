@@ -9,6 +9,7 @@ pub mod cloud_workspace;
 pub mod feature_usage;
 pub mod federation;
 pub mod federation_scenario_activation;
+pub mod flow;
 pub mod hosted_mock;
 pub mod incident;
 pub mod learning;
@@ -61,6 +62,7 @@ pub use federation::Federation;
 pub use federation_scenario_activation::{
     FederationScenarioActivation, FederationScenarioActivationStatus, PerServiceActivationState,
 };
+pub use flow::{Flow, FlowVersion};
 pub use hosted_mock::{
     protocols_allowed_on_plan, DeploymentStatus, HealthStatus, HostedMock, Protocol,
 };

@@ -334,6 +334,29 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::snapshots::get_snapshot)
                 .delete(handlers::snapshots::delete_snapshot),
         )
+        // Flow routes (cloud-enablement task #9 / Phase 1).
+        // Unified resource for scenario/orchestration/state_machine/chain
+        // editor surfaces. Run trigger reuses #4 test_runs (kind=...).
+        .route(
+            "/api/v1/workspaces/{workspace_id}/flows",
+            get(handlers::flows::list_flows)
+                .post(handlers::flows::create_flow),
+        )
+        .route(
+            "/api/v1/flows/{id}",
+            get(handlers::flows::get_flow)
+                .patch(handlers::flows::update_flow)
+                .delete(handlers::flows::delete_flow),
+        )
+        .route(
+            "/api/v1/flows/{id}/versions",
+            get(handlers::flows::list_flow_versions)
+                .post(handlers::flows::save_flow_version),
+        )
+        .route(
+            "/api/v1/flow-versions/{version_id}",
+            get(handlers::flows::get_flow_version),
+        )
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
         // directly, and the notification dispatcher is a follow-up slice.

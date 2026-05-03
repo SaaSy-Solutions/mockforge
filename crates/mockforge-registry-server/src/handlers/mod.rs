@@ -11,6 +11,7 @@ pub mod cloud_services;
 pub mod cloud_workspaces;
 pub mod faq;
 pub mod federations;
+pub mod flows;
 pub mod health;
 pub mod hosted_mocks;
 pub mod incidents;
