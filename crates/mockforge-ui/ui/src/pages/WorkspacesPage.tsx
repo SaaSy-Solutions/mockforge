@@ -9,6 +9,7 @@ import type {
   WorkspaceDetail,
   FolderDetail,
   CreateWorkspaceRequest,
+  UpdateWorkspaceRequest,
   CreateFolderRequest,
   CreateRequestRequest,
   ImportToWorkspaceRequest,
@@ -25,7 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from '../components/ui/Badge';
 import { Alert } from '../components/ui/DesignSystem';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
-import { Folder, FolderOpen, FileText, Plus, Upload, Trash2, History, Play, Shield, GripVertical, AlertTriangle } from 'lucide-react';
+import { Folder, FolderOpen, FileText, Plus, Upload, Trash2, History, Play, Shield, GripVertical, AlertTriangle, Pencil } from 'lucide-react';
 import { Checkbox } from '../components/ui/DesignSystem';
 import { toast } from 'sonner';
 import ResponseHistory from '../components/workspace/ResponseHistory';
@@ -33,6 +34,7 @@ import EncryptionSettings from '../components/workspace/EncryptionSettings';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import WorkspacePromotions from '../components/workspace/WorkspacePromotions';
 import WorkspaceFederationScenariosPanel from '../components/workspace/WorkspaceFederationScenariosPanel';
+import WorkspaceSyncPanel from '../components/workspace/WorkspaceSyncPanel';
 import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
 import { IS_CLOUD } from '../utils/mode';
 
@@ -60,6 +62,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const [draggedWorkspace, setDraggedWorkspace] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [workspaceToDelete, setWorkspaceToDelete] = useState<string | null>(null);
+  const [editWorkspaceOpen, setEditWorkspaceOpen] = useState(false);
+  const [editWorkspaceData, setEditWorkspaceData] = useState<{
+    id: string;
+    request: UpdateWorkspaceRequest;
+  } | null>(null);
 
   // Form states
   const [newWorkspace, setNewWorkspace] = useState<CreateWorkspaceRequest>({
@@ -92,9 +99,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const updateWorkspacesOrder = useUpdateWorkspacesOrder();
   const queryClient = useQueryClient();
 
-  // Load import history when import dialog opens
+  // Load import history when import dialog opens (local only — cloud has no history endpoint)
   useEffect(() => {
-    if (importOpen) {
+    if (importOpen && !IS_CLOUD) {
       loadImportHistory();
     }
   }, [importOpen]);
@@ -158,6 +165,45 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const confirmDeleteWorkspace = (workspaceId: string) => {
     setWorkspaceToDelete(workspaceId);
     setDeleteConfirmOpen(true);
+  };
+
+  const openEditWorkspace = (workspace: WorkspaceSummary) => {
+    setEditWorkspaceData({
+      id: workspace.id,
+      request: {
+        name: workspace.name,
+        description: workspace.description ?? '',
+      },
+    });
+    setEditWorkspaceOpen(true);
+  };
+
+  const handleUpdateWorkspace = async () => {
+    if (!editWorkspaceData) return;
+    const trimmed = editWorkspaceData.request.name?.trim();
+    if (!trimmed) {
+      toast.error('Workspace name is required');
+      return;
+    }
+    try {
+      await apiService.updateWorkspace(editWorkspaceData.id, {
+        name: trimmed,
+        description: editWorkspaceData.request.description?.trim() || undefined,
+      });
+      toast.success('Workspace updated');
+      setEditWorkspaceOpen(false);
+      setEditWorkspaceData(null);
+      const { refreshWorkspaces } = useWorkspaceStore.getState();
+      await refreshWorkspaces();
+      if (selectedWorkspace?.summary.id === editWorkspaceData.id) {
+        const response = await apiService.getWorkspace(editWorkspaceData.id);
+        setSelectedWorkspace(response.workspace);
+      }
+    } catch (err) {
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to update workspace: ${errorDetails.message}`);
+      logError(err, 'Update workspace');
+    }
   };
 
   const handleSetActiveWorkspace = async (workspaceId: string) => {
@@ -539,6 +585,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     handleSetActiveWorkspace(workspace.id);
                   }}
                   disabled={workspace.is_active}
+                  title="Set as active workspace"
                 >
                   <Play className="w-4 h-4" />
                 </Button>
@@ -547,8 +594,20 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
+                    openEditWorkspace(workspace);
+                  }}
+                  title="Edit workspace"
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     confirmDeleteWorkspace(workspace.id);
                   }}
+                  title="Delete workspace"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -726,10 +785,10 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                       </DialogDescription>
                     </DialogHeader>
                     <Tabs defaultValue="paste" className="w-full">
-                      <TabsList className="grid w-full grid-cols-3">
+                      <TabsList className={`grid w-full ${IS_CLOUD ? 'grid-cols-2' : 'grid-cols-3'}`}>
                         <TabsTrigger value="paste">Paste Data</TabsTrigger>
                         <TabsTrigger value="upload">Upload File</TabsTrigger>
-                        <TabsTrigger value="history">History</TabsTrigger>
+                        {!IS_CLOUD && <TabsTrigger value="history">History</TabsTrigger>}
                       </TabsList>
                       <TabsContent value="paste" className="space-y-4">
                         <div>
@@ -816,32 +875,34 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                           />
                         </div>
                       </TabsContent>
-                      <TabsContent value="history" className="space-y-4">
-                        <div className="space-y-2">
-                          {importHistory.length === 0 ? (
-                            <p className="text-muted-foreground text-center py-8">No import history available</p>
-                          ) : (
-                            importHistory.map((item) => (
-                              <div key={`${item.timestamp}-${item.format}`} className="flex items-center justify-between p-3 border rounded">
-                                <div>
-                                  <p className="font-medium">{item.format}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {item.timestamp} • {item.routeCount} routes
-                                  </p>
+                      {!IS_CLOUD && (
+                        <TabsContent value="history" className="space-y-4">
+                          <div className="space-y-2">
+                            {importHistory.length === 0 ? (
+                              <p className="text-muted-foreground text-center py-8">No import history available</p>
+                            ) : (
+                              importHistory.map((item) => (
+                                <div key={`${item.timestamp}-${item.format}`} className="flex items-center justify-between p-3 border rounded">
+                                  <div>
+                                    <p className="font-medium">{item.format}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {item.timestamp} • {item.routeCount} routes
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={item.success ? "default" : "destructive"}>
+                                      {item.success ? "Success" : "Failed"}
+                                    </Badge>
+                                    <Button variant="outline" size="sm" onClick={() => handleReimport(item)}>
+                                      Re-import
+                                    </Button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant={item.success ? "default" : "destructive"}>
-                                    {item.success ? "Success" : "Failed"}
-                                  </Badge>
-                                  <Button variant="outline" size="sm" onClick={() => handleReimport(item)}>
-                                    Re-import
-                                  </Button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </TabsContent>
+                              ))
+                            )}
+                          </div>
+                        </TabsContent>
+                      )}
                     </Tabs>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setImportOpen(false)}>
@@ -854,14 +915,16 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   </DialogContent>
                 </Dialog>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEncryptionSettingsOpen(true)}
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  Encryption
-                </Button>
+                {IS_CLOUD && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEncryptionSettingsOpen(true)}
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Encryption
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -918,15 +981,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                   <span className="font-medium">{request.name}</span>
                                   <span className="text-sm text-muted-foreground">{request.path}</span>
                                 </div>
-                                <div className="flex items-center space-x-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleViewHistory(request.id, request.name)}
-                                  >
-                                    <History className="w-4 h-4" />
-                                  </Button>
-                                </div>
+                                {IS_CLOUD && (
+                                  <div className="flex items-center space-x-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleViewHistory(request.id, request.name)}
+                                    >
+                                      <History className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
                             </CardContent>
                           </Card>
@@ -946,15 +1011,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                 <span className="font-medium">{request.name}</span>
                                 <span className="text-sm text-muted-foreground">{request.path}</span>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleViewHistory(request.id, request.name)}
-                                >
-                                  <History className="w-4 h-4" />
-                                </Button>
-                              </div>
+                              {IS_CLOUD && (
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleViewHistory(request.id, request.name)}
+                                  >
+                                    <History className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </CardContent>
                         </Card>
@@ -968,6 +1035,14 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   <h3 className="text-lg font-semibold mb-2">Environments</h3>
                   <EnvironmentManager workspaceId={selectedWorkspace.summary.id} />
                 </div>
+
+                {/* Directory sync is a self-hosted-only feature (writes to local FS). */}
+                {!IS_CLOUD && (
+                  <WorkspaceSyncPanel
+                    workspaceId={selectedWorkspace.summary.id}
+                    workspaceName={selectedWorkspace.summary.name}
+                  />
+                )}
 
                 {/* Scenario promotions are a cloud-registry feature. */}
                 {IS_CLOUD && (
@@ -1103,6 +1178,61 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             workspaceId={selectedWorkspace?.summary.id || ''}
             workspaceName={selectedWorkspace?.summary.name || ''}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Workspace Dialog */}
+      <Dialog open={editWorkspaceOpen} onOpenChange={setEditWorkspaceOpen}>
+        <DialogContent className="bg-white dark:bg-gray-900">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Edit Workspace
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+              Update the workspace name or description.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
+              <Input
+                id="edit-workspace-name"
+                value={editWorkspaceData?.request.name ?? ''}
+                onChange={(e) =>
+                  setEditWorkspaceData((prev) =>
+                    prev ? { ...prev, request: { ...prev.request, name: e.target.value } } : prev
+                  )
+                }
+                placeholder="Workspace name"
+                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
+              <Textarea
+                id="edit-workspace-description"
+                value={editWorkspaceData?.request.description ?? ''}
+                onChange={(e) =>
+                  setEditWorkspaceData((prev) =>
+                    prev ? { ...prev, request: { ...prev.request, description: e.target.value } } : prev
+                  )
+                }
+                placeholder="Optional description..."
+                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditWorkspaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateWorkspace}
+              disabled={!editWorkspaceData?.request.name?.trim()}
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
