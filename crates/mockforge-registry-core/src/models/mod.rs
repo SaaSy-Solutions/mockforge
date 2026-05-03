@@ -10,6 +10,7 @@ pub mod feature_usage;
 pub mod federation;
 pub mod federation_scenario_activation;
 pub mod hosted_mock;
+pub mod incident;
 pub mod login_attempt;
 pub mod mock_environment;
 pub mod org_template;
@@ -56,6 +57,7 @@ pub use federation_scenario_activation::{
 pub use hosted_mock::{
     protocols_allowed_on_plan, DeploymentStatus, HealthStatus, HostedMock, Protocol,
 };
+pub use incident::{Incident, IncidentEvent};
 pub use org_template::OrgTemplate;
 pub use organization::{OrgMember, OrgRole, Organization, Plan};
 pub use osv::{OsvAdvisory, OsvAffected, OsvImportRecord, OsvMatch, OsvPackage, OsvSeverity};
