@@ -49,6 +49,12 @@ vi.mock('../../components/workspace/WorkspaceFederationScenariosPanel', () => ({
 vi.mock('../../components/workspace/WorkspaceSyncPanel', () => ({
   default: () => null,
 }));
+vi.mock('../../components/workspace/WorkspaceStatsStrip', () => ({
+  default: () => null,
+}));
+vi.mock('../../components/workspace/WorkspaceMockEnvironmentsPanel', () => ({
+  default: () => null,
+}));
 
 // Set default mocks
 vi.mocked(useWorkspaceStore).mockReturnValue({

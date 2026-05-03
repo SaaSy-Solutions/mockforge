@@ -1062,6 +1062,35 @@ export interface UpdateWorkspaceRequest {
   description?: string;
 }
 
+export interface WorkspaceStats {
+  total_requests: number;
+  active_routes: number;
+  last_request_at?: string;
+  created_at: string;
+  avg_response_time_ms: number;
+}
+
+export interface MockEnvironmentResponse {
+  name: string;
+  id: string;
+  workspace_id: string;
+  reality_config?: Record<string, unknown> | null;
+  chaos_config?: Record<string, unknown> | null;
+  drift_budget_config?: Record<string, unknown> | null;
+}
+
+export interface MockEnvironmentManagerResponse {
+  workspace_id: string;
+  active_environment?: string;
+  environments: MockEnvironmentResponse[];
+}
+
+export interface UpdateMockEnvironmentRequest {
+  reality_config?: Record<string, unknown> | null;
+  chaos_config?: Record<string, unknown> | null;
+  drift_budget_config?: Record<string, unknown> | null;
+}
+
 export interface CreateFolderRequest {
   name: string;
   description?: string;

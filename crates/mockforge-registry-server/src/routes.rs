@@ -292,7 +292,9 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Workspace content: folders + requests
         .route("/api/v1/workspaces/{workspace_id}/folders", post(handlers::workspace_folders::create_folder))
         .route("/api/v1/workspaces/{workspace_id}/folders/{folder_id}", get(handlers::workspace_folders::get_folder))
+        .route("/api/v1/workspaces/{workspace_id}/folders/{folder_id}", delete(handlers::workspace_folders::delete_folder))
         .route("/api/v1/workspaces/{workspace_id}/requests", post(handlers::workspace_folders::create_request))
+        .route("/api/v1/workspaces/{workspace_id}/requests/{request_id}", delete(handlers::workspace_folders::delete_request))
         // Import + autocomplete
         .route("/api/v1/import/preview", post(handlers::workspace_import::preview_import))
         .route("/api/v1/workspaces/{workspace_id}/import", post(handlers::workspace_import::import_to_workspace))
