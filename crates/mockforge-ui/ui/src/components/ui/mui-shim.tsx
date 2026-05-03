@@ -563,9 +563,8 @@ interface GridProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'> 
 
 function gridSpan(s: GridSize | undefined): string | undefined {
   if (s === undefined) return undefined;
-  if (s === true) return 'auto';
+  if (s === true || s === 'auto') return 'auto';
   if (s === false) return undefined;
-  if (s === 'auto') return 'auto';
   return `span ${s} / span ${s}`;
 }
 
@@ -593,21 +592,34 @@ export const Grid = React.forwardRef<HTMLDivElement, GridProps>(function Grid(
       </div>
     );
   }
-  // Item: produce gridColumn span. If only xs is given, span at all breakpoints.
-  // We don't have full responsive support for sm/md/lg in inline style; emit
-  // utility classes based on Tailwind's 12-col defaults instead.
-  const cls: string[] = [];
-  if (xs !== undefined && xs !== false) cls.push(xs === 'auto' || xs === true ? 'col-auto' : `col-span-${xs}`);
-  if (sm !== undefined && sm !== false && sm !== true) cls.push(`sm:col-span-${sm}`);
-  if (md !== undefined && md !== false && md !== true) cls.push(`md:col-span-${md}`);
-  if (lg !== undefined && lg !== false && lg !== true) cls.push(`lg:col-span-${lg}`);
-  if (xl !== undefined && xl !== false && xl !== true) cls.push(`xl:col-span-${xl}`);
 
-  // Note: Tailwind needs to see literal class names to JIT them; the source files
-  // that use <Grid item md={6}/> will already trigger the corresponding utilities.
-  if (item || cls.length > 0) {
+  // Items: Tailwind v4 can't JIT `col-span-${n}` from a string
+  // interpolation, so the shim emits `--gs-xs/sm/md/lg/xl` custom
+  // properties inline, and the matching `.mui-grid-item` rules in
+  // index.css read them at each breakpoint — preserves MUI's responsive
+  // Grid semantics without requiring Tailwind to enumerate the classes.
+  const responsive: Record<string, string | undefined> = {
+    '--gs-xs': gridSpan(xs),
+    '--gs-sm': gridSpan(sm),
+    '--gs-md': gridSpan(md),
+    '--gs-lg': gridSpan(lg),
+    '--gs-xl': gridSpan(xl),
+  };
+  const itemStyle: React.CSSProperties = {
+    ...(responsive as React.CSSProperties),
+    ...sxToStyle(sx),
+    ...style,
+  };
+  const hasAnySpan = xs !== undefined || sm !== undefined || md !== undefined || lg !== undefined || xl !== undefined;
+
+  if (item || hasAnySpan) {
     return (
-      <div ref={ref} className={cn(cls, className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+      <div
+        ref={ref}
+        className={cn('mui-grid-item', className)}
+        style={itemStyle}
+        {...rest}
+      >
         {children}
       </div>
     );

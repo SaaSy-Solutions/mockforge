@@ -479,3 +479,21 @@
   outline: 3px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+
+/* Grid items emitted by the MUI shim. The shim sets `--gs-xs/sm/md/lg/xl`
+   as inline custom properties; this CSS reads the appropriate one per
+   breakpoint, falling through to xs when no override exists — same
+   behaviour as MUI's responsive Grid. */
+.mui-grid-item { grid-column: var(--gs-xs, auto); }
+@media (min-width: 640px) {
+  .mui-grid-item { grid-column: var(--gs-sm, var(--gs-xs, auto)); }
+}
+@media (min-width: 768px) {
+  .mui-grid-item { grid-column: var(--gs-md, var(--gs-sm, var(--gs-xs, auto))); }
+}
+@media (min-width: 1024px) {
+  .mui-grid-item { grid-column: var(--gs-lg, var(--gs-md, var(--gs-sm, var(--gs-xs, auto)))); }
+}
+@media (min-width: 1280px) {
+  .mui-grid-item { grid-column: var(--gs-xl, var(--gs-lg, var(--gs-md, var(--gs-sm, var(--gs-xs, auto))))); }
+}
