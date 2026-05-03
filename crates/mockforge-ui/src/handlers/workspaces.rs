@@ -714,6 +714,9 @@ pub struct ConfigureSyncRequest {
     pub realtime_monitoring: bool,
     pub directory_structure: Option<SyncDirectoryStructure>,
     pub filename_pattern: Option<String>,
+    pub include_metadata: Option<bool>,
+    pub exclude_pattern: Option<String>,
+    pub force_overwrite: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1207,7 +1210,12 @@ pub async fn get_sync_status(
         "enabled": sync.enabled,
         "target_directory": sync.target_directory,
         "sync_direction": sync.sync_direction,
+        "directory_structure": sync.directory_structure,
         "realtime_monitoring": sync.realtime_monitoring,
+        "include_metadata": sync.include_metadata,
+        "filename_pattern": sync.filename_pattern,
+        "exclude_pattern": sync.exclude_pattern,
+        "force_overwrite": sync.force_overwrite,
         "last_sync": sync.last_sync,
         "status": if sync.enabled { "ready" } else { "disabled" },
     }))))
@@ -1238,6 +1246,19 @@ pub async fn configure_sync(
     }
     if let Some(filename_pattern) = request.filename_pattern {
         sync.filename_pattern = filename_pattern;
+    }
+    if let Some(include_metadata) = request.include_metadata {
+        sync.include_metadata = include_metadata;
+    }
+    if let Some(exclude_pattern) = request.exclude_pattern {
+        sync.exclude_pattern = if exclude_pattern.is_empty() {
+            None
+        } else {
+            Some(exclude_pattern)
+        };
+    }
+    if let Some(force_overwrite) = request.force_overwrite {
+        sync.force_overwrite = force_overwrite;
     }
 
     tenant_ws.workspace.configure_sync(sync).map_err(|e| {

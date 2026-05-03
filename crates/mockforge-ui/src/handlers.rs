@@ -4436,13 +4436,6 @@ pub async fn create_workspace(
     Json(ApiResponse::success("Workspace created".to_string()))
 }
 
-pub async fn open_workspace_from_directory(
-    State(_state): State<AdminState>,
-    Json(_request): Json<serde_json::Value>,
-) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Workspace opened from directory".to_string()))
-}
-
 // Reality Slider API handlers
 
 /// Get current reality level
