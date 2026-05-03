@@ -92,6 +92,13 @@ struct PortArgs {
     #[arg(long, help_heading = "Server Ports")]
     pub http_port: Option<u16>,
 
+    /// HTTPS server port. When set, runs an additional TLS listener
+    /// alongside `--http-port` (which always serves plain HTTP in this
+    /// mode). Requires `--tls-cert` and `--tls-key`. Lets you serve the
+    /// same routes on, e.g., 80 and 443 simultaneously like nginx.
+    #[arg(long, help_heading = "Server Ports")]
+    pub https_port: Option<u16>,
+
     /// WebSocket server port (defaults to config or 3001)
     #[arg(long, help_heading = "Server Ports")]
     pub ws_port: Option<u16>,
@@ -2275,6 +2282,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 eprintln!("Error: --mtls {} requires --tls-enabled", args.tls.mtls);
                 std::process::exit(1);
             }
+            // --https-port runs a TLS listener alongside the plain --http-port,
+            // so it always needs a cert + key (independent of --tls-enabled).
+            if args.ports.https_port.is_some()
+                && (args.tls.tls_cert.is_none() || args.tls.tls_key.is_none())
+            {
+                eprintln!("Error: --https-port requires --tls-cert and --tls-key");
+                std::process::exit(1);
+            }
+            if let (Some(http), Some(https)) = (args.ports.http_port, args.ports.https_port) {
+                if http == https {
+                    eprintln!(
+                        "Error: --http-port ({}) and --https-port ({}) must differ",
+                        http, https
+                    );
+                    std::process::exit(1);
+                }
+            }
 
             // Validate spec flags (mutually exclusive)
             if !args.spec.is_empty() && args.spec_dir.is_some() {
@@ -2296,6 +2320,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 config_path: args.config,
                 profile: args.profile,
                 http_port: args.ports.http_port,
+                https_port: args.ports.https_port,
                 ws_port: args.ports.ws_port,
                 grpc_port: args.ports.grpc_port,
                 tcp_port: args.ports.tcp_port,
