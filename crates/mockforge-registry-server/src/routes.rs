@@ -486,22 +486,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::captures::get_clone_model)
                 .delete(handlers::captures::delete_clone_model),
         )
-        // Org invitations (cloud-enablement #15 / Phase 1).
-        // Pre-existing user_management page is being retired; these
-        // endpoints fold into the OrganizationPage.
-        .route(
-            "/api/v1/organizations/{org_id}/invitations",
-            get(handlers::org_invitations::list_invitations)
-                .post(handlers::org_invitations::create_invitation),
-        )
-        .route(
-            "/api/v1/organizations/{org_id}/invitations/{id}",
-            axum::routing::delete(handlers::org_invitations::cancel_invitation),
-        )
-        .route(
-            "/api/v1/organizations/{org_id}/invitations/{id}/resend",
-            post(handlers::org_invitations::resend_invitation),
-        )
+        // Note: invitations were already implemented in
+        // handlers::organizations (using org_settings rows keyed
+        // `invite:<nonce>`); routes wired around line 181. The
+        // org_invitations module + migration 20250101000069_org_invitations.sql
+        // landed in c0396e19 by mistake — they're unused dead code, the
+        // pre-existing system handles #15 already. The unused table is
+        // left in place rather than dropped mid-history.
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
         // directly, and the notification dispatcher is a follow-up slice.

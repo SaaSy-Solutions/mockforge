@@ -23,7 +23,6 @@ pub mod legal;
 pub mod notification_channels;
 pub mod oauth;
 pub mod observability;
-pub mod org_invitations;
 pub mod org_templates;
 pub mod organization_settings;
 pub mod organizations;
