@@ -264,6 +264,75 @@ pub fn create_router(state: AppState) -> Router<AppState> {
                 .patch(handlers::test_suites::update_suite)
                 .delete(handlers::test_suites::delete_suite),
         )
+        // Test run trigger + read paths (cloud-enablement task #4 / Phase 2).
+        // Worker dispatch from the queued state lives in the
+        // mockforge-test-runner crate (separate slice).
+        .route(
+            "/api/v1/test-suites/{id}/runs",
+            get(handlers::test_runs::list_suite_runs)
+                .post(handlers::test_runs::trigger_run),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/test-runs",
+            get(handlers::test_runs::list_org_runs),
+        )
+        .route(
+            "/api/v1/test-runs/{id}",
+            get(handlers::test_runs::get_run),
+        )
+        .route(
+            "/api/v1/test-runs/{id}/cancel",
+            post(handlers::test_runs::cancel_run),
+        )
+        // Incident management routes (cloud-enablement task #3 / Phase 1).
+        // Public CRUD only; internal raises from #2/#8 call Incident::raise
+        // directly, and the notification dispatcher is a follow-up slice.
+        .route(
+            "/api/v1/organizations/{org_id}/incidents",
+            get(handlers::incidents::list_incidents)
+                .post(handlers::incidents::raise_incident_external),
+        )
+        .route(
+            "/api/v1/incidents/{id}",
+            get(handlers::incidents::get_incident),
+        )
+        .route(
+            "/api/v1/incidents/{id}/events",
+            get(handlers::incidents::list_incident_events),
+        )
+        .route(
+            "/api/v1/incidents/{id}/acknowledge",
+            post(handlers::incidents::acknowledge_incident),
+        )
+        .route(
+            "/api/v1/incidents/{id}/resolve",
+            post(handlers::incidents::resolve_incident),
+        )
+        // Notification channel routes (cloud-enablement task #3 / Phase 1).
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels",
+            get(handlers::notification_channels::list_channels)
+                .post(handlers::notification_channels::create_channel),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels/{id}",
+            patch(handlers::notification_channels::update_channel)
+                .delete(handlers::notification_channels::delete_channel),
+        )
+        // Routing rule routes (cloud-enablement task #3 / Phase 1).
+        // Maps (severity × source × workspace) → channel_ids[]; the
+        // dispatcher worker (separate slice) evaluates these per-incident
+        // in priority order.
+        .route(
+            "/api/v1/organizations/{org_id}/routing-rules",
+            get(handlers::routing_rules::list_rules)
+                .post(handlers::routing_rules::create_rule),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/routing-rules/{id}",
+            patch(handlers::routing_rules::update_rule)
+                .delete(handlers::routing_rules::delete_rule),
+        )
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
