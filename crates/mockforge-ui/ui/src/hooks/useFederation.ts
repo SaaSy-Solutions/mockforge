@@ -223,10 +223,21 @@ export interface ActivateScenarioRequest {
   service_overrides?: Record<string, ServiceScenarioOverride>;
 }
 
+export interface UseActiveFederationScenarioOptions {
+  /**
+   * Polling interval in ms. Default 10s for the federation detail view, but
+   * list-view callers (one query per card) should pass a longer interval —
+   * or `false` to disable polling — to avoid N concurrent pollers.
+   */
+  refetchInterval?: number | false;
+}
+
 // Fetch the active scenario (if any) for a federation
 export const useActiveFederationScenario = (
-  federationId: string
+  federationId: string,
+  options: UseActiveFederationScenarioOptions = {}
 ): UseQueryResult<FederationScenarioActivation | null, Error> => {
+  const { refetchInterval = 10000 } = options;
   return useQuery<FederationScenarioActivation | null, Error>({
     queryKey: ['federation-active-scenario', federationId],
     queryFn: async () => {
@@ -242,7 +253,7 @@ export const useActiveFederationScenario = (
       return response.json();
     },
     enabled: !!federationId,
-    refetchInterval: 10000,
+    refetchInterval,
   });
 };
 
@@ -304,6 +315,57 @@ export const useOrgScenarios = (): UseQueryResult<OrgScenarioEntry[], Error> => 
       }
       return response.json();
     },
+  });
+};
+
+// -----------------------------------------------------------------------------
+// Workspace-side: which federation scenario overrides apply to a workspace?
+// -----------------------------------------------------------------------------
+//
+// Mirrors the wire shape of `WorkspaceActiveScenariosResponse` in
+// `crates/mockforge-scenarios/src/federation_runtime.rs`. The same endpoint
+// (`GET /api/v1/workspaces/{id}/active-scenarios`) is polled by runtime
+// pollers; the admin UI uses it as a read-only diagnostic so users can see
+// which active federation scenarios are currently affecting a workspace.
+
+export interface WorkspaceActiveScenarioEntry {
+  activation_id: string;
+  federation_id: string;
+  federation_name: string;
+  scenario_name: string;
+  service_name: string;
+  override_config?: ServiceScenarioOverride | null;
+}
+
+export interface WorkspaceActiveScenariosResponse {
+  workspace_id: string;
+  entries: WorkspaceActiveScenarioEntry[];
+}
+
+export const useWorkspaceActiveFederationScenarios = (
+  workspaceId: string | undefined
+): UseQueryResult<WorkspaceActiveScenariosResponse, Error> => {
+  return useQuery<WorkspaceActiveScenariosResponse, Error>({
+    queryKey: ['workspace-active-federation-scenarios', workspaceId],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/workspaces/${workspaceId}/active-scenarios`,
+        { headers: authHeaders() }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          apiErrorMessage(
+            response,
+            errorData,
+            'Failed to fetch active federation scenarios for workspace'
+          )
+        );
+      }
+      return response.json();
+    },
+    enabled: !!workspaceId,
+    refetchInterval: 30000,
   });
 };
 
