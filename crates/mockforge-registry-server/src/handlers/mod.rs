@@ -1,6 +1,7 @@
 //! API handlers
 
 pub mod admin;
+pub mod ai_studio;
 pub mod analytics;
 pub mod auth;
 pub mod billing;

@@ -237,6 +237,11 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Static path — must be registered before `{token_id}` matchers.
         .route("/api/v1/tokens/scopes", get(handlers::tokens::list_scopes))
         .route("/api/v1/tokens/{token_id}", delete(handlers::tokens::delete_token))
+        // AI Studio routes (cloud-enablement task #1).
+        // Each handler does provider routing (BYOK vs platform) +
+        // pre-call quota check + post-call usage metering. See
+        // docs/cloud/CLOUD_AI_STUDIO_DESIGN.md.
+        .route("/api/v1/ai-studio/chat", post(handlers::ai_studio::chat))
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
