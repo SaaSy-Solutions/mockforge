@@ -41,7 +41,7 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 once_cell = { workspace = true }
-rayon = { version = "1.10", optional = true }
+rayon = { version = "1.12", optional = true }
 base64 = { workspace = true }
 base32 = "0.5"
 hex = "0.4"
