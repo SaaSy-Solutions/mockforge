@@ -157,6 +157,21 @@ export function ProfileSettings({ open, onOpenChange }: ProfileSettingsProps) {
               </span>
             </div>
           </div>
+
+          {user.created_at && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Member since
+              </label>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {new Date(user.created_at).toLocaleDateString(undefined, {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </div>
+            </div>
+          )}
         </form>
 
         <DialogFooter>

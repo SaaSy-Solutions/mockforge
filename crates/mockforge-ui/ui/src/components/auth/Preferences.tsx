@@ -76,6 +76,12 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
     { value: 'system', label: 'System', icon: Monitor },
   ];
 
+  const fontSizeOptions: { value: 'small' | 'medium' | 'large'; label: string; sample: string }[] = [
+    { value: 'small', label: 'Small', sample: '14px' },
+    { value: 'medium', label: 'Medium', sample: '16px' },
+    { value: 'large', label: 'Large', sample: '18px' },
+  ];
+
   // Hex values mirror the HSL palettes in useThemeSync.ts so the swatches
   // preview the actual applied accent (no Tailwind named color guesswork).
   const accentColors = [
@@ -147,6 +153,28 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                       >
                         <Icon className="h-4 w-4" />
                         <span className="text-sm">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
+                    Font Size
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {fontSizeOptions.map(({ value, label, sample }) => (
+                      <button
+                        key={value}
+                        onClick={() => updateTheme({ fontSize: value })}
+                        className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all ${
+                          preferences.theme.fontSize === value
+                            ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-600 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <span className="text-sm">{label}</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{sample}</span>
                       </button>
                     ))}
                   </div>
