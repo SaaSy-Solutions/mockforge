@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FederationDashboard } from '../components/federation/FederationDashboard';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Building2 } from 'lucide-react';
 
 interface Organization {
   id: string;
@@ -11,6 +11,8 @@ interface Organization {
   owner_id: string;
   created_at: string;
 }
+
+const SELECTED_ORG_KEY = 'federation:selected-org-id';
 
 async function fetchOrganizations(): Promise<Organization[]> {
   const token = localStorage.getItem('auth_token');
@@ -32,6 +34,37 @@ export const FederationPage: React.FC = () => {
     queryFn: fetchOrganizations,
   });
 
+  // Persist the chosen org across navigation. Falls back to the first org
+  // when nothing is stored yet, or when the stored org is no longer in the
+  // user's org list (e.g. they were removed from it).
+  const [selectedOrgId, setSelectedOrgIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(SELECTED_ORG_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const setSelectedOrgId = (id: string) => {
+    setSelectedOrgIdState(id);
+    try {
+      localStorage.setItem(SELECTED_ORG_KEY, id);
+    } catch {
+      // localStorage can throw in private mode / quota — selection still
+      // works for the current session.
+    }
+  };
+
+  // Reconcile the stored selection against the loaded org list.
+  useEffect(() => {
+    if (!organizations || organizations.length === 0) return;
+    const stillAvailable =
+      selectedOrgId && organizations.some((o) => o.id === selectedOrgId);
+    if (!stillAvailable) {
+      setSelectedOrgId(organizations[0].id);
+    }
+  }, [organizations, selectedOrgId]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12">
@@ -51,9 +84,7 @@ export const FederationPage: React.FC = () => {
     );
   }
 
-  const orgId = organizations?.[0]?.id;
-
-  if (!orgId) {
+  if (!organizations || organizations.length === 0) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
         <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 p-4 rounded-lg flex items-center gap-3">
@@ -64,5 +95,34 @@ export const FederationPage: React.FC = () => {
     );
   }
 
-  return <FederationDashboard orgId={orgId} />;
+  const orgId = selectedOrgId ?? organizations[0].id;
+
+  return (
+    <div>
+      {organizations.length > 1 && (
+        <div className="px-6 pt-6">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Building2 className="h-4 w-4" />
+            <span>Organization</span>
+            <select
+              value={orgId}
+              onChange={(e) => setSelectedOrgId(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {/* Remount the dashboard when the selected org changes so its internal
+          view-mode state (list/detail/edit/create) resets to the list view —
+          a previously-selected federation in org A would otherwise be shown
+          while the URL/list is now scoped to org B. */}
+      <FederationDashboard key={orgId} orgId={orgId} />
+    </div>
+  );
 };

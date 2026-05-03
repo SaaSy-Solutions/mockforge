@@ -319,6 +319,55 @@ export const useOrgScenarios = (): UseQueryResult<OrgScenarioEntry[], Error> => 
 };
 
 // -----------------------------------------------------------------------------
+// Manual per-service state report — admin-side override of the runtime callback.
+// -----------------------------------------------------------------------------
+//
+// `POST /api/v1/federation/{id}/scenarios/active/report` is normally called by
+// runtime pollers to flip pending → applied | failed. Exposing it from the
+// admin UI lets an operator unstick a scenario when a poller is down or a
+// service is wedged — the report endpoint accepts the same payload regardless
+// of caller.
+
+export interface ReportPerServiceStateRequest {
+  service_name: string;
+  status: PerServiceActivationState['status'];
+  error?: string | null;
+}
+
+export const useReportFederationScenarioState = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    FederationScenarioActivation,
+    Error,
+    { federationId: string; report: ReportPerServiceStateRequest }
+  >({
+    mutationFn: async ({ federationId, report }) => {
+      const response = await fetch(
+        `${API_BASE}/${federationId}/scenarios/active/report`,
+        {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(report),
+        }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          apiErrorMessage(response, errorData, 'Failed to report per-service state')
+        );
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['federation-active-scenario', variables.federationId],
+      });
+    },
+  });
+};
+
+// -----------------------------------------------------------------------------
 // Workspace-side: which federation scenario overrides apply to a workspace?
 // -----------------------------------------------------------------------------
 //

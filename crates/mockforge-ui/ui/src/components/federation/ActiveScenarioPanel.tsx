@@ -16,6 +16,7 @@ import {
   useActiveFederationScenario,
   useDeactivateFederationScenario,
   useOrgScenarios,
+  useReportFederationScenarioState,
 } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
 import { AlertCircle, CheckCircle, Clock, Play, Square, Zap } from 'lucide-react';
@@ -34,7 +35,30 @@ export const ActiveScenarioPanel: React.FC<ActiveScenarioPanelProps> = ({ federa
   const { data: active, isLoading } = useActiveFederationScenario(federation.id);
   const activate = useActivateFederationScenario();
   const deactivate = useDeactivateFederationScenario();
+  const reportState = useReportFederationScenarioState();
   const [showActivate, setShowActivate] = useState(false);
+
+  const handleForceState = async (
+    serviceName: string,
+    status: PerServiceActivationState['status']
+  ) => {
+    const reason =
+      status === 'failed'
+        ? prompt(`Mark "${serviceName}" as failed. Optional error message:`) ?? undefined
+        : undefined;
+    try {
+      await reportState.mutateAsync({
+        federationId: federation.id,
+        report: {
+          service_name: serviceName,
+          status,
+          error: reason || null,
+        },
+      });
+    } catch (err) {
+      alert(`Failed to report state: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -112,6 +136,43 @@ export const ActiveScenarioPanel: React.FC<ActiveScenarioPanelProps> = ({ federa
                   <span className="text-xs uppercase text-gray-500 dark:text-gray-400">
                     {entry.status}
                   </span>
+                  {/* Manual override — same payload runtime pollers use, for
+                      unsticking services when a poller is down. */}
+                  <div className="flex items-center gap-1">
+                    {entry.status !== 'applied' && (
+                      <button
+                        type="button"
+                        onClick={() => handleForceState(entry.service_name, 'applied')}
+                        disabled={reportState.isPending}
+                        className="text-xs px-2 py-0.5 rounded border border-green-300 dark:border-green-700 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/40 disabled:opacity-50"
+                        title="Force-mark this service as applied"
+                      >
+                        applied
+                      </button>
+                    )}
+                    {entry.status !== 'failed' && (
+                      <button
+                        type="button"
+                        onClick={() => handleForceState(entry.service_name, 'failed')}
+                        disabled={reportState.isPending}
+                        className="text-xs px-2 py-0.5 rounded border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/40 disabled:opacity-50"
+                        title="Force-mark this service as failed"
+                      >
+                        failed
+                      </button>
+                    )}
+                    {entry.status !== 'pending' && (
+                      <button
+                        type="button"
+                        onClick={() => handleForceState(entry.service_name, 'pending')}
+                        disabled={reportState.isPending}
+                        className="text-xs px-2 py-0.5 rounded border border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-50 dark:hover:bg-yellow-900/40 disabled:opacity-50"
+                        title="Force-reset this service to pending"
+                      >
+                        reset
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
