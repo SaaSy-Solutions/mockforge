@@ -242,6 +242,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // pre-call quota check + post-call usage metering. See
         // docs/cloud/CLOUD_AI_STUDIO_DESIGN.md.
         .route("/api/v1/ai-studio/chat", post(handlers::ai_studio::chat))
+        .route(
+            "/api/v1/ai-studio/generate-openapi",
+            post(handlers::ai_studio::generate_openapi),
+        )
+        .route(
+            "/api/v1/ai-studio/explain-rule",
+            post(handlers::ai_studio::explain_rule),
+        )
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
