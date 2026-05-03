@@ -5,10 +5,15 @@
  */
 
 import React from 'react';
-import { useFederations, useDeleteFederation, type Federation } from '../../hooks/useFederation';
+import {
+  useActiveFederationScenario,
+  useDeleteFederation,
+  useFederations,
+  type Federation,
+} from '../../hooks/useFederation';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import { Card } from '../ui/Card';
-import { Edit, Trash2, Plus, Network, ArrowRight } from 'lucide-react';
+import { Edit, Trash2, Plus, Network, ArrowRight, Zap } from 'lucide-react';
 
 export interface FederationListProps {
   orgId: string;
@@ -121,6 +126,8 @@ export const FederationList: React.FC<FederationListProps> = ({
                     </p>
                   )}
 
+                  <ActiveScenarioBadge federationId={federation.id} />
+
                   <div className="space-y-2">
                     <div className="text-sm text-gray-600 dark:text-gray-400">
                       <strong>Services:</strong> {federation.services.length}
@@ -177,6 +184,29 @@ export const FederationList: React.FC<FederationListProps> = ({
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+interface ActiveScenarioBadgeProps {
+  federationId: string;
+}
+
+/**
+ * Inline badge that surfaces when a federation has an active scenario, so the
+ * user doesn't have to click into each federation to know whether one is
+ * running. Polling is disabled here — list-view callers shouldn't open a
+ * poller per card. The cache is shared with the detail view's hook (same
+ * query key), so opening a federation hydrates this badge instantly.
+ */
+const ActiveScenarioBadge: React.FC<ActiveScenarioBadgeProps> = ({ federationId }) => {
+  const { data } = useActiveFederationScenario(federationId, { refetchInterval: false });
+  if (!data) return null;
+  return (
+    <div className="mb-3 inline-flex items-center gap-2 px-3 py-1 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-full text-xs">
+      <Zap className="h-3 w-3" />
+      <span className="font-medium">Active scenario:</span>
+      <span>{data.scenario_name}</span>
     </div>
   );
 };

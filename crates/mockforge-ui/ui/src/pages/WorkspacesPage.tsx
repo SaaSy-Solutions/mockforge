@@ -32,6 +32,7 @@ import ResponseHistory from '../components/workspace/ResponseHistory';
 import EncryptionSettings from '../components/workspace/EncryptionSettings';
 import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import WorkspacePromotions from '../components/workspace/WorkspacePromotions';
+import WorkspaceFederationScenariosPanel from '../components/workspace/WorkspaceFederationScenariosPanel';
 import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
 import { IS_CLOUD } from '../utils/mode';
 
@@ -866,6 +867,9 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+                {/* Active federation scenarios applying to this workspace (cloud-only) */}
+                <WorkspaceFederationScenariosPanel workspaceId={selectedWorkspace.summary.id} />
+
                 {/* Folders */}
                 {selectedWorkspace.folders.length > 0 && (
                   <div>

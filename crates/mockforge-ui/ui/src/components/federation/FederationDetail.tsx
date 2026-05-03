@@ -16,6 +16,9 @@ export interface FederationDetailProps {
   onBack?: () => void;
 }
 
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
+type HttpMethod = (typeof HTTP_METHODS)[number];
+
 export const FederationDetail: React.FC<FederationDetailProps> = ({
   federation: initialFederation,
   onEdit,
@@ -24,19 +27,52 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
   const { data: federation, isLoading } = useFederation(initialFederation.id);
   const routeRequest = useRouteRequest();
   const [testPath, setTestPath] = useState('');
+  const [testMethod, setTestMethod] = useState<HttpMethod>('GET');
+  const [testHeadersText, setTestHeadersText] = useState('');
+  const [testBodyText, setTestBodyText] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [routingResult, setRoutingResult] = useState<any>(null);
 
   const currentFederation = federation || initialFederation;
 
+  const parseHeaders = (text: string): Record<string, string> | null => {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    const headers: Record<string, string> = {};
+    for (const line of trimmed.split('\n')) {
+      const sep = line.indexOf(':');
+      if (sep === -1) continue;
+      const name = line.slice(0, sep).trim();
+      const value = line.slice(sep + 1).trim();
+      if (name) headers[name] = value;
+    }
+    return Object.keys(headers).length > 0 ? headers : null;
+  };
+
+  const parseBody = (text: string): unknown | undefined => {
+    const trimmed = text.trim();
+    if (!trimmed) return undefined;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
+    }
+  };
+
   const handleTestRoute = async () => {
     if (!testPath) return;
+
+    const headers = parseHeaders(testHeadersText) ?? undefined;
+    const body = parseBody(testBodyText);
 
     try {
       const result = await routeRequest.mutateAsync({
         federationId: currentFederation.id,
         request: {
           path: testPath,
-          method: 'GET',
+          method: testMethod,
+          headers,
+          body,
         },
       });
       setRoutingResult(result);
@@ -217,6 +253,16 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
         </h3>
         <div className="space-y-4">
           <div className="flex gap-2">
+            <select
+              value={testMethod}
+              onChange={(e) => setTestMethod(e.target.value as HttpMethod)}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+              aria-label="HTTP method"
+            >
+              {HTTP_METHODS.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
             <input
               type="text"
               value={testPath}
@@ -232,6 +278,41 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
               Test Route
             </button>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            {showAdvanced ? 'Hide' : 'Show'} headers & body (forward-compat with route handler)
+          </button>
+          {showAdvanced && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Headers (one per line, <code>Name: value</code>)
+                </label>
+                <textarea
+                  value={testHeadersText}
+                  onChange={(e) => setTestHeadersText(e.target.value)}
+                  rows={4}
+                  placeholder={'Authorization: Bearer ...\nX-Trace-Id: abc'}
+                  className="w-full px-3 py-2 font-mono text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Body (JSON or raw text)
+                </label>
+                <textarea
+                  value={testBodyText}
+                  onChange={(e) => setTestBodyText(e.target.value)}
+                  rows={4}
+                  placeholder={'{"username": "alice"}'}
+                  className="w-full px-3 py-2 font-mono text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
+          )}
           {routingResult && (
             <div className="p-4 bg-green-50 dark:bg-green-900 rounded">
               <div className="flex items-center gap-2 mb-2">
