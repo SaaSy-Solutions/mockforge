@@ -226,6 +226,10 @@ const cloudNavItemIds = new Set([
   'plugin-registry',
   'pillar-analytics',
   'status',
+  // AI Studio chat is wired end-to-end (handler + UI client + page dispatcher).
+  // Other AI nav items (mockai, mockai-rules, mockai-openapi-generator, voice)
+  // stay local-only until their pages are migrated to use aiStudioApi.
+  'ai-studio',
   'config',
   'organization',
   'billing',
