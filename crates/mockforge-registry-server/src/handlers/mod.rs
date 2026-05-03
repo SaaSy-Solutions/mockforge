@@ -30,6 +30,7 @@ pub mod sso;
 pub mod stats;
 pub mod status;
 pub mod support;
+pub mod test_suites;
 pub mod tokens;
 pub mod two_factor;
 pub mod usage;

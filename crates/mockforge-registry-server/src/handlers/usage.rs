@@ -89,6 +89,11 @@ pub async fn get_usage(
                 limit: limits.get("ai_tokens_per_month").and_then(|v| v.as_i64()).unwrap_or(0),
                 unit: "tokens".to_string(),
             },
+            runner_seconds: UsageMetric {
+                used: usage.runner_seconds_used,
+                limit: limits.get("runner_seconds_per_month").and_then(|v| v.as_i64()).unwrap_or(0),
+                unit: "seconds".to_string(),
+            },
         },
         plan: org_ctx.org.plan().to_string(),
     }))
@@ -118,6 +123,7 @@ pub async fn get_usage_history(
             egress_bytes: counter.egress_bytes,
             storage_bytes: counter.storage_bytes,
             ai_tokens_used: counter.ai_tokens_used,
+            runner_seconds_used: counter.runner_seconds_used,
         })
         .collect();
 
@@ -142,6 +148,7 @@ pub struct UsageBreakdown {
     pub storage: UsageMetric,
     pub egress: UsageMetric,
     pub ai_tokens: UsageMetric,
+    pub runner_seconds: UsageMetric,
 }
 
 #[derive(Debug, Serialize)]
@@ -165,6 +172,8 @@ pub struct UsagePeriod {
     pub egress_bytes: i64,
     pub storage_bytes: i64,
     pub ai_tokens_used: i64,
+    #[serde(default)]
+    pub runner_seconds_used: i64,
 }
 
 /// Request body for reporting AI token consumption

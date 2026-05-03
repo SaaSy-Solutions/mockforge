@@ -30,6 +30,7 @@ pub mod suspicious_activity;
 pub mod template;
 pub mod template_review;
 pub mod template_star;
+pub mod test_execution;
 pub mod user;
 pub mod verification_token;
 pub mod waitlist;
@@ -87,3 +88,4 @@ pub use template::{Template, TemplateCategory, TemplateVersion};
 pub use template_review::TemplateReview;
 #[cfg(feature = "postgres")]
 pub use template_star::TemplateStar;
+pub use test_execution::TestSuite;

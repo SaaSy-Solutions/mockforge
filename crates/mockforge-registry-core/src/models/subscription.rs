@@ -208,6 +208,10 @@ pub struct UsageCounter {
     pub egress_bytes: i64,
     pub storage_bytes: i64,
     pub ai_tokens_used: i64,
+    /// Wall-clock test/chaos/scenario runner time consumed this period.
+    /// Migration 20250101000059 adds this column with default 0.
+    #[serde(default)]
+    pub runner_seconds_used: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -300,6 +304,27 @@ impl UsageCounter {
             "UPDATE usage_counters SET ai_tokens_used = ai_tokens_used + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(tokens)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment runner-seconds used. Charged for every wall-clock second
+    /// a cloud worker spends on a test/chaos/scenario/etc. run. Plan limits
+    /// live in `organizations.limits_json` under `runner_seconds_per_month`.
+    pub async fn increment_runner_seconds(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        seconds: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET runner_seconds_used = runner_seconds_used + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(seconds)
         .bind(counter.id)
         .execute(pool)
         .await?;
@@ -600,6 +625,7 @@ mod tests {
             egress_bytes: 50000,
             storage_bytes: 10000,
             ai_tokens_used: 5000,
+            runner_seconds_used: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -621,6 +647,7 @@ mod tests {
             egress_bytes: 50000,
             storage_bytes: 10000,
             ai_tokens_used: 5000,
+            runner_seconds_used: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
