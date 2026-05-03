@@ -80,6 +80,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/marketplace/templates/search", post(handlers::templates::search_templates))
         .route("/api/v1/marketplace/templates/{name}/{version}", get(handlers::templates::get_template))
         .route("/api/v1/marketplace/templates/{name}/{version}/reviews", get(handlers::template_reviews::get_template_reviews))
+        // Showcase + Learning Hub read paths (public; cloud-enablement task #12).
+        .route("/api/v1/showcase/entries", get(handlers::showcase::list_showcase_entries))
+        .route("/api/v1/showcase/entries/{slug}", get(handlers::showcase::get_showcase_entry))
+        .route("/api/v1/learning/tracks", get(handlers::showcase::list_learning_tracks))
+        .route("/api/v1/learning/tracks/{slug}", get(handlers::showcase::get_learning_track))
+        .route("/api/v1/learning/recipes", get(handlers::showcase::list_learning_recipes))
+        .route("/api/v1/learning/recipes/{slug}", get(handlers::showcase::get_learning_recipe))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
@@ -301,6 +308,19 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route(
             "/api/v1/tunnels/{id}/verify-custom-domain",
             post(handlers::tunnels::verify_custom_domain),
+        )
+        // Showcase + Learning Hub auth-required actions (cloud-enablement #12).
+        .route(
+            "/api/v1/showcase/entries/{id}/like-toggle",
+            post(handlers::showcase::toggle_showcase_like),
+        )
+        .route(
+            "/api/v1/learning/lessons/{lesson_id}/complete",
+            post(handlers::showcase::complete_learning_lesson),
+        )
+        .route(
+            "/api/v1/learning/progress",
+            get(handlers::showcase::list_learning_progress),
         )
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
