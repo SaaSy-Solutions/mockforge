@@ -322,6 +322,18 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/learning/progress",
             get(handlers::showcase::list_learning_progress),
         )
+        // Time Travel snapshot routes (cloud-enablement task #10 / Phase 1).
+        // Capture worker dispatch + restore + diff land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/snapshots",
+            get(handlers::snapshots::list_snapshots)
+                .post(handlers::snapshots::capture_snapshot),
+        )
+        .route(
+            "/api/v1/snapshots/{id}",
+            get(handlers::snapshots::get_snapshot)
+                .delete(handlers::snapshots::delete_snapshot),
+        )
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
         // directly, and the notification dispatcher is a follow-up slice.

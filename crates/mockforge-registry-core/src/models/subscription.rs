@@ -216,6 +216,13 @@ pub struct UsageCounter {
     /// Migration 20250101000061 adds this column with default 0.
     #[serde(default)]
     pub tunnel_bytes_used: i64,
+    /// Total snapshot blob storage in use across the org.
+    /// Unlike the other meters this is a *current value* (gauge) not a
+    /// monthly sum (counter) — snapshots are billed against an instantaneous
+    /// quota, not throughput.
+    /// Migration 20250101000063 adds this column with default 0.
+    #[serde(default)]
+    pub snapshot_bytes_stored: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -348,6 +355,29 @@ impl UsageCounter {
 
         sqlx::query(
             "UPDATE usage_counters SET tunnel_bytes_used = tunnel_bytes_used + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Set snapshot blob storage used by the org. Unlike the other meters
+    /// this is a *gauge* — snapshot bytes go up when a capture finishes
+    /// and down when one is deleted/expired, so callers compute the new
+    /// total and write it. Plan limits live in `organizations.limits_json`
+    /// under `snapshot_bytes_quota`.
+    pub async fn set_snapshot_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET snapshot_bytes_stored = $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
@@ -652,6 +682,7 @@ mod tests {
             ai_tokens_used: 5000,
             runner_seconds_used: 0,
             tunnel_bytes_used: 0,
+            snapshot_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -675,6 +706,7 @@ mod tests {
             ai_tokens_used: 5000,
             runner_seconds_used: 0,
             tunnel_bytes_used: 0,
+            snapshot_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

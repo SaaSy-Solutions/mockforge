@@ -30,6 +30,7 @@ pub mod reviews;
 pub mod routing_rules;
 pub mod scenario_promotions;
 pub mod showcase;
+pub mod snapshots;
 pub mod sso;
 pub mod stats;
 pub mod status;
