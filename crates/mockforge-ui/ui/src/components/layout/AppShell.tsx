@@ -230,6 +230,9 @@ const cloudNavItemIds = new Set([
   // Other AI nav items (mockai, mockai-rules, mockai-openapi-generator, voice)
   // stay local-only until their pages are migrated to use aiStudioApi.
   'ai-studio',
+  // Import dispatches to /api/v1/import/preview + /api/v1/workspaces/{id}/import
+  // when isCloudMode(); requires an active workspace selection.
+  'import',
   'config',
   'organization',
   'billing',
