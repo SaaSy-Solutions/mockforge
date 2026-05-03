@@ -8868,6 +8868,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-test-runner"
+version = "0.3.125"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "futures",
+ "redis 0.25.4",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "mockforge-tracing"
 version = "0.3.125"
 dependencies = [

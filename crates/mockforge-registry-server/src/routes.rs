@@ -71,6 +71,22 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Waitlist signup (public)
         .route("/api/v1/waitlist/subscribe", post(handlers::waitlist::subscribe))
         .route("/api/v1/waitlist/unsubscribe", get(handlers::waitlist::unsubscribe))
+        // Internal test-runner callbacks (cloud-enablement task #18 / Phase 1).
+        // Auth: shared bearer token (`MOCKFORGE_INTERNAL_API_TOKEN`); planned
+        // mTLS upgrade. Lives in public_routes because they're not user-
+        // scoped — the runner is a separate trust principal.
+        .route(
+            "/api/v1/internal/test-runs/{id}/start",
+            post(handlers::internal_test_runs::run_started),
+        )
+        .route(
+            "/api/v1/internal/test-runs/{id}/events",
+            post(handlers::internal_test_runs::run_event),
+        )
+        .route(
+            "/api/v1/internal/test-runs/{id}/finish",
+            post(handlers::internal_test_runs::run_finished),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))
