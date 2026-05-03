@@ -153,7 +153,7 @@ mod tests {
         pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
     }
 
-    fn iter<'a>(v: &'a [(String, String)]) -> impl IntoIterator<Item = (&'a str, &'a str)> + Clone {
+    fn iter(v: &[(String, String)]) -> impl IntoIterator<Item = (&str, &str)> + Clone {
         v.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>()
     }
 

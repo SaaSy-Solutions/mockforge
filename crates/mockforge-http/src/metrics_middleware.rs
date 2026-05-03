@@ -123,6 +123,9 @@ pub async fn collect_http_metrics(
     // Record metrics with pillar information
     registry.record_http_request_with_pillar(&method, status_code, duration_seconds, pillar);
 
+    // Bump TPS / RPS counters for the dashboard rate sampler.
+    mockforge_foundation::rate_counters::record_response(status_code);
+
     // Record errors separately with pillar
     if status_code >= 400 {
         let error_type = if status_code >= 500 {

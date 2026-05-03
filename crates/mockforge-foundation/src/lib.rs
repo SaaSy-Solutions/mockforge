@@ -23,6 +23,7 @@ pub mod latency;
 pub mod multi_tenant_types;
 pub mod protocol;
 pub mod protocol_contract_types;
+pub mod rate_counters;
 pub mod response_generation_trace;
 pub mod response_selection;
 pub mod schema_diff;

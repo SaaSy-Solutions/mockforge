@@ -256,13 +256,21 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Min(2)]).split(inner);
+        // Reserve 4 lines for the text stats (Total/ErrRate, Avg RT, TPS/RPS,
+        // CPS); rest goes to the sparkline.
+        let chunks = Layout::vertical([Constraint::Length(4), Constraint::Min(2)]).split(inner);
 
         // Stats summary
         let total = data.metrics.total_requests;
         let avg_rt = data.metrics.average_response_time;
         let err_rate = data.metrics.error_rate;
         let peak_err = data.system.peak_error_rate.max(err_rate);
+        let tps = data.system.tps;
+        let peak_tps = data.system.peak_tps.max(tps);
+        let rps_200 = data.system.rps_200;
+        let peak_rps_200 = data.system.peak_rps_200.max(rps_200);
+        let cps = data.system.cps;
+        let peak_cps = data.system.peak_cps.max(cps);
 
         let stats = vec![
             Line::from(vec![
@@ -285,6 +293,19 @@ impl DashboardScreen {
             Line::from(vec![
                 Span::styled(" Avg RT: ", Theme::dim()),
                 Span::styled(format!("{avg_rt:.0}ms"), Style::default().fg(Theme::FG)),
+            ]),
+            Line::from(vec![
+                Span::styled(" TPS: ", Theme::dim()),
+                Span::styled(format!("{tps:.1}"), Style::default().fg(Theme::FG)),
+                Span::styled(format!(" (peak {peak_tps:.1})"), Theme::dim()),
+                Span::styled("  RPS200: ", Theme::dim()),
+                Span::styled(format!("{rps_200:.1}"), Style::default().fg(Theme::FG)),
+                Span::styled(format!(" (peak {peak_rps_200:.1})"), Theme::dim()),
+            ]),
+            Line::from(vec![
+                Span::styled(" CPS: ", Theme::dim()),
+                Span::styled(format!("{cps:.1}"), Style::default().fg(Theme::FG)),
+                Span::styled(format!(" (peak {peak_cps:.1})"), Theme::dim()),
             ]),
         ];
         frame.render_widget(Paragraph::new(stats), chunks[0]);
@@ -391,7 +412,13 @@ mod tests {
                 "memory_usage_mb": 512,
                 "active_threads": 8,
                 "total_routes": 25,
-                "total_fixtures": 10
+                "total_fixtures": 10,
+                "tps": 42.5,
+                "peak_tps": 120.0,
+                "rps_200": 38.0,
+                "peak_rps_200": 110.0,
+                "cps": 7.5,
+                "peak_cps": 30.0
             },
             "recent_logs": [
                 {

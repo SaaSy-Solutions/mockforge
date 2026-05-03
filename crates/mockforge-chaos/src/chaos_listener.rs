@@ -127,6 +127,9 @@ impl axum::serve::Listener for ChaosTcpListener {
                 }
                 // `Http503` (or no fault hit) lets the connection through; the
                 // chaos middleware will still apply its HTTP-level 503 logic.
+                // The accept counter is bumped by `CountingMakeService` when
+                // axum hands the stream to the make-service, so this listener
+                // doesn't need to touch it.
                 _ => return (stream, addr),
             }
         }
