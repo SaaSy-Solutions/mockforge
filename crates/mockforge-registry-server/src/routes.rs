@@ -357,6 +357,135 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/flow-versions/{version_id}",
             get(handlers::flows::get_flow_version),
         )
+        // Observability saved-queries + dashboards (cloud-enablement #2 / Phase 1).
+        // Cross-deployment query handlers come in a follow-up slice.
+        .route(
+            "/api/v1/organizations/{org_id}/observability/saved-queries",
+            get(handlers::observability::list_saved_queries)
+                .post(handlers::observability::create_saved_query),
+        )
+        .route(
+            "/api/v1/observability/saved-queries/{id}",
+            patch(handlers::observability::update_saved_query)
+                .delete(handlers::observability::delete_saved_query),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/observability/dashboards",
+            get(handlers::observability::list_dashboards)
+                .post(handlers::observability::create_dashboard),
+        )
+        .route(
+            "/api/v1/observability/dashboards/{id}",
+            patch(handlers::observability::update_dashboard)
+                .delete(handlers::observability::delete_dashboard),
+        )
+        // Chaos campaigns + resilience patterns (cloud-enablement #7 / Phase 1).
+        // Run trigger / kill-switch worker / target authorization land
+        // in follow-up slices once #4 worker pool is up.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/chaos-campaigns",
+            get(handlers::chaos::list_campaigns)
+                .post(handlers::chaos::create_campaign),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}",
+            get(handlers::chaos::get_campaign)
+                .delete(handlers::chaos::delete_campaign),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}/reports",
+            get(handlers::chaos::list_campaign_reports),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience-patterns",
+            get(handlers::chaos::list_patterns),
+        )
+        // Contract Diff / Verification / Fitness (cloud-enablement #8 / Phase 1).
+        // Probe worker / scheduler / IncidentBus wiring land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/monitored-services",
+            get(handlers::contract_verification::list_monitored_services)
+                .post(handlers::contract_verification::create_monitored_service),
+        )
+        .route(
+            "/api/v1/monitored-services/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_monitored_service),
+        )
+        .route(
+            "/api/v1/monitored-services/{id}/diffs",
+            get(handlers::contract_verification::list_service_diff_runs),
+        )
+        .route(
+            "/api/v1/contract-diff-runs/{id}",
+            get(handlers::contract_verification::get_diff_run),
+        )
+        .route(
+            "/api/v1/contract-diff-runs/{id}/findings",
+            get(handlers::contract_verification::list_diff_findings),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/fitness-functions",
+            get(handlers::contract_verification::list_fitness_functions)
+                .post(handlers::contract_verification::create_fitness_function),
+        )
+        .route(
+            "/api/v1/fitness-functions/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_fitness_function),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/verification-suites",
+            get(handlers::contract_verification::list_verification_suites)
+                .post(handlers::contract_verification::create_verification_suite),
+        )
+        .route(
+            "/api/v1/verification-suites/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_verification_suite),
+        )
+        // Recorder + Behavioral cloning (cloud-enablement #6 / Phase 1).
+        // Training worker / replay endpoint / per-capture cloud-shipping
+        // land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/capture-sessions",
+            get(handlers::captures::list_sessions)
+                .post(handlers::captures::create_session),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}/members",
+            patch(handlers::captures::modify_session_members),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}",
+            axum::routing::delete(handlers::captures::delete_session),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/clone-models",
+            get(handlers::captures::list_clone_models),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}/train",
+            post(handlers::captures::train_clone_from_session),
+        )
+        .route(
+            "/api/v1/clone-models/{id}",
+            get(handlers::captures::get_clone_model)
+                .delete(handlers::captures::delete_clone_model),
+        )
+        // Org invitations (cloud-enablement #15 / Phase 1).
+        // Pre-existing user_management page is being retired; these
+        // endpoints fold into the OrganizationPage.
+        .route(
+            "/api/v1/organizations/{org_id}/invitations",
+            get(handlers::org_invitations::list_invitations)
+                .post(handlers::org_invitations::create_invitation),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/invitations/{id}",
+            axum::routing::delete(handlers::org_invitations::cancel_invitation),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/invitations/{id}/resend",
+            post(handlers::org_invitations::resend_invitation),
+        )
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
         // directly, and the notification dispatcher is a follow-up slice.

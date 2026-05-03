@@ -223,6 +223,15 @@ pub struct UsageCounter {
     /// Migration 20250101000063 adds this column with default 0.
     #[serde(default)]
     pub snapshot_bytes_stored: i64,
+    /// Observability log/trace ingest volume this period.
+    /// Migration 20250101000065 adds this column with default 0.
+    #[serde(default)]
+    pub log_bytes_ingested: i64,
+    /// Total recorder capture blob storage in use across the org.
+    /// Gauge, not counter — same shape as snapshot_bytes_stored.
+    /// Migration 20250101000068 adds this column with default 0.
+    #[serde(default)]
+    pub capture_bytes_stored: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -378,6 +387,27 @@ impl UsageCounter {
 
         sqlx::query(
             "UPDATE usage_counters SET snapshot_bytes_stored = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment observability log/trace ingest bytes. Reported by the
+    /// log shipper / OTLP collector via internal routes. Plan limits
+    /// live in `organizations.limits_json` under `log_bytes_per_month`.
+    pub async fn increment_log_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET log_bytes_ingested = log_bytes_ingested + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
@@ -683,6 +713,8 @@ mod tests {
             runner_seconds_used: 0,
             tunnel_bytes_used: 0,
             snapshot_bytes_stored: 0,
+            log_bytes_ingested: 0,
+            capture_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -707,6 +739,8 @@ mod tests {
             runner_seconds_used: 0,
             tunnel_bytes_used: 0,
             snapshot_bytes_stored: 0,
+            log_bytes_ingested: 0,
+            capture_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

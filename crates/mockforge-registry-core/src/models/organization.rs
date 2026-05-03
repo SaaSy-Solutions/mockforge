@@ -370,7 +370,11 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "tunnel_bytes_per_month": 1_000_000_000, // 1 GB
             "max_snapshots": 3,
             "snapshot_retention_days": 7,
-            "snapshot_bytes_quota": 100_000_000 // 100 MB
+            "snapshot_bytes_quota": 100_000_000, // 100 MB
+            "log_retention_days": 1, // tease only
+            "log_bytes_per_month": 100_000_000, // 100 MB
+            "max_clone_models": 0,
+            "capture_bytes_quota": 100_000_000 // 100 MB
         }),
         Plan::Pro => serde_json::json!({
             "max_projects": 10,
@@ -392,7 +396,11 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "tunnel_bytes_per_month": 50_000_000_000_i64, // 50 GB
             "max_snapshots": 50,
             "snapshot_retention_days": 30,
-            "snapshot_bytes_quota": 5_000_000_000_i64 // 5 GB
+            "snapshot_bytes_quota": 5_000_000_000_i64, // 5 GB
+            "log_retention_days": 7,
+            "log_bytes_per_month": 50_000_000_000_i64, // 50 GB
+            "max_clone_models": 2,
+            "capture_bytes_quota": 5_000_000_000_i64 // 5 GB
         }),
         Plan::Team => serde_json::json!({
             "max_projects": -1, // unlimited
@@ -414,7 +422,11 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "tunnel_bytes_per_month": 500_000_000_000_i64, // 500 GB
             "max_snapshots": 500,
             "snapshot_retention_days": 90,
-            "snapshot_bytes_quota": 50_000_000_000_i64 // 50 GB
+            "snapshot_bytes_quota": 50_000_000_000_i64, // 50 GB
+            "log_retention_days": 30,
+            "log_bytes_per_month": 500_000_000_000_i64, // 500 GB
+            "max_clone_models": 10,
+            "capture_bytes_quota": 50_000_000_000_i64 // 50 GB
         }),
     }
 }
