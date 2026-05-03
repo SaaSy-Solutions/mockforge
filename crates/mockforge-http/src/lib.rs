@@ -177,6 +177,9 @@ pub mod consistency;
 pub mod contract_diff_api;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
+/// TCP-listener wrapper that bumps the global `record_accept()` counter,
+/// used by the dashboard sampler to derive connections-per-second.
+pub mod counting_listener;
 pub mod coverage;
 pub mod database;
 /// File generation service for creating mock PDF, CSV, JSON files
@@ -1474,12 +1477,17 @@ pub async fn serve_router_with_tls_notify_chaos(
         let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
             mockforge_chaos::ChaosClientAddr,
         >(app_with_addr_compat);
-        axum::serve(chaos_listener, make_svc).await?;
+        // Bump the accept counter on each connection that gets through chaos.
+        let counted = counting_listener::CountingMakeService::new(make_svc);
+        axum::serve(chaos_listener, counted).await?;
     } else {
         let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
             SocketAddr,
         >(odata_app);
-        axum::serve(listener, make_svc).await?;
+        // Bump the accept counter once per accepted connection so the
+        // dashboard sampler can derive CPS.
+        let counted = counting_listener::CountingMakeService::new(make_svc);
+        axum::serve(listener, counted).await?;
     }
     Ok(())
 }
@@ -1536,10 +1544,13 @@ async fn serve_with_tls(
     let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
         SocketAddr,
     >(odata_app);
+    // Bump the accept counter once per successful TLS handshake / connection
+    // so the dashboard sampler can derive CPS for HTTPS-only setups.
+    let counted = counting_listener::CountingMakeService::new(make_svc);
 
     // Serve with TLS using axum-server
     axum_server::bind_rustls(addr, rustls_config)
-        .serve(make_svc)
+        .serve(counted)
         .await
         .map_err(|e| format!("HTTPS server error: {}", e).into())
 }

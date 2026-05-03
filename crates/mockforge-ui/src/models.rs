@@ -99,6 +99,28 @@ pub struct SystemInfo {
     /// Timestamp peaks were last reset; gives a window for long-running tests
     #[serde(default = "chrono::Utc::now")]
     pub peaks_since: chrono::DateTime<chrono::Utc>,
+    /// Successful (status `200..=399`) HTTP responses per second over the
+    /// last metrics sampling interval. "Successful API transactions/sec"
+    /// in the load-testing sense.
+    #[serde(default)]
+    pub tps: f64,
+    /// Peak `tps` observed since `peaks_since`.
+    #[serde(default)]
+    pub peak_tps: f64,
+    /// HTTP `200 OK` responses per second over the last metrics interval.
+    #[serde(default)]
+    pub rps_200: f64,
+    /// Peak `rps_200` observed since `peaks_since`.
+    #[serde(default)]
+    pub peak_rps_200: f64,
+    /// Accepted TCP connections per second over the last metrics interval.
+    /// Plain HTTP path only — the TLS path uses `axum-server`'s own accept
+    /// loop and is not yet instrumented; reads as 0 for HTTPS-only setups.
+    #[serde(default)]
+    pub cps: f64,
+    /// Peak `cps` observed since `peaks_since`.
+    #[serde(default)]
+    pub peak_cps: f64,
 }
 
 /// Latency profile configuration
@@ -1226,6 +1248,12 @@ mod tests {
             peak_cpu_usage_percent: 25.5,
             peak_error_rate: 0.0,
             peaks_since: chrono::Utc::now(),
+            tps: 0.0,
+            peak_tps: 0.0,
+            rps_200: 0.0,
+            peak_rps_200: 0.0,
+            cps: 0.0,
+            peak_cps: 0.0,
         };
 
         assert_eq!(info.version, "0.3.8");
