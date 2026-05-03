@@ -2993,6 +2993,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             println!("    {} = {}", code, n);
                         }
                     }
+                    // Surface the captured error responses so the user can
+                    // tell whether errors came from MockForge, an upstream
+                    // proxy, a CDN, etc. Hint at the most common cause when
+                    // 5xx is involved (proxy upstream timeout on long
+                    // chunked uploads).
+                    if !r.error_samples.is_empty() {
+                        println!("  Error response samples:");
+                        for s in &r.error_samples {
+                            let server = s.server_header.as_deref().unwrap_or("(no Server header)");
+                            println!("    [{}] Server: {}", s.status, server);
+                            if !s.body_excerpt.is_empty() {
+                                let one_line = s.body_excerpt.replace('\n', " ");
+                                println!("       body: {}", one_line);
+                            }
+                        }
+                        if r.status_counts.keys().any(|c| (500..600).contains(c)) {
+                            println!(
+                                "  Hint: 5xx responses with `Server:` revealing a proxy/LB usually \
+                                 mean the proxy timed out reading from upstream. Each chunked request \
+                                 takes >= (total_size_bytes / chunk_size_bytes) * chunk_interval_ms; \
+                                 if that exceeds the proxy's upstream timeout, errors are inevitable."
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("Chunked bench failed: {}", e);
