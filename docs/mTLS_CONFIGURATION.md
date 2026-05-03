@@ -47,17 +47,9 @@ For mTLS to work, you need:
 2. **Server Private Key** (`key_file`): The server's private key
 3. **CA Certificate** (`ca_file`): Certificate Authority certificate that signed the client certificates
 
-### Environment Variables
-
-You can also configure mTLS via environment variables:
-
-```bash
-export MOCKFORGE_HTTP_TLS_ENABLED=true
-export MOCKFORGE_HTTP_TLS_CERT_FILE=./certs/server.crt
-export MOCKFORGE_HTTP_TLS_KEY_FILE=./certs/server.key
-export MOCKFORGE_HTTP_TLS_CA_FILE=./certs/ca.crt
-export MOCKFORGE_HTTP_TLS_REQUIRE_CLIENT_CERT=true
-```
+mTLS configuration is YAML-only (under `http.tls.*` in your `mockforge.yaml`).
+There are no env-var equivalents in v0.3.x — set the cert paths in the
+config file or via `--tls-cert` / `--tls-key` CLI flags.
 
 ## Certificate Generation
 
@@ -449,13 +441,10 @@ services:
     volumes:
       - ./certs:/certs
       - ./config.yaml:/config.yaml
-    environment:
-      - MOCKFORGE_HTTP_TLS_ENABLED=true
-      - MOCKFORGE_HTTP_TLS_CERT_FILE=/certs/server.crt
-      - MOCKFORGE_HTTP_TLS_KEY_FILE=/certs/server.key
-      - MOCKFORGE_HTTP_TLS_CA_FILE=/certs/ca.crt
-      - MOCKFORGE_HTTP_TLS_REQUIRE_CLIENT_CERT=true
 ```
+
+Mount the config file with mTLS configured under `http.tls.*` rather
+than passing env vars; v0.3.x doesn't read TLS settings from env.
 
 ## Related Documentation
 

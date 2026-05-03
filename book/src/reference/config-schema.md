@@ -524,24 +524,27 @@ Configuration values are applied in order of priority (highest to lowest):
 
 ## Environment Variable Mapping
 
-All configuration options can be set via environment variables using the `MOCKFORGE_` prefix with underscore-separated paths:
+A subset of config options can be overridden via env vars. The full list
+is in [Environment Variables](../configuration/environment.md). Common ones:
 
 ```bash
 # Server configuration
-export MOCKFORGE_SERVER_HTTP_PORT=9080
-export MOCKFORGE_SERVER_BIND="127.0.0.1"
+export MOCKFORGE_HTTP_PORT=9080
+export MOCKFORGE_HTTP_HOST="127.0.0.1"
+export MOCKFORGE_GRPC_PORT=50051
+export MOCKFORGE_WS_PORT=3001
 
 # Admin UI
 export MOCKFORGE_ADMIN_ENABLED=true
-export MOCKFORGE_ADMIN_PORT=9090
+export MOCKFORGE_ADMIN_PORT=9080
 
-# Validation
-export MOCKFORGE_VALIDATION_MODE=warn
+# Validation / templating
+export MOCKFORGE_REQUEST_VALIDATION=warn
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 
-# Protocol-specific
-export MOCKFORGE_GRPC_PROTO_DIR="my-protos/"
-export MOCKFORGE_WEBSOCKET_REPLAY_FILE="replay.jsonl"
+# Protocol-specific (paths)
+export MOCKFORGE_WS_REPLAY_FILE="replay.jsonl"
+# Use --grpc-proto-dir or grpc.proto_dir in YAML for proto paths
 ```
 
 ## Validation

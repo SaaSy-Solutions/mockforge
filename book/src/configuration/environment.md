@@ -172,6 +172,7 @@ Host binding for the gRPC server is YAML-only (`grpc.host`).
 ## Kafka Protocol
 
 - `MOCKFORGE_KAFKA_ENABLED=true|false` — start the Kafka mock listener.
+- `MOCKFORGE_KAFKA_ADVERTISED_HOST=<host>` — hostname advertised in metadata responses (defaults to the bind host).
 - `MOCKFORGE_KAFKA_ADVERTISED_PORT=<int>` — port advertised in metadata responses (defaults to the bind port).
 - `MOCKFORGE_KAFKA_FIXTURES_DIR=path/to/kafka-fixtures` — directory of pre-recorded Kafka topic fixtures.
 
@@ -187,6 +188,8 @@ Host binding for the gRPC server is YAML-only (`grpc.host`).
 - `MOCKFORGE_ENCRYPTION_KEY=<base64-key>` — base64-encoded AES-256 key used to encrypt config/data at rest.
 - `MOCKFORGE_MASTER_KEY=<base64-key>` — master KEK that wraps per-workspace data encryption keys.
 - `MOCKFORGE_BYOK_ENCRYPTION_KEY=<base64-key>` — bring-your-own-key override for workspace encryption.
+- `MOCKFORGE_SECRET_PROVIDER=env|aws|vault|gcp|azure` — backend used by the secret-resolution layer (default: `env`).
+- `MOCKFORGE_SECRET_CACHE_TTL=<secs>` — how long resolved secrets stay in the in-process cache.
 - `MOCKFORGE_KMS_PROVIDER=aws|gcp|azure|vault` — when set, MockForge fetches the master key from a managed KMS instead of using `MOCKFORGE_MASTER_KEY`.
 - `MOCKFORGE_KMS_REGION=<region>` — region for the KMS provider (e.g. `us-east-1`).
 - `MOCKFORGE_VAULT_ADDR=<url>` — Vault server address when using `MOCKFORGE_KMS_PROVIDER=vault`.
@@ -207,6 +210,64 @@ backend; the OSS local mock server doesn't need them.
 - `MOCKFORGE_FIXTURES_DIR=path/to/fixtures` (default: `./fixtures`)
   - Directory where fixtures are stored
   - Used for recording and replaying HTTP requests
+
+## Authentication (OIDC)
+
+- `MOCKFORGE_OIDC_ENABLED=true|false` — enable OpenID Connect for the admin API and proxied routes.
+- `MOCKFORGE_OIDC_ISSUER=<url>` — issuer URL whose `/.well-known/openid-configuration` MockForge will fetch.
+- `MOCKFORGE_OIDC_CONFIG=<path>` — path to a YAML/JSON file overriding individual OIDC discovery fields.
+- `MOCKFORGE_OIDC_SECRET=<client-secret>` — confidential-client secret for the configured `client_id`.
+
+## Hot Reload
+
+Watch the spec / config / fixtures dirs and rebuild routes on change without restarting.
+
+- `MOCKFORGE_HOT_RELOAD_ENABLED=true|false` — master switch.
+- `MOCKFORGE_HOT_RELOAD_SPEC=true|false` — watch the OpenAPI spec file.
+- `MOCKFORGE_HOT_RELOAD_FIXTURES=true|false` — watch the fixtures directory.
+- `MOCKFORGE_HOT_RELOAD_DEBOUNCE=<ms>` — coalesce rapid filesystem events into a single reload.
+- `MOCKFORGE_HOT_RELOAD_INTERVAL=<ms>` — polling fallback when filesystem events aren't available.
+- `MOCKFORGE_HOT_RELOAD_TIMEOUT=<ms>` — upper bound on a single reload before it's aborted.
+- `MOCKFORGE_HOT_RELOAD_GRACEFUL=true|false` — drain in-flight requests before swapping routes.
+- `MOCKFORGE_HOT_RELOAD_VALIDATE=true|false` — re-run validation on every reload (safer; slower).
+
+## Plugins
+
+- `MOCKFORGE_PLUGINS_ENABLED=true|false` — load `.so`/`.dylib`/`.wasm` plugins on startup.
+- `MOCKFORGE_PLUGIN_CACHE_DIR=<path>` — where downloaded plugins are cached.
+- `MOCKFORGE_PLUGIN_TIMEOUT_MS=<ms>` — per-invocation timeout for plugin calls.
+- `MOCKFORGE_PLUGIN_MAX_CONCURRENT=<int>` — max concurrent plugin invocations across the process.
+- `MOCKFORGE_PLUGIN_MAX_CPU=<percent>` — CPU budget per plugin (0–100).
+- `MOCKFORGE_PLUGIN_MAX_MEMORY=<bytes>` — memory cap per plugin.
+- `MOCKFORGE_PLUGIN_MAX_MODULE_SIZE=<bytes>` — max accepted plugin binary size.
+- `MOCKFORGE_PLUGIN_NETWORK_ACCESS=true|false` — allow plugins to make outbound network calls.
+
+## Compression
+
+- `MOCKFORGE_COMPRESSION_ENABLED=true|false` — gzip/deflate/zstd response bodies above the threshold.
+- `MOCKFORGE_COMPRESSION_ALGORITHM=gzip|deflate|zstd|br` — preferred compression codec when the client accepts multiple.
+- `MOCKFORGE_COMPRESSION_LEVEL=<int>` — codec-specific level (e.g. 1–9 for gzip).
+
+## Resilience
+
+- `MOCKFORGE_CIRCUIT_BREAKER_ENABLED=true|false` — wrap upstream calls (proxy / record-replay) in a circuit breaker.
+- `MOCKFORGE_CIRCUIT_BREAKER_THRESHOLD=<int>` — consecutive failures before the breaker opens.
+- `MOCKFORGE_POOL_MAX_CONNECTIONS=<int>` — outbound HTTP connection pool size.
+- `MOCKFORGE_POOL_IDLE_TIMEOUT=<secs>` — close idle connections after this duration.
+
+## Performance Tuning
+
+- `MOCKFORGE_WORKER_THREADS=<int>` — Tokio worker-thread count (default: number of CPU cores).
+- `MOCKFORGE_MAX_BODY_SIZE=<bytes>` — reject inbound HTTP bodies larger than this.
+
+## Proxy / Record-Replay
+
+- `MOCKFORGE_PROXY_UPSTREAM=<url>` — when set, requests with no matching mock are proxied here. Pair with `mockforge serve --record` (or the recorder admin API) to capture upstream traffic for replay.
+
+## Tunneling
+
+- `MOCKFORGE_TUNNEL_SERVER_URL=<url>` — control-plane URL for the MockForge tunnel server (used when `mockforge tunnel start`).
+- `MOCKFORGE_TUNNEL_AUTH_TOKEN=<token>` — auth token for the tunnel control plane.
 
 ## Observability
 
@@ -233,7 +294,7 @@ in the working directory.
 ### Basic HTTP Server with OpenAPI
 
 ```bash
-export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+export MOCKFORGE_OPENAPI_SPEC_URL=file://./examples/openapi-demo.json
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_ADMIN_ENABLED=true
 cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 9080
@@ -244,7 +305,7 @@ cargo run -p mockforge-cli -- serve --http-port 3000 --admin-port 9080
 ```bash
 export MOCKFORGE_WS_REPLAY_FILE=examples/ws-demo.jsonl
 export MOCKFORGE_WS_PORT=3001
-export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+export MOCKFORGE_OPENAPI_SPEC_URL=file://./examples/openapi-demo.json
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 cargo run -p mockforge-cli -- serve --admin
 ```
@@ -256,7 +317,7 @@ export MOCKFORGE_LOG_LEVEL=debug
 export MOCKFORGE_LATENCY_ENABLED=false
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 export MOCKFORGE_ADMIN_ENABLED=true
-export MOCKFORGE_HTTP_OPENAPI_SPEC=examples/openapi-demo.json
+export MOCKFORGE_OPENAPI_SPEC_URL=file://./examples/openapi-demo.json
 cargo run -p mockforge-cli -- serve
 ```
 
@@ -268,7 +329,7 @@ export MOCKFORGE_LATENCY_ENABLED=true
 export MOCKFORGE_FAILURES_ENABLED=false
 export MOCKFORGE_REQUEST_VALIDATION=enforce
 export MOCKFORGE_ADMIN_ENABLED=false
-export MOCKFORGE_HTTP_OPENAPI_SPEC=path/to/production-spec.json
+export MOCKFORGE_OPENAPI_SPEC_URL=file://./path/to/production-spec.json
 cargo run -p mockforge-cli -- serve --http-port 80
 ```
 
@@ -286,7 +347,7 @@ Environment variables override configuration file settings. CLI flags take prece
 - Be careful with `MOCKFORGE_ADMIN_ENABLED=true` in production
 - Consider setting restrictive host bindings (`127.0.0.1`) for internal use
 - Use `MOCKFORGE_FAKE_TOKENS=false` for deterministic testing
-- Review `MOCKFORGE_CORS_ENABLED` settings for cross-origin requests
+- Review CORS settings for cross-origin requests
 
 ## Troubleshooting
 
@@ -302,7 +363,7 @@ Environment variables override configuration file settings. CLI flags take prece
    - Check what processes are using ports with `netstat -tlnp`
 
 3. **OpenAPI spec not loading**
-   - Verify file path in `MOCKFORGE_HTTP_OPENAPI_SPEC`
+   - Verify file path in `MOCKFORGE_OPENAPI_SPEC_URL`
    - Ensure JSON/YAML syntax is valid
    - Check file permissions
 

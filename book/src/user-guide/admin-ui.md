@@ -239,22 +239,16 @@ updateValidation({
 
 ### Environment Variables
 
-Configure Admin UI behavior through environment variables:
-
 ```bash
-# Enable Admin UI (default: true)
-MOCKFORGE_ADMIN_UI_ENABLED=true
-
 # Admin UI port (default: 9080)
 MOCKFORGE_ADMIN_PORT=9080
 
-# Authentication settings
-MOCKFORGE_ADMIN_AUTH_ENABLED=true
-MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
-
-# Session timeout (default: 24h)
-MOCKFORGE_ADMIN_SESSION_TIMEOUT=86400
+# Enable the Admin UI
+MOCKFORGE_ADMIN_ENABLED=true
 ```
+
+Auth, session timeout, JWT secrets, and resource limits are YAML-only —
+configure under `admin.*` in `mockforge.yaml`.
 
 ### Custom Authentication
 
@@ -339,9 +333,6 @@ GET /__mockforge/logs/sse
 
 #### Authentication Problems
 ```bash
-# Check JWT secret configuration
-MOCKFORGE_ADMIN_JWT_SECRET=your-secret-key
-
 # Verify admin credentials against the embedded admin server
 curl -X POST http://localhost:9080/__mockforge/auth/login \
   -H "Content-Type: application/json" \
@@ -363,13 +354,10 @@ ProxyPass /__mockforge/ http://localhost:9080/__mockforge/
 ```
 
 #### Performance Issues
-```bash
-# Enable performance monitoring
-MOCKFORGE_ADMIN_METRICS_ENABLED=true
 
-# Increase memory limits for large datasets
-MOCKFORGE_ADMIN_MEMORY_LIMIT=512MB
-```
+For large fixture sets / high-traffic dashboards, enable Prometheus
+metrics with `--metrics --metrics-port 9090` to track admin server
+overhead. Memory tuning is YAML-only (`admin.memory_limit_mb`).
 
 ### Debug Mode
 

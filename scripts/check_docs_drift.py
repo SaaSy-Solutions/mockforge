@@ -67,6 +67,10 @@ ENV_ALLOWLIST: dict[str, str] = {
     "MOCKFORGE_LOG_INGEST_BATCH_SIZE": "hosted log shipper internal tunable",
     "MOCKFORGE_LOG_INGEST_BUFFER": "hosted log shipper internal tunable",
     "MOCKFORGE_LOG_INGEST_FLUSH_MS": "hosted log shipper internal tunable",
+    "MOCKFORGE_LOG_INGEST_BASE_URL": "hosted log shipper base URL; orchestrator-injected",
+    "MOCKFORGE_OTLP_INGEST_ENDPOINT": "hosted-mocks OTLP ingest; orchestrator-injected",
+    "MOCKFORGE_MOCKS_DOMAIN": "hosted-mocks deployment domain; orchestrator-injected",
+    "MOCKFORGE_AWS_SECRETS_REGION": "registry-server AWS Secrets Manager region; operator-only",
     "MOCKFORGE_CAPTURE_INGEST_URL": "hosted capture pipeline; orchestrator-injected",
     "MOCKFORGE_CAPTURE_INGEST_TOKEN": "hosted capture pipeline; orchestrator-injected",
     "MOCKFORGE_CAPTURE_INGEST_BATCH_SIZE": "hosted capture pipeline tunable",
@@ -94,10 +98,27 @@ COMMAND_ALLOWLIST: dict[str, str] = {
     "DevX": "developer-experience helper (internal)",
 }
 
-# Documented but allowed not to exist in code anymore (e.g. recently-removed
-# env vars where docs still reference them as "legacy" or "previously"). Empty
-# to start — add with a reason when needed.
-DOC_ONLY_ENV_ALLOWLIST: dict[str, str] = {}
+# Documented but allowed not to exist in code. Two cases:
+#  1. Docs explicitly note the var as "doesn't exist; use YAML instead" — this
+#     is the user-helpful pattern for telling people what NOT to set.
+#  2. Teaching examples that show the wrong name (e.g. MOCKFORGE_PORT vs
+#     the correct MOCKFORGE_HTTP_PORT).
+DOC_ONLY_ENV_ALLOWLIST: dict[str, str] = {
+    # Anti-pattern teaching examples ("don't use this name")
+    "MOCKFORGE_PORT": "common-issues.md teaches users to NOT use this — the right one is MOCKFORGE_HTTP_PORT",
+    # Disclaimer references (docs note these don't exist as env vars)
+    "MOCKFORGE_AMQP_FIXTURES_DIR": "amqp/configuration.md notes this is YAML-only",
+    "MOCKFORGE_MQTT_FIXTURES_DIR": "mqtt/configuration.md notes this is YAML-only",
+    "MOCKFORGE_MQTT_FIXTURES": "mqtt/examples.md typo / variant; not a real var",
+    "MOCKFORGE_MQTT_TLS_ENABLED": "mqtt/configuration.md notes this is roadmap, not yet implemented",
+    "MOCKFORGE_GRPC_HOST": "grpc-mocking.md notes this is YAML-only (grpc.host)",
+    "MOCKFORGE_GRPC_REFLECTION_ENABLED": "grpc-mocking troubleshooting notes this isn't an env var",
+    "MOCKFORGE_CONFIG_FILE": "faq.md / files.md document fallback discovery behavior; not a real var",
+    "MOCKFORGE_CORS_ENABLED": "documented as not implemented; users redirect to YAML",
+    "MOCKFORGE_TEMPLATE_TIMEOUT_MS": "dynamic-data.md mentions as roadmap",
+    "MOCKFORGE_DATA_SYNTHESIS_DEBUG": "advanced-data-synthesis.md mentions as YAML-equivalent example",
+    "MOCKFORGE_DATA_SYNTHESIS_SEED": "advanced-data-synthesis.md mentions as YAML-equivalent example",
+}
 
 # Per-flag long-form flag names that don't need their own doc entry. Use
 # sparingly; prefer documenting the flag.
@@ -108,7 +129,7 @@ FLAG_ALLOWLIST: dict[str, str] = {
 }
 
 ENV_VAR_RE = re.compile(
-    r"""std::env::var(?:_os)?\(\s*['"](MOCKFORGE_[A-Z0-9_]+)['"]\s*\)"""
+    r"""(?:std::)?env::var(?:_os)?\(\s*['"](MOCKFORGE_[A-Z0-9_]+)['"]\s*\)"""
 )
 
 # `name: "MOCKFORGE_FOO_BAR"` inside a curated EnvVarDef registry that
@@ -146,13 +167,21 @@ def gather_env_vars() -> set[str]:
          grep.
     """
     found: set[str] = set()
-    for rs in REPO.glob("crates/*/src/**/*.rs"):
-        try:
-            text = rs.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for m in ENV_VAR_RE.finditer(text):
-            found.add(m.group(1))
+    # Scan main source, build scripts, and example crates. build.rs files
+    # often read env vars at compile time (e.g. MOCKFORGE_PROTO_DIR for the
+    # gRPC build), and example crates demonstrate documented env-var usage.
+    for pattern in (
+        "crates/*/src/**/*.rs",
+        "crates/*/build.rs",
+        "crates/*/examples/**/*.rs",
+    ):
+        for rs in REPO.glob(pattern):
+            try:
+                text = rs.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for m in ENV_VAR_RE.finditer(text):
+                found.add(m.group(1))
     cfg_cmd = REPO / "crates" / "mockforge-cli" / "src" / "config_commands.rs"
     if cfg_cmd.is_file():
         text = cfg_cmd.read_text(encoding="utf-8", errors="ignore")

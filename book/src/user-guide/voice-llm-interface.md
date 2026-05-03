@@ -209,17 +209,24 @@ voice:
 
 ### CLI Configuration
 
-```bash
-# Set AI provider via environment
-export MOCKFORGE_VOICE_AI_PROVIDER=ollama
-export MOCKFORGE_VOICE_AI_MODEL=llama3.2
-export MOCKFORGE_VOICE_AI_BASE_URL=http://localhost:11434
+The voice + LLM interface uses the shared
+[RAG/LLM env vars](../configuration/environment.md#rag--llm-provider)
+rather than dedicated `MOCKFORGE_VOICE_*` vars:
 
-# Or use OpenAI
-export MOCKFORGE_VOICE_AI_PROVIDER=openai
-export MOCKFORGE_VOICE_AI_MODEL=gpt-3.5-turbo
-export MOCKFORGE_VOICE_AI_API_KEY=sk-...
+```bash
+# Use Ollama (free, local)
+export MOCKFORGE_RAG_PROVIDER=ollama
+export MOCKFORGE_RAG_MODEL=llama3
+export MOCKFORGE_RAG_API_ENDPOINT=http://localhost:11434
+
+# Or OpenAI
+export MOCKFORGE_RAG_PROVIDER=openai
+export MOCKFORGE_RAG_MODEL=gpt-3.5-turbo
+export MOCKFORGE_RAG_API_KEY=sk-...
 ```
+
+Voice-specific YAML knobs (`voice.ai_provider`, etc.) override the
+shared env vars when both are set.
 
 ## API Endpoints
 

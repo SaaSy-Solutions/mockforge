@@ -4,33 +4,16 @@ MockForge supports recording and replaying HTTP requests and responses as fixtur
 
 ## Recording Fixtures
 
-To record fixtures, enable recording by setting the environment variable:
-
-```
-MOCKFORGE_RECORD_ENABLED=true
-```
-
-By default, all HTTP requests will be recorded. To record only GET requests, set:
-
-```
-MOCKFORGE_RECORD_GET_ONLY=true
-```
-
-Fixtures are saved in the `fixtures` directory by default. You can change this location with:
-
-```
-MOCKFORGE_FIXTURES_DIR=/path/to/fixtures
-```
+Recording is enabled via the `--record` CLI flag or `core.fixtures.record:
+true` in YAML. By default all HTTP requests are recorded. To record only
+GET requests, set `core.fixtures.record_get_only: true`. Fixtures are
+saved in `MOCKFORGE_FIXTURES_DIR` (default `./fixtures`).
 
 ## Replay Fixtures
 
-To replay recorded fixtures, enable replay by setting the environment variable:
-
-```
-MOCKFORGE_REPLAY_ENABLED=true
-```
-
-When replay is enabled, MockForge will serve recorded responses for matching requests instead of generating new ones.
+Replay is enabled via the `--replay` CLI flag or `core.fixtures.replay:
+true` in YAML. When replay is enabled, MockForge serves recorded responses
+for matching requests instead of generating new ones.
 
 ## Ready-to-Run Fixtures
 
@@ -81,19 +64,18 @@ The Admin UI provides a graphical interface for managing fixtures and running sm
 
 The following environment variables control fixture and smoke test behavior:
 
-### Core Settings
+### Core Settings (env vars)
 - `MOCKFORGE_FIXTURES_DIR` - Directory where fixtures are stored (default: `./fixtures`)
-- `MOCKFORGE_RECORD_ENABLED` - Enable recording of requests (default: `false`)
-- `MOCKFORGE_REPLAY_ENABLED` - Enable replay of recorded requests (default: `false`)
+- `MOCKFORGE_LATENCY_ENABLED` - Inject latency on responses (default: `false`)
+- `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` - Expand `{{...}}` templates in responses (default: `false`)
+- `MOCKFORGE_REQUEST_VALIDATION` - Validation level for incoming requests (`enforce` | `warn` | `off`)
+- `MOCKFORGE_RESPONSE_VALIDATION` - Validate generated responses against the spec (`true` | `false`)
 
-### Recording Options
-- `MOCKFORGE_RECORD_GET_ONLY` - Record only GET requests (default: `false`)
-- `MOCKFORGE_LATENCY_ENABLED` - Include latency in recorded fixtures (default: `true`)
-- `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` - Expand templates when recording (default: `false`)
+### Record / replay toggles (CLI / YAML, not env)
 
-### Validation and Testing
-- `MOCKFORGE_REQUEST_VALIDATION` - Validation level during recording (default: `enforce`)
-- `MOCKFORGE_RESPONSE_VALIDATION` - Validate responses during replay (default: `false`)
+`record_enabled`, `replay_enabled`, and `record_get_only` are configured
+under `core.fixtures.*` in YAML or via the `--record` / `--replay` CLI
+flags — they don't have env-var equivalents.
 
 ### Configuration File Support
 You can also configure fixtures through YAML:

@@ -109,7 +109,7 @@ mockforge serve --http-port 3000 --ws-port 3001 --spec api.json
 ```bash
 MOCKFORGE_HTTP_PORT=3000
 MOCKFORGE_WS_PORT=3001
-MOCKFORGE_OPENAPI_SPEC=api.json
+MOCKFORGE_OPENAPI_SPEC_URL=file://./api.json
 ```
 
 ### 3. Configuration Files (Lowest Priority)

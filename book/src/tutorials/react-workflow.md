@@ -431,13 +431,13 @@ Run tests against the mock server:
 ```bash
 # Start mock server in background
 mockforge serve --spec user-management-api.json --http-port 3000 &
-MOCKFORGE_PID=$!
+SERVER_PID=$!
 
 # Run tests
 npm test
 
 # Stop mock server
-kill $MOCKFORGE_PID
+kill $SERVER_PID
 ```
 
 ## Common Issues
