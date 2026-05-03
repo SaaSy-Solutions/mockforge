@@ -15,7 +15,7 @@ tauri-build = { version = "2.5", features = [] }
 [dependencies]
 # Tauri dependencies
 tauri = { version = "2.11", features = ["tray-icon"] }
-tauri-plugin-dialog = "2.6"
+tauri-plugin-dialog = "2.7"
 tauri-plugin-notification = "2.3"
 tauri-plugin-shell = "2.3"
 tauri-plugin-global-shortcut = "2.3"
