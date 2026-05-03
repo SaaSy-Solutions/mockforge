@@ -108,6 +108,18 @@
   - Reported by @srikr while load-testing the api.github.com spec — sustained load was hitting the default 1000 RPM / 2000 burst limits and returning 429s with `Retry-After: 60`
   - Workaround prior to this release was setting `MOCKFORGE_RATE_LIMIT_RPM=100000000` / `MOCKFORGE_RATE_LIMIT_BURST=100000000`; that still works and is unchanged
 
+## [0.3.104] – [0.3.118] — 2026-03-29 to 2026-04-23
+
+These releases predate the `chore(release): bump workspace to X.Y.Z`
+commit convention introduced in 0.3.119, so there's no single commit
+to lift detail from per version. Per-release notes are auto-generated
+on each GitHub release page:
+
+- <https://github.com/SaaSy-Solutions/mockforge/releases>
+
+The crates are all published and resolvable on crates.io
+(`cargo search mockforge-cli` lists every version).
+
 ## [0.3.103] - 2026-03-28
 
 ### Added
