@@ -212,6 +212,10 @@ pub struct UsageCounter {
     /// Migration 20250101000059 adds this column with default 0.
     #[serde(default)]
     pub runner_seconds_used: i64,
+    /// Tunnel relay bytes (in + out) consumed this period.
+    /// Migration 20250101000061 adds this column with default 0.
+    #[serde(default)]
+    pub tunnel_bytes_used: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -325,6 +329,27 @@ impl UsageCounter {
             "UPDATE usage_counters SET runner_seconds_used = runner_seconds_used + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(seconds)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment tunnel relay bytes (in + out summed). Reported by the
+    /// relay binary via internal mTLS routes. Plan limits live in
+    /// `organizations.limits_json` under `tunnel_bytes_per_month`.
+    pub async fn increment_tunnel_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET tunnel_bytes_used = tunnel_bytes_used + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
         .bind(counter.id)
         .execute(pool)
         .await?;
@@ -626,6 +651,7 @@ mod tests {
             storage_bytes: 10000,
             ai_tokens_used: 5000,
             runner_seconds_used: 0,
+            tunnel_bytes_used: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -648,6 +674,7 @@ mod tests {
             storage_bytes: 10000,
             ai_tokens_used: 5000,
             runner_seconds_used: 0,
+            tunnel_bytes_used: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

@@ -364,7 +364,10 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "hosted_mocks": false,
             "max_hosted_mocks": 0,
             "runner_seconds_per_month": 0, // no test execution on Free
-            "max_concurrent_runs": 0
+            "max_concurrent_runs": 0,
+            "max_tunnel_reservations": 1, // 1 ephemeral subdomain
+            "max_custom_domains": 0,
+            "tunnel_bytes_per_month": 1_000_000_000 // 1 GB
         }),
         Plan::Pro => serde_json::json!({
             "max_projects": 10,
@@ -380,7 +383,10 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "hosted_mocks": true,
             "max_hosted_mocks": 3,
             "runner_seconds_per_month": 30000, // 500 runner-minutes/month
-            "max_concurrent_runs": 1
+            "max_concurrent_runs": 1,
+            "max_tunnel_reservations": 3,
+            "max_custom_domains": 1,
+            "tunnel_bytes_per_month": 50_000_000_000_i64 // 50 GB
         }),
         Plan::Team => serde_json::json!({
             "max_projects": -1, // unlimited
@@ -396,7 +402,10 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "hosted_mocks": true,
             "max_hosted_mocks": -1, // unlimited
             "runner_seconds_per_month": 300000, // 5000 runner-minutes/month
-            "max_concurrent_runs": 3
+            "max_concurrent_runs": 3,
+            "max_tunnel_reservations": 10,
+            "max_custom_domains": 5,
+            "tunnel_bytes_per_month": 500_000_000_000_i64 // 500 GB
         }),
     }
 }

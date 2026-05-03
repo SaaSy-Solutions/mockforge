@@ -284,6 +284,24 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/test-runs/{id}/cancel",
             post(handlers::test_runs::cancel_run),
         )
+        // Tunnel reservation routes (cloud-enablement task #5 / Phase 1).
+        // Phase 1 surface only — relay session ingest + custom-domain DNS
+        // verification land in follow-up slices.
+        .route(
+            "/api/v1/organizations/{org_id}/tunnels",
+            get(handlers::tunnels::list_tunnels)
+                .post(handlers::tunnels::create_tunnel),
+        )
+        .route(
+            "/api/v1/tunnels/{id}",
+            get(handlers::tunnels::get_tunnel)
+                .patch(handlers::tunnels::update_tunnel)
+                .delete(handlers::tunnels::delete_tunnel),
+        )
+        .route(
+            "/api/v1/tunnels/{id}/verify-custom-domain",
+            post(handlers::tunnels::verify_custom_domain),
+        )
         // Incident management routes (cloud-enablement task #3 / Phase 1).
         // Public CRUD only; internal raises from #2/#8 call Incident::raise
         // directly, and the notification dispatcher is a follow-up slice.

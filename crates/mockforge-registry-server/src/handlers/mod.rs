@@ -36,6 +36,7 @@ pub mod support;
 pub mod test_runs;
 pub mod test_suites;
 pub mod tokens;
+pub mod tunnels;
 pub mod two_factor;
 pub mod usage;
 pub mod users_me;
