@@ -3,7 +3,8 @@
 //! Custom React Flow node component for representing API call steps in a flow.
 
 import React from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Globe } from 'lucide-react';
 import { cn } from '@/utils/cn';

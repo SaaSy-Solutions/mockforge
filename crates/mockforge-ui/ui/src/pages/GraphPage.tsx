@@ -2,15 +2,17 @@ import { logger } from '@/utils/logger';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  Connection,
   NodeTypes,
   ReactFlowInstance,
 } from '@xyflow/react';

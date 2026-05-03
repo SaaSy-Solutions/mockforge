@@ -7,18 +7,20 @@ import { logger } from '@/utils/logger';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+  MarkerType,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  Connection,
   NodeTypes,
   ReactFlowInstance,
-  MarkerType,
 } from '@xyflow/react';
 import { Loader2, Save, Download, Upload, Undo2, Redo2, Play, Square, Plus, Trash2, Database, Layers } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';

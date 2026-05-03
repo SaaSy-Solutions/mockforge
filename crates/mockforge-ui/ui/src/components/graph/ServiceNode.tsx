@@ -1,5 +1,6 @@
 import React from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position } from '@xyflow/react';
+import type { NodeProps } from '@xyflow/react';
 import { Server, Package } from 'lucide-react';
 
 interface ServiceNodeData {

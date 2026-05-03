@@ -6,18 +6,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+  MarkerType,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  Connection,
   NodeTypes,
   ReactFlowInstance,
-  MarkerType,
 } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
