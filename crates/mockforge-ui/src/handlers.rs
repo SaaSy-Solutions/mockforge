@@ -2501,6 +2501,126 @@ fn extract_fingerprint(
     Ok(format!("{:x}", hasher.finish()))
 }
 
+/// JSON payload accepted by `POST /__mockforge/fixtures` on the local admin
+/// server. Mirrors the fields the cloud `/api/v1/fixtures` POST accepts so
+/// the UI can use the same dialog in either mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixtureCreateRequest {
+    pub name: String,
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub protocol: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub content: Option<serde_json::Value>,
+}
+
+/// Create a new fixture file on disk under
+/// `$MOCKFORGE_FIXTURES_DIR/{protocol}/{safe_name}.json`. The on-disk shape
+/// matches what `scan_fixtures_directory` reads back, so the new fixture
+/// shows up on the next list refresh.
+pub async fn create_fixture(
+    Json(payload): Json<FixtureCreateRequest>,
+) -> Json<ApiResponse<FixtureInfo>> {
+    match write_fixture_to_disk(payload).await {
+        Ok(info) => {
+            tracing::info!("Created fixture: {} ({})", info.id, info.file_path);
+            Json(ApiResponse::success(info))
+        }
+        Err(e) => {
+            tracing::error!("Failed to create fixture: {}", e);
+            Json(ApiResponse::error(format!("Failed to create fixture: {}", e)))
+        }
+    }
+}
+
+/// Defence-in-depth filename sanitiser: refuse anything outside
+/// `[a-zA-Z0-9._-]`, forbid leading dots, cap at 200 chars. Mirrors the rule
+/// used by `mockforge_http::fixtures_api::safe_id` so the two stores stay
+/// compatible.
+fn sanitize_fixture_filename(name: &str) -> Result<String> {
+    if name.is_empty() || name.len() > 200 {
+        return Err(Error::internal("Fixture name must be 1..=200 characters"));
+    }
+    if name == "." || name == ".." || name.starts_with('.') {
+        return Err(Error::internal("Fixture name must not start with '.'"));
+    }
+    if name
+        .chars()
+        .any(|c| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
+    {
+        return Err(Error::internal("Fixture name must match [a-zA-Z0-9._-]"));
+    }
+    Ok(name.to_string())
+}
+
+async fn write_fixture_to_disk(req: FixtureCreateRequest) -> Result<FixtureInfo> {
+    let trimmed = req.name.trim();
+    let safe_name = sanitize_fixture_filename(trimmed)?;
+    let protocol = req.protocol.as_deref().unwrap_or("http").to_lowercase();
+    let method = req.method.as_deref().unwrap_or("GET").to_uppercase();
+    let path_str = req.path.clone().unwrap_or_default();
+
+    // Build a self-describing JSON document that the scanner can read back.
+    // For HTTP we mimic the existing on-disk shape (request.method/path).
+    let mut document = serde_json::Map::new();
+    document.insert("name".to_string(), serde_json::Value::String(trimmed.to_string()));
+    if let Some(desc) = req.description.as_deref() {
+        document.insert("description".to_string(), serde_json::Value::String(desc.to_string()));
+    }
+    if !req.tags.is_empty() {
+        document.insert(
+            "tags".to_string(),
+            serde_json::Value::Array(
+                req.tags.iter().map(|t| serde_json::Value::String(t.clone())).collect(),
+            ),
+        );
+    }
+    document.insert("protocol".to_string(), serde_json::Value::String(protocol.clone()));
+    document
+        .insert("request".to_string(), serde_json::json!({ "method": method, "path": path_str }));
+    document.insert("response".to_string(), req.content.unwrap_or(serde_json::Value::Null));
+
+    let body = serde_json::to_string_pretty(&serde_json::Value::Object(document))
+        .map_err(|e| Error::internal(format!("Failed to serialise fixture JSON: {}", e)))?;
+
+    let fixtures_dir =
+        std::env::var("MOCKFORGE_FIXTURES_DIR").unwrap_or_else(|_| "fixtures".to_string());
+    let target_dir = std::path::Path::new(&fixtures_dir).join(&protocol);
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|e| Error::internal(format!("Failed to create fixtures directory: {}", e)))?;
+
+    let target_path = target_dir.join(format!("{}.json", safe_name));
+    if tokio::fs::try_exists(&target_path).await.unwrap_or(false) {
+        return Err(Error::internal(format!(
+            "Fixture '{}' already exists at {}",
+            safe_name,
+            target_path.display()
+        )));
+    }
+    tokio::fs::write(&target_path, body)
+        .await
+        .map_err(|e| Error::internal(format!("Failed to write fixture file: {}", e)))?;
+
+    // Re-read via the same parser the list endpoint uses, so the response we
+    // hand back to the UI is identical to what the next refresh will show.
+    let path_for_parse = target_path.clone();
+    let protocol_for_parse = protocol.clone();
+    let info = tokio::task::spawn_blocking(move || {
+        parse_fixture_file_sync(&path_for_parse, &protocol_for_parse)
+    })
+    .await
+    .map_err(|e| Error::internal(format!("Task join error: {}", e)))??;
+    Ok(info)
+}
+
 /// Delete a fixture
 pub async fn delete_fixture(
     Json(payload): Json<FixtureDeleteRequest>,

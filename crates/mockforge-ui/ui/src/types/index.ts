@@ -50,6 +50,10 @@ export interface FixtureInfo {
   size?: number;
   created_at?: string;
   modified_at?: string;
+  /** Resolved username of the creator; set by the cloud API when known. */
+  created_by_username?: string;
+  /** Cloud-only: workspace this fixture is assigned to (if any). */
+  workspace_id?: string | null;
 }
 
 export interface DiffChange {

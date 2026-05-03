@@ -21,6 +21,10 @@ export interface FixtureCreatePayload {
   protocol?: string;
   tags?: string[];
   content?: unknown;
+  /** Cloud-only: assign the new fixture to a workspace. */
+  workspace_id?: string | null;
+  /** Cloud-only: optional canonical route path (complements path). */
+  route_path?: string | null;
 }
 
 export interface FixtureUpdatePayload {
@@ -28,8 +32,16 @@ export interface FixtureUpdatePayload {
   path?: string;
   method?: string;
   description?: string;
+  protocol?: string;
   tags?: string[];
   content?: unknown;
+  /** Cloud-only: optional canonical route path (complements path). */
+  route_path?: string | null;
+  /**
+   * Cloud-only tri-state. Omit to leave unchanged, send `null` to clear,
+   * send a uuid to assign.
+   */
+  workspace_id?: string | null;
 }
 
 class FixturesApiService {
@@ -45,9 +57,13 @@ class FixturesApiService {
     this.moveFixture = this.moveFixture.bind(this);
   }
 
-  async getFixtures(): Promise<FixtureInfo[]> {
+  async getFixtures(workspaceId?: string | null): Promise<FixtureInfo[]> {
     if (isCloud) {
-      return fetchJson(FIXTURE_API_BASE) as Promise<FixtureInfo[]>;
+      const url =
+        workspaceId == null
+          ? FIXTURE_API_BASE
+          : `${FIXTURE_API_BASE}?workspace_id=${encodeURIComponent(workspaceId)}`;
+      return fetchJson(url) as Promise<FixtureInfo[]>;
     }
     return fetchJsonWithValidation<FixtureInfo[]>(
       FIXTURE_API_BASE,
@@ -86,12 +102,8 @@ class FixturesApiService {
   }
 
   async deleteFixturesBulk(fixtureIds: string[]): Promise<void> {
-    if (isCloud) {
-      // Cloud has no bulk endpoint; fan out individual DELETE calls instead.
-      await Promise.all(fixtureIds.map((id) => this.deleteFixture(id)));
-      return;
-    }
-    return fetchJson(`${LOCAL_BASE}/bulk`, {
+    if (fixtureIds.length === 0) return;
+    return fetchJson(`${FIXTURE_API_BASE}/bulk`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fixture_ids: fixtureIds }),

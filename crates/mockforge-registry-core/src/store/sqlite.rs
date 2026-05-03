@@ -1738,6 +1738,8 @@ impl RegistryStore for SqliteRegistryStore {
         content: Option<&serde_json::Value>,
         protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        workspace_id: Option<Uuid>,
+        route_path: Option<&str>,
     ) -> StoreResult<CloudFixture> {
         Err(StoreError::NotFound)
     }
@@ -1748,7 +1750,11 @@ impl RegistryStore for SqliteRegistryStore {
     }
 
     #[allow(unused_variables)]
-    async fn list_cloud_fixtures_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudFixture>> {
+    async fn list_cloud_fixtures_by_org(
+        &self,
+        org_id: Uuid,
+        workspace_id: Option<Uuid>,
+    ) -> StoreResult<Vec<CloudFixture>> {
         Ok(Vec::new())
     }
 
@@ -1761,7 +1767,10 @@ impl RegistryStore for SqliteRegistryStore {
         path: Option<&str>,
         method: Option<&str>,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        route_path: Option<&str>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudFixture>> {
         Ok(None)
     }
@@ -1769,6 +1778,15 @@ impl RegistryStore for SqliteRegistryStore {
     #[allow(unused_variables)]
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {
         Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn delete_cloud_fixtures_bulk(
+        &self,
+        org_id: Uuid,
+        ids: &[Uuid],
+    ) -> StoreResult<Vec<Uuid>> {
+        Ok(Vec::new())
     }
 
     #[allow(unused_variables)]

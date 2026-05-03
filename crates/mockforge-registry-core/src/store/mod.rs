@@ -1265,12 +1265,24 @@ pub trait RegistryStore: Send + Sync + 'static {
         content: Option<&serde_json::Value>,
         protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        workspace_id: Option<Uuid>,
+        route_path: Option<&str>,
     ) -> StoreResult<CloudFixture>;
 
     async fn find_cloud_fixture_by_id(&self, id: Uuid) -> StoreResult<Option<CloudFixture>>;
 
-    async fn list_cloud_fixtures_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudFixture>>;
+    /// List fixtures in an organization. When `workspace_id` is `Some`, only
+    /// fixtures assigned to that workspace are returned; when `None`, every
+    /// fixture in the org is returned.
+    async fn list_cloud_fixtures_by_org(
+        &self,
+        org_id: Uuid,
+        workspace_id: Option<Uuid>,
+    ) -> StoreResult<Vec<CloudFixture>>;
 
+    /// Update mutable fields on a cloud fixture. `workspace_id` is tri-state:
+    /// `None` leaves it untouched; `Some(None)` clears it; `Some(Some(id))`
+    /// assigns/changes it.
     #[allow(clippy::too_many_arguments)]
     async fn update_cloud_fixture(
         &self,
@@ -1280,10 +1292,21 @@ pub trait RegistryStore: Send + Sync + 'static {
         path: Option<&str>,
         method: Option<&str>,
         content: Option<&serde_json::Value>,
+        protocol: Option<&str>,
         tags: Option<&serde_json::Value>,
+        route_path: Option<&str>,
+        workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudFixture>>;
 
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()>;
+
+    /// Delete many fixtures atomically, scoped to an org. Returns the IDs
+    /// that were actually deleted.
+    async fn delete_cloud_fixtures_bulk(
+        &self,
+        org_id: Uuid,
+        ids: &[Uuid],
+    ) -> StoreResult<Vec<Uuid>>;
 
     // ---------------------------------------------------------------------
     // Hosted mocks (deployments)

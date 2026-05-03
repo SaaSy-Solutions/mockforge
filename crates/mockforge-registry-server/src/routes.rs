@@ -316,6 +316,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Fixture routes
         .route("/api/v1/fixtures", get(handlers::cloud_fixtures::list_fixtures))
         .route("/api/v1/fixtures", post(handlers::cloud_fixtures::create_fixture))
+        .route(
+            "/api/v1/fixtures/bulk",
+            delete(handlers::cloud_fixtures::delete_fixtures_bulk),
+        )
         .route("/api/v1/fixtures/{id}", get(handlers::cloud_fixtures::get_fixture))
         .route("/api/v1/fixtures/{id}", patch(handlers::cloud_fixtures::update_fixture))
         .route("/api/v1/fixtures/{id}", delete(handlers::cloud_fixtures::delete_fixture))
