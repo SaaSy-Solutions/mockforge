@@ -86,7 +86,7 @@ jobs:
 
       - name: Create issue on crash
         if: steps.check_crashes.outputs.crashes != '0'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const crashes = ${{ steps.check_crashes.outputs.crashes }};

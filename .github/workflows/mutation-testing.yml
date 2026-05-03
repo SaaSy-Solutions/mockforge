@@ -158,7 +158,7 @@ jobs:
 
       - name: Create issue for low mutation score
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             // This runs only on scheduled workflows
