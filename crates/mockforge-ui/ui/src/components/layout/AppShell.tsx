@@ -133,6 +133,7 @@ const navSections = [
       { id: 'cloud-incidents', labelKey: 'tab.cloudIncidents', icon: Bell },
       { id: 'logs', labelKey: 'tab.logs', icon: FileText },
       { id: 'traces', labelKey: 'tab.traces', icon: Network },
+      { id: 'cloud-traces', labelKey: 'tab.cloudTraces', icon: Network },
       { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
       { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
       { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
@@ -252,6 +253,8 @@ const cloudNavItemIds = new Set([
   // Cloud test runs — org-wide history with SSE event tailing via
   // cloudTestRunsApi.streamRunEvents.
   'cloud-test-runs',
+  // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
+  'cloud-traces',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
