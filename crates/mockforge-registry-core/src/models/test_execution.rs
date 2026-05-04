@@ -155,3 +155,103 @@ impl TestSuite {
         Ok(rows > 0)
     }
 }
+
+/// Cron-driven schedule for a TestSuite. The schedule worker
+/// (registry-server::workers::test_schedule_runner) scans this table
+/// every minute, identifies rows whose next-fire time has passed, and
+/// triggers runs the same way the public POST /test-suites/{id}/runs
+/// path does (test_runs row + Redis queue push).
+#[cfg_attr(feature = "postgres", derive(FromRow))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestSchedule {
+    pub id: Uuid,
+    pub suite_id: Uuid,
+    pub cron: String,
+    pub timezone: String,
+    pub enabled: bool,
+    #[serde(default)]
+    pub last_triggered_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[cfg(feature = "postgres")]
+impl TestSchedule {
+    pub async fn create(
+        pool: &PgPool,
+        suite_id: Uuid,
+        cron: &str,
+        timezone: &str,
+    ) -> sqlx::Result<Self> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            INSERT INTO test_schedules (suite_id, cron, timezone, enabled)
+            VALUES ($1, $2, $3, TRUE)
+            RETURNING *
+            "#,
+        )
+        .bind(suite_id)
+        .bind(cron)
+        .bind(timezone)
+        .fetch_one(pool)
+        .await
+    }
+
+    pub async fn list_by_suite(pool: &PgPool, suite_id: Uuid) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM test_schedules WHERE suite_id = $1 ORDER BY created_at",
+        )
+        .bind(suite_id)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// All enabled schedules. The worker filters in-memory rather than in
+    /// SQL because cron-expression evaluation lives in Rust.
+    pub async fn list_enabled(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>("SELECT * FROM test_schedules WHERE enabled = TRUE")
+            .fetch_all(pool)
+            .await
+    }
+
+    pub async fn set_enabled(pool: &PgPool, id: Uuid, enabled: bool) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE test_schedules SET enabled = $2 WHERE id = $1 RETURNING *",
+        )
+        .bind(id)
+        .bind(enabled)
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Worker-callback: schedule fired, advance the cursor. Idempotent on
+    /// the (id, fired_at) pair via the WHERE clause — re-running with an
+    /// older timestamp is a no-op so a worker restart won't double-fire.
+    pub async fn mark_triggered(
+        pool: &PgPool,
+        id: Uuid,
+        fired_at: DateTime<Utc>,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            UPDATE test_schedules
+               SET last_triggered_at = $2
+             WHERE id = $1
+               AND (last_triggered_at IS NULL OR last_triggered_at < $2)
+             RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(fired_at)
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+        let rows = sqlx::query("DELETE FROM test_schedules WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected();
+        Ok(rows > 0)
+    }
+}

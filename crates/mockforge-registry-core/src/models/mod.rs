@@ -114,6 +114,6 @@ pub use template::{Template, TemplateCategory, TemplateVersion};
 pub use template_review::TemplateReview;
 #[cfg(feature = "postgres")]
 pub use template_star::TemplateStar;
-pub use test_execution::TestSuite;
+pub use test_execution::{TestSchedule, TestSuite};
 pub use test_run::TestRun;
 pub use tunnel::TunnelReservation;

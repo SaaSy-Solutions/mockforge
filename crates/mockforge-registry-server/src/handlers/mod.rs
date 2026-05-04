@@ -42,6 +42,7 @@ pub mod stats;
 pub mod status;
 pub mod support;
 pub mod test_runs;
+pub mod test_schedules;
 pub mod test_suites;
 pub mod tokens;
 pub mod tunnels;
