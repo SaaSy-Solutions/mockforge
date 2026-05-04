@@ -103,6 +103,7 @@ const en: Dictionary = {
   'tab.usage': 'Plan & Usage',
   'tab.userManagement': 'User Management',
   'tab.notificationChannels': 'Notification Channels',
+  'tab.cloudSnapshots': 'Snapshots',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requires a local MockForge instance',

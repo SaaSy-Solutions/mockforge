@@ -70,6 +70,7 @@ import {
   MessageCircle as MessageCircleIcon,
   LifeBuoy,
   Bell,
+  Camera,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -97,6 +98,7 @@ const navSections = [
       { id: 'virtual-backends', labelKey: 'tab.virtualBackends', icon: Database },
       { id: 'fixtures', labelKey: 'tab.fixtures', icon: FileJson },
       { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
+      { id: 'cloud-snapshots', labelKey: 'tab.cloudSnapshots', icon: Camera },
       { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
       { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
     ]
@@ -239,6 +241,9 @@ const cloudNavItemIds = new Set([
   // Tunnels page detects cloud mode and dispatches CRUD + DNS verify
   // through cloudTunnelsApi against /api/v1/organizations/{org_id}/tunnels.
   'tunnels',
+  // Cloud snapshots — synchronous capture / diff / restore for the
+  // active workspace via cloudSnapshotsApi.
+  'cloud-snapshots',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
