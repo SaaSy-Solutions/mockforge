@@ -110,7 +110,7 @@ describe('StateNode', () => {
       <StateNode {...defaultProps} selected={true} />
     );
 
-    const nodeElement = container.querySelector('.border-blue-500');
+    const nodeElement = container.querySelector('.border-info');
     expect(nodeElement).toBeInTheDocument();
   });
 
@@ -123,7 +123,7 @@ describe('StateNode', () => {
       />
     );
 
-    const nodeElement = container.querySelector('.border-green-500');
+    const nodeElement = container.querySelector('.border-success');
     expect(nodeElement).toBeInTheDocument();
   });
 

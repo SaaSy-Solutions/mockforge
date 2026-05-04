@@ -1,13 +1,15 @@
 import { ServerTable } from '../components/dashboard/ServerTable';
 import { RequestLog } from '../components/dashboard/RequestLog';
+import { CloudActivityFeed } from '../components/dashboard/CloudActivityFeed';
 import { LatencyHistogram } from '../components/metrics/LatencyHistogram';
 import { TimeTravelWidget } from '../components/time-travel/TimeTravelWidget';
 import { RealitySlider } from '../components/reality/RealitySlider';
 import { RealityIndicator } from '../components/reality/RealityIndicator';
 import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 import { useDashboardStream } from '../hooks/useDashboardStream';
-import type { LatencyMetrics, LogEntry } from '../types';
+import type { CloudDashboardMetrics, LatencyMetrics, LogEntry } from '../types';
 import { useDashboard, useLogs } from '../hooks/useApi';
+import { isCloudMode } from '../utils/cloudMode';
 import {
   PageHeader,
   MetricCard,
@@ -18,6 +20,8 @@ import { MetricIcon, StatusIcon } from '../components/ui/IconSystem';
 import { DashboardLoading, ErrorState } from '../components/ui/LoadingStates';
 import { Wifi, WifiOff } from 'lucide-react';
 
+const isCloud = isCloudMode();
+
 function formatUptime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -25,6 +29,14 @@ function formatUptime(seconds: number): string {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, exp);
+  return `${value.toFixed(value >= 100 || exp === 0 ? 0 : 1)} ${units[exp]}`;
 }
 
 function safePercentage(value: number, total: number): string {
@@ -105,18 +117,29 @@ function computeLatencyMetrics(logs: unknown) {
 export function DashboardPage() {
   // All hooks must be called unconditionally and in the same order every render
   const { data: dashboard, isLoading, error, isFetching } = useDashboard();
-  // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates
-  const { data: logs } = useLogs({ limit: 100, refetchInterval: 3000 });
+  // Refetch logs every 3 seconds for dashboard metrics to stay in sync with SSE updates.
+  // Skipped in cloud mode — cloud has no per-request log stream; CloudActivityFeed
+  // covers the audit/activity surface instead.
+  const { data: logs } = useLogs({ limit: 100, refetchInterval: isCloud ? 0 : 3000 });
 
   // Wire real-time WebSocket updates — patches React Query cache on incoming events.
-  // Polling continues as fallback when the WebSocket is unavailable.
-  const { connected: wsConnected } = useDashboardStream();
+  // Polling continues as fallback when the WebSocket is unavailable. The /__mockforge/ws
+  // endpoint doesn't exist in cloud, so disable the connect attempt entirely there.
+  const { connected: wsConnected } = useDashboardStream({ enabled: !isCloud });
 
   // Enable keyboard shortcuts for reality level changes
   // This hook must be called unconditionally before any early returns
   useRealityShortcuts();
 
-  const failureCounters = computeFailureCounters(logs);
+  const cloudMetrics: CloudDashboardMetrics | undefined = dashboard?.cloud_metrics;
+
+  const failureCounters = isCloud && cloudMetrics
+    ? {
+        total2xx: cloudMetrics.requests_2xx,
+        total4xx: cloudMetrics.requests_4xx,
+        total5xx: cloudMetrics.requests_5xx,
+      }
+    : computeFailureCounters(logs);
   const latencyMetrics = computeLatencyMetrics(logs);
 
   if (isLoading) {
@@ -168,112 +191,173 @@ export function DashboardPage() {
     );
   }
 
+  const totalRequests = dashboard.metrics?.total_requests ?? 0;
+  const errorRate = dashboard.metrics?.error_rate ?? 0;
+  const avgResponseTime = dashboard.metrics?.average_response_time ?? 0;
+
   return (
     <div className="content-width">
       <PageHeader
         title="Dashboard"
         subtitle="Real-time system overview and performance metrics"
         className="space-section"
-        action={<RealityIndicator />}
+        action={isCloud ? null : <RealityIndicator />}
       />
 
-      {/* Reality Slider and Time Travel Widget */}
-      <Section
-        title="Environment Control"
-        subtitle="Adjust realism and temporal simulation for testing"
-        className="space-section section-breathing"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 grid-gap-lg">
-          <RealitySlider />
-          <TimeTravelWidget />
-        </div>
-      </Section>
+      {/* Reality Slider and Time Travel Widget — local mode only.
+          In cloud, /__mockforge/reality and /__mockforge/time-travel are stubbed
+          no-ops, so showing the controls just misleads users. */}
+      {!isCloud && (
+        <>
+          <Section
+            title="Environment Control"
+            subtitle="Adjust realism and temporal simulation for testing"
+            className="space-section section-breathing"
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 grid-gap-lg">
+              <RealitySlider />
+              <TimeTravelWidget />
+            </div>
+          </Section>
 
-      <div className="divider-accent my-12"></div>
+          <div className="divider-accent my-12"></div>
+        </>
+      )}
 
       <Section
         title="System Metrics"
-        subtitle="Current system performance indicators"
+        subtitle={isCloud ? 'Hosted-deployment activity for this organization' : 'Current system performance indicators'}
         className="space-section section-breathing"
         action={
-          <div className="flex items-center gap-3 text-sm">
-            {/* WebSocket connection indicator */}
-            <div className={`flex items-center gap-1.5 ${wsConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
-              {wsConnected ? (
-                <Wifi className="h-3.5 w-3.5" />
-              ) : (
-                <WifiOff className="h-3.5 w-3.5" />
-              )}
-              <span className="text-xs font-medium">
-                {wsConnected ? 'Streaming' : 'Polling'}
-              </span>
-            </div>
-            <div className="relative flex items-center gap-2 text-green-600 dark:text-green-400">
+          isCloud ? (
+            <div className="flex items-center gap-2 text-sm text-success-600 dark:text-success-400">
               <div className="relative">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
+                <div className="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
+                <div className="absolute inset-0 w-2 h-2 rounded-full bg-success-500 animate-ping opacity-75" />
               </div>
               <span className="font-medium">Live</span>
-              {isFetching && !wsConnected && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(updating...)</span>
+              {isFetching && (
+                <span className="text-xs text-muted-foreground ml-1">(updating...)</span>
               )}
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-3 text-sm">
+              <div className={`flex items-center gap-1.5 ${wsConnected ? 'text-success-600 dark:text-success-400' : 'text-muted-foreground'}`}>
+                {wsConnected ? (
+                  <Wifi className="h-3.5 w-3.5" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5" />
+                )}
+                <span className="text-xs font-medium">
+                  {wsConnected ? 'Streaming' : 'Polling'}
+                </span>
+              </div>
+              <div className="relative flex items-center gap-2 text-success-600 dark:text-success-400">
+                <div className="relative">
+                  <div className="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
+                  <div className="absolute inset-0 w-2 h-2 rounded-full bg-success-500 animate-ping opacity-75" />
+                </div>
+                <span className="font-medium">Live</span>
+                {isFetching && !wsConnected && (
+                  <span className="text-xs text-muted-foreground ml-1">(updating...)</span>
+                )}
+              </div>
+            </div>
+          )
         }
       >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 grid-gap-lg">
-          <MetricCard
-            title="Uptime"
-            value={formatUptime(system.uptime_seconds)}
-            subtitle="system uptime"
-            icon={<MetricIcon metric="uptime" size="lg" />}
-            className="animate-stagger-in animate-delay-75"
-          />
-          <MetricCard
-            title="CPU Usage"
-            value={`${system.cpu_usage_percent.toFixed(1)}%`}
-            subtitle="current utilization"
-            icon={<MetricIcon metric="cpu" size="lg" />}
-            className="animate-stagger-in animate-delay-150"
-          />
-          <MetricCard
-            title="Memory"
-            value={`${system.memory_usage_mb} MB`}
-            subtitle="allocated"
-            icon={<MetricIcon metric="memory" size="lg" />}
-            className="animate-stagger-in animate-delay-200"
-          />
-          <MetricCard
-            title="Active Threads"
-            value={system.active_threads.toString()}
-            subtitle="running threads"
-            icon={<MetricIcon metric="activity" size="lg" />}
-            className="animate-stagger-in animate-delay-300"
-          />
+          {isCloud ? (
+            <>
+              <MetricCard
+                title="Active Deployments"
+                value={(cloudMetrics?.active_deployments ?? 0).toString()}
+                subtitle={`${cloudMetrics?.total_deployments ?? 0} total`}
+                icon={<MetricIcon metric="activity" size="lg" />}
+                className="animate-stagger-in animate-delay-75"
+              />
+              <MetricCard
+                title="Requests (period)"
+                value={totalRequests.toLocaleString()}
+                subtitle={
+                  cloudMetrics?.period_start
+                    ? `since ${cloudMetrics.period_start}`
+                    : 'this billing period'
+                }
+                icon={<MetricIcon metric="performance" size="lg" />}
+                className="animate-stagger-in animate-delay-150"
+              />
+              <MetricCard
+                title="Avg Response Time"
+                value={`${Math.round(avgResponseTime)}ms`}
+                subtitle="weighted across deployments"
+                icon={<MetricIcon metric="performance" size="lg" />}
+                className="animate-stagger-in animate-delay-200"
+              />
+              <MetricCard
+                title="Egress"
+                value={formatBytes(cloudMetrics?.egress_bytes ?? 0)}
+                subtitle={`${errorRate.toFixed(1)}% error rate`}
+                icon={<MetricIcon metric="memory" size="lg" />}
+                className="animate-stagger-in animate-delay-300"
+              />
+            </>
+          ) : (
+            <>
+              <MetricCard
+                title="Uptime"
+                value={formatUptime(system.uptime_seconds)}
+                subtitle="system uptime"
+                icon={<MetricIcon metric="uptime" size="lg" />}
+                className="animate-stagger-in animate-delay-75"
+              />
+              <MetricCard
+                title="CPU Usage"
+                value={`${system.cpu_usage_percent.toFixed(1)}%`}
+                subtitle="current utilization"
+                icon={<MetricIcon metric="cpu" size="lg" />}
+                className="animate-stagger-in animate-delay-150"
+              />
+              <MetricCard
+                title="Memory"
+                value={`${system.memory_usage_mb} MB`}
+                subtitle="allocated"
+                icon={<MetricIcon metric="memory" size="lg" />}
+                className="animate-stagger-in animate-delay-200"
+              />
+              <MetricCard
+                title="Active Threads"
+                value={system.active_threads.toString()}
+                subtitle="running threads"
+                icon={<MetricIcon metric="activity" size="lg" />}
+                className="animate-stagger-in animate-delay-300"
+              />
+            </>
+          )}
         </div>
 
         {/* Failure Counters */}
         <div className="divider-soft my-8"></div>
         <div className="visual-group">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Response Status Distribution</h3>
+          <h3 className="text-lg font-bold text-foreground mb-4">Response Status Distribution</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 grid-gap-md">
           <MetricCard
             title="Success Responses"
-            value={failureCounters.total2xx.toString()}
+            value={failureCounters.total2xx.toLocaleString()}
             subtitle={`${safePercentage(failureCounters.total2xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="success" size="lg" />}
             className="animate-fade-in-up animate-delay-100"
           />
           <MetricCard
             title="Client Errors"
-            value={failureCounters.total4xx.toString()}
+            value={failureCounters.total4xx.toLocaleString()}
             subtitle={`${safePercentage(failureCounters.total4xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="warning" size="lg" />}
             className="animate-fade-in-up animate-delay-200"
           />
           <MetricCard
             title="Server Errors"
-            value={failureCounters.total5xx.toString()}
+            value={failureCounters.total5xx.toLocaleString()}
             subtitle={`${safePercentage(failureCounters.total5xx, failureCounters.total2xx + failureCounters.total4xx + failureCounters.total5xx)}% of total`}
             icon={<StatusIcon status="error" size="lg" />}
             className="animate-fade-in-up animate-delay-300"
@@ -284,51 +368,55 @@ export function DashboardPage() {
 
       <div className="divider-accent my-12"></div>
 
-      {/* Performance Metrics Section */}
-      <Section
-        title="Performance Metrics"
-        subtitle="Response time distribution and latency analysis"
-        className="space-section section-breathing"
-      >
-        <div className="space-component">
-          {latencyMetrics.length > 0 ? (
-             <LatencyHistogram
-               metrics={latencyMetrics as LatencyMetrics[]}
-               selectedService={undefined}
-               onServiceChange={() => {}}
-             />
-          ) : (
-            <div className="text-center py-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
-                <MetricIcon metric="performance" size="2xl" />
-              </div>
-              <div className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                No Latency Data Available
-              </div>
-              <p className="text-gray-600 dark:text-gray-400">
-                Latency metrics will appear here once requests have been processed.
-              </p>
+      {/* Performance Metrics — local only. Cloud doesn't expose per-request response
+          times yet (only weighted averages), so the histogram has nothing useful to show. */}
+      {!isCloud && (
+        <>
+          <Section
+            title="Performance Metrics"
+            subtitle="Response time distribution and latency analysis"
+            className="space-section section-breathing"
+          >
+            <div className="space-component">
+              {latencyMetrics.length > 0 ? (
+                 <LatencyHistogram
+                   metrics={latencyMetrics as LatencyMetrics[]}
+                   selectedService={undefined}
+                   onServiceChange={() => {}}
+                 />
+              ) : (
+                <div className="text-center py-8">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                    <MetricIcon metric="performance" size="2xl" />
+                  </div>
+                  <div className="text-lg font-medium text-foreground mb-2">
+                    No Latency Data Available
+                  </div>
+                  <p className="text-muted-foreground">
+                    Latency metrics will appear here once requests have been processed.
+                  </p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </Section>
+          </Section>
 
-      <div className="divider-soft my-8"></div>
+          <div className="divider-soft my-8"></div>
+        </>
+      )}
 
       <Section
         title="System Status"
-        subtitle="Server instances and recent activity"
+        subtitle={isCloud ? 'Active deployments and recent organization activity' : 'Server instances and recent activity'}
         className="space-section"
       >
         <div className="space-component">
-          {/* Server Instances - Full Width */}
           <div>
             <ServerTable />
           </div>
 
-          {/* Recent Requests - Full Width */}
+          {/* Cloud uses an audit-event activity feed; local uses the per-request log stream. */}
           <div>
-            <RequestLog />
+            {isCloud ? <CloudActivityFeed /> : <RequestLog />}
           </div>
         </div>
       </Section>
@@ -345,18 +433,22 @@ export function DashboardPage() {
             title="All Systems Operational"
             message="MockForge is running normally with all services active."
           />
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+          <div className="bg-card border border-border rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Version</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <h3 className="font-semibold text-foreground">Version</h3>
+                <p className="text-sm text-muted-foreground mt-1">
                   {system.version}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Routes</p>
-                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  {system.total_routes}
+                <p className="text-sm text-muted-foreground">
+                  {isCloud ? 'Workspaces' : 'Routes'}
+                </p>
+                <p className="text-lg font-semibold text-foreground">
+                  {isCloud
+                    ? cloudMetrics?.workspaces ?? 0
+                    : system.total_routes}
                 </p>
               </div>
             </div>

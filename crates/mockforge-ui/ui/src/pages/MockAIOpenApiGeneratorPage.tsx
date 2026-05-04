@@ -187,7 +187,7 @@ export function MockAIOpenApiGeneratorPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Database Path
-                  <span className="text-gray-500 text-xs ml-1">(optional)</span>
+                  <span className="text-muted-foreground text-xs ml-1">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -196,7 +196,7 @@ export function MockAIOpenApiGeneratorPage() {
                   placeholder="./recordings.db"
                   className="w-full px-3 py-2 border rounded-md text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Defaults to ./recordings.db in current directory
                 </p>
               </div>
@@ -205,7 +205,7 @@ export function MockAIOpenApiGeneratorPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Start Time
-                  <span className="text-gray-500 text-xs ml-1">(optional)</span>
+                  <span className="text-muted-foreground text-xs ml-1">(optional)</span>
                 </label>
                 <input
                   type="datetime-local"
@@ -226,7 +226,7 @@ export function MockAIOpenApiGeneratorPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">
                   End Time
-                  <span className="text-gray-500 text-xs ml-1">(optional)</span>
+                  <span className="text-muted-foreground text-xs ml-1">(optional)</span>
                 </label>
                 <input
                   type="datetime-local"
@@ -247,7 +247,7 @@ export function MockAIOpenApiGeneratorPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Path Pattern
-                  <span className="text-gray-500 text-xs ml-1">(optional)</span>
+                  <span className="text-muted-foreground text-xs ml-1">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -256,7 +256,7 @@ export function MockAIOpenApiGeneratorPage() {
                   placeholder="/api/*"
                   className="w-full px-3 py-2 border rounded-md text-sm font-mono"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Supports wildcards (e.g., /api/*)
                 </p>
               </div>
@@ -277,7 +277,7 @@ export function MockAIOpenApiGeneratorPage() {
                   }
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
                   <span>0%</span>
                   <span>50%</span>
                   <span>100%</span>
@@ -347,32 +347,32 @@ export function MockAIOpenApiGeneratorPage() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">
                     Requests Analyzed
                   </div>
                   <div className="text-2xl font-bold mt-1">
                     {result.metadata.requests_analyzed}
                   </div>
                 </div>
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">
                     Paths Inferred
                   </div>
                   <div className="text-2xl font-bold mt-1">
                     {result.metadata.paths_inferred}
                   </div>
                 </div>
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">
                     Generation Time
                   </div>
                   <div className="text-2xl font-bold mt-1">
                     {result.metadata.duration_ms}ms
                   </div>
                 </div>
-                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="text-sm text-muted-foreground">
                     Generated At
                   </div>
                   <div className="text-sm font-medium mt-1">
@@ -398,7 +398,7 @@ export function MockAIOpenApiGeneratorPage() {
                       .map(([path, score]) => (
                         <div
                           key={path}
-                          className="p-3 border rounded-lg bg-gray-50 dark:bg-gray-800"
+                          className="p-3 border rounded-lg bg-muted"
                         >
                           <div className="flex items-center justify-between mb-1">
                             <code className="text-sm font-mono">{path}</code>
@@ -414,7 +414,7 @@ export function MockAIOpenApiGeneratorPage() {
                               {(score.value * 100).toFixed(0)}%
                             </Badge>
                           </div>
-                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                          <p className="text-xs text-muted-foreground">
                             {score.reason}
                           </p>
                         </div>
@@ -453,13 +453,13 @@ export function MockAIOpenApiGeneratorPage() {
           {/* Empty State */}
           {!result && !loading && !error && (
             <EmptyState
-              icon={<Database className="h-12 w-12 text-gray-400" />}
+              icon={<Database className="h-12 w-12 text-muted-foreground" />}
               title="No OpenAPI Specification Generated"
               description="Configure filters and click 'Generate OpenAPI Spec' to analyze recorded traffic and generate an OpenAPI specification."
             >
-              <div className="mt-6 space-y-3 text-sm text-gray-600 dark:text-gray-400">
+              <div className="mt-6 space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
                   <div>
                     <div className="font-medium">Record Traffic First</div>
                     <div className="text-xs">
@@ -468,7 +468,7 @@ export function MockAIOpenApiGeneratorPage() {
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
                   <div>
                     <div className="font-medium">Configure Filters</div>
                     <div className="text-xs">
@@ -477,7 +477,7 @@ export function MockAIOpenApiGeneratorPage() {
                   </div>
                 </div>
                 <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
                   <div>
                     <div className="font-medium">Review & Download</div>
                     <div className="text-xs">

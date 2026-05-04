@@ -172,7 +172,7 @@ export const WorldStatePage: React.FC = () => {
               <span className="text-sm">Real-time updates</span>
             </label>
             {streamConnected && (
-              <span className="text-xs text-green-600">● Connected</span>
+              <span className="text-xs text-success-600">● Connected</span>
             )}
           </div>
           <select
@@ -227,21 +227,21 @@ export const WorldStatePage: React.FC = () => {
         <div className="grid grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold">{filteredNodes.length}</div>
-            <div className="text-sm text-gray-500">Nodes</div>
+            <div className="text-sm text-muted-foreground">Nodes</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold">{filteredEdges.length}</div>
-            <div className="text-sm text-gray-500">Edges</div>
+            <div className="text-sm text-muted-foreground">Edges</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold">{layers.length}</div>
-            <div className="text-sm text-gray-500">Layers</div>
+            <div className="text-sm text-muted-foreground">Layers</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold">
               {layers.filter((l) => l.enabled).length}
             </div>
-            <div className="text-sm text-gray-500">Active Layers</div>
+            <div className="text-sm text-muted-foreground">Active Layers</div>
           </div>
         </div>
       </Section>

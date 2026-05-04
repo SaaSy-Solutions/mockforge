@@ -191,17 +191,17 @@ export function ServerTable() {
         return (
           <div
             key={server.server_type}
-            className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors"
           >
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <div className="p-3 rounded-xl bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400">
                 {server.server_type === 'HTTP' && <Globe className="h-5 w-5" />}
                 {server.server_type === 'WebSocket' && <Zap className="h-5 w-5" />}
                 {server.server_type === 'gRPC' && <Database className="h-5 w-5" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                  <h3 className="font-semibold text-foreground">
                     {server.server_type}
                   </h3>
                   <ModernBadge
@@ -215,17 +215,17 @@ export function ServerTable() {
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                   )}
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 space-y-1">
+                <div className="text-sm text-muted-foreground mt-1 space-y-1">
                   <div className="flex items-center gap-4">
                     <span className="inline-flex items-center gap-1">
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">IP:</span>
-                      <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                      <span className="text-xs font-medium text-muted-foreground">IP:</span>
+                      <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
                         {addrInfo.ip}
                       </span>
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Port:</span>
-                      <span className="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded">
+                      <span className="text-xs font-medium text-muted-foreground">Port:</span>
+                      <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">
                         {addrInfo.port}
                       </span>
                     </span>
@@ -242,24 +242,24 @@ export function ServerTable() {
 
             <div className="flex items-center gap-6 text-sm">
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {formatUptime(server.uptime_seconds)}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Uptime</div>
+                <div className="text-muted-foreground">Uptime</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {server.total_requests.toLocaleString()}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Requests</div>
+                <div className="text-muted-foreground">Requests</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {server.active_connections}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Active</div>
+                <div className="text-muted-foreground">Active</div>
               </div>
             </div>
           </div>
@@ -276,17 +276,17 @@ export function ServerTable() {
         return (
           <div
             key={server.server_type}
-            className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <div className="p-2 rounded-lg bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400">
                 {server.server_type === 'HTTP' && <Globe className="h-4 w-4" />}
                 {server.server_type === 'WebSocket' && <Zap className="h-4 w-4" />}
                 {server.server_type === 'gRPC' && <Database className="h-4 w-4" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+                  <h3 className="font-medium text-foreground text-sm">
                     {server.server_type}
                   </h3>
                   <ModernBadge
@@ -300,9 +300,9 @@ export function ServerTable() {
                     <AlertTriangle className="h-3 w-3 text-amber-500" />
                   )}
                 </div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs">
+                    <span className="font-mono bg-muted px-1.5 py-0.5 rounded text-xs">
                       {addrInfo.display}
                     </span>
                     {statusInfo.showWarning && (
@@ -315,24 +315,24 @@ export function ServerTable() {
 
             <div className="flex items-center gap-3 text-xs">
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {formatUptime(server.uptime_seconds)}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Uptime</div>
+                <div className="text-muted-foreground">Uptime</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {server.total_requests.toLocaleString()}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Req</div>
+                <div className="text-muted-foreground">Req</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-medium text-foreground">
                   {server.active_connections}
                 </div>
-                <div className="text-gray-500 dark:text-gray-400">Active</div>
+                <div className="text-muted-foreground">Active</div>
               </div>
             </div>
           </div>
@@ -353,8 +353,8 @@ export function ServerTable() {
             disabled={isRefreshing || isLoading}
             className={cn(
               'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-colors',
-              'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100',
-              'hover:bg-gray-100 dark:hover:bg-gray-800',
+              'text-muted-foreground hover:text-foreground',
+              'hover:bg-accent hover:text-accent-foreground',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
             title="Refresh server status"
@@ -364,14 +364,14 @@ export function ServerTable() {
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 dark:text-gray-400">View</span>
-            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 bg-gray-50 dark:bg-gray-800">
+            <span className="text-xs text-muted-foreground">View</span>
+            <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted">
               <button
                 className={cn(
                   'text-xs h-7 px-3 rounded-md transition-colors',
                   density === 'comfortable'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                    ? 'bg-white dark:bg-gray-700 text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
                 onClick={() => updateUI({ serverTableDensity: 'comfortable' })}
               >
@@ -381,8 +381,8 @@ export function ServerTable() {
                 className={cn(
                   'text-xs h-7 px-3 rounded-md transition-colors',
                   density === 'compact'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                    ? 'bg-white dark:bg-gray-700 text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 )}
                 onClick={() => updateUI({ serverTableDensity: 'compact' })}
               >

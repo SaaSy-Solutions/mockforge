@@ -81,11 +81,11 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
   const getImpactColor = (impact: string) => {
     switch (impact.toLowerCase()) {
       case 'high':
-        return 'text-red-600 bg-red-50 border-red-200';
+        return 'text-danger-600 bg-danger-50 border-danger-200';
       case 'medium':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+        return 'text-warning-600 bg-warning-50 border-warning-200';
       case 'low':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
+        return 'text-info-600 bg-info-50 border-info-200';
       default:
         return 'text-gray-600 bg-gray-50 border-gray-200';
     }
@@ -96,11 +96,11 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
       case 'rule':
         return 'bg-purple-100 text-purple-800';
       case 'persona':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-info-100 text-info-700';
       case 'contract':
-        return 'bg-green-100 text-green-800';
+        return 'bg-success-100 text-success-700';
       case 'chaos':
-        return 'bg-red-100 text-red-800';
+        return 'bg-danger-100 text-danger-700';
       case 'hook':
         return 'bg-orange-100 text-orange-800';
       default:
@@ -122,7 +122,7 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
   if (error) {
     return (
       <Card className={`p-6 ${className || ''}`}>
-        <div className="flex items-start gap-3 text-red-600">
+        <div className="flex items-start gap-3 text-danger-600">
           <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div>
             <h3 className="font-medium">Error</h3>
@@ -148,10 +148,10 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
       {/* Summary */}
       <Card className="p-6">
         <div className="flex items-start gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-6 h-6 text-danger-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <h2 className="text-xl font-semibold mb-2">Failure Summary</h2>
-            <p className="text-gray-700">{narrative.summary}</p>
+            <p className="text-foreground">{narrative.summary}</p>
             <div className="mt-3 flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Confidence:</span>
               <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
@@ -171,7 +171,7 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
       {/* Explanation */}
       <Card className="p-6">
         <h2 className="text-xl font-semibold mb-3">Detailed Explanation</h2>
-        <p className="text-gray-700 whitespace-pre-wrap">{narrative.explanation}</p>
+        <p className="text-foreground whitespace-pre-wrap">{narrative.explanation}</p>
       </Card>
 
       {/* Stack Trace */}
@@ -182,17 +182,17 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
             {narrative.stack_trace.map((frame, index) => (
               <div
                 key={index}
-                className="border border-gray-200 rounded-lg overflow-hidden"
+                className="border border-border rounded-lg overflow-hidden"
               >
                 <button
                   onClick={() => toggleFrame(index)}
-                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-muted transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     {expandedFrames.has(index) ? (
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-gray-500" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     )}
                     <span className="font-medium text-left">{frame.description}</span>
                     <span
@@ -205,15 +205,15 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
                   </div>
                 </button>
                 {expandedFrames.has(index) && (
-                  <div className="px-4 pb-3 pt-2 bg-gray-50 border-t border-gray-200">
+                  <div className="px-4 pb-3 pt-2 bg-muted border-t border-border">
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="font-medium text-gray-700">Trigger:</span>
-                        <span className="ml-2 text-gray-600">{frame.trigger}</span>
+                        <span className="font-medium text-foreground">Trigger:</span>
+                        <span className="ml-2 text-muted-foreground">{frame.trigger}</span>
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">Source:</span>
-                        <span className="ml-2 text-gray-600">{frame.source}</span>
+                        <span className="font-medium text-foreground">Source:</span>
+                        <span className="ml-2 text-muted-foreground">{frame.source}</span>
                       </div>
                     </div>
                   </div>
@@ -236,11 +236,11 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
               >
                 <div className="flex items-start justify-between mb-2">
                   <span className="font-medium">{factor.description}</span>
-                  <span className="text-xs font-medium uppercase px-2 py-1 rounded bg-white/50">
+                  <span className="text-xs font-medium uppercase px-2 py-1 rounded bg-card/50">
                     {factor.impact} impact
                   </span>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   Type: {factor.factor_type}
                 </div>
               </div>
@@ -253,14 +253,14 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
       {narrative.suggested_fixes.length > 0 && (
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Lightbulb className="w-5 h-5 text-yellow-600" />
+            <Lightbulb className="w-5 h-5 text-warning-600" />
             <h2 className="text-xl font-semibold">Suggested Fixes</h2>
           </div>
           <ul className="space-y-2">
             {narrative.suggested_fixes.map((fix, index) => (
               <li key={index} className="flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                <span className="text-gray-700">{fix}</span>
+                <CheckCircle2 className="w-5 h-5 text-success-600 flex-shrink-0 mt-0.5" />
+                <span className="text-foreground">{fix}</span>
               </li>
             ))}
           </ul>
@@ -269,4 +269,3 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
     </div>
   );
 }
-

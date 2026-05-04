@@ -4,7 +4,8 @@
 //! Displays condition expressions and supports editing.
 
 import React from 'react';
-import { EdgeProps, getBezierPath } from '@xyflow/react';
+import { getBezierPath } from '@xyflow/react';
+import type { EdgeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { cn } from '@/utils/cn';
 
@@ -66,7 +67,7 @@ export function TransitionEdge({
           <div className="flex items-center justify-center h-full">
             <Badge
               variant="outline"
-              className="bg-white dark:bg-gray-800 text-xs px-2 py-1 border-green-500 dark:border-green-400"
+              className="bg-card text-xs px-2 py-1 border-success dark:border-success-400"
             >
               {condition.length > 30 ? `${condition.substring(0, 30)}...` : condition}
             </Badge>

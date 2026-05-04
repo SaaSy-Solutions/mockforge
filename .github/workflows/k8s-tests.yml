@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: 'v3.13.0'
 
@@ -215,7 +215,7 @@ jobs:
           config_file: .github/workflows/kind-config-integration.yaml
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Install Prometheus Operator
         run: |

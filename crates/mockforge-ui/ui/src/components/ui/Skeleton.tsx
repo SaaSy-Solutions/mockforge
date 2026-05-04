@@ -27,7 +27,7 @@ export function Skeleton({
   return (
     <div
       className={cn(
-        'bg-gray-200 dark:bg-gray-700',
+        'bg-muted',
         circle ? 'rounded-full' : 'rounded-md',
         animationClasses[animation],
         className
@@ -43,7 +43,7 @@ export function Skeleton({
 
 export function SkeletonCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('p-6 border border-gray-200 dark:border-gray-800 rounded-xl space-y-4', className)} {...props}>
+    <div className={cn('p-6 border border-border rounded-xl space-y-4', className)} {...props}>
       <div className="flex items-center space-x-4">
         <Skeleton circle width={48} height={48} />
         <div className="space-y-2 flex-1">
@@ -84,7 +84,7 @@ export function SkeletonTable({ rows = 5, cols = 4, className, ...props }: { row
 
 export function SkeletonMetricCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('p-6 border border-gray-200 dark:border-gray-800 rounded-xl', className)} {...props}>
+    <div className={cn('p-6 border border-border rounded-xl', className)} {...props}>
       <div className="flex items-center justify-between">
         <div className="space-y-2 flex-1">
           <Skeleton height={12} width="60%" />
@@ -101,7 +101,7 @@ export function SkeletonList({ items = 5, className, ...props }: { items?: numbe
   return (
     <div className={cn('space-y-3', className)} {...props}>
       {Array.from({ length: items }).map((_, index) => (
-        <div key={`list-item-${index}`} className="flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-800 rounded-lg">
+        <div key={`list-item-${index}`} className="flex items-center space-x-3 p-3 border border-border rounded-lg">
           <Skeleton circle width={24} height={24} />
           <div className="space-y-1 flex-1">
             <Skeleton height={14} width="70%" />
@@ -116,7 +116,7 @@ export function SkeletonList({ items = 5, className, ...props }: { items?: numbe
 
 export function SkeletonChart({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('p-6 border border-gray-200 dark:border-gray-800 rounded-xl space-y-4', className)} {...props}>
+    <div className={cn('p-6 border border-border rounded-xl space-y-4', className)} {...props}>
       <div className="flex items-center justify-between">
         <Skeleton height={16} width="30%" />
         <Skeleton height={12} width="20%" />

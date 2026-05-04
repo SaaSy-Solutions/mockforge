@@ -16,7 +16,11 @@ import { authApi } from '../services/authApi';
 // Default preferences
 const defaultThemePreferences: UIThemePreferences = {
   theme: 'system',
-  accentColor: 'blue',
+  // Default to the MockForge brand orange. `useThemeSync` writes
+  // --primary/--brand* from this on mount; if it doesn't match the brand,
+  // every CTA renders in the wrong colour even though the CSS tokens are
+  // correct.
+  accentColor: 'orange',
   fontSize: 'medium',
   highContrast: false,
 };

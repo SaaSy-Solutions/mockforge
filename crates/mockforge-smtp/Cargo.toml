@@ -38,7 +38,7 @@ base64 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "macros"] }
-tempfile = "3.0"
+tempfile = "3.27"
 criterion = { workspace = true }
 # Real SMTP client for the end-to-end regression test — sends a message
 # via the mock server and we then inspect the captured mailbox.

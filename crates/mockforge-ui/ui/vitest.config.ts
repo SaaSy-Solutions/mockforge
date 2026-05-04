@@ -52,6 +52,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Mirror the production aliases from vite.config.ts so vitest can
+      // resolve the legacy `@mui/material` and `@mui/icons-material`
+      // imports against the in-tree shims after the MUI dep was dropped.
+      '@mui/material': path.resolve(__dirname, './src/components/ui/mui-shim.tsx'),
+      '@mui/icons-material': path.resolve(__dirname, './src/components/ui/mui-icons-shim.tsx'),
     },
   },
 });

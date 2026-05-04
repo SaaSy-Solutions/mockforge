@@ -40,7 +40,7 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
   };
 
   const SortIcon = ({ column }: { column: SortKey }) => {
-    if (sortKey !== column) return <span className="text-gray-400">↕</span>;
+    if (sortKey !== column) return <span className="text-muted-foreground">↕</span>;
     return sortOrder === 'asc' ? <span>↑</span> : <span>↓</span>;
   };
 
@@ -50,7 +50,7 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
         <h3 className="text-lg font-semibold mb-4">Top Endpoints</h3>
         <div className="animate-pulse space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div key={i} className="h-12 bg-muted rounded"></div>
           ))}
         </div>
       </Card>
@@ -61,7 +61,7 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
     return (
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Top Endpoints</h3>
-        <div className="text-center py-8 text-gray-500">No endpoint data available</div>
+        <div className="text-center py-8 text-muted-foreground">No endpoint data available</div>
       </Card>
     );
   }
@@ -72,7 +72,7 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
         <h3 className="text-lg font-semibold">Top Endpoints</h3>
         <button
           onClick={() => exportEndpointsToCSV(data)}
-          className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg flex items-center gap-2 transition-colors"
+          className="px-3 py-1.5 text-sm bg-muted hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg flex items-center gap-2 transition-colors"
         >
           <Download className="w-4 h-4" />
           Export CSV
@@ -81,29 +81,29 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 dark:border-gray-700">
+            <tr className="border-b border-border">
               <th className="text-left py-3 px-2 font-medium">Path</th>
               <th className="text-left py-3 px-2 font-medium">Method</th>
               <th
-                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-accent hover:text-accent-foreground"
                 onClick={() => handleSort('request_rate')}
               >
                 Req/s <SortIcon column="request_rate" />
               </th>
               <th
-                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-accent hover:text-accent-foreground"
                 onClick={() => handleSort('avg_latency_ms')}
               >
                 Avg Latency <SortIcon column="avg_latency_ms" />
               </th>
               <th
-                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-accent hover:text-accent-foreground"
                 onClick={() => handleSort('p95_latency_ms')}
               >
                 P95 <SortIcon column="p95_latency_ms" />
               </th>
               <th
-                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="text-right py-3 px-2 font-medium cursor-pointer hover:bg-accent hover:text-accent-foreground"
                 onClick={() => handleSort('error_rate_percent')}
               >
                 Error % <SortIcon column="error_rate_percent" />
@@ -114,20 +114,20 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
             {sortedData.map((endpoint, index) => (
               <tr
                 key={`${endpoint.path}-${endpoint.method}-${index}`}
-                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                className="border-b border-border hover:bg-accent hover:text-accent-foreground/50"
               >
                 <td className="py-3 px-2 font-mono text-xs">{endpoint.path}</td>
                 <td className="py-3 px-2">
                   <span
                     className={`px-2 py-1 rounded text-xs font-medium ${
                       endpoint.method === 'GET'
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        ? 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-400'
                         : endpoint.method === 'POST'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400'
                         : endpoint.method === 'PUT'
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                        ? 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400'
                         : endpoint.method === 'DELETE'
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        ? 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400'
                         : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
                     }`}
                   >
@@ -139,10 +139,10 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
                 <td
                   className={`py-3 px-2 text-right ${
                     endpoint.p95_latency_ms < 100
-                      ? 'text-green-600 dark:text-green-400'
+                      ? 'text-success-600 dark:text-success-400'
                       : endpoint.p95_latency_ms < 500
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-red-600 dark:text-red-400'
+                      ? 'text-warning-600 dark:text-warning-400'
+                      : 'text-danger-600 dark:text-danger-400'
                   }`}
                 >
                   {Math.round(endpoint.p95_latency_ms)}ms
@@ -150,10 +150,10 @@ export const EndpointsTable: React.FC<EndpointsTableProps> = ({ data, isLoading 
                 <td
                   className={`py-3 px-2 text-right ${
                     endpoint.error_rate_percent < 1
-                      ? 'text-green-600 dark:text-green-400'
+                      ? 'text-success-600 dark:text-success-400'
                       : endpoint.error_rate_percent < 5
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-red-600 dark:text-red-400'
+                      ? 'text-warning-600 dark:text-warning-400'
+                      : 'text-danger-600 dark:text-danger-400'
                   }`}
                 >
                   {endpoint.error_rate_percent.toFixed(2)}%

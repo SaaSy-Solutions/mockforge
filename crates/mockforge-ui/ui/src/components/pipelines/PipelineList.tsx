@@ -30,7 +30,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
       </div>
     );
   }
@@ -38,7 +38,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
   if (error) {
     return (
       <Card className="p-6">
-        <div className="text-red-600 dark:text-red-400">
+        <div className="text-danger-600 dark:text-danger-400">
           Error loading pipelines: {error.message}
         </div>
       </Card>
@@ -60,15 +60,15 @@ export const PipelineList: React.FC<PipelineListProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pipelines</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <h2 className="text-2xl font-bold text-foreground">Pipelines</h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Automate mock lifecycle management with event-driven pipelines
           </p>
         </div>
         {onCreate && (
           <button
             onClick={onCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Create Pipeline
@@ -79,11 +79,11 @@ export const PipelineList: React.FC<PipelineListProps> = ({
       {/* Pipeline List */}
       {!pipelines || pipelines.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No pipelines found</p>
+          <p className="text-muted-foreground mb-4">No pipelines found</p>
           {onCreate && (
             <button
               onClick={onCreate}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
             >
               Create Your First Pipeline
             </button>
@@ -96,23 +96,23 @@ export const PipelineList: React.FC<PipelineListProps> = ({
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <h3 className="text-lg font-semibold text-foreground">
                       {pipeline.name}
                     </h3>
                     {pipeline.definition.enabled ? (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-xs">
+                      <span className="flex items-center gap-1 px-2 py-1 bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300 rounded text-xs">
                         <CheckCircle className="h-3 w-3" />
                         Enabled
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded text-xs">
+                      <span className="flex items-center gap-1 px-2 py-1 bg-muted text-foreground rounded text-xs">
                         <XCircle className="h-3 w-3" />
                         Disabled
                       </span>
                     )}
                   </div>
 
-                  <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                  <div className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-4">
                       <span>
                         <strong>Triggers:</strong> {pipeline.definition.triggers.length}
@@ -144,7 +144,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
                   {onSelect && (
                     <button
                       onClick={() => onSelect(pipeline)}
-                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      className="p-2 text-muted-foreground hover:text-info-600 dark:hover:text-info-400 transition-colors"
                       title="View Details"
                     >
                       <Edit className="h-4 w-4" />
@@ -152,7 +152,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
                   )}
                   <button
                     onClick={() => handleDelete(pipeline.id, pipeline.name)}
-                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    className="p-2 text-muted-foreground hover:text-danger-600 dark:hover:text-danger-400 transition-colors"
                     title="Delete Pipeline"
                   >
                     <Trash2 className="h-4 w-4" />

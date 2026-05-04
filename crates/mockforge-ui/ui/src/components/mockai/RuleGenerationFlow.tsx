@@ -119,26 +119,26 @@ export function RuleGenerationFlow({
   const getStepColor = (status: RuleGenerationStep['status']) => {
     switch (status) {
       case 'completed':
-        return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900';
+        return 'text-success-600 dark:text-success-400 bg-success-100 dark:bg-success-900';
       case 'processing':
-        return 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900';
+        return 'text-info-600 dark:text-info-400 bg-info-100 dark:bg-info-900';
       case 'error':
-        return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900';
+        return 'text-danger-600 dark:text-danger-400 bg-danger-100 dark:bg-danger-900';
       default:
-        return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800';
+        return 'text-muted-foreground bg-muted';
     }
   };
 
   const getStepBorderColor = (status: RuleGenerationStep['status']) => {
     switch (status) {
       case 'completed':
-        return 'border-green-500';
+        return 'border-success';
       case 'processing':
-        return 'border-blue-500';
+        return 'border-info';
       case 'error':
-        return 'border-red-500';
+        return 'border-destructive';
       default:
-        return 'border-gray-300 dark:border-gray-700';
+        return 'border-border';
     }
   };
 
@@ -147,9 +147,9 @@ export function RuleGenerationFlow({
       {/* Flow Steps */}
       <div className="relative">
         {/* Connection Lines */}
-        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700 -translate-y-1/2 z-0" />
+        <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2 z-0" />
         <div
-          className="absolute top-1/2 left-0 h-0.5 bg-blue-500 dark:bg-blue-400 -translate-y-1/2 z-0 transition-all duration-500"
+          className="absolute top-1/2 left-0 h-0.5 bg-info-500 dark:bg-info-400 -translate-y-1/2 z-0 transition-all duration-500"
           style={{
             width: `${((steps.findIndex((s) => s.status !== 'completed') + 1) / steps.length) * 100}%`,
           }}
@@ -173,7 +173,7 @@ export function RuleGenerationFlow({
                   step.icon
                 )}
                 {step.status === 'completed' && (
-                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="absolute -top-1 -right-1 w-5 h-5 bg-success-500 rounded-full flex items-center justify-center">
                     <CheckCircle2 className="h-3 w-3 text-white" />
                   </div>
                 )}
@@ -181,7 +181,7 @@ export function RuleGenerationFlow({
               <div className="mt-3 text-center">
                 <div className="text-sm font-semibold">{step.title}</div>
                 {step.data && (
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  <div className="text-xs text-muted-foreground mt-1">
                     {step.data.examples_count !== undefined &&
                       `${step.data.examples_count} examples`}
                     {step.data.patterns_detected !== undefined &&
@@ -214,7 +214,7 @@ export function RuleGenerationFlow({
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold">{step.title}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         {step.description}
                       </p>
                     </div>
@@ -241,12 +241,12 @@ export function RuleGenerationFlow({
                         <button
                           key={example.id}
                           onClick={() => onExampleClick?.(example.id)}
-                          className="p-2 text-left border rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          className="p-2 text-left border rounded hover:bg-accent hover:text-accent-foreground transition-colors"
                         >
                           <div className="text-xs font-mono">
                             {example.method} {example.path}
                           </div>
-                          <div className="text-xs text-gray-500">{example.id}</div>
+                          <div className="text-xs text-muted-foreground">{example.id}</div>
                         </button>
                       ))}
                     </div>
@@ -259,11 +259,11 @@ export function RuleGenerationFlow({
                     {patterns.map((pattern, idx) => (
                       <div
                         key={idx}
-                        className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        className="p-3 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <code
-                            className="text-sm font-mono cursor-pointer hover:text-blue-600 dark:hover:text-blue-400"
+                            className="text-sm font-mono cursor-pointer hover:text-info-600 dark:hover:text-info-400"
                             onClick={() => onPatternClick?.(pattern.pattern)}
                           >
                             {pattern.pattern}
@@ -272,7 +272,7 @@ export function RuleGenerationFlow({
                             {pattern.match_count} matches
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <TrendingUp className="h-3 w-3" />
                           {pattern.confidence > 0 && (
                             <span>
@@ -293,7 +293,7 @@ export function RuleGenerationFlow({
                         <button
                           key={rule.id}
                           onClick={() => onRuleClick?.(rule.id)}
-                          className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+                          className="p-3 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors text-left"
                         >
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-sm font-medium">{rule.id}</span>
@@ -309,7 +309,7 @@ export function RuleGenerationFlow({
                               {(rule.confidence * 100).toFixed(0)}%
                             </Badge>
                           </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                          <div className="text-xs text-muted-foreground">
                             {rule.type}
                           </div>
                         </button>
@@ -321,15 +321,15 @@ export function RuleGenerationFlow({
                 {step.id === 'output' && rules.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="font-medium">Final Rules</h4>
-                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                      <div className="flex items-center gap-2 text-green-700 dark:text-green-400 mb-2">
+                    <div className="p-4 bg-success-50 dark:bg-success-900/20 rounded-lg">
+                      <div className="flex items-center gap-2 text-success-700 dark:text-success-400 mb-2">
                         <CheckCircle2 className="h-5 w-5" />
                         <span className="font-medium">
                           Successfully generated {rules.length} rule
                           {rules.length !== 1 ? 's' : ''}
                         </span>
                       </div>
-                      <p className="text-sm text-green-600 dark:text-green-400">
+                      <p className="text-sm text-success-600 dark:text-success-400">
                         Rules are ready to use for intelligent mock behavior. View details
                         in the Rules Dashboard.
                       </p>
@@ -354,22 +354,22 @@ export function RuleGenerationFlow({
       {/* Summary Stats */}
       <div className="grid grid-cols-4 gap-4">
         <Card className="p-4 text-center">
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+          <div className="text-2xl font-bold text-info-600 dark:text-info-400 mb-1">
             {examples.length}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Examples</div>
+          <div className="text-sm text-muted-foreground">Examples</div>
         </Card>
         <Card className="p-4 text-center">
           <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 mb-1">
             {patterns.length}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Patterns</div>
+          <div className="text-sm text-muted-foreground">Patterns</div>
         </Card>
         <Card className="p-4 text-center">
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400 mb-1">
+          <div className="text-2xl font-bold text-success-600 dark:text-success-400 mb-1">
             {rules.length}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Rules</div>
+          <div className="text-sm text-muted-foreground">Rules</div>
         </Card>
         <Card className="p-4 text-center">
           <div className="text-2xl font-bold text-orange-600 dark:text-orange-400 mb-1">
@@ -377,7 +377,7 @@ export function RuleGenerationFlow({
               ? `${(rules.reduce((sum, r) => sum + r.confidence, 0) / rules.length * 100).toFixed(0)}%`
               : 'N/A'}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">Avg Confidence</div>
+          <div className="text-sm text-muted-foreground">Avg Confidence</div>
         </Card>
       </div>
     </div>

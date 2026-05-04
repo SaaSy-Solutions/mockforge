@@ -42,7 +42,7 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
       </div>
     );
   }
@@ -55,35 +55,35 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-3xl font-bold text-foreground">
               {currentPipeline.name}
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               Pipeline Details
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {currentPipeline.definition.enabled ? (
-            <span className="flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded">
+            <span className="flex items-center gap-1 px-3 py-1 bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300 rounded">
               <CheckCircle className="h-4 w-4" />
               Enabled
             </span>
           ) : (
-            <span className="flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded">
+            <span className="flex items-center gap-1 px-3 py-1 bg-muted text-foreground rounded">
               <XCircle className="h-4 w-4" />
               Disabled
             </span>
           )}
           <button
             onClick={handleTrigger}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Play className="h-4 w-4" />
             Trigger
@@ -91,7 +91,7 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
           {onEdit && (
             <button
               onClick={onEdit}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
             >
               <Edit className="h-4 w-4" />
               Edit
@@ -104,36 +104,36 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Basic Info */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Settings className="h-5 w-5" />
             Basic Information
           </h3>
           <div className="space-y-3 text-sm">
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Pipeline ID:</span>
-              <span className="ml-2 font-mono text-gray-900 dark:text-white">{currentPipeline.id}</span>
+              <span className="text-muted-foreground">Pipeline ID:</span>
+              <span className="ml-2 font-mono text-foreground">{currentPipeline.id}</span>
             </div>
             {currentPipeline.workspace_id && (
               <div>
-                <span className="text-gray-600 dark:text-gray-400">Workspace ID:</span>
-                <span className="ml-2 font-mono text-gray-900 dark:text-white">{currentPipeline.workspace_id}</span>
+                <span className="text-muted-foreground">Workspace ID:</span>
+                <span className="ml-2 font-mono text-foreground">{currentPipeline.workspace_id}</span>
               </div>
             )}
             {currentPipeline.org_id && (
               <div>
-                <span className="text-gray-600 dark:text-gray-400">Organization ID:</span>
-                <span className="ml-2 font-mono text-gray-900 dark:text-white">{currentPipeline.org_id}</span>
+                <span className="text-muted-foreground">Organization ID:</span>
+                <span className="ml-2 font-mono text-foreground">{currentPipeline.org_id}</span>
               </div>
             )}
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Created:</span>
-              <span className="ml-2 text-gray-900 dark:text-white">
+              <span className="text-muted-foreground">Created:</span>
+              <span className="ml-2 text-foreground">
                 {new Date(currentPipeline.created_at).toLocaleString()}
               </span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Updated:</span>
-              <span className="ml-2 text-gray-900 dark:text-white">
+              <span className="text-muted-foreground">Updated:</span>
+              <span className="ml-2 text-foreground">
                 {new Date(currentPipeline.updated_at).toLocaleString()}
               </span>
             </div>
@@ -142,20 +142,20 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
 
         {/* Triggers */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Triggers ({currentPipeline.definition.triggers.length})
           </h3>
           {currentPipeline.definition.triggers.length === 0 ? (
-            <p className="text-sm text-gray-600 dark:text-gray-400">No triggers configured</p>
+            <p className="text-sm text-muted-foreground">No triggers configured</p>
           ) : (
             <div className="space-y-2">
               {currentPipeline.definition.triggers.map((trigger, index) => (
-                <div key={index} className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="font-medium text-gray-900 dark:text-white">
+                <div key={index} className="p-3 bg-muted rounded">
+                  <div className="font-medium text-foreground">
                     {trigger.event_type}
                   </div>
                   {trigger.filters && Object.keys(trigger.filters).length > 0 && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       Filters: {JSON.stringify(trigger.filters)}
                     </div>
                   )}
@@ -168,26 +168,26 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
 
       {/* Steps */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-foreground mb-4">
           Steps ({currentPipeline.definition.steps.length})
         </h3>
         {currentPipeline.definition.steps.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">No steps configured</p>
+          <p className="text-sm text-muted-foreground">No steps configured</p>
         ) : (
           <div className="space-y-3">
             {currentPipeline.definition.steps.map((step, index) => (
-              <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded border-l-4 border-blue-600">
+              <div key={index} className="p-4 bg-muted rounded border-l-4 border-info-600">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium text-gray-900 dark:text-white">
+                  <div className="font-medium text-foreground">
                     {step.name || `Step ${index + 1}`}
                   </div>
-                  <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
+                  <span className="px-2 py-1 bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300 rounded text-xs">
                     {step.type}
                   </span>
                 </div>
                 {step.config && Object.keys(step.config).length > 0 && (
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                    <pre className="bg-gray-100 dark:bg-gray-900 p-2 rounded overflow-x-auto">
+                  <div className="text-xs text-muted-foreground mt-2">
+                    <pre className="bg-muted dark:bg-gray-900 p-2 rounded overflow-x-auto">
                       {JSON.stringify(step.config, null, 2)}
                     </pre>
                   </div>
@@ -203,16 +203,16 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+              <h3 className="text-lg font-semibold text-foreground mb-1">
                 Execution History
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 View past pipeline executions and their results
               </p>
             </div>
             <button
               onClick={onViewExecutions}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
             >
               View Executions
             </button>

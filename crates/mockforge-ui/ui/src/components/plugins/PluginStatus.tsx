@@ -67,9 +67,9 @@ export function PluginStatus() {
 
   const getHealthIcon = (healthy: boolean) => {
     return healthy ? (
-      <CheckCircle className="w-4 h-4 text-green-500" />
+      <CheckCircle className="w-4 h-4 text-success-500" />
     ) : (
-      <XCircle className="w-4 h-4 text-red-500" />
+      <XCircle className="w-4 h-4 text-danger-500" />
     );
   };
 
@@ -125,10 +125,10 @@ export function PluginStatus() {
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Plugins</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Plugins</p>
                 <p className="text-2xl font-bold">{stats.total_plugins}</p>
               </div>
-              <Activity className="w-8 h-8 text-blue-500" />
+              <Activity className="w-8 h-8 text-info-500" />
             </div>
           </div>
         </Card>
@@ -137,10 +137,10 @@ export function PluginStatus() {
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Loaded</p>
-                <p className="text-2xl font-bold text-green-600">{stats.loaded}</p>
+                <p className="text-sm font-medium text-muted-foreground">Loaded</p>
+                <p className="text-2xl font-bold text-success-600">{stats.loaded}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-500" />
+              <CheckCircle className="w-8 h-8 text-success-500" />
             </div>
           </div>
         </Card>
@@ -149,10 +149,10 @@ export function PluginStatus() {
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Failed</p>
-                <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
+                <p className="text-sm font-medium text-muted-foreground">Failed</p>
+                <p className="text-2xl font-bold text-danger-600">{stats.failed}</p>
               </div>
-              <XCircle className="w-8 h-8 text-red-500" />
+              <XCircle className="w-8 h-8 text-danger-500" />
             </div>
           </div>
         </Card>
@@ -161,10 +161,10 @@ export function PluginStatus() {
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
                 <p className="text-2xl font-bold">{stats.success_rate.toFixed(1)}%</p>
               </div>
-              <TrendingUp className="w-8 h-8 text-green-500" />
+              <TrendingUp className="w-8 h-8 text-success-500" />
             </div>
           </div>
         </Card>
@@ -180,7 +180,7 @@ export function PluginStatus() {
               <span>{stats.success_rate.toFixed(1)}%</span>
             </div>
             <Progress value={stats.success_rate} className="w-full" />
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-muted-foreground">
               <span>Loaded: {stats.loaded}</span>
               <span>Failed: {stats.failed}</span>
               <span>Skipped: {stats.skipped}</span>
@@ -201,13 +201,13 @@ export function PluginStatus() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
+              <CheckCircle className="w-5 h-5 text-success-500" />
               <span className="text-sm">
                 <strong>{healthyPlugins}</strong> healthy
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-red-500" />
+              <XCircle className="w-5 h-5 text-danger-500" />
               <span className="text-sm">
                 <strong>{unhealthyPlugins}</strong> unhealthy
               </span>
@@ -220,18 +220,18 @@ export function PluginStatus() {
                 key={plugin.id}
                 className={`flex items-center justify-between p-3 rounded-lg border ${
                   plugin.healthy
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-red-200 bg-red-50'
+                    ? 'border-success-200 bg-success-50'
+                    : 'border-danger-200 bg-danger-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   {getHealthIcon(plugin.healthy)}
                   <div>
                     <div className="font-medium">{plugin.id}</div>
-                    <div className="text-sm text-gray-600">{plugin.message}</div>
+                    <div className="text-sm text-muted-foreground">{plugin.message}</div>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-muted-foreground">
                   <Clock className="w-3 h-3 inline mr-1" />
                   {formatDateTime(plugin.last_check)}
                 </div>
@@ -240,7 +240,7 @@ export function PluginStatus() {
           </div>
 
           {status.last_updated && (
-            <div className="mt-4 text-xs text-gray-500 text-center">
+            <div className="mt-4 text-xs text-muted-foreground text-center">
               Last updated: {formatDateTime(status.last_updated)}
             </div>
           )}

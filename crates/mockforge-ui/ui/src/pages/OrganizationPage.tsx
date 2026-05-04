@@ -355,20 +355,20 @@ const resolveSuspiciousActivity = (orgId: string, activityId: string) =>
 function getRoleIcon(role: string) {
   switch (role) {
     case 'owner':
-      return <Crown className="w-4 h-4 text-yellow-500" />;
+      return <Crown className="w-4 h-4 text-warning-500" />;
     case 'admin':
-      return <Shield className="w-4 h-4 text-blue-500" />;
+      return <Shield className="w-4 h-4 text-info-500" />;
     default:
-      return <User className="w-4 h-4 text-gray-500" />;
+      return <User className="w-4 h-4 text-muted-foreground" />;
   }
 }
 
 function getRoleBadge(role: string) {
   switch (role) {
     case 'owner':
-      return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">Owner</Badge>;
+      return <Badge className="bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">Owner</Badge>;
     case 'admin':
-      return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Admin</Badge>;
+      return <Badge className="bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300">Admin</Badge>;
     default:
       return <Badge variant="secondary">Member</Badge>;
   }
@@ -379,7 +379,7 @@ function getPlanBadge(plan: string) {
     case 'team':
       return <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">Team</Badge>;
     case 'pro':
-      return <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">Pro</Badge>;
+      return <Badge className="bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300">Pro</Badge>;
     default:
       return <Badge variant="secondary">Free</Badge>;
   }
@@ -910,14 +910,14 @@ function SecurityActivityTab({ org }: { org: Organization }) {
     const s = severity.toLowerCase();
     if (s === 'critical' || s === 'high') {
       return (
-        <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+        <Badge className="bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300">
           {severity}
         </Badge>
       );
     }
     if (s === 'medium') {
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+        <Badge className="bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
           {severity}
         </Badge>
       );
@@ -953,7 +953,7 @@ function SecurityActivityTab({ org }: { org: Organization }) {
             <div key={activity.id} className="p-3 border rounded-lg text-sm">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                  <AlertTriangle className="w-4 h-4 text-warning-600" />
                   <Badge variant="secondary" className="text-xs">
                     {activity.activity_type}
                   </Badge>
@@ -1251,7 +1251,7 @@ function SSOTab({ org }: { org: Organization }) {
         <div className="flex items-center justify-between p-3 border rounded-lg">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium">SSO Status</span>
-            <Badge className={ssoConfig.enabled ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : ''}>
+            <Badge className={ssoConfig.enabled ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300' : ''}>
               {ssoConfig.enabled ? 'Enabled' : 'Disabled'}
             </Badge>
           </div>
@@ -1559,7 +1559,7 @@ function UsageQuotaTab({ org }: { org: Organization }) {
               <>
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Status</span>
-                  <Badge className={billing.subscription.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : ''}>
+                  <Badge className={billing.subscription.status === 'active' ? 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300' : ''}>
                     {billing.subscription.status}
                   </Badge>
                 </div>
@@ -1572,7 +1572,7 @@ function UsageQuotaTab({ org }: { org: Organization }) {
                   </div>
                 )}
                 {billing.subscription.cancel_at_period_end && (
-                  <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                  <Badge className="bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
                     Cancels at period end
                   </Badge>
                 )}

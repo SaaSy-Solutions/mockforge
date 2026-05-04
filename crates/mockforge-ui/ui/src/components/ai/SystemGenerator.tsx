@@ -249,7 +249,7 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
               rows={6}
               className="mt-2"
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Describe your backend system in natural language. Be specific about entities, relationships, and features.
             </p>
           </div>
@@ -312,16 +312,16 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
               <div>
                 <h3 className="text-lg font-semibold">Generated System</h3>
                 <div className="flex items-center space-x-2 mt-1">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-sm text-muted-foreground">
                     {generatedSystem.system_id} • {generatedSystem.version}
                   </span>
                   {generatedSystem.status === 'frozen' ? (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300">
                       <Snowflake className="w-3 h-3 mr-1" />
                       Frozen
                     </span>
                   ) : (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
                       Draft
                     </span>
                   )}
@@ -330,13 +330,13 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
               <div className="flex items-center space-x-2">
                 {generatedSystem.tokens_used && (
                   <div className="text-right">
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Tokens</div>
+                    <div className="text-xs text-muted-foreground">Tokens</div>
                     <div className="text-sm font-semibold">{generatedSystem.tokens_used.toLocaleString()}</div>
                   </div>
                 )}
                 {generatedSystem.cost_usd && (
                   <div className="text-right">
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Cost</div>
+                    <div className="text-xs text-muted-foreground">Cost</div>
                     <div className="text-sm font-semibold">${generatedSystem.cost_usd.toFixed(4)}</div>
                   </div>
                 )}
@@ -344,15 +344,15 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
             </div>
 
             {/* Metadata */}
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="pt-4 border-t border-border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="text-gray-600 dark:text-gray-400 mb-1">Entities</div>
+                  <div className="text-muted-foreground mb-1">Entities</div>
                   <div className="flex flex-wrap gap-1">
                     {generatedSystem.metadata.entities.map((entity, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-xs"
+                        className="px-2 py-1 bg-muted rounded text-xs"
                       >
                         {entity}
                       </span>
@@ -360,14 +360,14 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-600 dark:text-gray-400 mb-1">Relationships</div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300">
+                  <div className="text-muted-foreground mb-1">Relationships</div>
+                  <div className="text-xs text-foreground">
                     {generatedSystem.metadata.relationships.length} relationships
                   </div>
                 </div>
                 <div>
-                  <div className="text-gray-600 dark:text-gray-400 mb-1">Generated</div>
-                  <div className="text-xs text-gray-700 dark:text-gray-300">
+                  <div className="text-muted-foreground mb-1">Generated</div>
+                  <div className="text-xs text-foreground">
                     {new Date(generatedSystem.metadata.generated_at).toLocaleString()}
                   </div>
                 </div>
@@ -375,7 +375,7 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-4 border-t border-gray-200 dark:border-gray-700 mt-4 flex items-center space-x-2">
+            <div className="pt-4 border-t border-border mt-4 flex items-center space-x-2">
               <Button
                 onClick={handleApply}
                 disabled={isApplying || generatedSystem.status === 'frozen'}
@@ -422,14 +422,14 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
               {Object.entries(generatedSystem.artifacts).map(([artifactType, artifact]) => (
                 <div
                   key={artifactType}
-                  className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="p-4 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
-                      <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <FileText className="w-5 h-5 text-info-600 dark:text-info-400" />
                       <div>
                         <div className="font-medium capitalize">{artifactType}</div>
-                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                           {artifact.format.toUpperCase()} • {artifact.artifact_id.substring(0, 8)}...
                         </div>
                       </div>
@@ -471,7 +471,7 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
                   </div>
 
                   {selectedArtifact === artifactType && (
-                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
+                    <div className="mt-4 p-4 bg-muted rounded border border-border">
                       <pre className="text-xs overflow-x-auto max-h-96">
                         {formatArtifactContent(artifact)}
                       </pre>

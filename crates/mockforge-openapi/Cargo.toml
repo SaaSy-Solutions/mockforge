@@ -29,7 +29,7 @@ axum = { workspace = true }
 
 # OpenAPI types
 openapiv3 = { workspace = true }
-indexmap = "2.0"
+indexmap = "2.14"
 
 # JSON Schema validation
 jsonschema = { workspace = true }
@@ -61,4 +61,4 @@ default = []
 parallel-routes = ["rayon"]
 
 [dev-dependencies]
-tempfile = "3.10"
+tempfile = "3.27"

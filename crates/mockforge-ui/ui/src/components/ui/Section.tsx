@@ -22,7 +22,7 @@ export function Section({
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
           <div>
             {title && <h2 className="text-2xl font-semibold">{title}</h2>}
-            {subtitle && <p className="text-gray-600 dark:text-gray-400 mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-muted-foreground mt-1">{subtitle}</p>}
           </div>
           {actions && <div>{actions}</div>}
         </div>

@@ -36,6 +36,12 @@ export default defineConfig(({ command, mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        // MUI compatibility shims — legacy pages still import from
+        // '@mui/material' / '@mui/icons-material'. These aliases redirect
+        // those imports to in-tree shadcn-token replacements so we can drop
+        // the MUI dependency without rewriting every page in one PR.
+        '@mui/material': path.resolve(__dirname, './src/components/ui/mui-shim.tsx'),
+        '@mui/icons-material': path.resolve(__dirname, './src/components/ui/mui-icons-shim.tsx'),
       },
       dedupe: ['react', 'react-dom'], // Ensure React is not duplicated
     },
@@ -74,13 +80,11 @@ export default defineConfig(({ command, mode }) => {
           },
           manualChunks: (id) => {
             // Core React libraries - MUST be in the same chunk to avoid duplicate React instances
-            // Include MUI, Emotion, Zustand, and React Query with React since they have tight coupling
+            // Bundle Zustand and React Query with React since they have tight coupling.
             if (
               id.includes('node_modules/react/') ||
               id.includes('node_modules/react-dom/') ||
               id.includes('node_modules/react-router-dom') ||
-              id.includes('node_modules/@mui') ||
-              id.includes('node_modules/@emotion') ||
               id.includes('node_modules/zustand') ||
               id.includes('node_modules/@tanstack/react-query')
             ) {

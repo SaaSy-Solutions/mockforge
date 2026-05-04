@@ -50,7 +50,7 @@ export function VoicePage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-border">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('api')}
@@ -169,7 +169,7 @@ export function VoicePage() {
                       <div className="flex-1">
                         <div className="font-medium mb-1">{item.description}</div>
                         {item.error ? (
-                          <div className="text-sm text-red-600">{item.error}</div>
+                          <div className="text-sm text-danger-600">{item.error}</div>
                         ) : (
                           <div className="text-sm text-muted-foreground">
                             Hook configuration generated successfully
@@ -244,7 +244,7 @@ export function VoicePage() {
                       <div className="flex-1">
                         <div className="font-medium mb-1">{item.description}</div>
                         {item.error ? (
-                          <div className="text-sm text-red-600">{item.error}</div>
+                          <div className="text-sm text-danger-600">{item.error}</div>
                         ) : item.scenario ? (
                           <div className="text-sm text-muted-foreground">
                             {item.scenario?.name} • {item.scenario?.config_summary?.endpoint_count ?? 0}{' '}

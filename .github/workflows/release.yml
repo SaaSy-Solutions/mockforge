@@ -33,7 +33,7 @@ jobs:
 
     - name: Setup sccache (GHA backend)
       id: sccache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
 
     - name: Verify sccache works
@@ -106,7 +106,7 @@ jobs:
         echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREVIOUS_TAG}...${REF_NAME}" >> changelog.md
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
@@ -180,7 +180,7 @@ jobs:
         fetch-depth: 0
 
     - name: Install Helm
-      uses: azure/setup-helm@v4
+      uses: azure/setup-helm@v5
       with:
         version: '3.13.0'
 
@@ -221,7 +221,7 @@ jobs:
         helm repo index . --url "https://github.com/${REPO}/releases/download/${REF_NAME}"
 
     - name: Upload Helm chart to GitHub Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         files: |
           .helm-release/*.tgz

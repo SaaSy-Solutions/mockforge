@@ -283,6 +283,21 @@ export interface DashboardData {
   servers: ServerStatus[];
   recent_logs: RequestLog[];
   system: SystemInfo;
+  cloud_metrics?: CloudDashboardMetrics;
+}
+
+export interface CloudDashboardMetrics {
+  active_deployments: number;
+  total_deployments: number;
+  workspaces: number;
+  services: number;
+  fixtures: number;
+  federations: number;
+  requests_2xx: number;
+  requests_4xx: number;
+  requests_5xx: number;
+  egress_bytes: number;
+  period_start: string | null;
 }
 
 export interface LatencyMetrics {

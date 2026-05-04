@@ -23,13 +23,13 @@ export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({
 }) => {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label className="text-sm font-medium text-foreground">
         Time Range:
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="px-3 py-2 border border-border rounded-md bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         {timeRanges.map((range) => (
           <option key={range.value} value={range.value}>
