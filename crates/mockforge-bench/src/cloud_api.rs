@@ -32,6 +32,30 @@ use tempfile::TempDir;
 use crate::command::BenchCommand;
 use crate::error::{BenchError, Result};
 use crate::executor::{K6Executor, K6Results};
+use crate::ssrf::{validate_target_url, Policy as SsrfPolicy};
+
+/// Resolve the SSRF policy to apply to cloud-driven runs.
+///
+/// Defaults to [`SsrfPolicy::strict`]. The env var
+/// `MOCKFORGE_SSRF_ALLOW_LOOPBACK=1` opts into [`SsrfPolicy::for_test`] —
+/// **only** intended for integration tests that target a local mock
+/// server on `127.0.0.1`. Production deployments must NOT set this.
+fn resolve_ssrf_policy() -> SsrfPolicy {
+    match std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").as_deref() {
+        Ok("1") | Ok("true") => SsrfPolicy::for_test(),
+        _ => SsrfPolicy::strict(),
+    }
+}
+
+/// Validate the supplied target URL against the SSRF policy and convert
+/// any rejection into a [`BenchError`] so existing call-sites don't need
+/// a new error variant.
+async fn enforce_ssrf(target_url: &str) -> Result<()> {
+    let policy = resolve_ssrf_policy();
+    validate_target_url(target_url, policy)
+        .await
+        .map_err(|e| BenchError::Other(format!("SSRF guard rejected target: {}", e)))
+}
 
 /// Format hint for OpenAPI specs supplied as raw bytes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -201,6 +225,7 @@ pub async fn run_bench(inputs: CloudBenchInputs) -> Result<CloudRunArtifacts> {
     if !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
@@ -244,6 +269,7 @@ pub async fn run_conformance(inputs: CloudConformanceInputs) -> Result<CloudRunA
     if inputs.use_k6 && !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
@@ -484,6 +510,7 @@ pub async fn run_owasp(inputs: CloudOwaspInputs) -> Result<CloudRunArtifacts> {
     if !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
@@ -538,6 +565,7 @@ pub async fn run_security(inputs: CloudSecurityInputs) -> Result<CloudRunArtifac
     if !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
@@ -586,6 +614,7 @@ pub async fn run_wafbench(inputs: CloudWafBenchInputs) -> Result<CloudRunArtifac
     if !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
@@ -626,6 +655,7 @@ pub async fn run_crud_flow(inputs: CloudCrudFlowInputs) -> Result<CloudRunArtifa
     if !K6Executor::is_k6_installed() {
         return Err(BenchError::K6NotFound);
     }
+    enforce_ssrf(&inputs.target_url).await?;
 
     let workdir = TempDir::new()
         .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;

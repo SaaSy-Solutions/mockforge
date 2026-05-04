@@ -25,6 +25,7 @@ pub mod scenarios;
 pub mod security_payloads;
 pub mod spec_dependencies;
 pub mod spec_parser;
+pub mod ssrf;
 pub mod target_parser;
 pub mod wafbench;
 
@@ -49,6 +50,7 @@ pub use security_payloads::{SecurityCategory, SecurityPayloads, SecurityTestConf
 pub use spec_dependencies::{
     DependencyDetector, ExtractedValues, SpecDependency, SpecDependencyConfig, SpecGroup,
 };
+pub use ssrf::{validate_target_url, Policy as SsrfPolicy, SsrfError};
 pub use target_parser::{parse_targets_file, TargetConfig};
 pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};
 

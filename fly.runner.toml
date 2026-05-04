@@ -1,0 +1,39 @@
+# Fly.io configuration for the MockForge cloud test-runner worker.
+# Deploy: flyctl deploy --config fly.runner.toml
+
+app = "mockforge-runner"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.runner"
+
+[env]
+  RUST_LOG = "mockforge_test_runner=info,mockforge_bench=info"
+  # Production runs strict SSRF enforcement. Setting this to "1"
+  # ONLY in non-production deployments — never on prod-runner.
+  MOCKFORGE_SSRF_ALLOW_LOOPBACK = "0"
+
+# Secrets to set via `flyctl secrets set`:
+#   REDIS_URL                          - Same Redis instance the registry pushes jobs to
+#   MOCKFORGE_RUNNER_QUEUE_KEY         - Optional override; defaults to "test_runs:queued"
+#   MOCKFORGE_RUNNER_REGISTRY_URL      - Internal registry callback URL
+#   MOCKFORGE_RUNNER_CALLBACK_TOKEN    - Bearer token the registry validates on
+#                                        /api/v1/internal/test-runs/{id}/* callbacks
+#   MOCKFORGE_RUNNER_MAX_CONCURRENT_JOBS - Worker concurrency (default 4)
+
+# No public HTTP service — the runner only consumes from Redis and
+# pushes status via outbound HTTPS to the registry.
+[experimental]
+  auto_rollback = true
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 2048
+
+# k6 runs can be CPU-spikey but mostly idle between jobs. Auto-stop
+# is fine — Fly will wake on the next dequeue cycle.
+[machine]
+  auto_start = true
+  auto_stop = true
+  min_machines_running = 0
