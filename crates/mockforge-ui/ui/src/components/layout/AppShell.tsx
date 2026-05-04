@@ -234,6 +234,9 @@ const cloudNavItemIds = new Set([
   // Import dispatches to /api/v1/import/preview + /api/v1/workspaces/{id}/import
   // when isCloudMode(); requires an active workspace selection.
   'import',
+  // Tunnels page detects cloud mode and dispatches CRUD + DNS verify
+  // through cloudTunnelsApi against /api/v1/organizations/{org_id}/tunnels.
+  'tunnels',
   'config',
   'organization',
   'billing',

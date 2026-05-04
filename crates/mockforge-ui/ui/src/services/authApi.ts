@@ -297,6 +297,11 @@ export interface UserProfile {
   email_notifications: boolean;
   security_alerts: boolean;
   preferences: Record<string, unknown>;
+  /**
+   * First owned org. Cloud pages use this for org-scoped routes
+   * without an explicit selector. Null for users with no orgs.
+   */
+  default_org_id?: string | null;
   created_at: string;
   updated_at: string;
 }

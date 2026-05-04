@@ -10,7 +10,10 @@ use crate::{
     AppState,
 };
 
-fn serialize_user(user: mockforge_registry_core::models::User) -> UserResponse {
+fn serialize_user(
+    user: mockforge_registry_core::models::User,
+    default_org_id: Option<uuid::Uuid>,
+) -> UserResponse {
     UserResponse {
         user_id: user.id.to_string(),
         username: user.username,
@@ -21,6 +24,7 @@ fn serialize_user(user: mockforge_registry_core::models::User) -> UserResponse {
         email_notifications: user.email_notifications,
         security_alerts: user.security_alerts,
         preferences: user.preferences,
+        default_org_id: default_org_id.map(|id| id.to_string()),
         created_at: user.created_at,
         updated_at: user.updated_at,
     }
@@ -37,8 +41,22 @@ pub struct UserResponse {
     pub email_notifications: bool,
     pub security_alerts: bool,
     pub preferences: serde_json::Value,
+    /// First owned org. UI uses this to call org-scoped routes
+    /// without an explicit selector. Null for users with no orgs
+    /// (e.g., freshly registered, no org bootstrap yet).
+    #[serde(default)]
+    pub default_org_id: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Look up the user's first owned org. Mirrors the resolve_org_context
+/// fallback path so /me's `default_org_id` matches what
+/// resolve_org_context would pick when no header is supplied.
+async fn find_default_org_id(state: &AppState, user_id: uuid::Uuid) -> Option<uuid::Uuid> {
+    use mockforge_registry_core::models::Organization;
+    let orgs = Organization::find_by_user(state.db.pool(), user_id).await.ok()?;
+    orgs.into_iter().find(|o| o.owner_id == user_id).map(|o| o.id)
 }
 
 /// `GET /api/v1/users/me`
@@ -51,7 +69,8 @@ pub async fn get_me(
         .find_user_by_id(user_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
-    Ok(Json(serialize_user(user)))
+    let default_org_id = find_default_org_id(&state, user_id).await;
+    Ok(Json(serialize_user(user, default_org_id)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,8 +131,9 @@ pub async fn update_me(
         .store
         .update_user_profile(user_id, username.as_deref(), email.as_deref())
         .await?;
+    let default_org_id = find_default_org_id(&state, user_id).await;
 
-    Ok(Json(serialize_user(updated)))
+    Ok(Json(serialize_user(updated, default_org_id)))
 }
 
 #[derive(Debug, Deserialize)]
