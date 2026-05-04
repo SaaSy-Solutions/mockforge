@@ -35,6 +35,8 @@ import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import WorkspacePromotions from '../components/workspace/WorkspacePromotions';
 import WorkspaceFederationScenariosPanel from '../components/workspace/WorkspaceFederationScenariosPanel';
 import WorkspaceSyncPanel from '../components/workspace/WorkspaceSyncPanel';
+import WorkspaceStatsStrip from '../components/workspace/WorkspaceStatsStrip';
+import WorkspaceMockEnvironmentsPanel from '../components/workspace/WorkspaceMockEnvironmentsPanel';
 import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
 import { IS_CLOUD } from '../utils/mode';
 
@@ -309,6 +311,44 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   const handleViewHistory = (requestId: string, requestName: string) => {
     setSelectedRequestForHistory({ id: requestId, name: requestName });
     setHistoryDialogOpen(true);
+  };
+
+  const handleDeleteFolder = async (folderId: string, folderName: string) => {
+    if (!selectedWorkspace) return;
+    if (!confirm(`Delete folder "${folderName}"? Requests inside will also be removed.`)) return;
+    try {
+      await apiService.deleteFolder(selectedWorkspace.summary.id, folderId);
+      toast.success('Folder deleted');
+      const response = await apiService.getWorkspace(selectedWorkspace.summary.id);
+      setSelectedWorkspace(response.workspace);
+      if (selectedFolder?.summary.id === folderId) setSelectedFolder(null);
+    } catch (err) {
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to delete folder: ${errorDetails.message}`);
+      logError(err, 'Delete folder');
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string, requestName: string) => {
+    if (!selectedWorkspace) return;
+    if (!confirm(`Delete request "${requestName}"?`)) return;
+    try {
+      await apiService.deleteRequest(selectedWorkspace.summary.id, requestId);
+      toast.success('Request deleted');
+      const response = await apiService.getWorkspace(selectedWorkspace.summary.id);
+      setSelectedWorkspace(response.workspace);
+      if (selectedFolder) {
+        const folderResponse = await apiService.getFolder(
+          selectedWorkspace.summary.id,
+          selectedFolder.summary.id
+        );
+        setSelectedFolder(folderResponse.folder);
+      }
+    } catch (err) {
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to delete request: ${errorDetails.message}`);
+      logError(err, 'Delete request');
+    }
   };
 
   const handleImport = async () => {
@@ -930,6 +970,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+                {/* Per-workspace stats (local-only — cloud has no per-workspace stats endpoint) */}
+                {!IS_CLOUD && (
+                  <WorkspaceStatsStrip workspaceId={selectedWorkspace.summary.id} />
+                )}
+
                 {/* Active federation scenarios applying to this workspace (cloud-only) */}
                 <WorkspaceFederationScenariosPanel workspaceId={selectedWorkspace.summary.id} />
 
@@ -947,10 +992,23 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                           onClick={() => handleFolderClick(folder.id)}
                         >
                           <CardContent className="p-4">
-                            <div className="flex items-center space-x-2">
-                              <Folder className="w-4 h-4" />
-                              <span className="font-medium">{folder.name}</span>
-                              <Badge variant="outline">{folder.request_count} requests</Badge>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <Folder className="w-4 h-4 shrink-0" />
+                                <span className="font-medium truncate">{folder.name}</span>
+                                <Badge variant="outline">{folder.request_count} requests</Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteFolder(folder.id, folder.name);
+                                }}
+                                title="Delete folder"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                             {folder.description && (
                               <p className="text-sm text-muted-foreground mt-1">{folder.description}</p>
@@ -981,17 +1039,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                   <span className="font-medium">{request.name}</span>
                                   <span className="text-sm text-muted-foreground">{request.path}</span>
                                 </div>
-                                {IS_CLOUD && (
-                                  <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-2">
+                                  {IS_CLOUD && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => handleViewHistory(request.id, request.name)}
+                                      title="View history"
                                     >
                                       <History className="w-4 h-4" />
                                     </Button>
-                                  </div>
-                                )}
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteRequest(request.id, request.name)}
+                                    title="Delete request"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -1011,17 +1078,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                 <span className="font-medium">{request.name}</span>
                                 <span className="text-sm text-muted-foreground">{request.path}</span>
                               </div>
-                              {IS_CLOUD && (
-                                <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-2">
+                                {IS_CLOUD && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleViewHistory(request.id, request.name)}
+                                    title="View history"
                                   >
                                     <History className="w-4 h-4" />
                                   </Button>
-                                </div>
-                              )}
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRequest(request.id, request.name)}
+                                  title="Delete request"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -1043,6 +1119,12 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     workspaceName={selectedWorkspace.summary.name}
                   />
                 )}
+
+                {/* Mock environments (dev/test/prod with reality/chaos/drift configs) — local only. */}
+                {!IS_CLOUD && (
+                  <WorkspaceMockEnvironmentsPanel workspaceId={selectedWorkspace.summary.id} />
+                )}
+
 
                 {/* Scenario promotions are a cloud-registry feature. */}
                 {IS_CLOUD && (

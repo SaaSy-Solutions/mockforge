@@ -75,6 +75,36 @@ const LearningHubPage = lazy(() => import('../pages/LearningHubPage').then(m => 
 // User Management
 const UserManagementPage = lazy(() => import('../pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 
+// Notification Channels (cloud-only — incident dispatch destinations)
+const NotificationChannelsPage = lazy(() => import('../pages/NotificationChannelsPage').then(m => ({ default: m.NotificationChannelsPage })));
+
+// Cloud workspace snapshots (Time Travel #10)
+const CloudSnapshotsPage = lazy(() => import('../pages/CloudSnapshotsPage').then(m => ({ default: m.CloudSnapshotsPage })));
+
+// Cloud incidents (org-wide #3)
+const CloudIncidentsPage = lazy(() => import('../pages/CloudIncidentsPage').then(m => ({ default: m.CloudIncidentsPage })));
+
+// Cloud test runs (#4) — org-wide history with SSE live stream
+const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m => ({ default: m.CloudTestRunsPage })));
+
+// Cloud traces (#2) — cross-deployment OTLP search
+const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => ({ default: m.CloudTracesPage })));
+
+// Cloud chaos (#7) — campaign authoring + run history
+const CloudChaosPage = lazy(() => import('../pages/CloudChaosPage').then(m => ({ default: m.CloudChaosPage })));
+
+// Cloud flows (#9 + #14) — versioned scenario / state-machine / orchestration / chain definitions
+const CloudFlowsPage = lazy(() => import('../pages/CloudFlowsPage').then(m => ({ default: m.CloudFlowsPage })));
+
+// Cloud contract & verification (#8) — monitored services + diff runs
+const CloudContractPage = lazy(() => import('../pages/CloudContractPage').then(m => ({ default: m.CloudContractPage })));
+
+// Cloud recorder + behavioral cloning (#6)
+const CloudRecorderPage = lazy(() => import('../pages/CloudRecorderPage').then(m => ({ default: m.CloudRecorderPage })));
+
+// Cloud showcase admin (#12) — submit / publish / feature gallery entries
+const CloudShowcaseAdminPage = lazy(() => import('../pages/CloudShowcaseAdminPage').then(m => ({ default: m.CloudShowcaseAdminPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -199,6 +229,16 @@ export const routes: RouteConfig[] = [
 
   // User Management
   { path: '/user-management', element: <UserManagementPage /> },
+  { path: '/notification-channels', element: <NotificationChannelsPage /> },
+  { path: '/cloud-snapshots', element: <CloudSnapshotsPage /> },
+  { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
+  { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
+  { path: '/cloud-traces', element: <CloudTracesPage /> },
+  { path: '/cloud-chaos', element: <CloudChaosPage /> },
+  { path: '/cloud-flows', element: <CloudFlowsPage /> },
+  { path: '/cloud-contract', element: <CloudContractPage /> },
+  { path: '/cloud-recorder', element: <CloudRecorderPage /> },
+  { path: '/cloud-showcase-admin', element: <CloudShowcaseAdminPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },

@@ -208,6 +208,30 @@ pub struct UsageCounter {
     pub egress_bytes: i64,
     pub storage_bytes: i64,
     pub ai_tokens_used: i64,
+    /// Wall-clock test/chaos/scenario runner time consumed this period.
+    /// Migration 20250101000059 adds this column with default 0.
+    #[serde(default)]
+    pub runner_seconds_used: i64,
+    /// Tunnel relay bytes (in + out) consumed this period.
+    /// Migration 20250101000061 adds this column with default 0.
+    #[serde(default)]
+    pub tunnel_bytes_used: i64,
+    /// Total snapshot blob storage in use across the org.
+    /// Unlike the other meters this is a *current value* (gauge) not a
+    /// monthly sum (counter) — snapshots are billed against an instantaneous
+    /// quota, not throughput.
+    /// Migration 20250101000063 adds this column with default 0.
+    #[serde(default)]
+    pub snapshot_bytes_stored: i64,
+    /// Observability log/trace ingest volume this period.
+    /// Migration 20250101000065 adds this column with default 0.
+    #[serde(default)]
+    pub log_bytes_ingested: i64,
+    /// Total recorder capture blob storage in use across the org.
+    /// Gauge, not counter — same shape as snapshot_bytes_stored.
+    /// Migration 20250101000068 adds this column with default 0.
+    #[serde(default)]
+    pub capture_bytes_stored: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -300,6 +324,92 @@ impl UsageCounter {
             "UPDATE usage_counters SET ai_tokens_used = ai_tokens_used + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(tokens)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment runner-seconds used. Charged for every wall-clock second
+    /// a cloud worker spends on a test/chaos/scenario/etc. run. Plan limits
+    /// live in `organizations.limits_json` under `runner_seconds_per_month`.
+    pub async fn increment_runner_seconds(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        seconds: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET runner_seconds_used = runner_seconds_used + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(seconds)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment tunnel relay bytes (in + out summed). Reported by the
+    /// relay binary via internal mTLS routes. Plan limits live in
+    /// `organizations.limits_json` under `tunnel_bytes_per_month`.
+    pub async fn increment_tunnel_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET tunnel_bytes_used = tunnel_bytes_used + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Set snapshot blob storage used by the org. Unlike the other meters
+    /// this is a *gauge* — snapshot bytes go up when a capture finishes
+    /// and down when one is deleted/expired, so callers compute the new
+    /// total and write it. Plan limits live in `organizations.limits_json`
+    /// under `snapshot_bytes_quota`.
+    pub async fn set_snapshot_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET snapshot_bytes_stored = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
+        .bind(counter.id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment observability log/trace ingest bytes. Reported by the
+    /// log shipper / OTLP collector via internal routes. Plan limits
+    /// live in `organizations.limits_json` under `log_bytes_per_month`.
+    pub async fn increment_log_bytes(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(pool, org_id).await?;
+
+        sqlx::query(
+            "UPDATE usage_counters SET log_bytes_ingested = log_bytes_ingested + $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(bytes)
         .bind(counter.id)
         .execute(pool)
         .await?;
@@ -600,6 +710,11 @@ mod tests {
             egress_bytes: 50000,
             storage_bytes: 10000,
             ai_tokens_used: 5000,
+            runner_seconds_used: 0,
+            tunnel_bytes_used: 0,
+            snapshot_bytes_stored: 0,
+            log_bytes_ingested: 0,
+            capture_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -621,6 +736,11 @@ mod tests {
             egress_bytes: 50000,
             storage_bytes: 10000,
             ai_tokens_used: 5000,
+            runner_seconds_used: 0,
+            tunnel_bytes_used: 0,
+            snapshot_bytes_stored: 0,
+            log_bytes_ingested: 0,
+            capture_bytes_stored: 0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

@@ -59,6 +59,7 @@ members = [
     # Testing & Benchmarking
     "crates/mockforge-bench",
     "crates/mockforge-test",
+    "crates/mockforge-test-runner",
 
     # Infrastructure
     "crates/mockforge-vbr",

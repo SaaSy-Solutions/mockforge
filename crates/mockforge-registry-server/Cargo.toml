@@ -86,6 +86,9 @@ thiserror = "1.0"
 async-trait = "0.1"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+cron = "0.15"
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rust_decimal = "1.33"

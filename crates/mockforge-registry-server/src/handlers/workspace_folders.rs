@@ -204,3 +204,55 @@ pub async fn create_request(
         "message": "Request created",
     })))
 }
+
+/// DELETE /api/v1/workspaces/{workspace_id}/folders/{folder_id}
+pub async fn delete_folder(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((workspace_id, folder_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+
+    let folder = WorkspaceFolder::find_by_id(state.db.pool(), folder_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
+    if folder.workspace_id != workspace_id {
+        return Err(ApiError::InvalidRequest(
+            "Folder does not belong to this workspace".to_string(),
+        ));
+    }
+
+    WorkspaceFolder::delete(state.db.pool(), folder_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "id": folder_id,
+        "message": "Folder deleted",
+    })))
+}
+
+/// DELETE /api/v1/workspaces/{workspace_id}/requests/{request_id}
+pub async fn delete_request(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Path((workspace_id, request_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+
+    let request = WorkspaceRequest::find_by_id(state.db.pool(), request_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
+    if request.workspace_id != workspace_id {
+        return Err(ApiError::InvalidRequest(
+            "Request does not belong to this workspace".to_string(),
+        ));
+    }
+
+    WorkspaceRequest::delete(state.db.pool(), request_id).await?;
+
+    Ok(Json(serde_json::json!({
+        "id": request_id,
+        "message": "Request deleted",
+    })))
+}

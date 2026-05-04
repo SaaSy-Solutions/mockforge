@@ -71,6 +71,38 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Waitlist signup (public)
         .route("/api/v1/waitlist/subscribe", post(handlers::waitlist::subscribe))
         .route("/api/v1/waitlist/unsubscribe", get(handlers::waitlist::unsubscribe))
+        // Internal test-runner callbacks (cloud-enablement task #18 / Phase 1).
+        // Auth: shared bearer token (`MOCKFORGE_INTERNAL_API_TOKEN`); planned
+        // mTLS upgrade. Lives in public_routes because they're not user-
+        // scoped — the runner is a separate trust principal.
+        .route(
+            "/api/v1/internal/test-runs/{id}/start",
+            post(handlers::internal_test_runs::run_started),
+        )
+        .route(
+            "/api/v1/internal/test-runs/{id}/events",
+            post(handlers::internal_test_runs::run_event),
+        )
+        .route(
+            "/api/v1/internal/test-runs/{id}/finish",
+            post(handlers::internal_test_runs::run_finished),
+        )
+        .route(
+            "/api/v1/internal/capture-sessions/{id}/exchanges",
+            get(handlers::internal_test_runs::get_capture_exchanges),
+        )
+        .route(
+            "/api/v1/internal/workspaces/{id}/endpoint-hits",
+            get(handlers::internal_test_runs::get_workspace_endpoint_hits),
+        )
+        .route(
+            "/api/v1/internal/hosted-mocks/{id}/chaos",
+            post(handlers::internal_test_runs::proxy_chaos_toggle),
+        )
+        .route(
+            "/api/v1/internal/tunnel-reservations/by-subdomain/{subdomain}",
+            get(handlers::internal_test_runs::get_tunnel_reservation_by_subdomain),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))
@@ -80,6 +112,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/marketplace/templates/search", post(handlers::templates::search_templates))
         .route("/api/v1/marketplace/templates/{name}/{version}", get(handlers::templates::get_template))
         .route("/api/v1/marketplace/templates/{name}/{version}/reviews", get(handlers::template_reviews::get_template_reviews))
+        // Showcase + Learning Hub read paths (public; cloud-enablement task #12).
+        .route("/api/v1/showcase/entries", get(handlers::showcase::list_showcase_entries))
+        .route("/api/v1/showcase/entries/{slug}", get(handlers::showcase::get_showcase_entry))
+        .route("/api/v1/learning/tracks", get(handlers::showcase::list_learning_tracks))
+        .route("/api/v1/learning/tracks/{slug}", get(handlers::showcase::get_learning_track))
+        .route("/api/v1/learning/recipes", get(handlers::showcase::list_learning_recipes))
+        .route("/api/v1/learning/recipes/{slug}", get(handlers::showcase::get_learning_recipe))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Authenticated routes (require JWT + rate limiting)
@@ -237,6 +276,359 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Static path — must be registered before `{token_id}` matchers.
         .route("/api/v1/tokens/scopes", get(handlers::tokens::list_scopes))
         .route("/api/v1/tokens/{token_id}", delete(handlers::tokens::delete_token))
+        // AI Studio routes (cloud-enablement task #1).
+        // Each handler does provider routing (BYOK vs platform) +
+        // pre-call quota check + post-call usage metering. See
+        // docs/cloud/CLOUD_AI_STUDIO_DESIGN.md.
+        .route("/api/v1/ai-studio/chat", post(handlers::ai_studio::chat))
+        .route(
+            "/api/v1/ai-studio/generate-openapi",
+            post(handlers::ai_studio::generate_openapi),
+        )
+        .route(
+            "/api/v1/ai-studio/explain-rule",
+            post(handlers::ai_studio::explain_rule),
+        )
+        .route(
+            "/api/v1/ai-studio/quota",
+            get(handlers::ai_studio::quota),
+        )
+        // Test execution suite routes (cloud-enablement task #4 / Phase 1).
+        // Suites are user-authored definitions; runs/events/schedules/artifacts
+        // come in follow-up slices once the worker pool exists.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-suites",
+            get(handlers::test_suites::list_suites)
+                .post(handlers::test_suites::create_suite),
+        )
+        .route(
+            "/api/v1/test-suites/{id}",
+            get(handlers::test_suites::get_suite)
+                .patch(handlers::test_suites::update_suite)
+                .delete(handlers::test_suites::delete_suite),
+        )
+        // Test run trigger + read paths (cloud-enablement task #4 / Phase 2).
+        // Worker dispatch from the queued state lives in the
+        // mockforge-test-runner crate (separate slice).
+        .route(
+            "/api/v1/test-suites/{id}/runs",
+            get(handlers::test_runs::list_suite_runs)
+                .post(handlers::test_runs::trigger_run),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/test-runs",
+            get(handlers::test_runs::list_org_runs),
+        )
+        .route(
+            "/api/v1/test-runs/{id}",
+            get(handlers::test_runs::get_run),
+        )
+        .route(
+            "/api/v1/test-runs/{id}/cancel",
+            post(handlers::test_runs::cancel_run),
+        )
+        .route(
+            "/api/v1/test-runs/{id}/stream",
+            get(handlers::test_runs::stream_run_events),
+        )
+        .route(
+            "/api/v1/test-suites/{suite_id}/schedules",
+            get(handlers::test_schedules::list_for_suite)
+                .post(handlers::test_schedules::create),
+        )
+        .route(
+            "/api/v1/test-schedules/{id}",
+            patch(handlers::test_schedules::set_enabled)
+                .delete(handlers::test_schedules::delete),
+        )
+        // Tunnel reservation routes (cloud-enablement task #5 / Phase 1).
+        // Phase 1 surface only — relay session ingest + custom-domain DNS
+        // verification land in follow-up slices.
+        .route(
+            "/api/v1/organizations/{org_id}/tunnels",
+            get(handlers::tunnels::list_tunnels)
+                .post(handlers::tunnels::create_tunnel),
+        )
+        .route(
+            "/api/v1/tunnels/{id}",
+            get(handlers::tunnels::get_tunnel)
+                .patch(handlers::tunnels::update_tunnel)
+                .delete(handlers::tunnels::delete_tunnel),
+        )
+        .route(
+            "/api/v1/tunnels/{id}/verify-custom-domain",
+            post(handlers::tunnels::verify_custom_domain),
+        )
+        .route(
+            "/api/v1/tunnels/{id}/custom-domain-proof",
+            get(handlers::tunnels::get_custom_domain_proof),
+        )
+        // Showcase + Learning Hub auth-required actions (cloud-enablement #12).
+        .route(
+            "/api/v1/showcase/entries/{id}/like-toggle",
+            post(handlers::showcase::toggle_showcase_like),
+        )
+        // Showcase admin authoring (Phase 2). Unscoped — site-admin
+        // role gating happens in the auth middleware once a real
+        // role-check lands; for now any authenticated user can submit.
+        .route(
+            "/api/v1/admin/showcase/entries",
+            get(handlers::showcase::admin_list_showcase_entries)
+                .post(handlers::showcase::admin_create_showcase_entry),
+        )
+        .route(
+            "/api/v1/admin/showcase/entries/{id}",
+            patch(handlers::showcase::admin_update_showcase_entry)
+                .delete(handlers::showcase::admin_delete_showcase_entry),
+        )
+        .route(
+            "/api/v1/learning/lessons/{lesson_id}/complete",
+            post(handlers::showcase::complete_learning_lesson),
+        )
+        .route(
+            "/api/v1/learning/progress",
+            get(handlers::showcase::list_learning_progress),
+        )
+        // Time Travel snapshot routes (cloud-enablement task #10 / Phase 1).
+        // Capture worker dispatch + restore + diff land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/snapshots",
+            get(handlers::snapshots::list_snapshots)
+                .post(handlers::snapshots::capture_snapshot),
+        )
+        .route(
+            "/api/v1/snapshots/{id}",
+            get(handlers::snapshots::get_snapshot)
+                .delete(handlers::snapshots::delete_snapshot),
+        )
+        .route(
+            "/api/v1/snapshots/{id}/diff",
+            get(handlers::snapshots::diff_snapshot),
+        )
+        .route(
+            "/api/v1/snapshots/{id}/restore",
+            post(handlers::snapshots::restore_snapshot),
+        )
+        // Flow routes (cloud-enablement task #9 / Phase 1).
+        // Unified resource for scenario/orchestration/state_machine/chain
+        // editor surfaces. Run trigger reuses #4 test_runs (kind=...).
+        .route(
+            "/api/v1/workspaces/{workspace_id}/flows",
+            get(handlers::flows::list_flows)
+                .post(handlers::flows::create_flow),
+        )
+        .route(
+            "/api/v1/flows/{id}",
+            get(handlers::flows::get_flow)
+                .patch(handlers::flows::update_flow)
+                .delete(handlers::flows::delete_flow),
+        )
+        .route(
+            "/api/v1/flows/{id}/versions",
+            get(handlers::flows::list_flow_versions)
+                .post(handlers::flows::save_flow_version),
+        )
+        .route(
+            "/api/v1/flows/{id}/runs",
+            post(handlers::flows::trigger_run),
+        )
+        .route(
+            "/api/v1/flow-versions/{version_id}",
+            get(handlers::flows::get_flow_version),
+        )
+        // Observability saved-queries + dashboards (cloud-enablement #2 / Phase 1).
+        // Cross-deployment query handlers come in a follow-up slice.
+        .route(
+            "/api/v1/organizations/{org_id}/observability/saved-queries",
+            get(handlers::observability::list_saved_queries)
+                .post(handlers::observability::create_saved_query),
+        )
+        .route(
+            "/api/v1/observability/saved-queries/{id}",
+            patch(handlers::observability::update_saved_query)
+                .delete(handlers::observability::delete_saved_query),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/observability/dashboards",
+            get(handlers::observability::list_dashboards)
+                .post(handlers::observability::create_dashboard),
+        )
+        .route(
+            "/api/v1/observability/dashboards/{id}",
+            patch(handlers::observability::update_dashboard)
+                .delete(handlers::observability::delete_dashboard),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/observability/traces/query",
+            post(handlers::observability::query_traces),
+        )
+        // Chaos campaigns + resilience patterns (cloud-enablement #7 / Phase 1).
+        // Run trigger / kill-switch worker / target authorization land
+        // in follow-up slices once #4 worker pool is up.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/chaos-campaigns",
+            get(handlers::chaos::list_campaigns)
+                .post(handlers::chaos::create_campaign),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}",
+            get(handlers::chaos::get_campaign)
+                .delete(handlers::chaos::delete_campaign),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}/reports",
+            get(handlers::chaos::list_campaign_reports),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}/runs",
+            post(handlers::chaos::trigger_run),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience-patterns",
+            get(handlers::chaos::list_patterns),
+        )
+        // Contract Diff / Verification / Fitness (cloud-enablement #8 / Phase 1).
+        // Probe worker / scheduler / IncidentBus wiring land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/monitored-services",
+            get(handlers::contract_verification::list_monitored_services)
+                .post(handlers::contract_verification::create_monitored_service),
+        )
+        .route(
+            "/api/v1/monitored-services/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_monitored_service),
+        )
+        .route(
+            "/api/v1/monitored-services/{id}/diffs",
+            get(handlers::contract_verification::list_service_diff_runs),
+        )
+        .route(
+            "/api/v1/monitored-services/{id}/diff",
+            post(handlers::contract_verification::trigger_diff_run),
+        )
+        .route(
+            "/api/v1/contract-diff-runs/{id}",
+            get(handlers::contract_verification::get_diff_run),
+        )
+        .route(
+            "/api/v1/contract-diff-runs/{id}/findings",
+            get(handlers::contract_verification::list_diff_findings),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/fitness-functions",
+            get(handlers::contract_verification::list_fitness_functions)
+                .post(handlers::contract_verification::create_fitness_function),
+        )
+        .route(
+            "/api/v1/fitness-functions/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_fitness_function),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/verification-suites",
+            get(handlers::contract_verification::list_verification_suites)
+                .post(handlers::contract_verification::create_verification_suite),
+        )
+        .route(
+            "/api/v1/verification-suites/{id}",
+            axum::routing::delete(handlers::contract_verification::delete_verification_suite),
+        )
+        // Recorder + Behavioral cloning (cloud-enablement #6 / Phase 1).
+        // Training worker / replay endpoint / per-capture cloud-shipping
+        // land in follow-up slices.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/capture-sessions",
+            get(handlers::captures::list_sessions)
+                .post(handlers::captures::create_session),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}/members",
+            patch(handlers::captures::modify_session_members),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}",
+            axum::routing::delete(handlers::captures::delete_session),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/clone-models",
+            get(handlers::captures::list_clone_models),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}/train",
+            post(handlers::captures::train_clone_from_session),
+        )
+        .route(
+            "/api/v1/capture-sessions/{id}/replay",
+            post(handlers::captures::replay_capture_session),
+        )
+        .route(
+            "/api/v1/clone-models/{id}",
+            get(handlers::captures::get_clone_model)
+                .delete(handlers::captures::delete_clone_model),
+        )
+        // Note: invitations were already implemented in
+        // handlers::organizations (using org_settings rows keyed
+        // `invite:<nonce>`); routes wired around line 181. The
+        // org_invitations module + migration 20250101000069_org_invitations.sql
+        // landed in c0396e19 by mistake — they're unused dead code, the
+        // pre-existing system handles #15 already. The unused table is
+        // left in place rather than dropped mid-history.
+        // Incident management routes (cloud-enablement task #3 / Phase 1).
+        // Public CRUD only; internal raises from #2/#8 call Incident::raise
+        // directly, and the notification dispatcher is a follow-up slice.
+        .route(
+            "/api/v1/organizations/{org_id}/incidents",
+            get(handlers::incidents::list_incidents)
+                .post(handlers::incidents::raise_incident_external),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/incidents/stats",
+            get(handlers::incidents::get_stats),
+        )
+        .route(
+            "/api/v1/incidents/{id}",
+            get(handlers::incidents::get_incident),
+        )
+        .route(
+            "/api/v1/incidents/{id}/events",
+            get(handlers::incidents::list_incident_events),
+        )
+        .route(
+            "/api/v1/incidents/{id}/acknowledge",
+            post(handlers::incidents::acknowledge_incident),
+        )
+        .route(
+            "/api/v1/incidents/{id}/resolve",
+            post(handlers::incidents::resolve_incident),
+        )
+        // Notification channel routes (cloud-enablement task #3 / Phase 1).
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels",
+            get(handlers::notification_channels::list_channels)
+                .post(handlers::notification_channels::create_channel),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels/{id}",
+            patch(handlers::notification_channels::update_channel)
+                .delete(handlers::notification_channels::delete_channel),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels/{id}/test-fire",
+            post(handlers::notification_channels::test_fire_channel),
+        )
+        // Routing rule routes (cloud-enablement task #3 / Phase 1).
+        // Maps (severity × source × workspace) → channel_ids[]; the
+        // dispatcher worker (separate slice) evaluates these per-incident
+        // in priority order.
+        .route(
+            "/api/v1/organizations/{org_id}/routing-rules",
+            get(handlers::routing_rules::list_rules)
+                .post(handlers::routing_rules::create_rule),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/routing-rules/{id}",
+            patch(handlers::routing_rules::update_rule)
+                .delete(handlers::routing_rules::delete_rule),
+        )
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
@@ -292,7 +684,9 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Workspace content: folders + requests
         .route("/api/v1/workspaces/{workspace_id}/folders", post(handlers::workspace_folders::create_folder))
         .route("/api/v1/workspaces/{workspace_id}/folders/{folder_id}", get(handlers::workspace_folders::get_folder))
+        .route("/api/v1/workspaces/{workspace_id}/folders/{folder_id}", delete(handlers::workspace_folders::delete_folder))
         .route("/api/v1/workspaces/{workspace_id}/requests", post(handlers::workspace_folders::create_request))
+        .route("/api/v1/workspaces/{workspace_id}/requests/{request_id}", delete(handlers::workspace_folders::delete_request))
         // Import + autocomplete
         .route("/api/v1/import/preview", post(handlers::workspace_import::preview_import))
         .route("/api/v1/workspaces/{workspace_id}/import", post(handlers::workspace_import::import_to_workspace))

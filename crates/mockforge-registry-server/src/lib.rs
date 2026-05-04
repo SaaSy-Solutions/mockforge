@@ -17,6 +17,7 @@
 
 /// JWT/password auth helpers moved to `mockforge-registry-core`.
 pub use mockforge_registry_core::auth;
+pub mod ai;
 pub mod cache;
 pub mod circuit_breaker;
 pub mod config;
@@ -36,6 +37,7 @@ pub use mockforge_registry_core::models;
 pub mod pillar_tracking_init;
 pub mod redis;
 pub mod routes;
+pub mod run_queue;
 pub mod storage;
 /// Storage trait + backends now live in `mockforge-registry-core`.
 /// Re-exported so existing `crate::store::*` paths keep working.

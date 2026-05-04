@@ -36,8 +36,48 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { apiService, contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { aiStudioApi } from '../services/api/aiStudio';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudAIQuotaBanner } from '../components/ai/CloudAIQuotaBanner';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
+
+/**
+ * Dispatches a chat message to the cloud or local backend depending on
+ * mode, and normalizes the response into the shape this page expects.
+ *
+ * Local: `/__mockforge/ai-studio/chat` returns `{ success, data: { message, intent, data } }`.
+ * Cloud: `/api/v1/ai-studio/chat` returns `{ content, provider, tokens_used, ... }` —
+ *        no intent/data fields. Cloud-mode messages get a synthetic
+ *        `intent: 'cloud_chat'` so existing UI branches don't break.
+ */
+async function dispatchChat(message: string): Promise<{
+  message: string;
+  intent?: string;
+  data?: unknown;
+}> {
+  if (isCloudMode()) {
+    const result = await aiStudioApi.chat({ prompt: message });
+    return { message: result.content, intent: 'cloud_chat' };
+  }
+  const response = await fetch('/__mockforge/ai-studio/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to process chat message');
+  }
+  const result = await response.json();
+  if (!result.success || !result.data) {
+    throw new Error(result.error ?? 'Chat returned no data');
+  }
+  return {
+    message: result.data.message,
+    intent: result.data.intent,
+    data: result.data.data,
+  };
+}
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AIStudioNav } from '../components/ai/AIStudioNav';
 import { ApiCritique } from '../components/ai/ApiCritique';
@@ -169,28 +209,14 @@ export function AIStudioPage() {
     setIsProcessing(true);
 
     try {
-      const response = await fetch('/__mockforge/ai-studio/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process chat message');
-      }
-
-      const result = await response.json();
-      if (result.success && result.data) {
+      const result = await dispatchChat(inputMessage);
+      {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
-          content: result.data.message,
+          content: result.message,
           timestamp: new Date(),
-          intent: result.data.intent,
-          data: result.data.data,
+          intent: result.intent,
+          data: result.data,
         };
         setChatMessages(prev => [...prev, assistantMessage]);
 
@@ -223,6 +249,9 @@ export function AIStudioPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Navigation */}
       <AIStudioNav showQuickActions={activeTab === 'chat'} />
+
+      {/* Cloud-mode AI quota strip — hidden in self-hosted */}
+      <CloudAIQuotaBanner />
 
       {/* Header */}
       <div className="space-y-2">
@@ -541,33 +570,15 @@ export function AIStudioPage() {
                     setIsProcessing(true);
 
                     try {
-                      const response = await fetch('/__mockforge/ai-studio/chat', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          message: debugMessage,
-                        }),
-                      });
-
-                      if (!response.ok) {
-                        throw new Error('Failed to analyze test failure');
-                      }
-
-                      const result = await response.json();
-                      if (result.success && result.data) {
-                        const assistantMessage: ChatMessage = {
-                          role: 'assistant',
-                          content: result.data.message,
-                          timestamp: new Date(),
-                          intent: result.data.intent,
-                          data: result.data.data,
-                        };
-                        setChatMessages(prev => [...prev, assistantMessage]);
-                      } else {
-                        throw new Error(result.error || 'Unknown error');
-                      }
+                      const result = await dispatchChat(debugMessage);
+                      const assistantMessage: ChatMessage = {
+                        role: 'assistant',
+                        content: result.message,
+                        timestamp: new Date(),
+                        intent: result.intent,
+                        data: result.data,
+                      };
+                      setChatMessages(prev => [...prev, assistantMessage]);
                     } catch (err) {
                       logger.error('Failed to analyze test failure', err);
                       toast.error('Failed to analyze test failure. Please try again.');
@@ -776,34 +787,16 @@ export function AIStudioPage() {
                     setIsProcessing(true);
 
                     try {
-                      const response = await fetch('/__mockforge/ai-studio/chat', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          message: personaMessage,
-                        }),
-                      });
-
-                      if (!response.ok) {
-                        throw new Error('Failed to generate persona');
-                      }
-
-                      const result = await response.json();
-                      if (result.success && result.data) {
-                        const assistantMessage: ChatMessage = {
-                          role: 'assistant',
-                          content: result.data.message,
-                          timestamp: new Date(),
-                          intent: result.data.intent,
-                          data: result.data.data,
-                        };
-                        setChatMessages(prev => [...prev, assistantMessage]);
-                        toast.success('Persona generated successfully!');
-                      } else {
-                        throw new Error(result.error || 'Unknown error');
-                      }
+                      const result = await dispatchChat(personaMessage);
+                      const assistantMessage: ChatMessage = {
+                        role: 'assistant',
+                        content: result.message,
+                        timestamp: new Date(),
+                        intent: result.intent,
+                        data: result.data,
+                      };
+                      setChatMessages(prev => [...prev, assistantMessage]);
+                      toast.success('Persona generated successfully!');
                     } catch (err) {
                       logger.error('Failed to generate persona', err);
                       toast.error('Failed to generate persona. Please try again.');

@@ -9,6 +9,9 @@ import {
   useImportHistory,
   useClearImportHistory,
 } from '../hooks/useApi';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { authenticatedFetch } from '../utils/apiClient';
 import {
   PageHeader,
   Section,
@@ -31,6 +34,75 @@ import type { ImportRoute } from '../types';
 // Import format types
 type ImportFormat = 'postman' | 'insomnia' | 'curl';
 type TabType = ImportFormat | 'history';
+
+/**
+ * Cloud-mode preview dispatcher. Translates the local ImportRequest
+ * shape into the cloud `{format, data, base_url, environment}` shape
+ * and POSTs to /api/v1/import/preview. Cloud's PreviewResponse is
+ * already shape-compatible with ImportResponse so no response mapping
+ * needed.
+ */
+async function cloudPreview(
+  format: ImportFormat,
+  request: ImportRequest,
+): Promise<ImportResponse> {
+  const body = {
+    format,
+    data: request.content,
+    base_url: request.base_url,
+    environment: request.environment,
+  };
+  const resp = await authenticatedFetch('/api/v1/import/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Cloud preview failed: ${resp.status} ${text}`);
+  }
+  return (await resp.json()) as ImportResponse;
+}
+
+/**
+ * Cloud-mode import dispatcher. Cloud route is workspace-scoped, so
+ * the caller must provide an active workspace id. Cloud's response
+ * shape is {success, imported, warnings} (no per-route detail) — we
+ * adapt to ImportResponse by leaving routes empty.
+ */
+async function cloudImport(
+  workspaceId: string,
+  format: ImportFormat,
+  request: ImportRequest,
+  selectedRoutes: number[] | undefined,
+): Promise<ImportResponse> {
+  const body = {
+    format,
+    data: request.content,
+    base_url: request.base_url,
+    environment: request.environment,
+    selected_routes: selectedRoutes,
+    create_folders: false,
+  };
+  const resp = await authenticatedFetch(
+    `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/import`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Cloud import failed: ${resp.status} ${text}`);
+  }
+  const cloud = (await resp.json()) as { success: boolean; imported: number; warnings: string[] };
+  return {
+    success: cloud.success,
+    routes: [],
+    warnings: cloud.warnings,
+  };
+}
 
 interface FileUploadProps {
   onFileSelect: (content: string, filename: string) => void;
@@ -428,6 +500,8 @@ export function ImportPage() {
   const importPostman = useImportPostman();
   const importInsomnia = useImportInsomnia();
   const importCurl = useImportCurl();
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+  const cloud = isCloudMode();
 
   const handleFileSelect = useCallback((content: string, fileName: string) => {
     setFileContent(content);
@@ -447,7 +521,9 @@ export function ImportPage() {
     };
 
     try {
-      const result = await previewImport.mutateAsync(request);
+      const result = cloud
+        ? await cloudPreview(activeTab as ImportFormat, request)
+        : await previewImport.mutateAsync(request);
       setPreviewResult(result);
 
       // Auto-select all routes by default
@@ -455,7 +531,8 @@ export function ImportPage() {
         setSelectedRoutes(new Set(result.routes.map((_, index) => index)));
       }
     } catch (error) {
-      logger.error('Preview failed',error);
+      logger.error('Preview failed', error);
+      toast.error(error instanceof Error ? error.message : 'Preview failed');
     }
   };
 
@@ -472,18 +549,31 @@ export function ImportPage() {
     try {
       let result: ImportResponse;
 
-      switch (activeTab) {
-        case 'postman':
-          result = await importPostman.mutateAsync(request);
-          break;
-        case 'insomnia':
-          result = await importInsomnia.mutateAsync(request);
-          break;
-        case 'curl':
-          result = await importCurl.mutateAsync(request);
-          break;
-        default:
+      if (cloud) {
+        if (!activeWorkspace) {
+          toast.error('Select an active workspace before importing in cloud mode');
           return;
+        }
+        result = await cloudImport(
+          activeWorkspace.id,
+          activeTab as ImportFormat,
+          request,
+          Array.from(selectedRoutes),
+        );
+      } else {
+        switch (activeTab) {
+          case 'postman':
+            result = await importPostman.mutateAsync(request);
+            break;
+          case 'insomnia':
+            result = await importInsomnia.mutateAsync(request);
+            break;
+          case 'curl':
+            result = await importCurl.mutateAsync(request);
+            break;
+          default:
+            return;
+        }
       }
 
       if (result.success) {

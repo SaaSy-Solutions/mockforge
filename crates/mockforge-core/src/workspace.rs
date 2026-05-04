@@ -871,6 +871,38 @@ impl Folder {
         None
     }
 
+    /// Remove a subfolder by ID. Searches recursively through nested folders.
+    pub fn remove_folder(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.folders.iter().position(|f| f.id == id) {
+            self.folders.remove(pos);
+            self.updated_at = Utc::now();
+            return Ok(());
+        }
+        for folder in &mut self.folders {
+            if folder.remove_folder(id).is_ok() {
+                self.updated_at = Utc::now();
+                return Ok(());
+            }
+        }
+        Err(Error::not_found("Folder", id))
+    }
+
+    /// Remove a request by ID. Searches recursively through nested folders.
+    pub fn remove_request(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.requests.iter().position(|r| r.id == id) {
+            self.requests.remove(pos);
+            self.updated_at = Utc::now();
+            return Ok(());
+        }
+        for folder in &mut self.folders {
+            if folder.remove_request(id).is_ok() {
+                self.updated_at = Utc::now();
+                return Ok(());
+            }
+        }
+        Err(Error::not_found("Request", id))
+    }
+
     /// Get all routes from this folder and subfolders
     pub fn get_routes(&self, workspace_id: &str) -> Vec<Route> {
         let mut routes = Vec::new();
@@ -928,6 +960,38 @@ impl Workspace {
         self.requests.push(request);
         self.updated_at = Utc::now();
         Ok(id)
+    }
+
+    /// Remove a folder by ID. Searches recursively through nested folders.
+    pub fn remove_folder(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.folders.iter().position(|f| f.id == id) {
+            self.folders.remove(pos);
+            self.updated_at = Utc::now();
+            return Ok(());
+        }
+        for folder in &mut self.folders {
+            if folder.remove_folder(id).is_ok() {
+                self.updated_at = Utc::now();
+                return Ok(());
+            }
+        }
+        Err(Error::not_found("Folder", id))
+    }
+
+    /// Remove a request by ID. Searches recursively through nested folders.
+    pub fn remove_request(&mut self, id: &str) -> Result<()> {
+        if let Some(pos) = self.requests.iter().position(|r| r.id == id) {
+            self.requests.remove(pos);
+            self.updated_at = Utc::now();
+            return Ok(());
+        }
+        for folder in &mut self.folders {
+            if folder.remove_request(id).is_ok() {
+                self.updated_at = Utc::now();
+                return Ok(());
+            }
+        }
+        Err(Error::not_found("Request", id))
     }
 
     /// Get all routes from this workspace

@@ -21,6 +21,10 @@ import type {
   CreateWorkspaceRequest,
   CreateWorkspaceResponse,
   UpdateWorkspaceRequest,
+  WorkspaceStats,
+  MockEnvironmentManagerResponse,
+  MockEnvironmentResponse,
+  UpdateMockEnvironmentRequest,
   FolderResponse,
   CreateFolderRequest,
   CreateFolderResponse,
@@ -75,6 +79,44 @@ class WorkspacesApiMixin {
     }) as Promise<{ message: string }>;
   }
 
+  async getWorkspaceStats(workspaceId: string): Promise<WorkspaceStats> {
+    return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/stats`) as Promise<WorkspaceStats>;
+  }
+
+  // ==================== MOCK ENVIRONMENTS (local only) ====================
+
+  async listMockEnvironments(workspaceId: string): Promise<MockEnvironmentManagerResponse> {
+    return fetchJson(
+      `${WORKSPACE_API_BASE}/${workspaceId}/mock-environments`
+    ) as Promise<MockEnvironmentManagerResponse>;
+  }
+
+  async setActiveMockEnvironment(
+    workspaceId: string,
+    environment: string
+  ): Promise<{ message: string }> {
+    return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/mock-environments/active`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ environment }),
+    }) as Promise<{ message: string }>;
+  }
+
+  async updateMockEnvironment(
+    workspaceId: string,
+    envName: string,
+    request: UpdateMockEnvironmentRequest
+  ): Promise<MockEnvironmentResponse> {
+    return fetchJson(
+      `${WORKSPACE_API_BASE}/${workspaceId}/mock-environments/${envName}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      }
+    ) as Promise<MockEnvironmentResponse>;
+  }
+
   async deleteWorkspace(workspaceId: string): Promise<{ message: string }> {
     return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}`, {
       method: 'DELETE',
@@ -101,12 +143,24 @@ class WorkspacesApiMixin {
     }) as Promise<CreateFolderResponse>;
   }
 
+  async deleteFolder(workspaceId: string, folderId: string): Promise<{ message: string }> {
+    return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/folders/${folderId}`, {
+      method: 'DELETE',
+    }) as Promise<{ message: string }>;
+  }
+
   async createRequest(workspaceId: string, request: CreateRequestRequest): Promise<CreateRequestResponse> {
     return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/requests`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     }) as Promise<CreateRequestResponse>;
+  }
+
+  async deleteRequest(workspaceId: string, requestId: string): Promise<{ message: string }> {
+    return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}/requests/${requestId}`, {
+      method: 'DELETE',
+    }) as Promise<{ message: string }>;
   }
 
   async importToWorkspace(workspaceId: string, request: ImportToWorkspaceRequest): Promise<ImportResponse> {

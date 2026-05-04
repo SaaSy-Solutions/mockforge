@@ -138,31 +138,25 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       return;
     }
 
+    // Reorder the environments array
+    const draggedIndex = environments.environments.findIndex(env => env.id === draggedItem);
+    const targetIndex = environments.environments.findIndex(env => env.id === targetEnvironmentId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedItem(null);
+      return;
+    }
+
+    const newEnvironments = [...environments.environments];
+    const [draggedEnv] = newEnvironments.splice(draggedIndex, 1);
+    newEnvironments.splice(targetIndex, 0, draggedEnv);
+    const environmentIds = newEnvironments.map(env => env.id);
+
     try {
-      // Reorder the environments array
-      const draggedIndex = environments.environments.findIndex(env => env.id === draggedItem);
-      const targetIndex = environments.environments.findIndex(env => env.id === targetEnvironmentId);
-
-      if (draggedIndex === -1 || targetIndex === -1) {
-        setDraggedItem(null);
-        return;
-      }
-
-      const newEnvironments = [...environments.environments];
-      const [draggedEnv] = newEnvironments.splice(draggedIndex, 1);
-      newEnvironments.splice(targetIndex, 0, draggedEnv);
-
-      // Update the order by sending the new order to the API
-      const environmentIds = newEnvironments.map(env => env.id);
-
-      try {
-        await updateEnvironmentsOrder.mutateAsync(environmentIds);
-        toast.success('Environment order updated');
-      } catch {
-        toast.error('Failed to update environment order');
-        throw error;
-      }
-    } catch {
+      await updateEnvironmentsOrder.mutateAsync(environmentIds);
+      toast.success('Environment order updated');
+    } catch (err) {
+      logger.error('Failed to update environment order', err);
       toast.error('Failed to update environment order');
     } finally {
       setDraggedItem(null);
