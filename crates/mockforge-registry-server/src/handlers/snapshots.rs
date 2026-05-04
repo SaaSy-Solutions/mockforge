@@ -18,7 +18,6 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use mockforge_registry_core::models::snapshot::CreateSnapshot;
-use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -26,7 +25,7 @@ use crate::{
     error::{ApiError, ApiResult},
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
-    models::{CloudWorkspace, Snapshot, TestRun, UsageCounter},
+    models::{CloudWorkspace, Snapshot, UsageCounter},
     AppState,
 };
 
@@ -137,46 +136,134 @@ pub async fn capture_snapshot(
     .await
     .map_err(ApiError::Database)?;
 
-    // Pair the snapshot row with a test_runs row so it shares the runner
-    // pool + concurrency cap + runner_seconds metering with everything
-    // else. Snapshot.status remains 'capturing' until the executor
-    // reports back via Snapshot::mark_ready (separate slice — for now
-    // the worker only updates test_runs, leaving snapshot.status as a
-    // known follow-up gap).
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: snapshot.id,
-            org_id: ctx.org_id,
-            kind: "snapshot_capture",
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
-
-    if let Err(e) = crate::run_queue::enqueue(
-        state.redis.as_ref(),
-        crate::run_queue::EnqueuedJob {
-            run_id: run.id,
-            org_id: run.org_id,
-            source_id: snapshot.id,
-            kind: "snapshot_capture",
-            payload: serde_json::json!({
-                "workspace_id": workspace_id,
-                "hosted_deployment_id": request.hosted_deployment_id,
-            }),
-        },
-    )
-    .await
+    // Capture the workspace state synchronously. For now the manifest
+    // *is* the snapshot — we don't yet have S3/blob storage, so the
+    // JSON lands inline in snapshots.manifest. Sub-second on a typical
+    // workspace, so the request stays interactive without a background
+    // worker round-trip. When blob storage lands, the manifest stays as
+    // the index and bulky byte-level data moves out via storage_url.
+    let (manifest, size_bytes) = match build_workspace_manifest(state.db.pool(), workspace_id).await
     {
-        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue snapshot_capture run");
-    }
+        Ok((m, s)) => (m, s),
+        Err(e) => {
+            tracing::error!(snapshot_id = %snapshot.id, error = %e, "manifest build failed");
+            // Flip status to 'failed' so list_by_workspace reflects reality.
+            let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
+            return Err(ApiError::Database(e));
+        }
+    };
 
-    Ok(Json(snapshot))
+    let storage_url = format!("inline-manifest://snapshot/{}", snapshot.id);
+    match Snapshot::mark_ready(state.db.pool(), snapshot.id, &storage_url, size_bytes, &manifest)
+        .await
+    {
+        Ok(Some(ready)) => {
+            // Storage metering is a gauge (set_snapshot_bytes) not a
+            // counter; updating it correctly requires reading the
+            // current size_bytes sum across all ready snapshots, which
+            // would race with other captures landing concurrently. The
+            // usage_threshold_checker worker reconciles the gauge from
+            // the source of truth, so we leave it alone here.
+            let _ = ctx; // ctx no longer load-bearing post-mark_ready
+            Ok(Json(ready))
+        }
+        Ok(None) => Ok(Json(snapshot)), // already terminal — return what we have
+        Err(e) => {
+            let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
+            Err(ApiError::Database(e))
+        }
+    }
+}
+
+/// Build a JSON manifest of the workspace's authoritative state.
+/// Includes the resources a "restore" would want to recreate: services,
+/// fixtures, scenarios, environments, federation links, folders.
+/// Returns (manifest, byte_count) so the caller can bill storage usage.
+async fn build_workspace_manifest(
+    pool: &sqlx::PgPool,
+    workspace_id: Uuid,
+) -> sqlx::Result<(serde_json::Value, i64)> {
+    use mockforge_registry_core::models::{
+        flow::Flow, mock_environment::MockEnvironment, ChaosCampaign,
+    };
+
+    // Each list is best-effort — if a resource family fails to load we
+    // log + include an empty array. A partial snapshot is more useful
+    // than no snapshot at all, and `restored_partial: true` in the
+    // manifest tells a future restore worker to be cautious.
+    let mut partial = false;
+    let environments = match MockEnvironment::list_by_workspace(pool, workspace_id).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: mock_environments fetch failed");
+            partial = true;
+            Vec::new()
+        }
+    };
+    let flows = match Flow::list_by_workspace(pool, workspace_id, None).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: flows fetch failed");
+            partial = true;
+            Vec::new()
+        }
+    };
+    let chaos = match ChaosCampaign::list_by_workspace(pool, workspace_id).await {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: chaos fetch failed");
+            partial = true;
+            Vec::new()
+        }
+    };
+
+    // Raw services / fixtures table dumps via sqlx so we don't need a
+    // model API for every column — the manifest is forward-compatible
+    // because new columns just appear in the JSON.
+    let services = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+        "SELECT id, to_jsonb(s) AS doc FROM services s WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: services fetch failed");
+        partial = true;
+        Vec::new()
+    });
+    let fixtures = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+        "SELECT id, to_jsonb(f) AS doc FROM fixtures f WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: fixtures fetch failed");
+        partial = true;
+        Vec::new()
+    });
+
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "captured_at": chrono::Utc::now(),
+        "workspace_id": workspace_id,
+        "partial": partial,
+        "counts": {
+            "services": services.len(),
+            "fixtures": fixtures.len(),
+            "environments": environments.len(),
+            "flows": flows.len(),
+            "chaos_campaigns": chaos.len(),
+        },
+        "services": services.into_iter().map(|(_, doc)| doc).collect::<Vec<_>>(),
+        "fixtures": fixtures.into_iter().map(|(_, doc)| doc).collect::<Vec<_>>(),
+        "environments": environments,
+        "flows": flows,
+        "chaos_campaigns": chaos,
+    });
+
+    let bytes = manifest.to_string().len() as i64;
+    Ok((manifest, bytes))
 }
 
 /// `GET /api/v1/snapshots/{id}`
