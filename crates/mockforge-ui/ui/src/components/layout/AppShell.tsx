@@ -130,6 +130,7 @@ const navSections = [
       { id: 'performance', labelKey: 'tab.performance', icon: Activity },
       { id: 'status', labelKey: 'tab.systemStatus', icon: Globe },
       { id: 'incidents', labelKey: 'tab.incidents', icon: AlertTriangle },
+      { id: 'cloud-incidents', labelKey: 'tab.cloudIncidents', icon: Bell },
       { id: 'logs', labelKey: 'tab.logs', icon: FileText },
       { id: 'traces', labelKey: 'tab.traces', icon: Network },
       { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
@@ -244,6 +245,9 @@ const cloudNavItemIds = new Set([
   // Cloud snapshots — synchronous capture / diff / restore for the
   // active workspace via cloudSnapshotsApi.
   'cloud-snapshots',
+  // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
+  // (different feature from drift IncidentDashboard).
+  'cloud-incidents',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
