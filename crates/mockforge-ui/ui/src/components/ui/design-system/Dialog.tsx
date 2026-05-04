@@ -13,11 +13,11 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/50 z-40"
+        className="fixed inset-0 bg-bg-overlay z-40"
         onClick={() => onOpenChange(false)}
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-card text-card-foreground border border-border rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
           {children}
         </div>
       </div>
@@ -30,13 +30,13 @@ export function DialogContent({ children, className }: { children: React.ReactNo
 }
 
 export function DialogHeader({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('px-6 py-4 border-b border-gray-200 dark:border-gray-700', className)}>{children}</div>;
+  return <div className={cn('px-6 py-4 border-b border-border', className)}>{children}</div>;
 }
 
 export function DialogTitle({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <h3 className={cn('text-lg font-semibold text-gray-900 dark:text-gray-100', className)}>{children}</h3>;
+  return <h3 className={cn('text-lg font-semibold text-foreground', className)}>{children}</h3>;
 }
 
 export function DialogDescription({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <p className={cn('text-sm text-gray-600 dark:text-gray-400 mt-2', className)}>{children}</p>;
+  return <p className={cn('text-sm text-muted-foreground mt-2', className)}>{children}</p>;
 }

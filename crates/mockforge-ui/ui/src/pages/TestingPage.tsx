@@ -238,21 +238,21 @@ export function TestingPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'passed': return <CheckCircle className="h-4 w-4 text-green-600" />;
-      case 'failed': return <XCircle className="h-4 w-4 text-red-600" />;
-      case 'running': return <Clock className="h-4 w-4 text-blue-600 animate-spin" />;
-      case 'pending': return <Clock className="h-4 w-4 text-gray-400" />;
-      default: return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'passed': return <CheckCircle className="h-4 w-4 text-success-600" />;
+      case 'failed': return <XCircle className="h-4 w-4 text-danger-600" />;
+      case 'running': return <Clock className="h-4 w-4 text-info-600 animate-spin" />;
+      case 'pending': return <Clock className="h-4 w-4 text-muted-foreground" />;
+      default: return <AlertTriangle className="h-4 w-4 text-warning-600" />;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'passed': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
-      case 'failed': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
-      case 'running': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
+      case 'passed': return 'bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400';
+      case 'failed': return 'bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400';
+      case 'running': return 'bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-400';
       case 'pending': return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-      default: return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400';
+      default: return 'bg-warning-100 text-warning-700 dark:bg-warning-900/20 dark:text-warning-400';
     }
   };
 
@@ -309,48 +309,48 @@ export function TestingPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <ModernCard>
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              <div className="p-3 rounded-lg bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400">
                 <TestTube className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalTests}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Total Tests</div>
+                <div className="text-2xl font-bold text-foreground">{totalTests}</div>
+                <div className="text-sm text-muted-foreground">Total Tests</div>
               </div>
             </div>
           </ModernCard>
 
           <ModernCard>
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400">
+              <div className="p-3 rounded-lg bg-success-50 dark:bg-success-900/20 text-success-600 dark:text-success-400">
                 <CheckCircle className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">{totalPassed}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Passed</div>
+                <div className="text-2xl font-bold text-success-600 dark:text-success-400">{totalPassed}</div>
+                <div className="text-sm text-muted-foreground">Passed</div>
               </div>
             </div>
           </ModernCard>
 
           <ModernCard>
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
+              <div className="p-3 rounded-lg bg-danger-50 dark:bg-danger-900/20 text-danger-600 dark:text-danger-400">
                 <XCircle className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{totalFailed}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Failed</div>
+                <div className="text-2xl font-bold text-danger-600 dark:text-danger-400">{totalFailed}</div>
+                <div className="text-sm text-muted-foreground">Failed</div>
               </div>
             </div>
           </ModernCard>
 
           <ModernCard>
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400">
+              <div className="p-3 rounded-lg bg-warning-50 dark:bg-warning-900/20 text-warning-600 dark:text-warning-400">
                 <Clock className="h-6 w-6" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{(totalDuration / 1000).toFixed(1)}s</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Total Time</div>
+                <div className="text-2xl font-bold text-foreground">{(totalDuration / 1000).toFixed(1)}s</div>
+                <div className="text-sm text-muted-foreground">Total Time</div>
               </div>
             </div>
           </ModernCard>
@@ -364,11 +364,11 @@ export function TestingPage() {
             <ModernCard key={suite.id}>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
                     <TestTube className="h-5 w-5" />
                     {suite.name}
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     {suite.description}
                   </p>
                 </div>
@@ -385,41 +385,41 @@ export function TestingPage() {
 
               <div className="grid grid-cols-3 gap-4 mb-4">
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="text-lg font-semibold text-foreground">
                     {suite.totalTests}
                   </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>
+                  <div className="text-xs text-muted-foreground">Total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-green-600 dark:text-green-400">
+                  <div className="text-lg font-semibold text-success-600 dark:text-success-400">
                     {suite.passedTests}
                   </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">Passed</div>
+                  <div className="text-xs text-muted-foreground">Passed</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-semibold text-red-600 dark:text-red-400">
+                  <div className="text-lg font-semibold text-danger-600 dark:text-danger-400">
                     {suite.failedTests}
                   </div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">Failed</div>
+                  <div className="text-xs text-muted-foreground">Failed</div>
                 </div>
               </div>
 
               <div className="space-y-2 mb-4">
                 {suite.tests.slice(0, 5).map((test) => (
-                  <div key={test.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                  <div key={test.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(test.status)}
-                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                      <span className="text-sm text-foreground">
                         {test.name}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       {test.duration > 0 ? `${test.duration.toFixed(0)}ms` : ''}
                     </div>
                   </div>
                 ))}
                 {suite.tests.length > 5 && (
-                  <div className="text-center text-sm text-gray-500 dark:text-gray-400">
+                  <div className="text-center text-sm text-muted-foreground">
                     +{suite.tests.length - 5} more tests
                   </div>
                 )}
@@ -454,11 +454,11 @@ export function TestingPage() {
           <ModernCard>
             <div className="space-y-4">
               {testResults.find(s => s.id === selectedSuite)?.tests.map((test) => (
-                <div key={test.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <div key={test.id} className="border border-border rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(test.status)}
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                      <h4 className="font-medium text-foreground">
                         {test.name}
                       </h4>
                     </div>
@@ -467,7 +467,7 @@ export function TestingPage() {
                         {test.status}
                       </span>
                       {test.duration > 0 && (
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           {test.duration.toFixed(0)}ms
                         </span>
                       )}
@@ -475,17 +475,17 @@ export function TestingPage() {
                   </div>
 
                   {test.error && (
-                    <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                    <div className="mt-2 p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg">
                       <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-                        <div className="text-sm text-red-800 dark:text-red-200">
+                        <AlertTriangle className="h-4 w-4 text-danger-600 dark:text-danger-400 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-danger-700 dark:text-danger-200">
                           {test.error}
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="mt-2 text-xs text-muted-foreground">
                     Executed at {new Date(test.timestamp).toLocaleString()}
                   </div>
                 </div>
@@ -500,17 +500,17 @@ export function TestingPage() {
         <ModernCard>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Test Timeout (seconds)
               </label>
               <Input type="number" defaultValue="30" min="1" max="300" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Parallel Execution
               </label>
-              <select className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+              <select className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground">
                 <option value="sequential">Sequential</option>
                 <option value="parallel">Parallel</option>
                 <option value="limited">Limited Parallel (4)</option>
@@ -518,7 +518,7 @@ export function TestingPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Test Environment
               </label>
               <div className="flex gap-4">
@@ -538,7 +538,7 @@ export function TestingPage() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end pt-6 border-t border-border">
             <Button>Save Configuration</Button>
           </div>
         </ModernCard>

@@ -191,19 +191,19 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
           spellCheck={false}
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-          <span className="text-xs text-gray-400 bg-gray-100 px-1 rounded">
+          <span className="text-xs text-muted-foreground bg-muted px-1 rounded">
             Template
           </span>
         </div>
       </div>
 
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
+        <div className="absolute z-10 w-full bg-popover text-popover-foreground border border-border rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
           {suggestions.map((suggestion, index) => (
             <div
               key={index}
               className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 ${
-                index === selectedIndex ? 'bg-blue-50' : ''
+                index === selectedIndex ? 'bg-info-50' : ''
               }`}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -213,16 +213,16 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <div className="font-mono font-medium text-gray-900">
+                  <div className="font-mono font-medium text-foreground">
                     {suggestion.label}
                   </div>
                   {suggestion.description && (
-                    <div className="text-xs text-gray-600 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       {suggestion.description}
                     </div>
                   )}
                 </div>
-                <div className="ml-2 text-xs text-gray-400 capitalize">
+                <div className="ml-2 text-xs text-muted-foreground capitalize">
                   {suggestion.category || suggestion.kind}
                 </div>
               </div>
@@ -232,7 +232,7 @@ export const AutocompleteInput: React.FC<AutocompleteInputProps> = ({
       )}
 
       {!disabled && (
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Use Ctrl+Space for autocomplete suggestions
         </p>
       )}

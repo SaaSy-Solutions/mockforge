@@ -567,6 +567,27 @@ pub fn create_admin_router(
             )
             .route("/__mockforge/workspaces/{workspace_id}", delete(workspaces::delete_workspace))
             .route("/__mockforge/workspaces/{workspace_id}/stats", get(workspaces::get_workspace_stats))
+            // Folder + request CRUD
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/folders",
+                post(workspaces::create_folder),
+            )
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/folders/{folder_id}",
+                get(workspaces::get_folder),
+            )
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/folders/{folder_id}",
+                delete(workspaces::delete_folder),
+            )
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/requests",
+                post(workspaces::create_request),
+            )
+            .route(
+                "/__mockforge/workspaces/{workspace_id}/requests/{request_id}",
+                delete(workspaces::delete_request),
+            )
             // Workspace environment endpoints
             .route("/__mockforge/workspaces/{workspace_id}/environments", get(workspaces::list_environments))
             .route("/__mockforge/workspaces/{workspace_id}/environments", post(workspaces::create_environment))
@@ -639,82 +660,6 @@ pub fn create_admin_router(
 
         router = router.merge(workspace_router);
         tracing::info!("Workspace router mounted with WorkspaceState");
-
-        // Promotion routes
-        #[cfg(feature = "database-auth")]
-        {
-            use crate::handlers::promotions;
-            use crate::handlers::promotions::PromotionState;
-            use mockforge_collab::promotion::PromotionService;
-            use sqlx::SqlitePool;
-            use std::sync::Arc;
-
-            let db_url = std::env::var("MOCKFORGE_COLLAB_DB_URL")
-                .unwrap_or_else(|_| "sqlite://mockforge-collab.db".to_string());
-
-            match SqlitePool::connect_lazy(&db_url) {
-                Ok(pool) => {
-                    let promotion_service = Arc::new(PromotionService::new(pool));
-                    let promotion_state = PromotionState::new(promotion_service, workspace_state);
-
-                    let promotion_router = Router::new()
-                        .route("/api/v2/promotions", post(promotions::create_promotion))
-                        .route("/api/v2/promotions/{promotion_id}", get(promotions::get_promotion))
-                        .route(
-                            "/api/v2/promotions/{promotion_id}/status",
-                            axum::routing::put(promotions::update_promotion_status),
-                        )
-                        .route(
-                            "/api/v2/workspaces/{workspace_id}/promotions",
-                            get(promotions::list_workspace_promotions),
-                        )
-                        .route(
-                            "/api/v2/promotions/pending",
-                            get(promotions::list_pending_promotions),
-                        )
-                        .route(
-                            "/api/v2/workspaces/{workspace_id}/promotions/{entity_type}/{entity_id}",
-                            get(promotions::get_entity_promotion_history),
-                        )
-                        .route("/__mockforge/promotions", post(promotions::create_promotion))
-                        .route(
-                            "/__mockforge/promotions/{promotion_id}",
-                            get(promotions::get_promotion),
-                        )
-                        .route(
-                            "/__mockforge/promotions/{promotion_id}/status",
-                            axum::routing::put(promotions::update_promotion_status),
-                        )
-                        .route(
-                            "/__mockforge/workspaces/{workspace_id}/promotions",
-                            get(promotions::list_workspace_promotions),
-                        )
-                        .route(
-                            "/__mockforge/promotions/pending",
-                            get(promotions::list_pending_promotions),
-                        )
-                        .route(
-                            "/__mockforge/workspaces/{workspace_id}/promotions/{entity_type}/{entity_id}",
-                            get(promotions::get_entity_promotion_history),
-                        )
-                        .with_state(promotion_state);
-
-                    router = router.merge(promotion_router);
-                    tracing::info!("Promotion routes mounted");
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to initialize promotion database pool from {}: {}",
-                        db_url,
-                        e
-                    );
-                }
-            }
-        }
-        #[cfg(not(feature = "database-auth"))]
-        {
-            tracing::debug!("Promotion routes require 'database-auth' feature - not available");
-        }
     }
 
     // Add UI Builder router

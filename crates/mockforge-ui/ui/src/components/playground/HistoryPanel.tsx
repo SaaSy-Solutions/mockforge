@@ -91,20 +91,20 @@ export function HistoryPanel() {
   // Get status icon
   const getStatusIcon = (status: number) => {
     if (status >= 200 && status < 300) {
-      return <CheckCircle className="h-4 w-4 text-green-600" />;
+      return <CheckCircle className="h-4 w-4 text-success-600" />;
     }
     if (status >= 400) {
-      return <XCircle className="h-4 w-4 text-red-600" />;
+      return <XCircle className="h-4 w-4 text-danger-600" />;
     }
-    return <AlertCircle className="h-4 w-4 text-yellow-600" />;
+    return <AlertCircle className="h-4 w-4 text-warning-600" />;
   };
 
   // Get status color
   const getStatusColor = (status: number) => {
-    if (status >= 200 && status < 300) return 'bg-green-500';
-    if (status >= 300 && status < 400) return 'bg-blue-500';
-    if (status >= 400 && status < 500) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (status >= 200 && status < 300) return 'bg-success-500';
+    if (status >= 300 && status < 400) return 'bg-info-500';
+    if (status >= 400 && status < 500) return 'bg-warning-500';
+    return 'bg-danger-500';
   };
 
   return (

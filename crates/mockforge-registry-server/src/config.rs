@@ -133,10 +133,19 @@ impl Config {
                 .context("PORT must be a valid port number (0-65535)")?,
             database_url: database_url.unwrap(),
             jwt_secret: jwt_secret.unwrap(),
+            // Fall back to the AWS-standard env var names that Fly's
+            // `flyctl storage create` and other tooling auto-set. Lets
+            // Tigris (or any S3-compatible backend) wire up without
+            // manually aliasing secrets.
             s3_bucket: std::env::var("S3_BUCKET")
+                .or_else(|_| std::env::var("BUCKET_NAME"))
                 .unwrap_or_else(|_| "mockforge-plugins".to_string()),
-            s3_region: std::env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-            s3_endpoint: std::env::var("S3_ENDPOINT").ok(),
+            s3_region: std::env::var("S3_REGION")
+                .or_else(|_| std::env::var("AWS_REGION"))
+                .unwrap_or_else(|_| "us-east-1".to_string()),
+            s3_endpoint: std::env::var("S3_ENDPOINT")
+                .ok()
+                .or_else(|| std::env::var("AWS_ENDPOINT_URL_S3").ok()),
             max_plugin_size: std::env::var("MAX_PLUGIN_SIZE")
                 .unwrap_or_else(|_| "52428800".to_string()) // 50MB
                 .parse()

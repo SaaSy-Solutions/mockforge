@@ -69,6 +69,8 @@ import {
   Radio as RadioIcon,
   MessageCircle as MessageCircleIcon,
   LifeBuoy,
+  Bell,
+  Camera,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -96,6 +98,7 @@ const navSections = [
       { id: 'virtual-backends', labelKey: 'tab.virtualBackends', icon: Database },
       { id: 'fixtures', labelKey: 'tab.fixtures', icon: FileJson },
       { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
+      { id: 'cloud-snapshots', labelKey: 'tab.cloudSnapshots', icon: Camera },
       { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
       { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
     ]
@@ -117,6 +120,7 @@ const navSections = [
       { id: 'scenario-studio', labelKey: 'tab.scenarioStudio', icon: Film },
       { id: 'orchestration-builder', labelKey: 'tab.orchestrationBuilder', icon: GitBranch },
       { id: 'orchestration-execution', labelKey: 'tab.orchestrationExecution', icon: PlayCircle },
+      { id: 'cloud-flows', labelKey: 'tab.cloudFlows', icon: GitBranch },
     ]
   },
   {
@@ -127,14 +131,17 @@ const navSections = [
       { id: 'performance', labelKey: 'tab.performance', icon: Activity },
       { id: 'status', labelKey: 'tab.systemStatus', icon: Globe },
       { id: 'incidents', labelKey: 'tab.incidents', icon: AlertTriangle },
+      { id: 'cloud-incidents', labelKey: 'tab.cloudIncidents', icon: Bell },
       { id: 'logs', labelKey: 'tab.logs', icon: FileText },
       { id: 'traces', labelKey: 'tab.traces', icon: Network },
+      { id: 'cloud-traces', labelKey: 'tab.cloudTraces', icon: Network },
       { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
       { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
       { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
       { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
       { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
       { id: 'contract-diff', labelKey: 'tab.contractDiff', icon: GitCompare },
+      { id: 'cloud-contract', labelKey: 'tab.cloudContract', icon: GitCompare },
     ]
   },
   {
@@ -143,6 +150,7 @@ const navSections = [
       { id: 'testing', labelKey: 'tab.testing', icon: TestTube },
       { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
       { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
+      { id: 'cloud-test-runs', labelKey: 'tab.cloudTestRuns', icon: PlayCircle },
       { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
       { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
       { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
@@ -152,8 +160,10 @@ const navSections = [
     titleKey: 'nav.chaosResilience',
     items: [
       { id: 'chaos', labelKey: 'tab.chaosEngineering', icon: Zap },
+      { id: 'cloud-chaos', labelKey: 'tab.cloudChaos', icon: Zap },
       { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
+      { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
       { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
     ]
   },
@@ -179,6 +189,7 @@ const navSections = [
     titleKey: 'nav.community',
     items: [
       { id: 'showcase', labelKey: 'tab.showcase', icon: Star },
+      { id: 'cloud-showcase-admin', labelKey: 'tab.cloudShowcaseAdmin', icon: Star },
       { id: 'learning-hub', labelKey: 'tab.learningHub', icon: BookOpen },
     ]
   },
@@ -199,7 +210,9 @@ const navSections = [
       { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
       { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
-      { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
+      { id: 'notification-channels', labelKey: 'tab.notificationChannels', icon: Bell },
+      // user-management retired (#15) — surface lives inside the
+      // Organization page's Members / Roles / Activity tabs now.
     ]
   },
   {
@@ -226,6 +239,42 @@ const cloudNavItemIds = new Set([
   'plugin-registry',
   'pillar-analytics',
   'status',
+  // AI Studio chat is wired end-to-end (handler + UI client + page dispatcher).
+  // Other AI nav items (mockai, mockai-rules, mockai-openapi-generator, voice)
+  // stay local-only until their pages are migrated to use aiStudioApi.
+  'ai-studio',
+  // Import dispatches to /api/v1/import/preview + /api/v1/workspaces/{id}/import
+  // when isCloudMode(); requires an active workspace selection.
+  'import',
+  // Tunnels page detects cloud mode and dispatches CRUD + DNS verify
+  // through cloudTunnelsApi against /api/v1/organizations/{org_id}/tunnels.
+  'tunnels',
+  // Cloud snapshots — synchronous capture / diff / restore for the
+  // active workspace via cloudSnapshotsApi.
+  'cloud-snapshots',
+  // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
+  // (different feature from drift IncidentDashboard).
+  'cloud-incidents',
+  // Cloud test runs — org-wide history with SSE event tailing via
+  // cloudTestRunsApi.streamRunEvents.
+  'cloud-test-runs',
+  // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
+  'cloud-traces',
+  // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
+  'cloud-chaos',
+  // Cloud flows — versioned scenario / state-machine / orchestration /
+  // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
+  'cloud-flows',
+  // Cloud contract diff + verification via cloudContractApi.
+  'cloud-contract',
+  // Cloud recorder + behavioral cloning via cloudRecorderApi.
+  'cloud-recorder',
+  // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
+  // adminUpdate / adminDelete.
+  'cloud-showcase-admin',
+  // Notification channels (cloud-only) — incident dispatch destinations
+  // wired through cloudNotificationsApi.
+  'notification-channels',
   'config',
   'organization',
   'billing',
@@ -328,11 +377,11 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-gray-200 dark:border-gray-800 shadow-2xl animate-slide-in-left">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
+          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-border shadow-2xl animate-slide-in-left">
+            <div className="flex items-center justify-between p-6 border-b border-border bg-card">
               <div className="flex items-center gap-3">
                 <Logo variant="icon" size="md" />
-                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
+                <span className="text-xl font-bold text-foreground">{t('app.brand')}</span>
               </div>
               <Button
                 variant="secondary"
@@ -407,7 +456,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             <div className="flex items-center gap-3 px-4 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
               {!sidebarCollapsed && (
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
+                <span className="font-semibold text-foreground">{t('app.brand')}</span>
               )}
               <Button
                 variant="ghost"
@@ -489,9 +538,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
-                <span className="text-gray-600 dark:text-gray-400">/</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">
+                <span className="text-sm text-muted-foreground">{t('app.home')}</span>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-sm font-medium text-foreground truncate capitalize">
                   {t(allNavItems.find(n => n.id === activeTab)?.labelKey ?? '', activeTab)}
                 </span>
               </div>
@@ -536,7 +585,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                       }
                     }}
                   />
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground border border-border rounded px-1 py-0.5 bg-bg-primary">
                     {isMac ? '⌘K' : 'Ctrl K'}
                   </span>
                 </div>

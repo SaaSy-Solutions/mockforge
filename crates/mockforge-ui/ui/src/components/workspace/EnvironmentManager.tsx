@@ -138,31 +138,25 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       return;
     }
 
+    // Reorder the environments array
+    const draggedIndex = environments.environments.findIndex(env => env.id === draggedItem);
+    const targetIndex = environments.environments.findIndex(env => env.id === targetEnvironmentId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedItem(null);
+      return;
+    }
+
+    const newEnvironments = [...environments.environments];
+    const [draggedEnv] = newEnvironments.splice(draggedIndex, 1);
+    newEnvironments.splice(targetIndex, 0, draggedEnv);
+    const environmentIds = newEnvironments.map(env => env.id);
+
     try {
-      // Reorder the environments array
-      const draggedIndex = environments.environments.findIndex(env => env.id === draggedItem);
-      const targetIndex = environments.environments.findIndex(env => env.id === targetEnvironmentId);
-
-      if (draggedIndex === -1 || targetIndex === -1) {
-        setDraggedItem(null);
-        return;
-      }
-
-      const newEnvironments = [...environments.environments];
-      const [draggedEnv] = newEnvironments.splice(draggedIndex, 1);
-      newEnvironments.splice(targetIndex, 0, draggedEnv);
-
-      // Update the order by sending the new order to the API
-      const environmentIds = newEnvironments.map(env => env.id);
-
-      try {
-        await updateEnvironmentsOrder.mutateAsync(environmentIds);
-        toast.success('Environment order updated');
-      } catch {
-        toast.error('Failed to update environment order');
-        throw error;
-      }
-    } catch {
+      await updateEnvironmentsOrder.mutateAsync(environmentIds);
+      toast.success('Environment order updated');
+    } catch (err) {
+      logger.error('Failed to update environment order', err);
       toast.error('Failed to update environment order');
     } finally {
       setDraggedItem(null);
@@ -183,16 +177,16 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
             onDrop={(e) => handleDrop(e, environment.id)}
             className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${
               environment.active
-                ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                ? 'ring-2 ring-blue-500 bg-info-50 dark:bg-info-900/20'
+                : 'hover:bg-accent hover:text-accent-foreground/50'
             } ${isDragging ? 'opacity-50' : ''} ${!environment.is_global ? 'cursor-move' : ''}`}
             onClick={() => handleSetActive(environment)}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {!environment.is_global && (
-                  <div className="cursor-move p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                    <GripVertical className="w-4 h-4 text-gray-400" />
+                  <div className="cursor-move p-1 hover:bg-accent hover:text-accent-foreground rounded">
+                    <GripVertical className="w-4 h-4 text-muted-foreground" />
                   </div>
                 )}
                 {environment.color && (
@@ -202,14 +196,14 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
                   />
                 )}
                 <div>
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                  <h3 className="font-medium text-foreground">
                     {environment.name}
                     {environment.is_global && (
-                      <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">(Global)</span>
+                      <span className="ml-2 text-xs text-muted-foreground">(Global)</span>
                     )}
                   </h3>
                   {environment.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-muted-foreground">
                       {environment.description}
                     </p>
                   )}
@@ -217,28 +211,28 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   {environment.variable_count} vars
                 </span>
                 {environment.active && (
-                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <div className="w-2 h-2 bg-info-500 rounded-full" />
                 )}
               </div>
             </div>
 
             {variables && variables.variables.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="mt-3 pt-3 border-t border-border">
                 <div className="flex flex-wrap gap-1">
                   {variables.variables.slice(0, 3).map((variable: unknown) => (
                     <span
                       key={variable.name}
-                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+                      className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-foreground"
                     >
                       {variable.name}
                     </span>
                   ))}
                   {variables.variables.length > 3 && (
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                    <span className="text-xs text-muted-foreground">
                       +{variables.variables.length - 3} more
                     </span>
                   )}
@@ -260,7 +254,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
           {!environment.is_global && (
             <ContextMenuItem
               onClick={() => handleDelete(environment)}
-              className="text-red-600 dark:text-red-400"
+              className="text-danger-600 dark:text-danger-400"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete Environment
@@ -275,14 +269,14 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-lg font-semibold text-foreground">
             Environments
           </h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="animate-pulse">
-              <div className="h-24 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+              <div className="h-24 bg-muted rounded-lg"></div>
             </div>
           ))}
         </div>
@@ -294,11 +288,11 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h2 className="text-lg font-semibold text-foreground">
             Environments
           </h2>
         </div>
-        <div className="text-center py-8 text-red-600 dark:text-red-400">
+        <div className="text-center py-8 text-danger-600 dark:text-danger-400">
           Failed to load environments
         </div>
       </div>
@@ -308,7 +302,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h2 className="text-lg font-semibold text-foreground">
           Environments
         </h2>
 
@@ -326,7 +320,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Name
                 </label>
                 <Input
@@ -337,7 +331,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Description (Optional)
                 </label>
                 <Input
@@ -384,7 +378,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
           {editingEnvironment && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Name
                 </label>
                 <Input
@@ -394,7 +388,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Description (Optional)
                 </label>
                 <Input
@@ -404,7 +398,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Color (Optional)
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -415,7 +409,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
                       className={`w-8 h-8 rounded-full border-2 ${
                         selectedColor?.hex === color.hex
                           ? 'border-gray-900 dark:border-gray-100'
-                          : 'border-gray-300 dark:border-gray-600'
+                          : 'border-border'
                       }`}
                       style={{ backgroundColor: color.hex }}
                       title={color.name}
@@ -425,10 +419,10 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
                 {selectedColor && (
                   <div className="flex items-center gap-2 mt-2">
                     <div
-                      className="w-4 h-4 rounded-full border border-gray-300"
+                      className="w-4 h-4 rounded-full border border-border"
                       style={{ backgroundColor: selectedColor.hex }}
                     />
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-sm text-muted-foreground">
                       {selectedColor.name}
                     </span>
                   </div>

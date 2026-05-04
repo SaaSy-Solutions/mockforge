@@ -119,6 +119,14 @@ impl WorkspaceRequest {
         .await
     }
 
+    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("DELETE FROM workspace_requests WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn count_in_workspace(pool: &sqlx::PgPool, workspace_id: Uuid) -> sqlx::Result<i64> {
         sqlx::query_scalar("SELECT COUNT(*) FROM workspace_requests WHERE workspace_id = $1")
             .bind(workspace_id)

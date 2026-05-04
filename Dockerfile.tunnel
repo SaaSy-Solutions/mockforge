@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1.6
+#
+# Cloud tunnel relay image. Builds the existing `tunnel-server` binary
+# from `crates/mockforge-tunnel` with the `cloud-validation` feature on
+# so it consults the registry's tunnel_reservations table for subdomain
+# claims.
+#
+# Wire from Fly with secrets:
+#   REGISTRY_URL=http://mockforge-registry.internal:8080
+#   MOCKFORGE_INTERNAL_API_TOKEN=<shared with the registry app>
+#
+# See docs/cloud/CLOUD_TUNNEL_RELAY_DEPLOYMENT.md for the full
+# deployment story.
+
+FROM rust:1.91-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev protobuf-compiler build-essential g++ cmake ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+
+# Drop workspace members whose directories aren't in the Docker context
+# (matches the .dockerignore filter list). Same trick the registry
+# Dockerfile uses.
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/plugins\/response-graphql"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/test-integration"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
+
+COPY crates/ ./crates/
+COPY proto/ ./proto/
+
+# Placeholder UI dist files — mockforge-ui requires them to compile,
+# but the relay never serves the UI.
+RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
+    echo '<!DOCTYPE html><html><body></body></html>' > crates/mockforge-ui/ui/dist/index.html && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.css && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.js && \
+    echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json && \
+    echo '' > crates/mockforge-ui/ui/dist/sw.js
+
+RUN cargo build --release \
+    -p mockforge-tunnel \
+    --features cloud-validation \
+    --bin tunnel-server
+
+FROM debian:trixie-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/tunnel-server /usr/local/bin/tunnel-server
+
+ENV TUNNEL_SERVER_PORT=8080 \
+    TUNNEL_SERVER_BIND=0.0.0.0 \
+    TUNNEL_USE_IN_MEMORY_STORAGE=1 \
+    TUNNEL_AUDIT_LOG_ENABLED=false \
+    RUST_LOG=info
+
+EXPOSE 8080
+
+CMD ["/usr/local/bin/tunnel-server"]

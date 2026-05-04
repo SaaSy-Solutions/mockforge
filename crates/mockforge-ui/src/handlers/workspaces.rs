@@ -9,7 +9,7 @@ use axum::{
 };
 use mockforge_core::{
     workspace::{EnvironmentColor, MockEnvironmentName, SyncDirection, SyncDirectoryStructure},
-    MultiTenantWorkspaceRegistry, Workspace, WorkspaceStats,
+    Folder, HttpMethod, MockRequest, MultiTenantWorkspaceRegistry, Workspace, WorkspaceStats,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -69,6 +69,125 @@ pub struct WorkspaceListItem {
     pub updated_at: String,
 }
 
+/// Folder summary as returned to the FE
+#[derive(Debug, Clone, Serialize)]
+pub struct FolderSummary {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub parent_id: Option<String>,
+    pub subfolder_count: usize,
+    pub request_count: usize,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl FolderSummary {
+    fn from_folder(folder: &Folder) -> Self {
+        Self {
+            id: folder.id.clone(),
+            name: folder.name.clone(),
+            description: folder.description.clone(),
+            parent_id: folder.parent_id.clone(),
+            subfolder_count: folder.folders.len(),
+            request_count: folder.requests.len(),
+            created_at: folder.created_at.to_rfc3339(),
+            updated_at: folder.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// Request summary as returned to the FE
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestSummary {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub method: String,
+    pub path: String,
+    pub status_code: u16,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl RequestSummary {
+    fn from_request(request: &MockRequest) -> Self {
+        Self {
+            id: request.id.clone(),
+            name: request.name.clone(),
+            description: request.description.clone(),
+            method: format!("{:?}", request.method),
+            path: request.path.clone(),
+            status_code: request.response.status_code,
+            created_at: request.created_at.to_rfc3339(),
+            updated_at: request.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// Workspace summary (matches FE WorkspaceSummary)
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceSummaryDetail {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub is_active: bool,
+    pub folder_count: usize,
+    pub request_count: usize,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Workspace detail returned by GET /workspaces/{id}
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceDetail {
+    pub summary: WorkspaceSummaryDetail,
+    pub folders: Vec<FolderSummary>,
+    pub requests: Vec<RequestSummary>,
+}
+
+/// Wrapper for GET /workspaces/{id} so the FE finds `response.workspace`
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceDetailResponse {
+    pub workspace: WorkspaceDetail,
+}
+
+/// Folder detail returned by GET /workspaces/{id}/folders/{folder_id}
+#[derive(Debug, Clone, Serialize)]
+pub struct FolderDetail {
+    pub summary: FolderSummary,
+    pub requests: Vec<RequestSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FolderDetailResponse {
+    pub folder: FolderDetail,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateFolderRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub parent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateRequestRequest {
+    pub name: String,
+    pub description: Option<String>,
+    pub method: String,
+    pub path: String,
+    pub status_code: Option<u16>,
+    pub response_body: Option<String>,
+    pub folder_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CreatedItemResponse {
+    pub id: String,
+    pub message: String,
+}
+
 /// Workspace creation request
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateWorkspaceRequest {
@@ -120,22 +239,28 @@ pub async fn list_workspaces(
 pub async fn get_workspace(
     State(state): State<WorkspaceState>,
     Path(workspace_id): Path<String>,
-) -> Result<Json<ApiResponse<WorkspaceListItem>>, Response> {
+) -> Result<Json<WorkspaceDetailResponse>, Response> {
     let registry = state.registry.read().await;
 
     match registry.get_workspace(&workspace_id) {
         Ok(tenant_ws) => {
-            let item = WorkspaceListItem {
-                id: workspace_id.clone(),
-                name: tenant_ws.workspace.name.clone(),
-                description: tenant_ws.workspace.description.clone(),
-                enabled: tenant_ws.enabled,
-                stats: tenant_ws.stats.clone(),
-                created_at: tenant_ws.workspace.created_at.to_rfc3339(),
-                updated_at: tenant_ws.workspace.updated_at.to_rfc3339(),
+            let workspace = &tenant_ws.workspace;
+            let detail = WorkspaceDetail {
+                summary: WorkspaceSummaryDetail {
+                    id: workspace_id.clone(),
+                    name: workspace.name.clone(),
+                    description: workspace.description.clone(),
+                    is_active: false,
+                    folder_count: workspace.folders.len(),
+                    request_count: workspace.requests.len(),
+                    created_at: workspace.created_at.to_rfc3339(),
+                    updated_at: workspace.updated_at.to_rfc3339(),
+                },
+                folders: workspace.folders.iter().map(FolderSummary::from_folder).collect(),
+                requests: workspace.requests.iter().map(RequestSummary::from_request).collect(),
             };
 
-            Ok(Json(ApiResponse::success(item)))
+            Ok(Json(WorkspaceDetailResponse { workspace: detail }))
         }
         Err(e) => {
             tracing::error!("Failed to get workspace {}: {}", workspace_id, e);
@@ -146,6 +271,228 @@ pub async fn get_workspace(
                 .into_response())
         }
     }
+}
+
+/// Get a single folder and its requests
+pub async fn get_folder(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, folder_id)): Path<(String, String)>,
+) -> Result<Json<FolderDetailResponse>, Response> {
+    let registry = state.registry.read().await;
+    let tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let folder = tenant_ws.workspace.find_folder(&folder_id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Folder '{}' not found", folder_id)})),
+        )
+            .into_response()
+    })?;
+
+    Ok(Json(FolderDetailResponse {
+        folder: FolderDetail {
+            summary: FolderSummary::from_folder(folder),
+            requests: folder.requests.iter().map(RequestSummary::from_request).collect(),
+        },
+    }))
+}
+
+/// Create a folder in a workspace
+pub async fn create_folder(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<CreateFolderRequest>,
+) -> Result<Json<CreatedItemResponse>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let mut folder = Folder::new(request.name);
+    folder.description = request.description;
+    folder.parent_id = request.parent_id.clone();
+    let folder_id = folder.id.clone();
+
+    if let Some(parent_id) = request.parent_id.as_ref() {
+        let parent = tenant_ws.workspace.find_folder_mut(parent_id).ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Parent folder '{}' not found", parent_id)})),
+            )
+                .into_response()
+        })?;
+        parent.folders.push(folder);
+        parent.updated_at = chrono::Utc::now();
+    } else {
+        tenant_ws.workspace.folders.push(folder);
+    }
+    tenant_ws.workspace.updated_at = chrono::Utc::now();
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(CreatedItemResponse {
+        id: folder_id,
+        message: "Folder created".to_string(),
+    }))
+}
+
+/// Delete a folder from a workspace
+pub async fn delete_folder(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, folder_id)): Path<(String, String)>,
+) -> Result<Json<CreatedItemResponse>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.remove_folder(&folder_id).map_err(|e| {
+        (StatusCode::NOT_FOUND, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(CreatedItemResponse {
+        id: folder_id,
+        message: "Folder deleted".to_string(),
+    }))
+}
+
+/// Create a request in a workspace (or folder)
+pub async fn create_request(
+    State(state): State<WorkspaceState>,
+    Path(workspace_id): Path<String>,
+    Json(request): Json<CreateRequestRequest>,
+) -> Result<Json<CreatedItemResponse>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    let method = match request.method.to_uppercase().as_str() {
+        "GET" => HttpMethod::GET,
+        "POST" => HttpMethod::POST,
+        "PUT" => HttpMethod::PUT,
+        "DELETE" => HttpMethod::DELETE,
+        "PATCH" => HttpMethod::PATCH,
+        "HEAD" => HttpMethod::HEAD,
+        "OPTIONS" => HttpMethod::OPTIONS,
+        other => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Unsupported HTTP method '{}'", other)})),
+            )
+                .into_response());
+        }
+    };
+
+    let mut mock_request = MockRequest::new(method, request.path, request.name);
+    mock_request.description = request.description;
+    if let Some(status) = request.status_code {
+        mock_request.response.status_code = status;
+    }
+    if let Some(body) = request.response_body {
+        mock_request.response.body = Some(body);
+    }
+    let request_id = mock_request.id.clone();
+
+    if let Some(folder_id) = request.folder_id.as_ref() {
+        let folder = tenant_ws.workspace.find_folder_mut(folder_id).ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("Folder '{}' not found", folder_id)})),
+            )
+                .into_response()
+        })?;
+        folder.requests.push(mock_request);
+        folder.updated_at = chrono::Utc::now();
+    } else {
+        tenant_ws.workspace.requests.push(mock_request);
+    }
+    tenant_ws.workspace.updated_at = chrono::Utc::now();
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(CreatedItemResponse {
+        id: request_id,
+        message: "Request created".to_string(),
+    }))
+}
+
+/// Delete a request from a workspace
+pub async fn delete_request(
+    State(state): State<WorkspaceState>,
+    Path((workspace_id, request_id)): Path<(String, String)>,
+) -> Result<Json<CreatedItemResponse>, Response> {
+    let mut registry = state.registry.write().await;
+    let mut tenant_ws = registry.get_workspace(&workspace_id).map_err(|_| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
+        )
+            .into_response()
+    })?;
+
+    tenant_ws.workspace.remove_request(&request_id).map_err(|e| {
+        (StatusCode::NOT_FOUND, Json(json!({"error": e.to_string()}))).into_response()
+    })?;
+
+    registry
+        .update_workspace(&workspace_id, tenant_ws.workspace.clone())
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to save workspace: {}", e)})),
+            )
+                .into_response()
+        })?;
+
+    Ok(Json(CreatedItemResponse {
+        id: request_id,
+        message: "Request deleted".to_string(),
+    }))
 }
 
 /// Create a new workspace
@@ -1899,8 +2246,10 @@ mod tests {
 
         let result = get_workspace(State(state), Path("get-test".to_string())).await.unwrap();
 
-        assert!(result.0.success);
-        assert_eq!(result.0.data.as_ref().unwrap().id, "get-test");
+        assert_eq!(result.0.workspace.summary.id, "get-test");
+        assert_eq!(result.0.workspace.summary.name, "Get Test Workspace");
+        assert!(result.0.workspace.folders.is_empty());
+        assert!(result.0.workspace.requests.is_empty());
     }
 
     #[tokio::test]

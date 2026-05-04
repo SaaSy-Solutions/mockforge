@@ -1,0 +1,42 @@
+# Fly.io config for the cloud tunnel relay (closes #5 / operational
+# half). Deploy with:
+#
+#   fly apps create mockforge-tunnel-relay
+#   fly secrets set -a mockforge-tunnel-relay \
+#       REGISTRY_URL=http://mockforge-registry.internal:8080 \
+#       MOCKFORGE_INTERNAL_API_TOKEN=<value from mockforge-registry>
+#   fly deploy -c fly.tunnel.toml --dockerfile Dockerfile.tunnel
+#   fly certs create -a mockforge-tunnel-relay '*.tunnels.mockforge.dev'
+
+app = "mockforge-tunnel-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.tunnel"
+
+[env]
+  PORT = "8080"
+  BIND_ADDRESS = "0.0.0.0"
+  USE_IN_MEMORY_STORAGE = "true"
+  RUST_LOG = "info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

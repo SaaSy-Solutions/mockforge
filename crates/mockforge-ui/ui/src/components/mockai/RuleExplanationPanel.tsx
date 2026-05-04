@@ -61,14 +61,14 @@ export function RuleExplanationPanel({
   const getRuleTypeColor = (ruleType: string) => {
     switch (ruleType.toLowerCase()) {
       case 'consistency':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
       case 'validation':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300';
       case 'pagination':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
       case 'statetransition':
       case 'state_transition':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        return 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300';
       case 'crud':
         return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
       default:
@@ -103,7 +103,7 @@ export function RuleExplanationPanel({
               {(explanation.confidence * 100).toFixed(0)}% confidence
             </Badge>
           </div>
-          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
               {new Date(explanation.generated_at).toLocaleString()}
@@ -120,7 +120,7 @@ export function RuleExplanationPanel({
       </div>
 
       {/* Reasoning Section */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+      <div className="border-t border-border pt-4">
         <button
           onClick={() => toggleSection('reasoning')}
           className="flex items-center justify-between w-full text-left mb-2"
@@ -136,7 +136,7 @@ export function RuleExplanationPanel({
           </div>
         </button>
         {expandedSections.has('reasoning') && (
-          <div className="pl-6 text-sm text-gray-700 dark:text-gray-300">
+          <div className="pl-6 text-sm text-foreground">
             {explanation.reasoning}
           </div>
         )}
@@ -144,7 +144,7 @@ export function RuleExplanationPanel({
 
       {/* Source Examples Section */}
       {explanation.source_examples.length > 0 && (
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div className="border-t border-border pt-4">
           <button
             onClick={() => toggleSection('source_examples')}
             className="flex items-center justify-between w-full text-left mb-2"
@@ -164,7 +164,7 @@ export function RuleExplanationPanel({
               {explanation.source_examples.map((exampleId, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded"
+                  className="flex items-center justify-between p-2 bg-muted rounded"
                 >
                   <code className="text-sm font-mono">{exampleId}</code>
                   {onExampleClick && (
@@ -185,7 +185,7 @@ export function RuleExplanationPanel({
 
       {/* Pattern Matches Section */}
       {explanation.pattern_matches.length > 0 && (
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div className="border-t border-border pt-4">
           <button
             onClick={() => toggleSection('pattern_matches')}
             className="flex items-center justify-between w-full text-left mb-2"
@@ -205,7 +205,7 @@ export function RuleExplanationPanel({
               {explanation.pattern_matches.map((match, idx) => (
                 <div
                   key={idx}
-                  className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                  className="p-3 bg-muted rounded-lg"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <code className="text-sm font-mono font-semibold">
@@ -217,20 +217,20 @@ export function RuleExplanationPanel({
                   </div>
                   {match.example_ids.length > 0 && (
                     <div className="mt-2">
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      <div className="text-xs text-muted-foreground mb-1">
                         Matched Examples:
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {match.example_ids.slice(0, 5).map((exampleId, eIdx) => (
                           <code
                             key={eIdx}
-                            className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded"
+                            className="text-xs px-2 py-1 bg-muted rounded"
                           >
                             {exampleId}
                           </code>
                         ))}
                         {match.example_ids.length > 5 && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-muted-foreground">
                             +{match.example_ids.length - 5} more
                           </span>
                         )}
@@ -245,25 +245,25 @@ export function RuleExplanationPanel({
       )}
 
       {/* Confidence Indicator */}
-      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+      <div className="border-t border-border pt-4">
         <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">Confidence Score</span>
         </div>
         <div className="pl-6">
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+          <div className="w-full bg-muted rounded-full h-2">
             <div
               className={`h-2 rounded-full ${
                 explanation.confidence >= 0.8
-                  ? 'bg-green-500'
+                  ? 'bg-success-500'
                   : explanation.confidence >= 0.6
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
+                    ? 'bg-warning-500'
+                    : 'bg-danger-500'
               }`}
               style={{ width: `${explanation.confidence * 100}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-1">
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>Low (0%)</span>
             <span>High (100%)</span>
           </div>

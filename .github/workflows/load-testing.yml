@@ -1,5 +1,6 @@
 name: Load Testing & Performance Regression
 
+# Cron disabled — runner queue contention; manual workflow_dispatch still works.
 on:
   pull_request:
     branches: [main, develop]
@@ -14,9 +15,6 @@ on:
       - 'crates/**'
       - 'tests/load/**'
       - 'Cargo.toml'
-  schedule:
-    # Run extended load tests nightly
-    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       test_type:
@@ -162,7 +160,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

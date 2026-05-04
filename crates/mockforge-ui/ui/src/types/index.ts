@@ -7,6 +7,10 @@ export interface User {
   email: string;
   role: 'admin' | 'user' | 'viewer';
   preferences?: UserPreferences;
+  /** Cloud-only: hydrated from /api/v1/users/me; absent in local admin mode. */
+  is_verified?: boolean;
+  /** Cloud-only: account creation timestamp from /api/v1/users/me. */
+  created_at?: string;
 }
 
 export interface AuthState {
@@ -279,6 +283,21 @@ export interface DashboardData {
   servers: ServerStatus[];
   recent_logs: RequestLog[];
   system: SystemInfo;
+  cloud_metrics?: CloudDashboardMetrics;
+}
+
+export interface CloudDashboardMetrics {
+  active_deployments: number;
+  total_deployments: number;
+  workspaces: number;
+  services: number;
+  fixtures: number;
+  federations: number;
+  requests_2xx: number;
+  requests_4xx: number;
+  requests_5xx: number;
+  egress_bytes: number;
+  period_start: string | null;
 }
 
 export interface LatencyMetrics {
@@ -1061,6 +1080,36 @@ export interface UpdateWorkspaceRequest {
   name?: string;
   description?: string;
 }
+
+export interface WorkspaceStats {
+  total_requests: number;
+  active_routes: number;
+  last_request_at?: string;
+  created_at: string;
+  avg_response_time_ms: number;
+}
+
+export interface MockEnvironmentResponse {
+  name: string;
+  id: string;
+  workspace_id: string;
+  reality_config?: Record<string, unknown> | null;
+  chaos_config?: Record<string, unknown> | null;
+  drift_budget_config?: Record<string, unknown> | null;
+}
+
+export interface MockEnvironmentManagerResponse {
+  workspace_id: string;
+  active_environment?: string;
+  environments: MockEnvironmentResponse[];
+}
+
+export interface UpdateMockEnvironmentRequest {
+  reality_config?: Record<string, unknown> | null;
+  chaos_config?: Record<string, unknown> | null;
+  drift_budget_config?: Record<string, unknown> | null;
+}
+
 
 export interface CreateFolderRequest {
   name: string;

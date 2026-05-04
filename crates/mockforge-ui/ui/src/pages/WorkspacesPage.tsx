@@ -35,6 +35,8 @@ import { EnvironmentManager } from '../components/workspace/EnvironmentManager';
 import WorkspacePromotions from '../components/workspace/WorkspacePromotions';
 import WorkspaceFederationScenariosPanel from '../components/workspace/WorkspaceFederationScenariosPanel';
 import WorkspaceSyncPanel from '../components/workspace/WorkspaceSyncPanel';
+import WorkspaceStatsStrip from '../components/workspace/WorkspaceStatsStrip';
+import WorkspaceMockEnvironmentsPanel from '../components/workspace/WorkspaceMockEnvironmentsPanel';
 import { getErrorDetails, logError, sanitizeInput, validateFile } from '../utils/errorHandling';
 import { IS_CLOUD } from '../utils/mode';
 
@@ -311,6 +313,44 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
     setHistoryDialogOpen(true);
   };
 
+  const handleDeleteFolder = async (folderId: string, folderName: string) => {
+    if (!selectedWorkspace) return;
+    if (!confirm(`Delete folder "${folderName}"? Requests inside will also be removed.`)) return;
+    try {
+      await apiService.deleteFolder(selectedWorkspace.summary.id, folderId);
+      toast.success('Folder deleted');
+      const response = await apiService.getWorkspace(selectedWorkspace.summary.id);
+      setSelectedWorkspace(response.workspace);
+      if (selectedFolder?.summary.id === folderId) setSelectedFolder(null);
+    } catch (err) {
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to delete folder: ${errorDetails.message}`);
+      logError(err, 'Delete folder');
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string, requestName: string) => {
+    if (!selectedWorkspace) return;
+    if (!confirm(`Delete request "${requestName}"?`)) return;
+    try {
+      await apiService.deleteRequest(selectedWorkspace.summary.id, requestId);
+      toast.success('Request deleted');
+      const response = await apiService.getWorkspace(selectedWorkspace.summary.id);
+      setSelectedWorkspace(response.workspace);
+      if (selectedFolder) {
+        const folderResponse = await apiService.getFolder(
+          selectedWorkspace.summary.id,
+          selectedFolder.summary.id
+        );
+        setSelectedFolder(folderResponse.folder);
+      }
+    } catch (err) {
+      const errorDetails = getErrorDetails(err);
+      toast.error(`Failed to delete request: ${errorDetails.message}`);
+      logError(err, 'Delete request');
+    }
+  };
+
   const handleImport = async () => {
     if (!selectedWorkspace) return;
 
@@ -447,7 +487,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-red-500">{error}</div>
+        <div className="text-danger-500">{error}</div>
       </div>
     );
   }
@@ -468,32 +508,32 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                 New Workspace
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white dark:bg-gray-900">
+            <DialogContent className="bg-card">
               <DialogHeader className="space-y-2">
-                <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">Create New Workspace</DialogTitle>
-                <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                <DialogTitle className="text-xl font-semibold text-foreground">Create New Workspace</DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
                   Create a new workspace to organize your mock API endpoints.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
+                  <Label htmlFor="workspace-name" className="text-foreground">Name</Label>
                   <Input
                     id="workspace-name"
                     value={newWorkspace.name}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, name: e.target.value })}
                     placeholder="My Workspace"
-                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
+                  <Label htmlFor="workspace-description" className="text-foreground">Description</Label>
                   <Textarea
                     id="workspace-description"
                     value={newWorkspace.description}
                     onChange={(e) => setNewWorkspace({ ...newWorkspace, description: e.target.value })}
                     placeholder="Optional description..."
-                    className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
                 {!IS_CLOUD && (
@@ -504,17 +544,17 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                         checked={enableSync}
                         onCheckedChange={setEnableSync}
                       />
-                      <Label htmlFor="enable-sync" className="text-gray-900 dark:text-gray-100">Enable directory sync</Label>
+                      <Label htmlFor="enable-sync" className="text-foreground">Enable directory sync</Label>
                     </div>
                     {enableSync && (
                       <div>
-                        <Label htmlFor="sync-directory" className="text-gray-900 dark:text-gray-100">Sync Directory</Label>
+                        <Label htmlFor="sync-directory" className="text-foreground">Sync Directory</Label>
                         <Input
                           id="sync-directory"
                           value={syncDirectory}
                           onChange={(e) => setSyncDirectory(e.target.value)}
                           placeholder="/path/to/workspace"
-                          className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                          className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                         />
                       </div>
                     )}
@@ -930,6 +970,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
+                {/* Per-workspace stats (local-only — cloud has no per-workspace stats endpoint) */}
+                {!IS_CLOUD && (
+                  <WorkspaceStatsStrip workspaceId={selectedWorkspace.summary.id} />
+                )}
+
                 {/* Active federation scenarios applying to this workspace (cloud-only) */}
                 <WorkspaceFederationScenariosPanel workspaceId={selectedWorkspace.summary.id} />
 
@@ -947,10 +992,23 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                           onClick={() => handleFolderClick(folder.id)}
                         >
                           <CardContent className="p-4">
-                            <div className="flex items-center space-x-2">
-                              <Folder className="w-4 h-4" />
-                              <span className="font-medium">{folder.name}</span>
-                              <Badge variant="outline">{folder.request_count} requests</Badge>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <Folder className="w-4 h-4 shrink-0" />
+                                <span className="font-medium truncate">{folder.name}</span>
+                                <Badge variant="outline">{folder.request_count} requests</Badge>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteFolder(folder.id, folder.name);
+                                }}
+                                title="Delete folder"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
                             </div>
                             {folder.description && (
                               <p className="text-sm text-muted-foreground mt-1">{folder.description}</p>
@@ -981,17 +1039,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                   <span className="font-medium">{request.name}</span>
                                   <span className="text-sm text-muted-foreground">{request.path}</span>
                                 </div>
-                                {IS_CLOUD && (
-                                  <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-2">
+                                  {IS_CLOUD && (
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       onClick={() => handleViewHistory(request.id, request.name)}
+                                      title="View history"
                                     >
                                       <History className="w-4 h-4" />
                                     </Button>
-                                  </div>
-                                )}
+                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteRequest(request.id, request.name)}
+                                    title="Delete request"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </div>
                             </CardContent>
                           </Card>
@@ -1011,17 +1078,26 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                                 <span className="font-medium">{request.name}</span>
                                 <span className="text-sm text-muted-foreground">{request.path}</span>
                               </div>
-                              {IS_CLOUD && (
-                                <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-2">
+                                {IS_CLOUD && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleViewHistory(request.id, request.name)}
+                                    title="View history"
                                   >
                                     <History className="w-4 h-4" />
                                   </Button>
-                                </div>
-                              )}
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteRequest(request.id, request.name)}
+                                  title="Delete request"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
@@ -1043,6 +1119,12 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     workspaceName={selectedWorkspace.summary.name}
                   />
                 )}
+
+                {/* Mock environments (dev/test/prod with reality/chaos/drift configs) — local only. */}
+                {!IS_CLOUD && (
+                  <WorkspaceMockEnvironmentsPanel workspaceId={selectedWorkspace.summary.id} />
+                )}
+
 
                 {/* Scenario promotions are a cloud-registry feature. */}
                 {IS_CLOUD && (
@@ -1183,18 +1265,18 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
 
       {/* Edit Workspace Dialog */}
       <Dialog open={editWorkspaceOpen} onOpenChange={setEditWorkspaceOpen}>
-        <DialogContent className="bg-white dark:bg-gray-900">
+        <DialogContent className="bg-card">
           <DialogHeader className="space-y-2">
-            <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            <DialogTitle className="text-xl font-semibold text-foreground">
               Edit Workspace
             </DialogTitle>
-            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+            <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
               Update the workspace name or description.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="edit-workspace-name" className="text-gray-900 dark:text-gray-100">Name</Label>
+              <Label htmlFor="edit-workspace-name" className="text-foreground">Name</Label>
               <Input
                 id="edit-workspace-name"
                 value={editWorkspaceData?.request.name ?? ''}
@@ -1204,11 +1286,11 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   )
                 }
                 placeholder="Workspace name"
-                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               />
             </div>
             <div>
-              <Label htmlFor="edit-workspace-description" className="text-gray-900 dark:text-gray-100">Description</Label>
+              <Label htmlFor="edit-workspace-description" className="text-foreground">Description</Label>
               <Textarea
                 id="edit-workspace-description"
                 value={editWorkspaceData?.request.description ?? ''}
@@ -1218,7 +1300,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   )
                 }
                 placeholder="Optional description..."
-                className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className="bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
               />
             </div>
           </div>

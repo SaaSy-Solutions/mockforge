@@ -73,7 +73,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
       <Section title="Network Profiles" subtitle="Apply predefined or custom network conditions">
         <ModernCard>
           <div className="text-center py-8">
-            <p className="text-red-600 dark:text-red-400">
+            <p className="text-danger-600 dark:text-danger-400">
               Failed to load network profiles
             </p>
           </div>
@@ -95,7 +95,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
         {/* Built-in Profiles */}
         {builtinProfiles.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+            <h3 className="text-sm font-semibold text-foreground mb-4">
               Predefined Profiles
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -108,8 +108,8 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                   <div className="space-y-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <Wifi className="h-5 w-5 text-blue-500" />
-                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                        <Wifi className="h-5 w-5 text-info-500" />
+                        <h4 className="font-semibold text-foreground">
                           {profile.name.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                         </h4>
                       </div>
@@ -117,7 +117,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                         Built-in
                       </ModernBadge>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-muted-foreground">
                       {profile.description}
                     </p>
                     {profile.tags && profile.tags.length > 0 && (
@@ -125,7 +125,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                         {profile.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded"
+                            className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded"
                           >
                             {tag}
                           </span>
@@ -163,7 +163,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
         {/* Custom Profiles */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+            <h3 className="text-sm font-semibold text-foreground">
               Custom Profiles
             </h3>
             <Button
@@ -186,7 +186,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <Wifi className="h-5 w-5 text-purple-500" />
-                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                        <h4 className="font-semibold text-foreground">
                           {profile.name}
                         </h4>
                       </div>
@@ -195,12 +195,12 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                         size="sm"
                         onClick={(e) => handleDelete(profile.name, e)}
                         disabled={deleteProfile.isPending}
-                        className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        className="text-danger-600 hover:text-danger-700 dark:text-danger-400 dark:hover:text-danger-300"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <p className="text-sm text-muted-foreground">
                       {profile.description}
                     </p>
                     {profile.tags && profile.tags.length > 0 && (
@@ -208,7 +208,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
                         {profile.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded"
+                            className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded"
                           >
                             {tag}
                           </span>
@@ -244,8 +244,8 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
           ) : (
             <ModernCard>
               <div className="text-center py-8">
-                <Wifi className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                <Wifi className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground mb-4">
                   No custom profiles yet
                 </p>
                 <Button
@@ -267,7 +267,7 @@ export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelec
           <ModernCard className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Create Custom Profile</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-muted-foreground">
                 Custom profile creation will be available in a future update. For now, you can
                 export the current chaos configuration as a profile template.
               </p>

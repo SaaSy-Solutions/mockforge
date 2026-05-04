@@ -55,8 +55,8 @@ export function WaitlistPage() {
       <div className="container mx-auto px-4 py-12 max-w-2xl">
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success-100 dark:bg-success-900/30">
+              <CheckCircle2 className="h-8 w-8 text-success-600 dark:text-success-400" />
             </div>
             <h2 className="mb-2 text-2xl font-bold">You're on the list!</h2>
             <p className="mb-6 text-muted-foreground">
@@ -92,15 +92,15 @@ export function WaitlistPage() {
         </CardHeader>
         <CardContent>
           {error && (
-            <Alert className="mb-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <span className="text-red-800 dark:text-red-200">{error}</span>
+            <Alert className="mb-4 bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+              <span className="text-danger-700 dark:text-danger-200">{error}</span>
             </Alert>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-2">
-                Email <span className="text-red-500">*</span>
+                Email <span className="text-danger-500">*</span>
               </label>
               <Input
                 id="email"
@@ -146,7 +146,7 @@ export function WaitlistPage() {
                 onChange={(e) => setFormData({ ...formData, use_case: e.target.value })}
                 placeholder="Briefly describe your use case (optional)"
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 resize-y"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card resize-y"
               />
             </div>
 

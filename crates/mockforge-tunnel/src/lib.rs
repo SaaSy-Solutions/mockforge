@@ -7,6 +7,8 @@
 #[cfg(feature = "server")]
 pub mod audit;
 pub mod client;
+#[cfg(feature = "cloud-validation")]
+pub mod cloud_validation;
 pub mod config;
 pub mod manager;
 pub mod provider;

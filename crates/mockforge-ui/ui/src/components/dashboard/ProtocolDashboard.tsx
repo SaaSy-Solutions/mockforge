@@ -45,8 +45,8 @@ export function ProtocolDashboard({
             onClick={() => onProtocolChange(undefined as any)}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               !selectedProtocol
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
             }`}
           >
             All Protocols
@@ -57,8 +57,8 @@ export function ProtocolDashboard({
               onClick={() => onProtocolChange(metric.protocol)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                 selectedProtocol === metric.protocol
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
               <ProtocolIcon protocol={metric.protocol} size="sm" />
@@ -108,7 +108,7 @@ export function ProtocolDashboard({
       {/* Custom Metrics */}
       {filteredMetrics.some(m => m.customMetrics && Object.keys(m.customMetrics).length > 0) && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="text-lg font-semibold text-foreground">
             Custom Metrics
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -138,14 +138,14 @@ interface ProtocolMetricsCardProps {
 
 function ProtocolMetricsCard({ metrics }: ProtocolMetricsCardProps) {
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+    <div className="bg-card border border-border rounded-xl p-6">
       <div className="flex items-center gap-3 mb-4">
         <ProtocolIcon protocol={metrics.protocol} size="lg" />
         <div>
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="font-semibold text-foreground">
             {metrics.protocol}
           </h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Protocol Metrics
           </p>
         </div>
@@ -153,34 +153,34 @@ function ProtocolMetricsCard({ metrics }: ProtocolMetricsCardProps) {
 
       <div className="space-y-3">
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Total Requests</span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="text-sm text-muted-foreground">Total Requests</span>
+          <span className="font-medium text-foreground">
             {metrics.totalRequests.toLocaleString()}
           </span>
         </div>
 
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
+          <span className="text-sm text-muted-foreground">Success Rate</span>
           <span className={`font-medium ${
-            metrics.successRate >= 95 ? 'text-green-600' :
-            metrics.successRate >= 80 ? 'text-yellow-600' : 'text-red-600'
+            metrics.successRate >= 95 ? 'text-success-600' :
+            metrics.successRate >= 80 ? 'text-warning-600' : 'text-danger-600'
           }`}>
             {metrics.successRate.toFixed(1)}%
           </span>
         </div>
 
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Avg Latency</span>
-          <span className="font-medium text-gray-900 dark:text-gray-100">
+          <span className="text-sm text-muted-foreground">Avg Latency</span>
+          <span className="font-medium text-foreground">
             {metrics.averageLatency.toFixed(0)}ms
           </span>
         </div>
 
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Error Rate</span>
+          <span className="text-sm text-muted-foreground">Error Rate</span>
           <span className={`font-medium ${
-            metrics.errorRate <= 5 ? 'text-green-600' :
-            metrics.errorRate <= 20 ? 'text-yellow-600' : 'text-red-600'
+            metrics.errorRate <= 5 ? 'text-success-600' :
+            metrics.errorRate <= 20 ? 'text-warning-600' : 'text-danger-600'
           }`}>
             {metrics.errorRate.toFixed(1)}%
           </span>
@@ -188,8 +188,8 @@ function ProtocolMetricsCard({ metrics }: ProtocolMetricsCardProps) {
 
         {metrics.activeConnections !== undefined && (
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Active Connections</span>
-            <span className="font-medium text-gray-900 dark:text-gray-100">
+            <span className="text-sm text-muted-foreground">Active Connections</span>
+            <span className="font-medium text-foreground">
               {metrics.activeConnections}
             </span>
           </div>
@@ -197,8 +197,8 @@ function ProtocolMetricsCard({ metrics }: ProtocolMetricsCardProps) {
 
         {metrics.throughput !== undefined && (
           <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Throughput</span>
-            <span className="font-medium text-gray-900 dark:text-gray-100">
+            <span className="text-sm text-muted-foreground">Throughput</span>
+            <span className="font-medium text-foreground">
               {metrics.throughput.toFixed(1)} req/s
             </span>
           </div>

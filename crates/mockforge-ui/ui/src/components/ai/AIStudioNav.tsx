@@ -57,26 +57,26 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
   return (
     <div className="space-y-4">
       {/* Breadcrumb Navigation */}
-      <nav className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+      <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
         <a
           href="/ai-studio"
-          className="flex items-center hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+          className="flex items-center hover:text-foreground transition-colors"
         >
           <Home className="w-4 h-4 mr-1" />
           AI Studio
         </a>
         {breadcrumbs.map((item, index) => (
           <React.Fragment key={index}>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
             {item.path ? (
               <a
                 href={item.path}
-                className="hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                className="hover:text-foreground transition-colors"
               >
                 {item.label}
               </a>
             ) : (
-              <span className="text-gray-900 dark:text-gray-100 font-medium">
+              <span className="text-foreground font-medium">
                 {item.label}
               </span>
             )}
@@ -86,10 +86,10 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
 
       {/* Quick Actions Section */}
       {showQuickActions && (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <div className="bg-muted rounded-lg p-4 border border-border">
           <div className="flex items-center space-x-2 mb-3">
-            <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            <Brain className="w-5 h-5 text-info-600 dark:text-info-400" />
+            <h3 className="text-sm font-semibold text-foreground">
               Quick Actions
             </h3>
           </div>
@@ -98,16 +98,16 @@ export function AIStudioNav({ currentPage, showQuickActions = true }: AIStudioNa
               <a
                 key={link.path}
                 href={link.path}
-                className="flex items-start space-x-3 p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700"
+                className="flex items-start space-x-3 p-3 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors border border-border"
               >
-                <div className="text-blue-600 dark:text-blue-400 mt-0.5">
+                <div className="text-info-600 dark:text-info-400 mt-0.5">
                   {link.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <div className="text-sm font-medium text-foreground">
                     {link.label}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <div className="text-xs text-muted-foreground mt-0.5">
                     {link.description}
                   </div>
                 </div>
@@ -156,7 +156,7 @@ export function BackToAIStudio() {
   return (
     <a
       href="/ai-studio"
-      className="inline-flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+      className="inline-flex items-center space-x-2 text-sm text-info-600 dark:text-info-400 hover:text-info-700 dark:hover:text-info-300 transition-colors"
     >
       <ChevronRight className="w-4 h-4 rotate-180" />
       <span>Back to AI Studio</span>

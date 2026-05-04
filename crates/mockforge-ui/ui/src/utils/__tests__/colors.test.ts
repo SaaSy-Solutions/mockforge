@@ -46,25 +46,25 @@ describe('getServiceColors', () => {
   it('returns running service colors', () => {
     const colors = getServiceColors('running');
     expect(colors).toBe(semanticColors.service.running);
-    expect(colors.dot).toBe('bg-green-500');
+    expect(colors.dot).toBe('bg-success-500');
   });
 
   it('returns stopped service colors', () => {
     const colors = getServiceColors('stopped');
     expect(colors).toBe(semanticColors.service.stopped);
-    expect(colors.dot).toBe('bg-red-500');
+    expect(colors.dot).toBe('bg-danger-500');
   });
 
   it('returns starting service colors', () => {
     const colors = getServiceColors('starting');
     expect(colors).toBe(semanticColors.service.starting);
-    expect(colors.dot).toBe('bg-yellow-500');
+    expect(colors.dot).toBe('bg-warning-500');
   });
 
   it('returns error service colors', () => {
     const colors = getServiceColors('error');
     expect(colors).toBe(semanticColors.service.error);
-    expect(colors.dot).toBe('bg-red-500');
+    expect(colors.dot).toBe('bg-danger-500');
   });
 });
 
@@ -175,23 +175,23 @@ describe('getTrendColor', () => {
 
 describe('badgeVariants', () => {
   it('has success variant', () => {
-    expect(badgeVariants.success).toContain('bg-green-100');
-    expect(badgeVariants.success).toContain('text-green-800');
+    expect(badgeVariants.success).toContain('bg-success-100');
+    expect(badgeVariants.success).toContain('text-success-700');
   });
 
   it('has warning variant', () => {
-    expect(badgeVariants.warning).toContain('bg-yellow-100');
-    expect(badgeVariants.warning).toContain('text-yellow-800');
+    expect(badgeVariants.warning).toContain('bg-warning-100');
+    expect(badgeVariants.warning).toContain('text-warning-700');
   });
 
   it('has danger variant', () => {
-    expect(badgeVariants.danger).toContain('bg-red-100');
-    expect(badgeVariants.danger).toContain('text-red-800');
+    expect(badgeVariants.danger).toContain('bg-danger-100');
+    expect(badgeVariants.danger).toContain('text-danger-700');
   });
 
   it('has info variant', () => {
-    expect(badgeVariants.info).toContain('bg-blue-100');
-    expect(badgeVariants.info).toContain('text-blue-800');
+    expect(badgeVariants.info).toContain('bg-info-100');
+    expect(badgeVariants.info).toContain('text-info-700');
   });
 
   it('has brand variant', () => {

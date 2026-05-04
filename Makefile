@@ -316,6 +316,38 @@ sqlx-prepare: ## Regenerate SQLx query cache for mockforge-collab
 		rm /tmp/mockforge-sqlx-prepare.db && \
 		echo "✅ SQLx query cache regenerated successfully"
 
+# Apply registry-server migrations against a Postgres database (closes #17).
+# Usage:
+#   DATABASE_URL=postgres://user:pass@host:5432/db make registry-migrate
+#
+# What this does:
+# 1. Runs every migration in crates/mockforge-registry-server/migrations/
+#    against $DATABASE_URL via sqlx migrate run. Idempotent — already-
+#    applied migrations are skipped via the _sqlx_migrations tracking table.
+# 2. Re-runs sqlx-prepare for the collab crate (which is the one with
+#    SQLX_OFFLINE-cached queries). The registry-server itself uses
+#    runtime-prepared queries so it doesn't need a cache.
+#
+# Requires: sqlx-cli installed (`cargo install sqlx-cli --no-default-features --features postgres`).
+registry-migrate: ## Apply registry-server migrations + regenerate sqlx cache (closes #17)
+	@if [ -z "$$DATABASE_URL" ]; then \
+		echo "❌ DATABASE_URL is required. Example:"; \
+		echo "   DATABASE_URL=postgres://user:pass@host:5432/db make registry-migrate"; \
+		exit 1; \
+	fi
+	@command -v sqlx >/dev/null 2>&1 || { \
+		echo "❌ sqlx-cli not found. Install with: cargo install sqlx-cli --no-default-features --features postgres"; \
+		exit 1; \
+	}
+	@echo "🔄 Applying registry-server migrations against $${DATABASE_URL}..."
+	@cd crates/mockforge-registry-server && sqlx migrate run --database-url "$$DATABASE_URL"
+	@echo "✅ Registry migrations applied"
+	@echo ""
+	@echo "🔄 Regenerating mockforge-collab SQLx cache..."
+	@$(MAKE) sqlx-prepare
+	@echo ""
+	@echo "✅ #17 complete. Restart the registry to pick up the new schema."
+
 # Pre-commit checks (run before committing)
 pre-commit: fmt clippy test audit spellcheck ## Run all pre-commit checks
 

@@ -114,11 +114,11 @@ export function RealityTracePanel({ requestId, className, onNavigate }: RealityT
   const getContinuumTypeColor = (type: string) => {
     switch (type) {
       case 'synthetic':
-        return 'bg-blue-500';
+        return 'bg-info-500';
       case 'blended':
         return 'bg-purple-500';
       case 'live':
-        return 'bg-green-500';
+        return 'bg-success-500';
       default:
         return 'bg-gray-500';
     }
@@ -199,7 +199,7 @@ export function RealityTracePanel({ requestId, className, onNavigate }: RealityT
               </div>
               <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                 <div
-                  className="bg-blue-500 h-full transition-all"
+                  className="bg-info-500 h-full transition-all"
                   style={{ width: `${traceData.data_source_breakdown.recorded_percent}%` }}
                 />
               </div>
@@ -223,7 +223,7 @@ export function RealityTracePanel({ requestId, className, onNavigate }: RealityT
               </div>
               <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                 <div
-                  className="bg-green-500 h-full transition-all"
+                  className="bg-success-500 h-full transition-all"
                   style={{ width: `${traceData.data_source_breakdown.upstream_percent}%` }}
                 />
               </div>

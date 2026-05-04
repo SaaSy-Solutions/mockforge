@@ -1,6 +1,7 @@
 import { logger } from '@/utils/logger';
 import React, { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -32,13 +33,13 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
   const selectedMetric = selectedService ? metrics.find(m => m.service === selectedService) : metrics[0];
   const histogramData = selectedMetric?.histogram || [];
 
-  // Color bars based on latency ranges
+  // Color bars based on latency ranges, reading from brand tokens.
+  const palette = getChartPalette();
   const getBarColor = (range: string) => {
     const numValue = parseInt(range.split('-')[0] || '0');
-    if (numValue < 100) return '#10b981'; // green
-    if (numValue < 500) return '#f59e0b'; // yellow
-    if (numValue < 1000) return '#ef4444'; // red
-    return '#dc2626'; // dark red
+    if (numValue < 100) return palette.success;
+    if (numValue < 500) return palette.warning;
+    return palette.danger;
   };
 
   const chartData = useMemo(() => ({
@@ -118,15 +119,15 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
         <div className="mb-4">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-green-600">{selectedMetric.p50}ms</div>
+              <div className="text-2xl font-bold text-success-600">{selectedMetric.p50}ms</div>
               <div className="text-xs text-muted-foreground">P50 (Median)</div>
             </div>
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-yellow-600">{selectedMetric.p95}ms</div>
+              <div className="text-2xl font-bold text-warning-600">{selectedMetric.p95}ms</div>
               <div className="text-xs text-muted-foreground">P95</div>
             </div>
             <div className="space-y-1">
-              <div className="text-2xl font-bold text-red-600">{selectedMetric.p99}ms</div>
+              <div className="text-2xl font-bold text-danger-600">{selectedMetric.p99}ms</div>
               <div className="text-xs text-muted-foreground">P99</div>
             </div>
           </div>

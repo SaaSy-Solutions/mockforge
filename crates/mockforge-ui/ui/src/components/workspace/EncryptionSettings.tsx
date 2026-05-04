@@ -198,10 +198,10 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'text-red-600 bg-red-50 border-red-200';
+      case 'critical': return 'text-danger-600 bg-danger-50 border-danger-200';
       case 'high': return 'text-orange-600 bg-orange-50 border-orange-200';
-      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'low': return 'text-blue-600 bg-blue-50 border-blue-200';
+      case 'medium': return 'text-warning-600 bg-warning-50 border-warning-200';
+      case 'low': return 'text-info-600 bg-info-50 border-info-200';
       default: return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   };
@@ -221,7 +221,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Shield className="w-6 h-6 text-gray-900 dark:text-gray-100" />
+          <Shield className="w-6 h-6 text-foreground" />
           <div>
             <h2 className="text-xl font-semibold">Encryption Settings</h2>
             <p className="text-sm text-muted-foreground">
@@ -250,9 +250,9 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
           <CardContent>
             <div className="flex items-center gap-2">
               {status.masterKeySet ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-4 h-4 text-success-500" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <AlertTriangle className="w-4 h-4 text-warning-500" />
               )}
               <span className="text-sm">
                 {status.masterKeySet ? 'Configured' : 'Not Set'}
@@ -271,9 +271,9 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
           <CardContent>
             <div className="flex items-center gap-2">
               {status.workspaceKeySet ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-4 h-4 text-success-500" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <AlertTriangle className="w-4 h-4 text-warning-500" />
               )}
               <span className="text-sm">
                 {status.workspaceKeySet ? 'Generated' : 'Not Generated'}
@@ -292,9 +292,9 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
           <CardContent>
             <div className="flex items-center gap-2">
               {config.enabled ? (
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-4 h-4 text-success-500" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <AlertTriangle className="w-4 h-4 text-warning-500" />
               )}
               <span className="text-sm">
                 {config.enabled ? 'Enabled' : 'Disabled'}
@@ -332,10 +332,10 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                   </AlertDescription>
                 </Alert>
               ) : (
-                <Alert className="border-green-200 bg-green-50">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <AlertTitle className="text-green-800">Encryption Enabled</AlertTitle>
-                  <AlertDescription className="text-green-700">
+                <Alert className="border-success-200 bg-success-50">
+                  <CheckCircle className="h-4 w-4 text-success-600" />
+                  <AlertTitle className="text-success-700">Encryption Enabled</AlertTitle>
+                  <AlertDescription className="text-success-700">
                     This workspace is protected with end-to-end encryption.
                     Sensitive data is automatically encrypted.
                   </AlertDescription>
@@ -400,10 +400,10 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
               {securityCheck ? (
                 <div className="space-y-4">
                   {securityCheck.isSecure ? (
-                    <Alert className="border-green-200 bg-green-50">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertTitle className="text-green-800">Security Check Passed</AlertTitle>
-                      <AlertDescription className="text-green-700">
+                    <Alert className="border-success-200 bg-success-50">
+                      <CheckCircle className="h-4 w-4 text-success-600" />
+                      <AlertTitle className="text-success-700">Security Check Passed</AlertTitle>
+                      <AlertDescription className="text-success-700">
                         No security issues found in this workspace.
                       </AlertDescription>
                     </Alert>
@@ -433,7 +433,7 @@ const EncryptionSettings: React.FC<EncryptionSettingsProps> = ({
                       {/* Errors */}
                       {securityCheck.errors && securityCheck.errors.length > 0 && (
                         <div className="space-y-2">
-                          <h4 className="font-medium text-red-800">Errors ({securityCheck.errors.length})</h4>
+                          <h4 className="font-medium text-danger-700">Errors ({securityCheck.errors.length})</h4>
                           <div className="space-y-2">
                             {(securityCheck.errors as unknown as SecurityItem[]).map((error, index: number) => (
                               <div key={index} className={`p-3 border rounded-lg ${getSeverityColor(error.severity)}`}>

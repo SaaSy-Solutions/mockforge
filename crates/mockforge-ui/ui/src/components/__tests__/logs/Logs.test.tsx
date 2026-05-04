@@ -28,7 +28,7 @@ describe('LogEntry', () => {
   it('applies correct status color for 2xx codes', () => {
     const { container } = render(<LogEntry log={mockLog} />);
 
-    const statusElement = container.querySelector('.text-green-600');
+    const statusElement = container.querySelector('.text-success-600');
     expect(statusElement).toBeInTheDocument();
   });
 
@@ -36,7 +36,7 @@ describe('LogEntry', () => {
     const log404 = { ...mockLog, status_code: 404 };
     const { container } = render(<LogEntry log={log404} />);
 
-    const statusElement = container.querySelector('.text-yellow-600');
+    const statusElement = container.querySelector('.text-warning-600');
     expect(statusElement).toBeInTheDocument();
   });
 
@@ -44,14 +44,14 @@ describe('LogEntry', () => {
     const log500 = { ...mockLog, status_code: 500 };
     const { container } = render(<LogEntry log={log500} />);
 
-    const statusElement = container.querySelector('.text-red-600');
+    const statusElement = container.querySelector('.text-danger-600');
     expect(statusElement).toBeInTheDocument();
   });
 
   it('applies correct method color for GET requests', () => {
     const { container } = render(<LogEntry log={mockLog} />);
 
-    const methodElement = container.querySelector('.text-green-700');
+    const methodElement = container.querySelector('.text-success-700');
     expect(methodElement).toBeInTheDocument();
   });
 
@@ -59,7 +59,7 @@ describe('LogEntry', () => {
     const postLog = { ...mockLog, method: 'POST' };
     const { container } = render(<LogEntry log={postLog} />);
 
-    const methodElement = container.querySelector('.text-blue-700');
+    const methodElement = container.querySelector('.text-info-700');
     expect(methodElement).toBeInTheDocument();
   });
 
@@ -67,7 +67,7 @@ describe('LogEntry', () => {
     const deleteLog = { ...mockLog, method: 'DELETE' };
     const { container } = render(<LogEntry log={deleteLog} />);
 
-    const methodElement = container.querySelector('.text-red-700');
+    const methodElement = container.querySelector('.text-danger-700');
     expect(methodElement).toBeInTheDocument();
   });
 

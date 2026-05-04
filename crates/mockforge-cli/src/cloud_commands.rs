@@ -217,6 +217,58 @@ pub enum CloudCommands {
         #[arg(long, default_value = "https://api.mockforge.dev")]
         service_url: String,
     },
+
+    /// Trigger a cloud test run.
+    ///
+    /// Inserts a test_runs row + queues the job; the cloud runner pool
+    /// picks it up and reports back. Exits non-zero on a non-passed
+    /// terminal status when --wait is set, so this fits inside CI
+    /// pipelines without bespoke parsing.
+    ///
+    /// Examples:
+    ///   mockforge cloud test run <suite-id>
+    ///   mockforge cloud test run <suite-id> --wait
+    ///   mockforge cloud test run <suite-id> --wait --git-sha $GITHUB_SHA --git-ref $GITHUB_REF
+    #[command(verbatim_doc_comment)]
+    Test {
+        #[command(subcommand)]
+        test_command: TestCommands,
+    },
+}
+
+#[derive(clap::Subcommand)]
+pub enum TestCommands {
+    /// Trigger a run for a test suite.
+    Run {
+        /// UUID of the test_suites row to run.
+        suite_id: String,
+
+        /// Block until the run reaches a terminal status; exit non-zero
+        /// on failed/cancelled/errored.
+        #[arg(long)]
+        wait: bool,
+
+        /// 'manual' (default), 'ci', 'webhook' — what the UI shows.
+        #[arg(long, default_value = "ci")]
+        triggered_by: String,
+
+        /// Optional CI metadata stamped onto the run row.
+        #[arg(long)]
+        git_ref: Option<String>,
+
+        /// Optional CI metadata stamped onto the run row.
+        #[arg(long)]
+        git_sha: Option<String>,
+
+        /// Maximum seconds to wait when --wait is set. Worker tick is
+        /// ~1s so the default of 600 covers most synthetic + small
+        /// real runs.
+        #[arg(long, default_value = "600")]
+        timeout_secs: u64,
+
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
 }
 
 /// Sync command subcommands
@@ -498,7 +550,137 @@ pub async fn handle_cloud_command(cmd: CloudCommands) -> Result<()> {
             domain,
             service_url,
         } => handle_set_domain(id, domain, service_url).await,
+        CloudCommands::Test { test_command } => handle_test_command(test_command).await,
     }
+}
+
+async fn handle_test_command(cmd: TestCommands) -> Result<()> {
+    match cmd {
+        TestCommands::Run {
+            suite_id,
+            wait,
+            triggered_by,
+            git_ref,
+            git_sha,
+            timeout_secs,
+            service_url,
+        } => {
+            handle_test_run(
+                suite_id,
+                wait,
+                triggered_by,
+                git_ref,
+                git_sha,
+                timeout_secs,
+                service_url,
+            )
+            .await
+        }
+    }
+}
+
+async fn handle_test_run(
+    suite_id: String,
+    wait: bool,
+    triggered_by: String,
+    git_ref: Option<String>,
+    git_sha: Option<String>,
+    timeout_secs: u64,
+    service_url: String,
+) -> Result<()> {
+    let api_key = load_api_key()?;
+    let client = reqwest::Client::new();
+    let trigger_url = format!("{}/api/v1/test-suites/{}/runs", service_url, suite_id);
+    let body = serde_json::json!({
+        "triggered_by": triggered_by,
+        "git_ref": git_ref,
+        "git_sha": git_sha,
+    });
+
+    let resp = client
+        .post(&trigger_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .json(&body)
+        .send()
+        .await
+        .context("trigger request failed")?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        anyhow::bail!("trigger failed: HTTP {} — {}", status, text);
+    }
+
+    let run: serde_json::Value = resp.json().await.context("trigger response was not JSON")?;
+    let run_id = run.get("id").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+    let queued = run.get("status").and_then(|v| v.as_str()).unwrap_or("queued");
+    println!("✅ Run {} {}", run_id, queued);
+
+    if !wait {
+        return Ok(());
+    }
+
+    println!("⏳ Waiting (timeout {}s)…", timeout_secs);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    let get_url = format!("{}/api/v1/test-runs/{}", service_url, run_id);
+    let mut last_status = String::from("queued");
+    loop {
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!("timed out after {}s; last status was {}", timeout_secs, last_status);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let r = client
+            .get(&get_url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .send()
+            .await
+            .context("status poll failed")?;
+        if !r.status().is_success() {
+            let status = r.status();
+            let text = r.text().await.unwrap_or_default();
+            anyhow::bail!("status poll failed: HTTP {} — {}", status, text);
+        }
+        let row: serde_json::Value = r.json().await?;
+        let status = row.get("status").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+        if status != last_status {
+            println!("  → {}", status);
+            last_status = status.clone();
+        }
+        match status.as_str() {
+            "passed" => {
+                let secs = row.get("runner_seconds").and_then(|v| v.as_i64()).unwrap_or(0);
+                println!("✅ Passed in {}s", secs);
+                return Ok(());
+            }
+            "failed" | "cancelled" | "errored" => {
+                anyhow::bail!("Run {}", status);
+            }
+            _ => continue,
+        }
+    }
+}
+
+/// Read the saved cloud token from `~/.mockforge/cloud.json` (or
+/// $MOCKFORGE_API_KEY). Used by the new `cloud test` subcommand.
+/// Mirrors the pattern handle_whoami already uses.
+fn load_api_key() -> Result<String> {
+    if let Ok(k) = std::env::var("MOCKFORGE_API_KEY") {
+        if !k.is_empty() {
+            return Ok(k);
+        }
+    }
+    let config_path = dirs::home_dir()
+        .map(|p| p.join(".mockforge").join("cloud.json"))
+        .unwrap_or_else(|| PathBuf::from(".mockforge/cloud.json"));
+    if !config_path.exists() {
+        anyhow::bail!("Not authenticated — run `mockforge cloud login` first");
+    }
+    let raw = std::fs::read_to_string(&config_path).context("Failed to read cloud.json")?;
+    let cfg: serde_json::Value = serde_json::from_str(&raw).context("cloud.json is malformed")?;
+    cfg.get("api_key")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow::anyhow!("cloud.json missing api_key field"))
 }
 
 /// Handle login command

@@ -34,13 +34,13 @@ export function SyncConfirmationDialog({
   const getChangeIcon = (changeType: string) => {
     switch (changeType.toLowerCase()) {
       case 'created':
-        return <Plus className="h-4 w-4 text-green-500" />;
+        return <Plus className="h-4 w-4 text-success-500" />;
       case 'modified':
-        return <Edit className="h-4 w-4 text-blue-500" />;
+        return <Edit className="h-4 w-4 text-info-500" />;
       case 'deleted':
-        return <Trash2 className="h-4 w-4 text-red-500" />;
+        return <Trash2 className="h-4 w-4 text-danger-500" />;
       default:
-        return <FileText className="h-4 w-4 text-gray-500" />;
+        return <FileText className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -74,7 +74,7 @@ export function SyncConfirmationDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+            <AlertTriangle className="h-5 w-5 text-warning-500" />
             Confirm Directory Sync Changes
           </DialogTitle>
           <DialogDescription>
@@ -86,7 +86,7 @@ export function SyncConfirmationDialog({
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {requiringConfirmation.length > 0 && (
             <div>
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Changes requiring confirmation:</h4>
+              <h4 className="font-medium text-foreground mb-2">Changes requiring confirmation:</h4>
               <div className="space-y-2">
                 {requiringConfirmation.map((change, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-bg-secondary rounded-lg">
@@ -96,11 +96,11 @@ export function SyncConfirmationDialog({
                         <Badge variant={getChangeBadgeVariant(change.change_type)}>
                           {change.change_type}
                         </Badge>
-                        <code className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        <code className="text-sm text-muted-foreground truncate">
                           {change.path}
                         </code>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         {change.description}
                       </p>
                     </div>
@@ -112,7 +112,7 @@ export function SyncConfirmationDialog({
 
           {autoApplied.length > 0 && (
             <div>
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Changes that will be applied automatically:</h4>
+              <h4 className="font-medium text-foreground mb-2">Changes that will be applied automatically:</h4>
               <div className="space-y-2">
                 {autoApplied.map((change, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-bg-tertiary rounded-lg opacity-75">
@@ -122,11 +122,11 @@ export function SyncConfirmationDialog({
                         <Badge variant={getChangeBadgeVariant(change.change_type)}>
                           {change.change_type}
                         </Badge>
-                        <code className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                        <code className="text-sm text-muted-foreground truncate">
                           {change.path}
                         </code>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         {change.description}
                       </p>
                     </div>
@@ -137,14 +137,14 @@ export function SyncConfirmationDialog({
           )}
 
           {changes.length === 0 && (
-            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
+            <div className="text-center py-8 text-muted-foreground">
               No changes detected.
             </div>
           )}
         </div>
 
         {requiringConfirmation.length > 0 && (
-          <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+          <div className="flex items-center gap-2 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg">
             <input
               type="checkbox"
               id="apply-all"
@@ -152,7 +152,7 @@ export function SyncConfirmationDialog({
               onChange={(e) => setApplyAll(e.target.checked)}
               className="rounded border-border"
             />
-            <label htmlFor="apply-all" className="text-sm text-gray-900 dark:text-gray-100">
+            <label htmlFor="apply-all" className="text-sm text-foreground">
               Apply all changes including those requiring confirmation
             </label>
           </div>

@@ -262,15 +262,15 @@ export function BillingPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
+        return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
       case 'trialing':
-        return <Badge className="bg-blue-500"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
+        return <Badge className="bg-info-500"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
       case 'past_due':
-        return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
+        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
       case 'unpaid':
-        return <Badge className="bg-red-500"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
+        return <Badge className="bg-danger-500"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
       case 'incomplete':
-        return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
+        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
       case 'incomplete_expired':
         return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
       case 'canceled':
@@ -296,7 +296,7 @@ export function BillingPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="mx-auto max-w-md text-center py-12 space-y-4">
-          <AlertCircle className="w-8 h-8 text-yellow-600 mx-auto" />
+          <AlertCircle className="w-8 h-8 text-warning-600 mx-auto" />
           <div>
             <h2 className="font-semibold">Failed to load subscription</h2>
             <p className="text-sm text-muted-foreground mt-1">{message}</p>
@@ -317,13 +317,13 @@ export function BillingPage() {
       </div>
 
       {subscription.cancel_at_period_end && subscription.current_period_end && (
-        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+        <Card className="border-warning bg-warning-50 dark:bg-warning-900/20">
           <CardContent className="p-4">
             <div className="flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-warning-600 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-yellow-800 dark:text-yellow-200">Subscription Canceling</h3>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                <h3 className="font-semibold text-warning-700 dark:text-warning-200">Subscription Canceling</h3>
+                <p className="text-sm text-warning-700 dark:text-warning-300">
                   Your subscription will be canceled at the end of the current billing period on{' '}
                   {new Date(subscription.current_period_end).toLocaleDateString()}. You will retain
                   access to your current plan until then.
@@ -594,7 +594,7 @@ export function BillingPage() {
               </div>
               <a
                 href="/usage"
-                className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                className="inline-flex items-center text-sm font-medium text-info-600 hover:text-info-700 dark:text-info-400 dark:hover:text-info-300"
               >
                 View full usage dashboard
                 <ExternalLink className="w-3 h-3 ml-1" />
@@ -619,7 +619,7 @@ export function BillingPage() {
                 </div>
               ) : invoicesError ? (
                 <div className="text-center py-6 space-y-3">
-                  <AlertCircle className="w-8 h-8 mx-auto text-red-500" />
+                  <AlertCircle className="w-8 h-8 mx-auto text-danger-500" />
                   <p className="text-sm text-muted-foreground">Failed to load invoices</p>
                   <Button variant="outline" size="sm" onClick={() => refetchInvoices()}>
                     Retry
@@ -665,7 +665,7 @@ export function BillingPage() {
                                 href={inv.hosted_invoice_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline dark:text-blue-400"
+                                className="text-info-600 hover:underline dark:text-info-400"
                               >
                                 View
                               </a>
@@ -675,7 +675,7 @@ export function BillingPage() {
                                 href={inv.invoice_pdf}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline dark:text-blue-400"
+                                className="text-info-600 hover:underline dark:text-info-400"
                               >
                                 PDF
                               </a>
@@ -704,23 +704,23 @@ export function BillingPage() {
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     1 Project
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     1 Collaborator
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     10K requests/month
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     1GB storage
                   </li>
                   <li className="flex items-center">
-                    <XCircle className="w-4 h-4 mr-2 text-gray-400" />
+                    <XCircle className="w-4 h-4 mr-2 text-muted-foreground" />
                     BYOK only for AI
                   </li>
                 </ul>
@@ -750,27 +750,27 @@ export function BillingPage() {
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     10 Projects
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     5 Collaborators
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     250K requests/month
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     20GB storage
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     100K AI tokens/month
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     Hosted mocks
                   </li>
                 </ul>
@@ -800,27 +800,27 @@ export function BillingPage() {
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     Unlimited Projects
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     20 Collaborators
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     1M requests/month
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     100GB storage
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     1M AI tokens/month
                   </li>
                   <li className="flex items-center">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
                     Hosted mocks
                   </li>
                 </ul>
@@ -917,15 +917,15 @@ function PaymentIssueBanner({ status, onUpdatePaymentMethod, portalPending }: Pa
 
   const toneClasses =
     tone === 'red'
-      ? 'border-red-500 bg-red-50 dark:bg-red-950/20'
-      : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20';
-  const iconClass = tone === 'red' ? 'text-red-600' : 'text-yellow-600';
+      ? 'border-destructive bg-danger-50 dark:bg-danger-900/20'
+      : 'border-warning bg-warning-50 dark:bg-warning-900/20';
+  const iconClass = tone === 'red' ? 'text-danger-600' : 'text-warning-600';
   const headingClass =
     tone === 'red'
-      ? 'text-red-800 dark:text-red-200'
-      : 'text-yellow-800 dark:text-yellow-200';
+      ? 'text-danger-700 dark:text-danger-200'
+      : 'text-warning-700 dark:text-warning-200';
   const bodyClass =
-    tone === 'red' ? 'text-red-700 dark:text-red-300' : 'text-yellow-700 dark:text-yellow-300';
+    tone === 'red' ? 'text-danger-700 dark:text-danger-300' : 'text-warning-700 dark:text-warning-300';
 
   return (
     <Card className={toneClasses}>
@@ -954,11 +954,11 @@ function InvoiceStatusBadge({ status }: { status: string | null }) {
   if (!status) return <Badge>—</Badge>;
   switch (status) {
     case 'paid':
-      return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
+      return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
     case 'open':
-      return <Badge className="bg-yellow-500"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
+      return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
     case 'uncollectible':
-      return <Badge className="bg-red-500"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
+      return <Badge className="bg-danger-500"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
     case 'void':
       return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
     case 'draft':

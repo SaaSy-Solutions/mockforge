@@ -98,13 +98,13 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
   const getStatusIcon = (status: FlowExecutionStep['status']) => {
     switch (status) {
       case 'pending':
-        return <Clock className="h-4 w-4 text-gray-400" />;
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
       case 'running':
-        return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
+        return <Loader2 className="h-4 w-4 text-info-500 animate-spin" />;
       case 'success':
-        return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+        return <CheckCircle2 className="h-4 w-4 text-success-500" />;
       case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <XCircle className="h-4 w-4 text-danger-500" />;
     }
   };
 
@@ -113,11 +113,11 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
       case 'pending':
         return <Badge variant="outline">Pending</Badge>;
       case 'running':
-        return <Badge className="bg-blue-500">Running</Badge>;
+        return <Badge className="bg-info-500">Running</Badge>;
       case 'success':
-        return <Badge className="bg-green-500">Success</Badge>;
+        return <Badge className="bg-success-500">Success</Badge>;
       case 'error':
-        return <Badge className="bg-red-500">Error</Badge>;
+        return <Badge className="bg-danger-500">Error</Badge>;
     }
   };
 
@@ -147,7 +147,7 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
       <CardContent>
         <div className="space-y-2 max-h-96 overflow-y-auto">
           {executionSteps.length === 0 && !isExecuting && (
-            <div className="text-center text-gray-500 py-8">
+            <div className="text-center text-muted-foreground py-8">
               Click Execute to run the flow
             </div>
           )}
@@ -155,7 +155,7 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
             <div
               key={step.stepId}
               className={`p-3 border rounded-lg ${
-                index === currentStepIndex ? 'bg-blue-50 border-blue-300' : ''
+                index === currentStepIndex ? 'bg-info-50 border-info-300' : ''
               }`}
             >
               <div className="flex items-center justify-between mb-2">
@@ -165,17 +165,17 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
                 </div>
                 {getStatusBadge(step.status)}
               </div>
-              <div className="text-xs text-gray-500 mb-1">
+              <div className="text-xs text-muted-foreground mb-1">
                 Type: {step.stepType}
                 {step.duration && ` • Duration: ${step.duration}ms`}
               </div>
               {step.error && (
-                <div className="text-xs text-red-600 mt-1 bg-red-50 p-2 rounded">
+                <div className="text-xs text-danger-600 mt-1 bg-danger-50 p-2 rounded">
                   {step.error}
                 </div>
               )}
               {step.result && (
-                <div className="text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded font-mono">
+                <div className="text-xs text-muted-foreground mt-1 bg-muted p-2 rounded font-mono">
                   {JSON.stringify(step.result, null, 2)}
                 </div>
               )}
@@ -186,4 +186,3 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
     </Card>
   );
 }
-

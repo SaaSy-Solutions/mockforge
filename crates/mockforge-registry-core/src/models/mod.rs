@@ -3,33 +3,47 @@
 pub mod api_token;
 pub mod attestation;
 pub mod audit_log;
+pub mod capture;
+pub mod chaos;
 pub mod cloud_fixture;
 pub mod cloud_service;
 pub mod cloud_workspace;
+pub mod contract_verification;
 pub mod feature_usage;
 pub mod federation;
 pub mod federation_scenario_activation;
+pub mod flow;
 pub mod hosted_mock;
+pub mod incident;
+pub mod learning;
 pub mod login_attempt;
 pub mod mock_environment;
+pub mod notification_channel;
+pub mod observability_query;
 pub mod org_template;
 pub mod organization;
 pub mod osv;
 pub mod plugin;
 pub mod project;
 pub mod review;
+pub mod routing_rule;
 pub mod saml_assertion;
 pub mod scenario;
 pub mod scenario_promotion;
 pub mod scenario_review;
 pub mod scenario_star;
 pub mod settings;
+pub mod showcase;
+pub mod snapshot;
 pub mod sso;
 pub mod subscription;
 pub mod suspicious_activity;
 pub mod template;
 pub mod template_review;
 pub mod template_star;
+pub mod test_execution;
+pub mod test_run;
+pub mod tunnel;
 pub mod user;
 pub mod verification_token;
 pub mod waitlist;
@@ -47,23 +61,36 @@ pub use attestation::{
 #[cfg(feature = "postgres")]
 pub use audit_log::record_audit_event;
 pub use audit_log::AuditEventType;
+pub use capture::{CaptureSession, CloneModel};
+pub use chaos::{ChaosCampaign, ChaosCampaignReport, ResiliencePattern};
 pub use cloud_workspace::Workspace as CloudWorkspace;
+pub use contract_verification::{
+    ContractDiffFinding, ContractDiffRun, FitnessFunction, MonitoredService, VerificationSuite,
+};
 pub use federation::Federation;
 pub use federation_scenario_activation::{
     FederationScenarioActivation, FederationScenarioActivationStatus, PerServiceActivationState,
 };
+pub use flow::{Flow, FlowVersion};
 pub use hosted_mock::{
     protocols_allowed_on_plan, DeploymentStatus, HealthStatus, HostedMock, Protocol,
 };
+pub use incident::{Incident, IncidentEvent};
+pub use learning::{LearningLesson, LearningProgress, LearningRecipe, LearningTrack};
+pub use notification_channel::NotificationChannel;
+pub use observability_query::{ObservabilityDashboard, ObservabilitySavedQuery};
 pub use org_template::OrgTemplate;
 pub use organization::{OrgMember, OrgRole, Organization, Plan};
 pub use osv::{OsvAdvisory, OsvAffected, OsvImportRecord, OsvMatch, OsvPackage, OsvSeverity};
 pub use plugin::{PendingScanJob, Plugin, PluginSecurityScan, PluginVersion};
 pub use review::Review;
+pub use routing_rule::RoutingRule;
 pub use saml_assertion::SAMLAssertionId;
 pub use scenario::Scenario;
 pub use scenario_promotion::{PromotionStatus, ScenarioEnvironmentVersion, ScenarioPromotion};
 pub use settings::{BYOKConfig, OrgAiSettings, OrgSetting};
+pub use showcase::ShowcaseEntry;
+pub use snapshot::Snapshot;
 pub use sso::{SSOConfiguration, SSOSession};
 pub use subscription::{Subscription, SubscriptionStatus, UsageAlert, UsageCounter};
 pub use user::User;
@@ -87,3 +114,6 @@ pub use template::{Template, TemplateCategory, TemplateVersion};
 pub use template_review::TemplateReview;
 #[cfg(feature = "postgres")]
 pub use template_star::TemplateStar;
+pub use test_execution::{TestSchedule, TestSuite};
+pub use test_run::TestRun;
+pub use tunnel::TunnelReservation;

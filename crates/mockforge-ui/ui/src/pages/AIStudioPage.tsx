@@ -36,8 +36,48 @@ import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { apiService, contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { aiStudioApi } from '../services/api/aiStudio';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudAIQuotaBanner } from '../components/ai/CloudAIQuotaBanner';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
+
+/**
+ * Dispatches a chat message to the cloud or local backend depending on
+ * mode, and normalizes the response into the shape this page expects.
+ *
+ * Local: `/__mockforge/ai-studio/chat` returns `{ success, data: { message, intent, data } }`.
+ * Cloud: `/api/v1/ai-studio/chat` returns `{ content, provider, tokens_used, ... }` —
+ *        no intent/data fields. Cloud-mode messages get a synthetic
+ *        `intent: 'cloud_chat'` so existing UI branches don't break.
+ */
+async function dispatchChat(message: string): Promise<{
+  message: string;
+  intent?: string;
+  data?: unknown;
+}> {
+  if (isCloudMode()) {
+    const result = await aiStudioApi.chat({ prompt: message });
+    return { message: result.content, intent: 'cloud_chat' };
+  }
+  const response = await fetch('/__mockforge/ai-studio/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to process chat message');
+  }
+  const result = await response.json();
+  if (!result.success || !result.data) {
+    throw new Error(result.error ?? 'Chat returned no data');
+  }
+  return {
+    message: result.data.message,
+    intent: result.data.intent,
+    data: result.data.data,
+  };
+}
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AIStudioNav } from '../components/ai/AIStudioNav';
 import { ApiCritique } from '../components/ai/ApiCritique';
@@ -169,28 +209,14 @@ export function AIStudioPage() {
     setIsProcessing(true);
 
     try {
-      const response = await fetch('/__mockforge/ai-studio/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process chat message');
-      }
-
-      const result = await response.json();
-      if (result.success && result.data) {
+      const result = await dispatchChat(inputMessage);
+      {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
-          content: result.data.message,
+          content: result.message,
           timestamp: new Date(),
-          intent: result.data.intent,
-          data: result.data.data,
+          intent: result.intent,
+          data: result.data,
         };
         setChatMessages(prev => [...prev, assistantMessage]);
 
@@ -223,6 +249,9 @@ export function AIStudioPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Navigation */}
       <AIStudioNav showQuickActions={activeTab === 'chat'} />
+
+      {/* Cloud-mode AI quota strip — hidden in self-hosted */}
+      <CloudAIQuotaBanner />
 
       {/* Header */}
       <div className="space-y-2">
@@ -261,7 +290,7 @@ export function AIStudioPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-border">
         <nav className="-mb-px flex space-x-8">
           {[
             { id: 'chat' as TabType, label: 'Chat', icon: MessageSquare },
@@ -298,7 +327,7 @@ export function AIStudioPage() {
           {/* Chat Interface */}
           <Card className="p-6">
             <div className="space-y-4">
-              <div className="h-96 overflow-y-auto space-y-4 p-4 bg-gray-50 rounded-lg">
+              <div className="h-96 overflow-y-auto space-y-4 p-4 bg-muted rounded-lg">
                 {chatMessages.length === 0 ? (
                   <div className="text-center text-muted-foreground py-12">
                     <Brain className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -337,7 +366,7 @@ export function AIStudioPage() {
                           if (!spec) return null;
                           const specStr = JSON.stringify(spec, null, 2);
                           return (
-                            <div className="mt-3 pt-3 border-t border-gray-200">
+                            <div className="mt-3 pt-3 border-t border-border">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium">Generated OpenAPI Spec</span>
                                 <div className="flex gap-2">
@@ -394,7 +423,7 @@ export function AIStudioPage() {
                                   </Button>
                                 </div>
                               </div>
-                              <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto max-h-40">
+                              <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-40">
                                 {specStr.substring(0, 500)}
                                 {specStr.length > 500 ? '...' : ''}
                               </pre>
@@ -413,7 +442,7 @@ export function AIStudioPage() {
                   onChange={e => setInputMessage(e.target.value)}
                   onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
                   placeholder="Type your message..."
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={isProcessing}
                 />
                 <Button onClick={handleSendMessage} disabled={isProcessing || !inputMessage.trim()}>
@@ -428,7 +457,7 @@ export function AIStudioPage() {
       {activeTab === 'generate' && (
         <div className="space-y-4">
           {budgetExhausted && (
-            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+            <div className="p-4 rounded-lg bg-danger-50 border border-danger-200 text-danger-700 dark:bg-danger-900/20 dark:border-danger-800 dark:text-danger-300">
               <strong>Budget exhausted.</strong> You have reached or exceeded your AI usage budget limit. Generate and Debug actions are disabled until the budget resets or is increased.
             </div>
           )}
@@ -447,7 +476,7 @@ export function AIStudioPage() {
                   onChange={e => setInputMessage(e.target.value)}
                   onKeyPress={e => e.key === 'Enter' && !budgetExhausted && handleSendMessage()}
                   placeholder="e.g., Create a user API with CRUD operations for managing users"
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={isProcessing || budgetExhausted}
                 />
                 <Button onClick={handleSendMessage} disabled={budgetExhausted || isProcessing || !inputMessage.trim()}>
@@ -481,7 +510,7 @@ export function AIStudioPage() {
               ].map((example, idx) => (
                 <div
                   key={idx}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition-colors"
+                  className="p-4 border border-border rounded-lg hover:border-primary cursor-pointer transition-colors"
                   onClick={() => {
                     setInputMessage(example.prompt);
                     setActiveTab('chat'); // Switch to chat tab to use the prompt
@@ -499,7 +528,7 @@ export function AIStudioPage() {
       {activeTab === 'debug' && (
         <div className="space-y-4">
           {budgetExhausted && (
-            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300">
+            <div className="p-4 rounded-lg bg-danger-50 border border-danger-200 text-danger-700 dark:bg-danger-900/20 dark:border-danger-800 dark:text-danger-300">
               <strong>Budget exhausted.</strong> You have reached or exceeded your AI usage budget limit. Generate and Debug actions are disabled until the budget resets or is increased.
             </div>
           )}
@@ -519,7 +548,7 @@ export function AIStudioPage() {
                   value={inputMessage}
                   onChange={e => setInputMessage(e.target.value)}
                   placeholder="Paste your test failure logs here...&#10;&#10;Example:&#10;GET /api/users/123&#10;Status: 404&#10;Error: User not found"
-                  className="w-full h-48 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                  className="w-full h-48 px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
                   disabled={isProcessing}
                 />
               </div>
@@ -541,33 +570,15 @@ export function AIStudioPage() {
                     setIsProcessing(true);
 
                     try {
-                      const response = await fetch('/__mockforge/ai-studio/chat', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          message: debugMessage,
-                        }),
-                      });
-
-                      if (!response.ok) {
-                        throw new Error('Failed to analyze test failure');
-                      }
-
-                      const result = await response.json();
-                      if (result.success && result.data) {
-                        const assistantMessage: ChatMessage = {
-                          role: 'assistant',
-                          content: result.data.message,
-                          timestamp: new Date(),
-                          intent: result.data.intent,
-                          data: result.data.data,
-                        };
-                        setChatMessages(prev => [...prev, assistantMessage]);
-                      } else {
-                        throw new Error(result.error || 'Unknown error');
-                      }
+                      const result = await dispatchChat(debugMessage);
+                      const assistantMessage: ChatMessage = {
+                        role: 'assistant',
+                        content: result.message,
+                        timestamp: new Date(),
+                        intent: result.intent,
+                        data: result.data,
+                      };
+                      setChatMessages(prev => [...prev, assistantMessage]);
                     } catch (err) {
                       logger.error('Failed to analyze test failure', err);
                       toast.error('Failed to analyze test failure. Please try again.');
@@ -603,7 +614,7 @@ export function AIStudioPage() {
                   {msg.data?.root_cause && (
                     <div>
                       <h4 className="font-medium mb-2">Root Cause</h4>
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="p-3 bg-warning-50 border border-warning-200 rounded-lg">
                         <p className="text-sm">{msg.data.root_cause}</p>
                       </div>
                     </div>
@@ -613,20 +624,20 @@ export function AIStudioPage() {
                       <h4 className="font-medium mb-2">Suggestions</h4>
                       <div className="space-y-2">
                         {msg.data.suggestions.map((suggestion: any, sidx: number) => (
-                          <div key={sidx} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div key={sidx} className="p-3 bg-info-50 border border-info-200 rounded-lg">
                             <div className="font-medium text-sm mb-1">{suggestion.title || `Suggestion ${sidx + 1}`}</div>
                             <p className="text-sm text-muted-foreground mb-2">
                               {suggestion.description || suggestion.action}
                             </p>
                             {suggestion.config_path && (
                               <div className="text-xs text-muted-foreground mb-2">
-                                Config: <code className="bg-white px-1 rounded">{suggestion.config_path}</code>
+                                Config: <code className="bg-card px-1 rounded">{suggestion.config_path}</code>
                               </div>
                             )}
                             {suggestion.patch && (
-                              <div className="mt-3 pt-3 border-t border-blue-300">
+                              <div className="mt-3 pt-3 border-t border-info-300">
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-medium text-blue-900">JSON Patch Available</span>
+                                  <span className="text-xs font-medium text-info-900">JSON Patch Available</span>
                                   <div className="flex gap-2">
                                     <Button
                                       size="sm"
@@ -693,7 +704,7 @@ export function AIStudioPage() {
                                     </Button>
                                   </div>
                                 </div>
-                                <div className="text-xs bg-white p-2 rounded border border-blue-200">
+                                <div className="text-xs bg-card p-2 rounded border border-info-200">
                                   <div className="mb-1">
                                     <span className="font-medium">Operation:</span> {suggestion.patch?.op}
                                   </div>
@@ -724,7 +735,7 @@ export function AIStudioPage() {
                         {msg.data.related_configs.map((config: string, cidx: number) => (
                           <span
                             key={cidx}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm"
+                            className="px-2 py-1 bg-muted text-foreground rounded text-sm"
                           >
                             {config}
                           </span>
@@ -755,7 +766,7 @@ export function AIStudioPage() {
                   value={inputMessage}
                   onChange={e => setInputMessage(e.target.value)}
                   placeholder="e.g., Create a premium customer persona with high spending, active subscription, and priority support"
-                  className="w-full h-32 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full h-32 px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={isProcessing}
                 />
               </div>
@@ -776,34 +787,16 @@ export function AIStudioPage() {
                     setIsProcessing(true);
 
                     try {
-                      const response = await fetch('/__mockforge/ai-studio/chat', {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          message: personaMessage,
-                        }),
-                      });
-
-                      if (!response.ok) {
-                        throw new Error('Failed to generate persona');
-                      }
-
-                      const result = await response.json();
-                      if (result.success && result.data) {
-                        const assistantMessage: ChatMessage = {
-                          role: 'assistant',
-                          content: result.data.message,
-                          timestamp: new Date(),
-                          intent: result.data.intent,
-                          data: result.data.data,
-                        };
-                        setChatMessages(prev => [...prev, assistantMessage]);
-                        toast.success('Persona generated successfully!');
-                      } else {
-                        throw new Error(result.error || 'Unknown error');
-                      }
+                      const result = await dispatchChat(personaMessage);
+                      const assistantMessage: ChatMessage = {
+                        role: 'assistant',
+                        content: result.message,
+                        timestamp: new Date(),
+                        intent: result.intent,
+                        data: result.data,
+                      };
+                      setChatMessages(prev => [...prev, assistantMessage]);
+                      toast.success('Persona generated successfully!');
                     } catch (err) {
                       logger.error('Failed to generate persona', err);
                       toast.error('Failed to generate persona. Please try again.');
@@ -850,7 +843,7 @@ export function AIStudioPage() {
               ].map((example, idx) => (
                 <div
                   key={idx}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-primary cursor-pointer transition-colors"
+                  className="p-4 border border-border rounded-lg hover:border-primary cursor-pointer transition-colors"
                   onClick={() => {
                     setInputMessage(example.description);
                   }}
@@ -882,7 +875,7 @@ export function AIStudioPage() {
                           </span>
                         )}
                         {isFrozen && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded border border-blue-300" title="Frozen artifact (deterministic mode)">
+                          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-info-50 text-info-700 rounded border border-info-300" title="Frozen artifact (deterministic mode)">
                             <Snowflake className="h-3 w-3" />
                             Frozen
                           </span>
@@ -901,7 +894,7 @@ export function AIStudioPage() {
                         {msg.data.persona.id && (
                           <div>
                             <h4 className="font-medium mb-1">ID</h4>
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                            <code className="text-sm bg-muted px-2 py-1 rounded">
                               {msg.data.persona.id}
                             </code>
                           </div>
@@ -909,7 +902,7 @@ export function AIStudioPage() {
                         {msg.data.persona.domain && (
                           <div>
                             <h4 className="font-medium mb-1">Domain</h4>
-                            <span className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                            <span className="text-sm px-2 py-1 bg-info-100 text-info-700 rounded">
                               {msg.data.persona.domain}
                             </span>
                           </div>
@@ -919,8 +912,8 @@ export function AIStudioPage() {
                             <h4 className="font-medium mb-2">Traits</h4>
                             <div className="grid grid-cols-2 gap-2">
                               {Object.entries(msg.data.persona.traits).map(([key, value]) => (
-                                <div key={key} className="p-2 bg-gray-50 rounded">
-                                  <div className="text-xs font-medium text-gray-600">{key}</div>
+                                <div key={key} className="p-2 bg-muted rounded">
+                                  <div className="text-xs font-medium text-muted-foreground">{key}</div>
                                   <div className="text-sm">{String(value)}</div>
                                 </div>
                               ))}
@@ -936,7 +929,7 @@ export function AIStudioPage() {
                         {msg.data.persona.lifecycle_state && (
                           <div>
                             <h4 className="font-medium mb-1">Lifecycle State</h4>
-                            <span className="text-sm px-2 py-1 bg-green-100 text-green-700 rounded">
+                            <span className="text-sm px-2 py-1 bg-success-100 text-success-700 rounded">
                               {msg.data.persona.lifecycle_state}
                             </span>
                           </div>
@@ -1015,7 +1008,7 @@ export function AIStudioPage() {
                     <p className="text-sm text-muted-foreground">Total Captures</p>
                     <p className="text-2xl font-bold">{statsData.statistics.total_captures ?? 0}</p>
                   </div>
-                  <FileText className="w-8 h-8 text-blue-500" />
+                  <FileText className="w-8 h-8 text-info-500" />
                 </div>
               </Card>
               <Card className="p-4">
@@ -1024,7 +1017,7 @@ export function AIStudioPage() {
                     <p className="text-sm text-muted-foreground">Analyzed</p>
                     <p className="text-2xl font-bold">{statsData.statistics.analyzed_captures ?? 0}</p>
                   </div>
-                  <CheckCircle2 className="w-8 h-8 text-green-500" />
+                  <CheckCircle2 className="w-8 h-8 text-success-500" />
                 </div>
               </Card>
               <Card className="p-4">
@@ -1087,7 +1080,7 @@ export function AIStudioPage() {
                 </div>
 
                 {/* Request List */}
-                <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                <div className="border border-border rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
                   {capturesLoading ? (
                     <div className="p-4 text-center text-muted-foreground">Loading...</div>
                   ) : (capturesData?.captures || []).length === 0 ? (
@@ -1097,21 +1090,21 @@ export function AIStudioPage() {
                       <div
                         key={capture.id}
                         onClick={() => setSelectedCapture(capture.id || null)}
-                        className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${selectedCapture === capture.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                        className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${selectedCapture === capture.id ? 'bg-info-50 border-l-4 border-info' : ''
                           }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                              <span className="px-2 py-1 bg-muted text-foreground rounded text-xs font-medium">
                                 {capture.method}
                               </span>
-                              <span className="text-sm font-mono text-gray-900">{capture.path}</span>
+                              <span className="text-sm font-mono text-foreground">{capture.path}</span>
                             </div>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <span>{capture.source}</span>
                               {capture.analyzed && (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Analyzed</span>
+                                <span className="px-2 py-0.5 bg-success-100 text-success-700 rounded text-xs">Analyzed</span>
                               )}
                             </div>
                           </div>
@@ -1197,15 +1190,15 @@ export function AIStudioPage() {
               <Card className="p-6">
                 <div className="space-y-4">
                   {/* Overall Status */}
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                     <div className="flex items-center gap-4">
                       {analysisResult.matches ? (
-                        <CheckCircle2 className="w-6 h-6 text-green-500" />
+                        <CheckCircle2 className="w-6 h-6 text-success-500" />
                       ) : (
-                        <XCircle className="w-6 h-6 text-red-500" />
+                        <XCircle className="w-6 h-6 text-danger-500" />
                       )}
                       <div>
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-semibold text-foreground">
                           {analysisResult.matches ? 'Contract Matches' : 'Contract Mismatches Detected'}
                         </p>
                         <p className="text-sm text-muted-foreground">
@@ -1213,9 +1206,9 @@ export function AIStudioPage() {
                         </p>
                       </div>
                     </div>
-                    <div className={`inline-flex items-center px-2 py-1 rounded-full ${analysisResult.confidence >= 0.8 ? 'bg-green-100' : analysisResult.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full ${analysisResult.confidence >= 0.8 ? 'bg-success-100' : analysisResult.confidence >= 0.5 ? 'bg-warning-100' : 'bg-danger-100'
                       }`}>
-                      <span className={`text-sm font-medium ${analysisResult.confidence >= 0.8 ? 'text-green-600' : analysisResult.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                      <span className={`text-sm font-medium ${analysisResult.confidence >= 0.8 ? 'text-success-600' : analysisResult.confidence >= 0.5 ? 'text-warning-600' : 'text-danger-600'
                         }`}>
                         {Math.round(analysisResult.confidence * 100)}%
                       </span>
@@ -1229,28 +1222,28 @@ export function AIStudioPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse">
                           <thead>
-                            <tr className="border-b border-gray-200">
-                              <th className="text-left p-3 font-semibold text-sm text-gray-700">Path</th>
-                              <th className="text-left p-3 font-semibold text-sm text-gray-700">Type</th>
-                              <th className="text-left p-3 font-semibold text-sm text-gray-700">Severity</th>
-                              <th className="text-left p-3 font-semibold text-sm text-gray-700">Description</th>
+                            <tr className="border-b border-border">
+                              <th className="text-left p-3 font-semibold text-sm text-foreground">Path</th>
+                              <th className="text-left p-3 font-semibold text-sm text-foreground">Type</th>
+                              <th className="text-left p-3 font-semibold text-sm text-foreground">Severity</th>
+                              <th className="text-left p-3 font-semibold text-sm text-foreground">Description</th>
                             </tr>
                           </thead>
                           <tbody>
                             {analysisResult.mismatches.map((mismatch, idx) => (
-                              <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>
-                                <td className="p-3 text-sm text-gray-600">{mismatch.mismatch_type}</td>
+                              <tr key={idx} className="border-b border-gray-100 hover:bg-muted">
+                                <td className="p-3 text-sm font-mono text-foreground">{mismatch.path}</td>
+                                <td className="p-3 text-sm text-muted-foreground">{mismatch.mismatch_type}</td>
                                 <td className="p-3">
-                                  <span className={`px-2 py-1 rounded text-xs font-medium ${mismatch.severity === 'critical' ? 'bg-red-100 text-red-800' :
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${mismatch.severity === 'critical' ? 'bg-danger-100 text-danger-700' :
                                       mismatch.severity === 'high' ? 'bg-orange-100 text-orange-800' :
-                                        mismatch.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                          'bg-blue-100 text-blue-800'
+                                        mismatch.severity === 'medium' ? 'bg-warning-100 text-warning-700' :
+                                          'bg-info-100 text-info-700'
                                     }`}>
                                     {(mismatch.severity ?? 'unknown').toUpperCase()}
                                   </span>
                                 </td>
-                                <td className="p-3 text-sm text-gray-700">{mismatch.description}</td>
+                                <td className="p-3 text-sm text-foreground">{mismatch.description}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1265,20 +1258,20 @@ export function AIStudioPage() {
                       <h3 className="text-lg font-semibold mb-3">AI Recommendations</h3>
                       <div className="space-y-3">
                         {analysisResult.recommendations.map((rec, idx) => (
-                          <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-white">
+                          <div key={idx} className="border border-border rounded-lg p-4 bg-card">
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1">
-                                <p className="text-sm text-gray-900">{rec.recommendation}</p>
+                                <p className="text-sm text-foreground">{rec.recommendation}</p>
                                 {rec.suggested_fix && (
-                                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                                    <p className="text-xs font-semibold text-blue-900 mb-1">Suggested Fix:</p>
-                                    <p className="text-xs text-blue-800">{rec.suggested_fix}</p>
+                                  <div className="mt-2 p-2 bg-info-50 border border-info-200 rounded">
+                                    <p className="text-xs font-semibold text-info-900 mb-1">Suggested Fix:</p>
+                                    <p className="text-xs text-info-700">{rec.suggested_fix}</p>
                                   </div>
                                 )}
                               </div>
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${rec.confidence >= 0.8 ? 'bg-green-100' : rec.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${rec.confidence >= 0.8 ? 'bg-success-100' : rec.confidence >= 0.5 ? 'bg-warning-100' : 'bg-danger-100'
                                 }`}>
-                                <span className={`text-sm font-medium ${rec.confidence >= 0.8 ? 'text-green-600' : rec.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                                <span className={`text-sm font-medium ${rec.confidence >= 0.8 ? 'text-success-600' : rec.confidence >= 0.5 ? 'text-warning-600' : 'text-danger-600'
                                   }`}>
                                   {Math.round(rec.confidence * 100)}%
                                 </span>
@@ -1296,25 +1289,25 @@ export function AIStudioPage() {
                       <h3 className="text-lg font-semibold mb-3">Correction Proposals</h3>
                       <div className="space-y-3">
                         {analysisResult.corrections.map((correction, idx) => (
-                          <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-white">
+                          <div key={idx} className="border border-border rounded-lg p-4 bg-card">
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-900 mb-1">{correction.description}</p>
-                                <p className="text-xs text-gray-600 font-mono mb-2">Path: {correction.path}</p>
+                                <p className="text-sm font-semibold text-foreground mb-1">{correction.description}</p>
+                                <p className="text-xs text-muted-foreground font-mono mb-2">Path: {correction.path}</p>
                                 <div className="flex items-center gap-2">
-                                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
+                                  <span className="px-2 py-1 bg-muted text-foreground rounded text-xs">
                                     {correction.operation}
                                   </span>
                                   {correction.value && (
-                                    <div className="text-xs text-gray-600">
-                                      Value: <code className="bg-gray-100 px-1 rounded">{JSON.stringify(correction.value)}</code>
+                                    <div className="text-xs text-muted-foreground">
+                                      Value: <code className="bg-muted px-1 rounded">{JSON.stringify(correction.value)}</code>
                                     </div>
                                   )}
                                 </div>
                               </div>
-                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${correction.confidence >= 0.8 ? 'bg-green-100' : correction.confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100'
+                              <div className={`inline-flex items-center px-2 py-1 rounded-full ${correction.confidence >= 0.8 ? 'bg-success-100' : correction.confidence >= 0.5 ? 'bg-warning-100' : 'bg-danger-100'
                                 }`}>
-                                <span className={`text-sm font-medium ${correction.confidence >= 0.8 ? 'text-green-600' : correction.confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600'
+                                <span className={`text-sm font-medium ${correction.confidence >= 0.8 ? 'text-success-600' : correction.confidence >= 0.5 ? 'text-warning-600' : 'text-danger-600'
                                   }`}>
                                   {Math.round(correction.confidence * 100)}%
                                 </span>
@@ -1433,7 +1426,7 @@ export function AIStudioPage() {
                           ? (stats.tokens_used / usageStats.tokens_used) * 100
                           : 0;
                         return (
-                          <div key={feature} className="p-4 border border-gray-200 rounded-lg">
+                          <div key={feature} className="p-4 border border-border rounded-lg">
                             <div className="flex items-center justify-between mb-2">
                               <div>
                                 <h4 className="font-medium">{featureName}</h4>
@@ -1455,7 +1448,7 @@ export function AIStudioPage() {
                               </div>
                               <div className="w-full bg-gray-200 rounded-full h-2">
                                 <div
-                                  className="bg-blue-500 h-2 rounded-full transition-all"
+                                  className="bg-info-500 h-2 rounded-full transition-all"
                                   style={{ width: `${percentage}%` }}
                                 />
                               </div>

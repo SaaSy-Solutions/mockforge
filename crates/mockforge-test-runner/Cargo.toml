@@ -1,0 +1,54 @@
+[package]
+name = "mockforge-test-runner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Cloud worker that consumes test_runs from a Redis queue and dispatches per-kind executors"
+keywords = ["mock", "testing", "worker", "cloud"]
+categories = ["development-tools::testing"]
+publish = false
+
+[dependencies]
+# Async + tokio
+tokio = { workspace = true, features = ["full"] }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Serde
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Errors
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# IDs + time
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true }
+
+# HTTP for callbacks to registry (mTLS-secured POSTs)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# YAML parser used by ContractExecutor when an OpenAPI spec is served as YAML.
+serde_yaml = "0.9"
+
+# Redis queue (matches the registry-server's choice).
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+
+# tracing-subscriber is only used by the binary entry point; pulling it
+# into normal deps so the binary builds without juggling features.
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bin]]
+name = "mockforge-test-runner"
+path = "src/bin/runner.rs"
+
+[lints.rust]
+unsafe_code = "deny"
