@@ -1,9 +1,7 @@
 name: Fuzz Testing
 
+# Cron disabled — runner queue contention; manual workflow_dispatch still works.
 on:
-  schedule:
-    # Run fuzz tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       duration:
