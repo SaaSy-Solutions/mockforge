@@ -185,44 +185,133 @@ async fn run_real_contract_diff(
         )
         .await?;
 
-    // Emit one finding per endpoint at low severity ("declared"). A real
-    // ai_contract_diff pipeline would compare these against captured
-    // traffic and elevate severity for actual drift; for now this
-    // gives the UI a real list to render.
-    let mut next_seq: u32 = 3;
-    for (i, (method, path)) in endpoints.iter().take(200).enumerate() {
+    // Pull recent traffic so we can compare declared vs actually-hit
+    // endpoints. Empty/error → executor still emits the declared
+    // findings without drift markers.
+    let workspace_id = job
+        .payload
+        .get("workspace_id")
+        .and_then(|v| v.as_str())
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+    let hits = match workspace_id {
+        Some(wid) => callbacks.fetch_workspace_endpoint_hits(wid).await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let hits_by_endpoint: std::collections::HashMap<(String, String), i64> = hits
+        .iter()
+        .map(|h| ((h.method.to_uppercase(), h.path.clone()), h.hits))
+        .collect();
+    let declared_set: std::collections::HashSet<(String, String)> =
+        endpoints.iter().cloned().collect();
+
+    callbacks
+        .run_event(
+            job.run_id,
+            3,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!(
+                    "Traffic: {} unique endpoints hit in last 24h",
+                    hits_by_endpoint.len()
+                ),
+                "traffic_endpoint_count": hits_by_endpoint.len(),
+            }),
+        )
+        .await?;
+
+    let mut next_seq: u32 = 4;
+    let mut declared_count = 0u32;
+    let mut undeclared_count = 0u32;
+    let mut unused_count = 0u32;
+
+    // Walk the spec endpoints and emit drift severity based on traffic.
+    for (method, path) in &endpoints {
+        let hit_count = hits_by_endpoint.get(&(method.clone(), path.clone())).copied();
+        let (severity, description) = match hit_count {
+            Some(n) => ("declared", format!("Endpoint declared in spec, {n} hits in last 24h")),
+            None if hits_by_endpoint.is_empty() => {
+                ("declared", "Endpoint declared in spec; no traffic data available".to_string())
+            }
+            None => (
+                "non_breaking",
+                "Endpoint declared in spec but never hit in last 24h (potentially unused)"
+                    .to_string(),
+            ),
+        };
+        if hit_count.is_some() || hits_by_endpoint.is_empty() {
+            declared_count += 1;
+        } else {
+            unused_count += 1;
+        }
         callbacks
             .run_event(
                 job.run_id,
                 next_seq,
                 "diff_finding",
                 serde_json::json!({
-                    "index": i,
-                    "severity": "declared",
+                    "severity": severity,
                     "endpoint": format!("{method} {path}"),
-                    "description": "Endpoint declared in spec",
+                    "description": description,
+                    "hits_24h": hit_count.unwrap_or(0),
                 }),
             )
             .await?;
         next_seq += 1;
     }
 
+    // Walk the traffic for endpoints NOT in the spec — these are
+    // breaking-style drift findings (clients hit something the spec
+    // doesn't declare).
+    for ((method, path), hits) in &hits_by_endpoint {
+        if !declared_set.contains(&(method.clone(), path.clone())) {
+            undeclared_count += 1;
+            callbacks
+                .run_event(
+                    job.run_id,
+                    next_seq,
+                    "diff_finding",
+                    serde_json::json!({
+                        "severity": "breaking",
+                        "endpoint": format!("{method} {path}"),
+                        "description": format!(
+                            "Endpoint hit {hits} times in last 24h but not declared in spec — drift"
+                        ),
+                        "hits_24h": hits,
+                    }),
+                )
+                .await?;
+            next_seq += 1;
+        }
+    }
+
     let elapsed = started.elapsed();
     let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    // Pass when the spec covers everything the workspace has been
+    // serving. Failed when undeclared traffic shows up — that's
+    // breaking drift the operator needs to address.
+    let status = if undeclared_count == 0 {
+        JobStatus::Passed
+    } else {
+        JobStatus::Failed
+    };
 
     Ok(JobOutcome {
-        status: JobStatus::Passed,
+        status,
         runner_seconds: secs,
         summary: Some(serde_json::json!({
-            "executor_phase": "real_fetch",
+            "executor_phase": "real_diff",
             "tracking_task": 8,
             "kind": "contract_diff",
             "service_name": service_name,
             "spec_url": spec_url,
             "endpoint_count": endpoints.len(),
-            "findings_count": endpoints.len().min(200),
+            "traffic_endpoint_count": hits_by_endpoint.len(),
+            "declared_count": declared_count,
+            "unused_count": unused_count,
+            "undeclared_count": undeclared_count,
             "wall_ms": elapsed.as_millis() as u64,
-            "note": "AI-assisted drift scoring requires mockforge-ai-contract-diff (not yet integrated)",
+            "note": "AI-assisted scoring (param/schema/response drift) is the follow-up via mockforge-ai-contract-diff",
         })),
     })
 }

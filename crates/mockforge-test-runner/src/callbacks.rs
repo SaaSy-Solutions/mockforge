@@ -115,6 +115,32 @@ impl RegistryCallbacks {
         let rows: Vec<CaptureExchange> = resp.json().await?;
         Ok(rows)
     }
+
+    /// Pull endpoint-hit counts for a workspace from recent traffic
+    /// (last 24h). Used by the contract diff executor to compare
+    /// declared spec endpoints against what's actually being hit.
+    pub async fn fetch_workspace_endpoint_hits(
+        &self,
+        workspace_id: Uuid,
+    ) -> Result<Vec<EndpointHit>> {
+        let url = format!(
+            "{}/api/v1/internal/workspaces/{workspace_id}/endpoint-hits",
+            self.base_url.trim_end_matches('/'),
+        );
+        let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
+        let resp = resp.error_for_status()?;
+        let rows: Vec<EndpointHit> = resp.json().await?;
+        Ok(rows)
+    }
+}
+
+/// (method, path, hits) tuple from the workspace endpoint-hits endpoint.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct EndpointHit {
+    pub method: String,
+    pub path: String,
+    pub hits: i64,
 }
 
 #[derive(Serialize)]

@@ -308,6 +308,48 @@ pub struct CaptureExchangeRow {
     pub occurred_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// One (method, path) tuple observed in the workspace's recent
+/// runtime_captures, with hit count.
+#[allow(missing_docs)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct WorkspaceEndpointHit {
+    pub method: String,
+    pub path: String,
+    pub hits: i64,
+}
+
+/// `GET /api/v1/internal/workspaces/{id}/endpoint-hits`
+///
+/// Internal-only — the contract diff executor calls this to compare
+/// actual traffic against the declared OpenAPI spec. Returns each
+/// (method, path) combo seen in the workspace's recent captures, with
+/// hit count, ordered by hits desc.
+pub async fn get_workspace_endpoint_hits(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<WorkspaceEndpointHit>>> {
+    require_internal_auth(&headers)?;
+    let rows = sqlx::query_as::<_, WorkspaceEndpointHit>(
+        r#"
+        SELECT rc.method,
+               rc.path,
+               COUNT(*) AS hits
+          FROM runtime_captures rc
+         WHERE rc.workspace_id = $1
+           AND rc.occurred_at >= NOW() - INTERVAL '24 hours'
+         GROUP BY rc.method, rc.path
+         ORDER BY hits DESC
+         LIMIT 500
+        "#,
+    )
+    .bind(workspace_id)
+    .fetch_all(state.db.pool())
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(Json(rows))
+}
+
 /// `GET /api/v1/internal/capture-sessions/{id}/exchanges`
 ///
 /// Internal-only — the replay executor calls this to fetch the

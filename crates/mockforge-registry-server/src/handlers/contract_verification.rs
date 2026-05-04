@@ -249,6 +249,7 @@ pub async fn trigger_diff_run(
                 "base_url": svc.base_url,
                 "openapi_spec_url": svc.openapi_spec_url,
                 "traffic_source": svc.traffic_source,
+                "workspace_id": svc.workspace_id,
             }),
         },
     )
