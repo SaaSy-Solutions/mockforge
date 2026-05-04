@@ -114,6 +114,16 @@ interface SxObject {
   [key: string]: unknown;
 }
 
+// MUI: numbers on spacing/margin/padding/gap props are multiplied by the
+// spacing unit (8px). Numbers on sizing/positioning props are raw px.
+// Conflating these turned `<Tab sx={{ minHeight: 48 }}>` into a 384-px
+// tall button on the Plugin Registry tabs.
+function sizing(v: SxValue): string | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v === 'number') return `${v}px`;
+  return v;
+}
+
 function sxToStyle(sx: SxObject | undefined | null): React.CSSProperties | undefined {
   if (!sx) return undefined;
   const s: React.CSSProperties = {};
@@ -121,7 +131,12 @@ function sxToStyle(sx: SxObject | undefined | null): React.CSSProperties | undef
     if (v === undefined) return;
     (s as Record<string, string | undefined>)[key as string] = spacing(v);
   };
+  const setSize = (key: keyof React.CSSProperties, v: SxValue) => {
+    if (v === undefined) return;
+    (s as Record<string, string | undefined>)[key as string] = sizing(v);
+  };
 
+  // Spacing scale (number * 8px)
   setSpacing('padding', sx.p);
   setSpacing('paddingTop', sx.pt ?? sx.py);
   setSpacing('paddingRight', sx.pr ?? sx.px);
@@ -132,23 +147,24 @@ function sxToStyle(sx: SxObject | undefined | null): React.CSSProperties | undef
   setSpacing('marginRight', sx.mr ?? sx.mx);
   setSpacing('marginBottom', sx.mb ?? sx.my);
   setSpacing('marginLeft', sx.ml ?? sx.mx);
-  setSpacing('width', sx.width);
-  setSpacing('minWidth', sx.minWidth);
-  setSpacing('maxWidth', sx.maxWidth);
-  setSpacing('height', sx.height);
-  setSpacing('minHeight', sx.minHeight);
-  setSpacing('maxHeight', sx.maxHeight);
   setSpacing('gap', sx.gap);
   setSpacing('rowGap', sx.rowGap);
   setSpacing('columnGap', sx.columnGap);
-  setSpacing('top', sx.top);
-  setSpacing('right', sx.right);
-  setSpacing('bottom', sx.bottom);
-  setSpacing('left', sx.left);
-  setSpacing('fontSize', sx.fontSize);
-  setSpacing('lineHeight', sx.lineHeight);
-  setSpacing('letterSpacing', sx.letterSpacing);
-  setSpacing('borderRadius', sx.borderRadius);
+  // Sizing / positioning (number is raw px)
+  setSize('width', sx.width);
+  setSize('minWidth', sx.minWidth);
+  setSize('maxWidth', sx.maxWidth);
+  setSize('height', sx.height);
+  setSize('minHeight', sx.minHeight);
+  setSize('maxHeight', sx.maxHeight);
+  setSize('top', sx.top);
+  setSize('right', sx.right);
+  setSize('bottom', sx.bottom);
+  setSize('left', sx.left);
+  setSize('fontSize', sx.fontSize);
+  setSize('lineHeight', sx.lineHeight);
+  setSize('letterSpacing', sx.letterSpacing);
+  setSize('borderRadius', sx.borderRadius);
 
   if (sx.display) s.display = sx.display;
   if (sx.flexDirection) s.flexDirection = sx.flexDirection as React.CSSProperties['flexDirection'];
@@ -158,7 +174,7 @@ function sxToStyle(sx: SxObject | undefined | null): React.CSSProperties | undef
   if (sx.flex !== undefined) s.flex = sx.flex;
   if (sx.flexGrow !== undefined) s.flexGrow = sx.flexGrow;
   if (sx.flexShrink !== undefined) s.flexShrink = sx.flexShrink;
-  if (sx.flexBasis !== undefined) s.flexBasis = spacing(sx.flexBasis);
+  if (sx.flexBasis !== undefined) s.flexBasis = sizing(sx.flexBasis);
   if (sx.color) s.color = colorVal(sx.color);
   if (sx.bgcolor) s.backgroundColor = colorVal(sx.bgcolor);
   if (sx.backgroundColor) s.backgroundColor = colorVal(sx.backgroundColor);
