@@ -38,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { apiService, contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
 import { aiStudioApi } from '../services/api/aiStudio';
 import { isCloudMode } from '../utils/cloudMode';
+import { CloudAIQuotaBanner } from '../components/ai/CloudAIQuotaBanner';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
 
@@ -248,6 +249,9 @@ export function AIStudioPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Navigation */}
       <AIStudioNav showQuickActions={activeTab === 'chat'} />
+
+      {/* Cloud-mode AI quota strip — hidden in self-hosted */}
+      <CloudAIQuotaBanner />
 
       {/* Header */}
       <div className="space-y-2">
