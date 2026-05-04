@@ -28,6 +28,34 @@ impl ChaosExecutor {
         let raw = payload.get("synthetic_fault_ms").and_then(|v| v.as_u64()).unwrap_or(150);
         raw.min(5000)
     }
+
+    /// Pull the user's declared faults out of campaign.config so the
+    /// executor can iterate the real list. Recognized shape:
+    /// `config.faults = [{ kind, duration_ms?, name? }, ...]`.
+    /// Returns (kind, duration_ms) tuples, capped at 50 entries.
+    fn extract_real_faults(payload: &serde_json::Value) -> Vec<(String, u64)> {
+        let arr = payload.get("config").and_then(|c| c.get("faults")).and_then(|v| v.as_array());
+        let Some(arr) = arr else {
+            return Vec::new();
+        };
+        arr.iter()
+            .take(50)
+            .map(|f| {
+                let kind = f.get("kind").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                let dur = f.get("duration_ms").and_then(|v| v.as_u64()).unwrap_or(150).min(5000);
+                (kind, dur)
+            })
+            .collect()
+    }
+
+    /// Read max_duration_ms from safety_config (caller sets this so a
+    /// runaway fault list can't pin the worker forever).
+    fn safety_max_duration_ms(payload: &serde_json::Value) -> Option<u64> {
+        payload
+            .get("safety_config")
+            .and_then(|s| s.get("max_duration_ms"))
+            .and_then(|v| v.as_u64())
+    }
 }
 
 #[async_trait]
@@ -40,8 +68,10 @@ impl Executor for ChaosExecutor {
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
 
-        let faults = Self::synthetic_fault_count(&job.payload);
-        let fault_ms = Self::synthetic_fault_ms(&job.payload);
+        let real_faults = Self::extract_real_faults(&job.payload);
+        let using_real_config = !real_faults.is_empty();
+        let synth_fault_count = Self::synthetic_fault_count(&job.payload);
+        let synth_fault_ms = Self::synthetic_fault_ms(&job.payload);
         let target_kind =
             job.payload.get("target_kind").and_then(|v| v.as_str()).unwrap_or("hosted_mock");
         let target_ref = job
@@ -49,6 +79,13 @@ impl Executor for ChaosExecutor {
             .get("target_ref")
             .and_then(|v| v.as_str())
             .unwrap_or("(unspecified)");
+        let safety_cap = Self::safety_max_duration_ms(&job.payload);
+
+        let fault_count = if using_real_config {
+            real_faults.len() as u32
+        } else {
+            synth_fault_count
+        };
 
         callbacks
             .run_event(
@@ -58,17 +95,41 @@ impl Executor for ChaosExecutor {
                 serde_json::json!({
                     "level": "info",
                     "message": format!(
-                        "Synthetic chaos campaign: target_kind='{}', target_ref='{}', faults={}, fault_ms={}",
-                        target_kind, target_ref, faults, fault_ms,
+                        "{}: target_kind='{}', target_ref='{}', faults={}",
+                        if using_real_config { "Chaos campaign (config-driven)" } else { "Synthetic chaos campaign" },
+                        target_kind, target_ref, fault_count,
                     ),
-                    "synthetic": true,
+                    "synthetic": !using_real_config,
                     "tracking_task": 7,
                 }),
             )
             .await?;
 
         let mut next_seq: u32 = 2;
-        for i in 1..=faults {
+        let mut aborted = false;
+        let mut abort_reason: Option<String> = None;
+        for i in 1..=fault_count {
+            // Safety: respect max_duration_ms from safety_config.
+            if let Some(max_ms) = safety_cap {
+                let elapsed_ms = started.elapsed().as_millis() as u64;
+                if elapsed_ms >= max_ms {
+                    aborted = true;
+                    abort_reason = Some(format!(
+                        "safety_config.max_duration_ms ({}ms) reached after {} faults",
+                        max_ms,
+                        i - 1
+                    ));
+                    break;
+                }
+            }
+            let (fault_kind, fault_ms) = if using_real_config {
+                real_faults
+                    .get((i - 1) as usize)
+                    .cloned()
+                    .unwrap_or_else(|| ("unknown".into(), synth_fault_ms))
+            } else {
+                ("synthetic-latency".into(), synth_fault_ms)
+            };
             callbacks
                 .run_event(
                     job.run_id,
@@ -76,7 +137,7 @@ impl Executor for ChaosExecutor {
                     "fault_injected",
                     serde_json::json!({
                         "fault_index": i,
-                        "fault_kind": "synthetic-latency",
+                        "fault_kind": fault_kind,
                         "duration_ms": fault_ms,
                     }),
                 )
@@ -88,7 +149,7 @@ impl Executor for ChaosExecutor {
                     job.run_id,
                     next_seq,
                     "fault_recovered",
-                    serde_json::json!({ "fault_index": i }),
+                    serde_json::json!({ "fault_index": i, "fault_kind": fault_kind }),
                 )
                 .await?;
             next_seq += 1;
@@ -96,16 +157,23 @@ impl Executor for ChaosExecutor {
 
         let elapsed = started.elapsed();
         let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+        let status = if aborted {
+            JobStatus::Failed
+        } else {
+            JobStatus::Passed
+        };
 
         Ok(JobOutcome {
-            status: JobStatus::Passed,
+            status,
             runner_seconds: secs,
             summary: Some(serde_json::json!({
-                "executor_phase": "synthetic",
+                "executor_phase": if using_real_config { "config_driven" } else { "synthetic" },
                 "tracking_task": 7,
                 "target_kind": target_kind,
                 "target_ref": target_ref,
-                "faults_injected": faults,
+                "fault_count": fault_count,
+                "aborted": aborted,
+                "abort_reason": abort_reason,
                 "wall_ms": elapsed.as_millis() as u64,
             })),
         })

@@ -202,6 +202,8 @@ pub async fn trigger_run(
     .map_err(ApiError::Database)?;
 
     // Push onto the queue so the runner's ChaosExecutor picks it up.
+    // Includes the full campaign config + safety config so the executor
+    // can iterate the user's declared faults instead of synthesizing.
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
         crate::run_queue::EnqueuedJob {
@@ -212,6 +214,8 @@ pub async fn trigger_run(
             payload: serde_json::json!({
                 "target_kind": campaign.target_kind,
                 "target_ref": campaign.target_ref,
+                "config": campaign.config,
+                "safety_config": campaign.safety_config,
             }),
         },
     )
