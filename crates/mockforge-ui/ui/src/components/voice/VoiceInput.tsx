@@ -342,7 +342,7 @@ export function VoiceInput({ onCommandProcessed, className }: VoiceInputProps) {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+              <div className="flex items-center gap-2 text-success-600 dark:text-success-400">
                 <CheckCircle2 className="h-5 w-5" />
                 <span className="font-medium">Command processed successfully</span>
               </div>

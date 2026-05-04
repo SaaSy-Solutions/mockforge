@@ -15,11 +15,11 @@ export interface PipelineExecutionsProps {
 }
 
 const statusColors = {
-  started: 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200',
-  running: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200',
-  completed: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
-  failed: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200',
-  cancelled: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
+  started: 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300',
+  running: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300',
+  completed: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300',
+  failed: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300',
+  cancelled: 'bg-muted text-foreground',
 };
 
 const statusIcons = {
@@ -39,7 +39,7 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
       </div>
     );
   }
@@ -47,7 +47,7 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
   if (error) {
     return (
       <Card className="p-6">
-        <div className="text-red-600 dark:text-red-400">
+        <div className="text-danger-600 dark:text-danger-400">
           Error loading executions: {error.message}
         </div>
       </Card>
@@ -60,19 +60,19 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
         {onBack && (
           <button
             onClick={onBack}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-3xl font-bold text-foreground">
           Pipeline Executions
         </h1>
       </div>
 
       {!executions || executions.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-gray-600 dark:text-gray-400">No executions found</p>
+          <p className="text-muted-foreground">No executions found</p>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -89,12 +89,12 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
                         <StatusIcon className="h-3 w-3" />
                         {execution.status}
                       </span>
-                      <span className="text-xs text-gray-600 dark:text-gray-400 font-mono">
+                      <span className="text-xs text-muted-foreground font-mono">
                         {execution.id}
                       </span>
                     </div>
 
-                    <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="space-y-1 text-sm text-muted-foreground">
                       <div>
                         <strong>Started:</strong>{' '}
                         {new Date(execution.started_at).toLocaleString()}
@@ -106,7 +106,7 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
                         </div>
                       )}
                       {execution.error_message && (
-                        <div className="text-red-600 dark:text-red-400">
+                        <div className="text-danger-600 dark:text-danger-400">
                           <strong>Error:</strong> {execution.error_message}
                         </div>
                       )}
@@ -115,10 +115,10 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
                     {execution.trigger_event && (
                       <div className="mt-3">
                         <details className="text-sm">
-                          <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                             Trigger Event
                           </summary>
-                          <pre className="mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded overflow-x-auto">
+                          <pre className="mt-2 p-3 bg-muted rounded overflow-x-auto">
                             {JSON.stringify(execution.trigger_event, null, 2)}
                           </pre>
                         </details>

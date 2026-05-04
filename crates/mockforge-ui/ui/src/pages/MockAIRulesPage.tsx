@@ -157,14 +157,14 @@ export function MockAIRulesPage() {
   const getRuleTypeColor = (ruleType: string) => {
     switch (ruleType.toLowerCase()) {
       case 'consistency':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
       case 'validation':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300';
       case 'pagination':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
       case 'statetransition':
       case 'state_transition':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+        return 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300';
       case 'crud':
         return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
       default:
@@ -205,8 +205,8 @@ export function MockAIRulesPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600 dark:text-gray-400">Loading rules...</p>
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Loading rules...</p>
         </div>
       </div>
     );
@@ -226,7 +226,7 @@ export function MockAIRulesPage() {
           {/* Search */}
           <div className="md:col-span-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
                 value={searchQuery}
@@ -265,7 +265,7 @@ export function MockAIRulesPage() {
                 onChange={(e) => setMinConfidence(parseFloat(e.target.value))}
                 className="flex-1"
               />
-              <span className="text-sm text-gray-600 dark:text-gray-400 min-w-[60px]">
+              <span className="text-sm text-muted-foreground min-w-[60px]">
                 ≥{(minConfidence * 100).toFixed(0)}%
               </span>
             </div>
@@ -273,7 +273,7 @@ export function MockAIRulesPage() {
         </div>
 
         {/* Stats */}
-        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+        <div className="mt-4 pt-4 border-t border-border flex items-center gap-4 text-sm text-muted-foreground">
           <span>
             {filteredExplanations.length} of {explanations.length} rules
           </span>
@@ -351,7 +351,7 @@ export function MockAIRulesPage() {
       {/* Rules List */}
       {filteredExplanations.length === 0 ? (
         <EmptyState
-          icon={<Code className="h-12 w-12 text-gray-400" />}
+          icon={<Code className="h-12 w-12 text-muted-foreground" />}
           title="No Rules Found"
           description={
             searchQuery || ruleTypeFilter !== 'all' || minConfidence > 0

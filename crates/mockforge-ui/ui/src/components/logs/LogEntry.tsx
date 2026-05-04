@@ -11,20 +11,20 @@ interface LogEntryProps {
 
 export function LogEntry({ log, isSelected = false, onSelect }: LogEntryProps) {
   const getStatusColor = (statusCode: number) => {
-    if (statusCode >= 200 && statusCode < 300) return 'text-green-600 bg-green-50';
-    if (statusCode >= 300 && statusCode < 400) return 'text-blue-600 bg-blue-50';
-    if (statusCode >= 400 && statusCode < 500) return 'text-yellow-600 bg-yellow-50';
-    if (statusCode >= 500) return 'text-red-600 bg-red-50';
+    if (statusCode >= 200 && statusCode < 300) return 'text-success-600 bg-success-50';
+    if (statusCode >= 300 && statusCode < 400) return 'text-info-600 bg-info-50';
+    if (statusCode >= 400 && statusCode < 500) return 'text-warning-600 bg-warning-50';
+    if (statusCode >= 500) return 'text-danger-600 bg-danger-50';
     return 'text-gray-600 bg-gray-50';
   };
 
   const getMethodColor = (method: string) => {
     switch (method.toLowerCase()) {
-      case 'get': return 'text-green-700 bg-green-100';
-      case 'post': return 'text-blue-700 bg-blue-100';
-      case 'put': return 'text-yellow-700 bg-yellow-100';
+      case 'get': return 'text-success-700 bg-success-100';
+      case 'post': return 'text-info-700 bg-info-100';
+      case 'put': return 'text-warning-700 bg-warning-100';
       case 'patch': return 'text-purple-700 bg-purple-100';
-      case 'delete': return 'text-red-700 bg-red-100';
+      case 'delete': return 'text-danger-700 bg-danger-100';
       default: return 'text-gray-700 bg-gray-100';
     }
   };
@@ -75,9 +75,9 @@ export function LogEntry({ log, isSelected = false, onSelect }: LogEntryProps) {
       {/* Response Time */}
       <div className={cn(
         "text-xs px-2 py-1 rounded min-w-[60px] text-center",
-        log.response_time_ms > 1000 ? "text-red-600 bg-red-50" :
-        log.response_time_ms > 500 ? "text-yellow-600 bg-yellow-50" :
-        "text-green-600 bg-green-50"
+        log.response_time_ms > 1000 ? "text-danger-600 bg-danger-50" :
+        log.response_time_ms > 500 ? "text-warning-600 bg-warning-50" :
+        "text-success-600 bg-success-50"
       )}>
         {formatDuration(log.response_time_ms)}
       </div>
@@ -96,7 +96,7 @@ export function LogEntry({ log, isSelected = false, onSelect }: LogEntryProps) {
 
       {/* Error indicator */}
       {log.error_message && (
-        <div className="text-red-500 text-xs">
+        <div className="text-danger-500 text-xs">
           ⚠️
         </div>
       )}

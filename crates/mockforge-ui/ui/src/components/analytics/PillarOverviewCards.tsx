@@ -29,8 +29,8 @@ const pillars = [
     id: 'contracts',
     name: 'Contracts',
     icon: Shield,
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+    color: 'text-info-600 dark:text-info-400',
+    bgColor: 'bg-info-50 dark:bg-info-900/20',
     getValue: (data: PillarUsageMetrics | null | undefined) => {
       if (!data?.contracts) return null;
       return `${data.contracts.validation_enforce_percent.toFixed(1)}%`;
@@ -41,8 +41,8 @@ const pillars = [
     id: 'devx',
     name: 'DevX',
     icon: Code,
-    color: 'text-green-600 dark:text-green-400',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
+    color: 'text-success-600 dark:text-success-400',
+    bgColor: 'bg-success-50 dark:bg-success-900/20',
     getValue: (data: PillarUsageMetrics | null | undefined) => {
       if (!data?.devx) return null;
       return data.devx.sdk_installations.toString();
@@ -84,8 +84,8 @@ export const PillarOverviewCards: React.FC<PillarOverviewCardsProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {pillars.map((pillar) => (
           <Card key={pillar.id} className="p-6 animate-pulse">
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24 mb-2"></div>
-            <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
+            <div className="h-4 bg-muted rounded w-24 mb-2"></div>
+            <div className="h-8 bg-muted rounded w-16"></div>
           </Card>
         ))}
       </div>
@@ -105,16 +105,16 @@ export const PillarOverviewCards: React.FC<PillarOverviewCardsProps> = ({
             className={`p-6 hover:shadow-lg transition-shadow ${pillar.bgColor}`}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <h3 className="text-sm font-medium text-muted-foreground">
                 {pillar.name}
               </h3>
               <Icon className={`h-5 w-5 ${pillar.color}`} />
             </div>
             <div className="space-y-1">
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-2xl font-bold text-foreground">
                 {value ?? 'N/A'}
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 {label}
               </p>
             </div>

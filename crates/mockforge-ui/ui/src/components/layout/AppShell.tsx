@@ -264,6 +264,10 @@ const cloudNavItemIds = new Set([
   // Cloud test runs — org-wide history with SSE event tailing via
   // cloudTestRunsApi.streamRunEvents.
   'cloud-test-runs',
+  // Integration Test Builder persists as test_suite kind='integration'
+  // and runs through the IntegrationExecutor in mockforge-test-runner
+  // (#356).
+  'integration-test-builder',
   // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
   'cloud-traces',
   // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
@@ -271,6 +275,9 @@ const cloudNavItemIds = new Set([
   // Cloud flows — versioned scenario / state-machine / orchestration /
   // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
   'cloud-flows',
+  // Chains share the flows resource (kind='chain') and are executed by
+  // the ChainExecutor in mockforge-test-runner (#354).
+  'chains',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.

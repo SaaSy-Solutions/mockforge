@@ -124,7 +124,7 @@ export function ErrorPatternEditor({
       <div className="space-y-6">
         {/* Pattern Type Selector */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          <label className="block text-sm font-medium text-foreground mb-3">
             Pattern Type
           </label>
           <div className="grid grid-cols-3 gap-3">
@@ -134,14 +134,14 @@ export function ErrorPatternEditor({
               disabled={disabled}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
                 patternType === 'burst'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-info bg-info-50 dark:bg-info-900/20 dark:border-info-400'
+                  : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <div className="flex flex-col items-center gap-2">
                 <Zap className="h-5 w-5" />
                 <span className="text-sm font-medium">Burst</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   N errors in interval
                 </span>
               </div>
@@ -152,14 +152,14 @@ export function ErrorPatternEditor({
               disabled={disabled}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
                 patternType === 'random'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-info bg-info-50 dark:bg-info-900/20 dark:border-info-400'
+                  : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <div className="flex flex-col items-center gap-2">
                 <AlertCircle className="h-5 w-5" />
                 <span className="text-sm font-medium">Random</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   Probability-based
                 </span>
               </div>
@@ -170,14 +170,14 @@ export function ErrorPatternEditor({
               disabled={disabled}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
                 patternType === 'sequential'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  ? 'border-info bg-info-50 dark:bg-info-900/20 dark:border-info-400'
+                  : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
               } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               <div className="flex flex-col items-center gap-2">
                 <List className="h-5 w-5" />
                 <span className="text-sm font-medium">Sequential</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   Ordered sequence
                 </span>
               </div>
@@ -190,10 +190,10 @@ export function ErrorPatternEditor({
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="text-sm font-medium text-foreground">
                   Errors per Burst
                 </label>
-                <span className="text-sm text-gray-500 dark:text-gray-400">{burstCount}</span>
+                <span className="text-sm text-muted-foreground">{burstCount}</span>
               </div>
               <Slider
                 min={1}
@@ -207,10 +207,10 @@ export function ErrorPatternEditor({
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="text-sm font-medium text-foreground">
                   Burst Interval
                 </label>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   {burstInterval}ms
                 </span>
               </div>
@@ -225,7 +225,7 @@ export function ErrorPatternEditor({
                 description="Time window for the burst"
               />
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+            <div className="p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-sm text-foreground">
               <strong>Preview:</strong> Will inject {burstCount} errors within{' '}
               {burstInterval}ms, then wait for the next interval.
             </div>
@@ -236,10 +236,10 @@ export function ErrorPatternEditor({
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="text-sm font-medium text-foreground">
                   Error Probability
                 </label>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-sm text-muted-foreground">
                   {(randomProbability * 100).toFixed(1)}%
                 </span>
               </div>
@@ -254,7 +254,7 @@ export function ErrorPatternEditor({
                 description="Probability of injecting an error on each request"
               />
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+            <div className="p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-sm text-foreground">
               <strong>Preview:</strong> Each request has a{' '}
               {(randomProbability * 100).toFixed(1)}% chance of receiving an error.
             </div>
@@ -264,7 +264,7 @@ export function ErrorPatternEditor({
         {patternType === 'sequential' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Status Code Sequence
               </label>
               <input
@@ -273,14 +273,14 @@ export function ErrorPatternEditor({
                 onChange={(e) => setSequenceCodes(e.target.value)}
                 disabled={disabled}
                 placeholder="500,502,503,504"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Comma-separated HTTP status codes (100-599). Errors will be injected in this order,
                 then repeat.
               </p>
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300">
+            <div className="p-3 bg-info-50 dark:bg-info-900/20 rounded-lg text-sm text-foreground">
               <strong>Preview:</strong> Will inject errors in sequence:{' '}
               {sequenceCodes
                 .split(',')
@@ -293,7 +293,7 @@ export function ErrorPatternEditor({
         )}
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-3 pt-4 border-t border-border">
           <Button
             onClick={handleSave}
             disabled={disabled || updatePattern.isPending}

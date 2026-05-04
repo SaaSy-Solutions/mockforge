@@ -35,8 +35,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 function SeverityBadge({ severity }: { severity: IncidentSeverity }) {
   const colors: Record<IncidentSeverity, { bg: string; text: string; icon: React.ReactNode }> = {
     critical: {
-      bg: 'bg-red-100 dark:bg-red-900/20',
-      text: 'text-red-800 dark:text-red-300',
+      bg: 'bg-danger-100 dark:bg-danger-900/20',
+      text: 'text-danger-700 dark:text-danger-300',
       icon: <XCircle className="w-4 h-4" />,
     },
     high: {
@@ -45,13 +45,13 @@ function SeverityBadge({ severity }: { severity: IncidentSeverity }) {
       icon: <AlertTriangle className="w-4 h-4" />,
     },
     medium: {
-      bg: 'bg-yellow-100 dark:bg-yellow-900/20',
-      text: 'text-yellow-800 dark:text-yellow-300',
+      bg: 'bg-warning-100 dark:bg-warning-900/20',
+      text: 'text-warning-700 dark:text-warning-300',
       icon: <Clock className="w-4 h-4" />,
     },
     low: {
-      bg: 'bg-blue-100 dark:bg-blue-900/20',
-      text: 'text-blue-800 dark:text-blue-300',
+      bg: 'bg-info-100 dark:bg-info-900/20',
+      text: 'text-info-700 dark:text-info-300',
       icon: <Activity className="w-4 h-4" />,
     },
   };
@@ -70,22 +70,22 @@ function SeverityBadge({ severity }: { severity: IncidentSeverity }) {
 function StatusBadge({ status }: { status: IncidentStatus }) {
   const colors: Record<IncidentStatus, { bg: string; text: string; icon: React.ReactNode }> = {
     open: {
-      bg: 'bg-red-100 dark:bg-red-900/20',
-      text: 'text-red-800 dark:text-red-300',
+      bg: 'bg-danger-100 dark:bg-danger-900/20',
+      text: 'text-danger-700 dark:text-danger-300',
       icon: <AlertTriangle className="w-4 h-4" />,
     },
     acknowledged: {
-      bg: 'bg-yellow-100 dark:bg-yellow-900/20',
-      text: 'text-yellow-800 dark:text-yellow-300',
+      bg: 'bg-warning-100 dark:bg-warning-900/20',
+      text: 'text-warning-700 dark:text-warning-300',
       icon: <Clock className="w-4 h-4" />,
     },
     resolved: {
-      bg: 'bg-green-100 dark:bg-green-900/20',
-      text: 'text-green-800 dark:text-green-300',
+      bg: 'bg-success-100 dark:bg-success-900/20',
+      text: 'text-success-700 dark:text-success-300',
       icon: <CheckCircle2 className="w-4 h-4" />,
     },
     closed: {
-      bg: 'bg-gray-100 dark:bg-gray-800',
+      bg: 'bg-muted',
       text: 'text-gray-800 dark:text-gray-300',
       icon: <CheckCircle2 className="w-4 h-4" />,
     },
@@ -107,7 +107,7 @@ function IncidentTypeBadge({ type }: { type: IncidentType }) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
       isBreaking
-        ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+        ? 'bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-300'
         : 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
     }`}>
       {type === 'breaking_change' ? 'Breaking Change' : 'Threshold Exceeded'}
@@ -134,13 +134,13 @@ function ProtocolDisplay({
       const methodName = parts[parts.length - 1];
       return (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 dark:text-gray-400">gRPC</span>
-          <span className="text-gray-400">•</span>
-          <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <span className="text-xs text-muted-foreground">gRPC</span>
+          <span className="text-muted-foreground">•</span>
+          <span className="font-mono text-sm font-semibold text-foreground">
             {service}
           </span>
-          <span className="text-gray-400">/</span>
-          <span className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="text-muted-foreground">/</span>
+          <span className="text-sm text-foreground">
             {methodName}
           </span>
         </div>
@@ -150,15 +150,15 @@ function ProtocolDisplay({
     // For WebSocket, endpoint might be the message type or channel
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 dark:text-gray-400">WebSocket</span>
-        <span className="text-gray-400">•</span>
-        <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+        <span className="text-xs text-muted-foreground">WebSocket</span>
+        <span className="text-muted-foreground">•</span>
+        <span className="text-sm text-foreground truncate">
           {endpoint || 'Message'}
         </span>
         {method && method !== 'websocket' && (
           <>
-            <span className="text-gray-400">•</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-muted-foreground">•</span>
+            <span className="text-xs text-muted-foreground">
               {method}
             </span>
           </>
@@ -169,11 +169,11 @@ function ProtocolDisplay({
     // For MQTT/Kafka, endpoint is the topic
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+        <span className="text-xs text-muted-foreground uppercase">
           {protocol}
         </span>
-        <span className="text-gray-400">•</span>
-        <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+        <span className="text-muted-foreground">•</span>
+        <span className="font-mono text-sm font-semibold text-foreground truncate">
           Topic: {endpoint}
         </span>
       </div>
@@ -183,11 +183,11 @@ function ProtocolDisplay({
   // Fallback for other protocols
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-500 dark:text-gray-400 uppercase">
+      <span className="text-xs text-muted-foreground uppercase">
         {protocol}
       </span>
-      <span className="text-gray-400">•</span>
-      <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+      <span className="text-muted-foreground">•</span>
+      <span className="text-sm text-foreground truncate">
         {endpoint}
       </span>
     </div>
@@ -209,7 +209,7 @@ function IncidentRow({
   };
 
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+    <div className="border-b border-border last:border-b-0 hover:bg-accent hover:text-accent-foreground/50 transition-colors">
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
@@ -224,11 +224,11 @@ function IncidentRow({
                   />
                 ) : (
                   <>
-                    <span className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    <span className="font-mono text-sm font-semibold text-foreground">
                       {incident.method}
                     </span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                    <span className="text-muted-foreground">•</span>
+                    <span className="text-sm text-foreground truncate">
                       {incident.endpoint}
                     </span>
                   </>
@@ -239,7 +239,7 @@ function IncidentRow({
               <IncidentTypeBadge type={incident.incident_type} />
             </div>
 
-            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mb-2">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground mb-2">
               <span>Detected: {formatDate(incident.detected_at)}</span>
               {incident.resolved_at && (
                 <span>Resolved: {formatDate(incident.resolved_at)}</span>
@@ -252,7 +252,7 @@ function IncidentRow({
                   href={incident.external_ticket_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  className="inline-flex items-center gap-1 text-xs text-info-600 hover:text-info-700 dark:text-info-400 dark:hover:text-info-300"
                 >
                   <ExternalLink className="w-3 h-3" />
                   {incident.external_ticket_id || 'View Ticket'}
@@ -263,7 +263,7 @@ function IncidentRow({
             {/* Protocol Badge - only show if not already displayed in header */}
             {incident.protocol && incident.protocol !== 'http' && (
               <div className="mt-2">
-                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-300">
                   <Network className="w-3 h-3 mr-1" />
                   {incident.protocol.toUpperCase()}
                 </span>
@@ -275,7 +275,7 @@ function IncidentRow({
              Array.isArray(incident.fitness_test_results) &&
              incident.fitness_test_results.length > 0 && (
               <details className="mt-2">
-                <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 flex items-center gap-1">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground dark:hover:text-gray-200 flex items-center gap-1">
                   <TestTube className="w-3 h-3" />
                   Fitness Test Results ({incident.fitness_test_results.length})
                 </summary>
@@ -285,29 +285,29 @@ function IncidentRow({
                       key={idx}
                       className={`p-2 rounded text-xs ${
                         result.passed
-                          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                          : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                          ? 'bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800'
+                          : 'bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800'
                       }`}
                     >
                       <div className="flex items-start justify-between mb-1">
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        <span className="font-semibold text-foreground">
                           {result.function_name || `Test ${idx + 1}`}
                         </span>
                         {result.passed ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          <CheckCircle2 className="w-4 h-4 text-success-600 dark:text-success-400 flex-shrink-0" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+                          <XCircle className="w-4 h-4 text-danger-600 dark:text-danger-400 flex-shrink-0" />
                         )}
                       </div>
-                      <p className="text-gray-700 dark:text-gray-300 mb-1">
+                      <p className="text-foreground mb-1">
                         {result.message}
                       </p>
                       {result.metrics && Object.keys(result.metrics).length > 0 && (
-                        <div className="mt-1 pt-1 border-t border-gray-200 dark:border-gray-700">
+                        <div className="mt-1 pt-1 border-t border-border">
                           <div className="grid grid-cols-2 gap-1">
                             {Object.entries(result.metrics).map(([key, value]) => (
                               <div key={key} className="text-xs">
-                                <span className="text-gray-500 dark:text-gray-400">{key}:</span>{' '}
+                                <span className="text-muted-foreground">{key}:</span>{' '}
                                 <span className="font-mono font-semibold">
                                   {typeof value === 'number' ? value.toFixed(2) : String(value)}
                                 </span>
@@ -325,55 +325,55 @@ function IncidentRow({
             {/* Protocol-specific drift details */}
             {incident.protocol && incident.protocol !== 'http' && incident.details && (
               <details className="mt-2">
-                <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200 flex items-center gap-1">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground dark:hover:text-gray-200 flex items-center gap-1">
                   <Network className="w-3 h-3" />
                   Protocol Drift Details
                 </summary>
                 <div className="mt-2 space-y-2">
                   {/* Show breaking vs additive changes if available */}
                   {typeof incident.details.breaking_changes === 'number' && (
-                    <div className="p-2 rounded text-xs bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                      <span className="font-semibold text-red-800 dark:text-red-300">
+                    <div className="p-2 rounded text-xs bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800">
+                      <span className="font-semibold text-danger-700 dark:text-danger-300">
                         Breaking Changes: {incident.details.breaking_changes}
                       </span>
                     </div>
                   )}
                   {typeof incident.details.non_breaking_changes === 'number' && (
-                    <div className="p-2 rounded text-xs bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                      <span className="font-semibold text-green-800 dark:text-green-300">
+                    <div className="p-2 rounded text-xs bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800">
+                      <span className="font-semibold text-success-700 dark:text-success-300">
                         Non-Breaking Changes: {incident.details.non_breaking_changes}
                       </span>
                     </div>
                   )}
                   {typeof incident.details.potentially_breaking_changes === 'number' && (
-                    <div className="p-2 rounded text-xs bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-                      <span className="font-semibold text-yellow-800 dark:text-yellow-300">
+                    <div className="p-2 rounded text-xs bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800">
+                      <span className="font-semibold text-warning-700 dark:text-warning-300">
                         Potentially Breaking: {incident.details.potentially_breaking_changes}
                       </span>
                     </div>
                   )}
                   {/* Show protocol-specific operation info */}
                   {incident.details.operation_id && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Operation:</span> {String(incident.details.operation_id)}
                     </div>
                   )}
                   {incident.details.operation_type && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Type:</span> {String(incident.details.operation_type)}
                     </div>
                   )}
                   {/* Show schema format if available */}
                   {incident.details.schema_format && (
-                    <div className="p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                      <span className="font-semibold text-blue-800 dark:text-blue-300">
+                    <div className="p-2 rounded text-xs bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800">
+                      <span className="font-semibold text-info-700 dark:text-info-300">
                         Schema Format: {String(incident.details.schema_format).replace(/_/g, ' ').toUpperCase()}
                       </span>
                     </div>
                   )}
                   {/* Show service/method info for gRPC */}
                   {incident.protocol === 'grpc' && incident.details.service && (
-                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Service:</span> {String(incident.details.service)}
                       {incident.details.method && (
                         <> • <span className="font-semibold">Method:</span> {String(incident.details.method)}</>
@@ -386,10 +386,10 @@ function IncidentRow({
 
             {Object.keys(incident.details).length > 0 && (
               <details className="mt-2">
-                <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer hover:text-gray-900 dark:hover:text-gray-200">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground dark:hover:text-gray-200">
                   View Full Details
                 </summary>
-                <pre className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs overflow-x-auto">
+                <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-x-auto">
                   {JSON.stringify(incident.details, null, 2)}
                 </pre>
               </details>
@@ -420,7 +420,7 @@ function IncidentRow({
                   variant="default"
                   size="sm"
                   onClick={() => onResolve(incident.id)}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-success-600 hover:bg-success-600"
                 >
                   Resolve
                 </Button>
@@ -431,7 +431,7 @@ function IncidentRow({
                 variant="default"
                 size="sm"
                 onClick={() => onResolve(incident.id)}
-                className="bg-green-600 hover:bg-green-700"
+                className="bg-success-600 hover:bg-success-600"
               >
                 Resolve
               </Button>
@@ -454,13 +454,13 @@ function StatisticsCards({ statistics }: { statistics: any }) {
       <ModernCard className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Total Incidents</p>
-            <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+            <p className="text-sm text-muted-foreground">Total Incidents</p>
+            <p className="text-2xl font-bold text-foreground mt-1">
               {stats.total || 0}
             </p>
           </div>
-          <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-            <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-3 bg-info-100 dark:bg-info-900/20 rounded-lg">
+            <Activity className="w-6 h-6 text-info-600 dark:text-info-400" />
           </div>
         </div>
       </ModernCard>
@@ -468,13 +468,13 @@ function StatisticsCards({ statistics }: { statistics: any }) {
       <ModernCard className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Open</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+            <p className="text-sm text-muted-foreground">Open</p>
+            <p className="text-2xl font-bold text-danger-600 dark:text-danger-400 mt-1">
               {stats.by_status?.open || 0}
             </p>
           </div>
-          <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
-            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+          <div className="p-3 bg-danger-100 dark:bg-danger-900/20 rounded-lg">
+            <AlertTriangle className="w-6 h-6 text-danger-600 dark:text-danger-400" />
           </div>
         </div>
       </ModernCard>
@@ -482,13 +482,13 @@ function StatisticsCards({ statistics }: { statistics: any }) {
       <ModernCard className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Resolved</p>
-            <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+            <p className="text-sm text-muted-foreground">Resolved</p>
+            <p className="text-2xl font-bold text-success-600 dark:text-success-400 mt-1">
               {stats.by_status?.resolved || 0}
             </p>
           </div>
-          <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-            <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+          <div className="p-3 bg-success-100 dark:bg-success-900/20 rounded-lg">
+            <CheckCircle2 className="w-6 h-6 text-success-600 dark:text-success-400" />
           </div>
         </div>
       </ModernCard>
@@ -496,13 +496,13 @@ function StatisticsCards({ statistics }: { statistics: any }) {
       <ModernCard className="p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Critical</p>
-            <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+            <p className="text-sm text-muted-foreground">Critical</p>
+            <p className="text-2xl font-bold text-danger-600 dark:text-danger-400 mt-1">
               {stats.by_severity?.critical || 0}
             </p>
           </div>
-          <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
-            <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+          <div className="p-3 bg-danger-100 dark:bg-danger-900/20 rounded-lg">
+            <XCircle className="w-6 h-6 text-danger-600 dark:text-danger-400" />
           </div>
         </div>
       </ModernCard>
@@ -613,7 +613,7 @@ export function IncidentDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="lg:col-span-2">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input
                 placeholder="Search by endpoint, method, or ID..."
                 value={searchTerm}
@@ -708,8 +708,8 @@ export function IncidentDashboardPage() {
         {incidentsLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-400">Loading incidents...</p>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
+              <p className="mt-4 text-muted-foreground">Loading incidents...</p>
             </div>
           </div>
         ) : incidentsError ? (
@@ -727,7 +727,7 @@ export function IncidentDashboardPage() {
             }
           />
         ) : (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="divide-y divide-border">
             {incidents.map((incident) => (
               <IncidentRow
                 key={incident.id}
@@ -741,8 +741,8 @@ export function IncidentDashboardPage() {
 
         {/* Pagination info */}
         {incidentsData && incidentsData.total > 0 && (
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="p-4 border-t border-border bg-muted/50">
+            <p className="text-sm text-muted-foreground">
               Showing {incidents.length} of {incidentsData.total} incidents
             </p>
           </div>

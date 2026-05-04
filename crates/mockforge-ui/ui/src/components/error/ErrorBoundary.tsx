@@ -70,29 +70,29 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="error-boundary-fallback">
-          <div className="max-w-lg w-full bg-card border border-gray-200 dark:border-gray-800 rounded-xl shadow-xl p-8 spring-in">
+          <div className="max-w-lg w-full bg-card border border-border rounded-xl shadow-xl p-8 spring-in">
             <div className="text-center">
-              <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 inline-flex">
+              <div className="p-4 rounded-full bg-danger-50 dark:bg-danger-900/20 mb-6 inline-flex">
                 <StatusIcon status="error" size="3xl" />
               </div>
 
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+              <h2 className="text-3xl font-bold text-foreground mb-3">
                 Something went wrong
               </h2>
-              <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">
+              <p className="text-lg text-muted-foreground mb-8">
                 An unexpected error occurred in the application. Please try refreshing the page or contact support if the issue persists.
               </p>
 
               {import.meta.env.DEV && this.state.error && (
-                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-left">
-                  <div className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">Error Details:</div>
-                  <div className="text-sm font-mono text-red-700 dark:text-red-500 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                <div className="mb-6 p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg text-left">
+                  <div className="text-sm font-semibold text-danger-700 dark:text-danger-400 mb-2">Error Details:</div>
+                  <div className="text-sm font-mono text-danger-700 dark:text-danger-500 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
                     {this.state.error.message}
                   </div>
                   {this.state.errorInfo && (
-                    <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-800">
-                      <div className="text-xs font-semibold text-red-800 dark:text-red-400 mb-1">Component Stack:</div>
-                      <div className="text-xs font-mono text-red-700 dark:text-red-500 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+                    <div className="mt-3 pt-3 border-t border-danger-200 dark:border-danger-800">
+                      <div className="text-xs font-semibold text-danger-700 dark:text-danger-400 mb-1">Component Stack:</div>
+                      <div className="text-xs font-mono text-danger-700 dark:text-danger-500 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
                         {this.state.errorInfo.componentStack}
                       </div>
                     </div>
@@ -119,7 +119,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 </Button>
               </div>
 
-              <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
+              <div className="mt-6 text-sm text-muted-foreground">
                 If this problem persists, please contact support with the error details above.
               </div>
             </div>

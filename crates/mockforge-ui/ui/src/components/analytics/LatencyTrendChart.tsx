@@ -18,6 +18,7 @@ import {
 import { Card } from '../ui/Card';
 import { useLatencyTrends, type AnalyticsFilter } from '@/hooks/useAnalyticsV2';
 import { TrendingUp } from 'lucide-react';
+import { getChartPalette } from '../../utils/chartTheme';
 
 ChartJS.register(
   CategoryScale,
@@ -41,11 +42,11 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
         <div className="h-80 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading...</div>
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       </Card>
     );
@@ -55,16 +56,17 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
-        <div className="h-80 flex items-center justify-center text-gray-400">
+        <div className="h-80 flex items-center justify-center text-muted-foreground">
           {error ? 'Error loading data' : 'No data available'}
         </div>
       </Card>
     );
   }
 
+  const palette = getChartPalette();
   const timestamps = data.trends.map((t) =>
     new Date(t.timestamp * 1000).toLocaleTimeString([], {
       hour: '2-digit',
@@ -78,8 +80,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P99',
         data: data.trends.map((t) => t.p99),
-        borderColor: 'rgb(239, 68, 68)',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: palette.danger,
+        backgroundColor: palette.dangerAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -87,8 +89,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P95',
         data: data.trends.map((t) => t.p95),
-        borderColor: 'rgb(245, 158, 11)',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderColor: palette.warning,
+        backgroundColor: palette.warningAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -96,8 +98,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P50 (Median)',
         data: data.trends.map((t) => t.p50),
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderColor: palette.success,
+        backgroundColor: palette.successAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -105,8 +107,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'Average',
         data: data.trends.map((t) => t.avg),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: palette.primary,
+        backgroundColor: palette.primaryAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -168,10 +170,10 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <TrendingUp className="h-5 w-5 text-info-600 dark:text-info-400" />
           <h3 className="text-lg font-semibold">Latency Trends</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           {data.trends.length} data points
         </div>
       </div>

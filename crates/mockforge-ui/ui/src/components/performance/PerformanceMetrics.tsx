@@ -64,7 +64,7 @@ export function PerformanceMetrics() {
           <p className="text-xs text-muted-foreground">
             Target: {metrics.target_rps.toFixed(1)} RPS
             {rpsDiff !== 0 && (
-              <span className={rpsDiff > 0 ? 'text-red-500' : 'text-green-500'}>
+              <span className={rpsDiff > 0 ? 'text-danger-500' : 'text-success-500'}>
                 {' '}({rpsDiff > 0 ? '+' : ''}{rpsDiffPercent}%)
               </span>
             )}

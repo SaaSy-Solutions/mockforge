@@ -123,7 +123,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
       <div className="space-y-2">
-        <label htmlFor="hook-description" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="hook-description" className="block text-sm font-medium text-foreground">
           Describe your hook logic in natural language
         </label>
         <textarea
@@ -131,10 +131,10 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g., For users flagged as VIP, webhooks should fire instantly but payments fail 5% of the time"
-          className="w-full min-h-[120px] px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-info"
           disabled={isProcessing}
         />
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Describe conditions, actions, and timing constraints for your hook
         </p>
       </div>
@@ -160,11 +160,11 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md flex items-start gap-3">
-          <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+        <div className="p-4 bg-danger-50 border border-danger-200 rounded-md flex items-start gap-3">
+          <XCircle className="w-5 h-5 text-danger-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h3 className="text-sm font-medium text-red-800">Error</h3>
-            <p className="text-sm text-red-700 mt-1">{error}</p>
+            <h3 className="text-sm font-medium text-danger-700">Error</h3>
+            <p className="text-sm text-danger-700 mt-1">{error}</p>
           </div>
         </div>
       )}
@@ -172,7 +172,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
       {result && !result.error && (result.hookYaml || result.hookJson) && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900">Transpiled Hook</h3>
+            <h3 className="text-lg font-semibold text-foreground">Transpiled Hook</h3>
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -186,7 +186,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
           </div>
 
           <div className="relative">
-            <pre className="p-4 bg-gray-50 border border-gray-200 rounded-md overflow-x-auto text-sm">
+            <pre className="p-4 bg-muted border border-border rounded-md overflow-x-auto text-sm">
               <code>{showYaml ? result.hookYaml : JSON.stringify(result.hookJson, null, 2)}</code>
             </pre>
             <div className="absolute top-2 right-2 flex gap-2">
@@ -218,11 +218,11 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
             </div>
           </div>
 
-          <div className="p-4 bg-green-50 border border-green-200 rounded-md flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div className="p-4 bg-success-50 border border-success-200 rounded-md flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 text-success-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm font-medium text-green-800">Hook Generated Successfully</h3>
-              <p className="text-sm text-green-700 mt-1">
+              <h3 className="text-sm font-medium text-success-700">Hook Generated Successfully</h3>
+              <p className="text-sm text-success-700 mt-1">
                 The hook configuration has been generated. You can copy it or download it to use in your chaos
                 orchestration scenarios.
               </p>

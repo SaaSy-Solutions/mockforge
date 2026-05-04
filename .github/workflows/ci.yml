@@ -49,7 +49,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -81,7 +81,7 @@ jobs:
 
     - name: Cache sccache
       if: steps.sccache-check.outputs.sccache_available == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/sccache
         key: sccache-${{ matrix.rust }}-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -154,7 +154,7 @@ jobs:
         run: pnpm test
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           directory: crates/mockforge-ui/ui/coverage
           flags: ui-tests
@@ -174,7 +174,7 @@ jobs:
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -200,7 +200,7 @@ jobs:
       continue-on-error: true
 
     - name: Cache sccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/sccache
         key: warning-gate-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -222,7 +222,7 @@ jobs:
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -248,7 +248,7 @@ jobs:
       continue-on-error: true
 
     - name: Cache sccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/sccache
         key: warning-preview-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -266,7 +266,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -306,7 +306,7 @@ jobs:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -325,7 +325,7 @@ jobs:
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         files: lcov.info
         fail_ci_if_error: false
@@ -338,7 +338,7 @@ jobs:
       SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Install Rust toolchain (MSRV)
       uses: dtolnay/rust-toolchain@stable
@@ -366,7 +366,7 @@ jobs:
       continue-on-error: true
 
     - name: Cache sccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/sccache
         key: msrv-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
@@ -386,7 +386,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Check typos
       uses: crate-ci/typos@master
@@ -397,7 +397,7 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -451,7 +451,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -501,7 +501,7 @@ jobs:
       continue-on-error: true
 
     - name: Cache sccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/sccache
@@ -553,10 +553,10 @@ jobs:
       contents: write
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
 
@@ -572,7 +572,7 @@ jobs:
         ls -la release/
 
     - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}

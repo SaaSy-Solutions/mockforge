@@ -101,9 +101,9 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
 
   const getStatusIcon = (healthy: boolean) => {
     return healthy ? (
-      <CheckCircle className="w-5 h-5 text-green-500" />
+      <CheckCircle className="w-5 h-5 text-success-500" />
     ) : (
-      <XCircle className="w-5 h-5 text-red-500" />
+      <XCircle className="w-5 h-5 text-danger-500" />
     );
   };
 
@@ -174,33 +174,33 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
               <h3 className="font-semibold mb-2">Basic Information</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">ID:</span>
-                  <code className="text-sm bg-gray-100 px-2 py-1 rounded">{plugin.id}</code>
+                  <span className="text-sm text-muted-foreground">ID:</span>
+                  <code className="text-sm bg-muted px-2 py-1 rounded">{plugin.id}</code>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Types:</span>
+                  <span className="text-sm text-muted-foreground">Types:</span>
                   <div className="flex gap-1">
                     {getTypeBadges(plugin.types)}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Status:</span>
+                  <span className="text-sm text-muted-foreground">Status:</span>
                   <Badge variant={plugin.healthy ? 'success' : 'destructive'}>
                     {plugin.status}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-600" />
+                  <User className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm">{plugin.author}</span>
                 </div>
                 {plugin.homepage && (
                   <div className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-gray-600" />
+                    <Globe className="w-4 h-4 text-muted-foreground" />
                     <a
                       href={plugin.homepage}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline"
+                      className="text-sm text-info-600 hover:underline"
                     >
                       {plugin.homepage}
                     </a>
@@ -211,7 +211,7 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
 
             <div>
               <h3 className="font-semibold mb-2">Description</h3>
-              <p className="text-sm text-gray-600">{plugin.description}</p>
+              <p className="text-sm text-muted-foreground">{plugin.description}</p>
             </div>
           </div>
 
@@ -220,13 +220,13 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
               <h3 className="font-semibold mb-2">Health Status</h3>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Status:</span>
+                  <span className="text-sm text-muted-foreground">Status:</span>
                   <Badge variant={plugin.health.status === 'healthy' ? 'success' : 'destructive'}>
                     {plugin.health.status}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-gray-600" />
+                  <Clock className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm">
                     Last checked: {formatDateTime(plugin.health.last_check)}
                   </span>
@@ -288,13 +288,13 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <div className="text-gray-600">Max Memory</div>
+                    <div className="text-muted-foreground">Max Memory</div>
                     <div className="font-medium">
                       {(plugin.capabilities.resources.max_memory_bytes / 1024 / 1024).toFixed(0)} MB
                     </div>
                   </div>
                   <div>
-                    <div className="text-gray-600">Max CPU</div>
+                    <div className="text-muted-foreground">Max CPU</div>
                     <div className="font-medium">
                       {plugin.capabilities.resources.max_cpu_percent}%
                     </div>

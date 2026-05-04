@@ -2,6 +2,8 @@ export { queryKeys } from './queryKeys';
 
 // Dashboard
 export { useDashboard, useHealth, useSystemStatus } from './useDashboardApi';
+export { useCloudDashboardActivity } from './useCloudDashboardApi';
+export type { CloudActivityEvent } from './useCloudDashboardApi';
 
 // Server
 export { useServerInfo, useRestartStatus, useRestartServers } from './useServerApi';

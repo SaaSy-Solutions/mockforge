@@ -8,6 +8,11 @@ Automated deployment scripts for MockForge on major cloud platforms.
 - `deploy-gcp.sh` - Deploy to Google Cloud Run
 - `deploy-azure.sh` - Deploy to Azure Container Apps
 - `deploy-digitalocean.sh` - Deploy to DigitalOcean App Platform
+- `run-forever.sh` - Lightweight bash supervisor that restarts
+  `mockforge serve` on any non-clean exit. Use on hosts without
+  systemd or for ad-hoc test sessions. See
+  [`../systemd/README.md`](../systemd/README.md) for the systemd
+  alternative.
 
 ## Prerequisites
 

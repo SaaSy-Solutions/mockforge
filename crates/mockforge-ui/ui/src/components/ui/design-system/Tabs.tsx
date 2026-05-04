@@ -49,7 +49,7 @@ export function TabsContent({ value, children, className }: TabsContentProps) {
 
 export function TabsList({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('flex space-x-1 border-b border-gray-200 dark:border-gray-700', className)}>
+    <div className={cn('flex space-x-1 border-b border-border', className)}>
       {children}
     </div>
   );
@@ -65,7 +65,7 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
   return (
     <button
       className={cn(
-        'px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600 transition-colors duration-200 focus:outline-none focus:border-blue-500',
+        'px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 border-transparent text-muted-foreground hover:text-foreground hover:border-border transition-colors duration-200 focus:outline-none focus:border-ring',
         className
       )}
       data-value={value}

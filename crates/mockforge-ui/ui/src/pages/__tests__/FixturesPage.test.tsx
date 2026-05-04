@@ -306,7 +306,7 @@ describe('FixturesPage', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     const deleteBtn = document
-      .querySelectorAll('button.text-red-600')[0] as HTMLElement | undefined;
+      .querySelectorAll('button.text-danger-600')[0] as HTMLElement | undefined;
     fireEvent.click(deleteBtn!);
 
     expect(screen.getByText('Delete Fixture')).toBeInTheDocument();
@@ -317,7 +317,7 @@ describe('FixturesPage', () => {
     render(<FixturesPage />, { wrapper: createWrapper() });
 
     const deleteBtn = document
-      .querySelectorAll('button.text-red-600')[0] as HTMLElement | undefined;
+      .querySelectorAll('button.text-danger-600')[0] as HTMLElement | undefined;
     fireEvent.click(deleteBtn!);
 
     const confirmButton = screen.getByRole('button', { name: 'Delete' });

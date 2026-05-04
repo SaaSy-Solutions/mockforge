@@ -71,17 +71,17 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
   };
 
   const getStatusColor = (status: number) => {
-    if (status >= 200 && status < 300) return 'bg-green-500';
-    if (status >= 300 && status < 400) return 'bg-blue-500';
-    if (status >= 400 && status < 500) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (status >= 200 && status < 300) return 'bg-success-500';
+    if (status >= 300 && status < 400) return 'bg-info-500';
+    if (status >= 400 && status < 500) return 'bg-warning-500';
+    return 'bg-danger-500';
   };
 
   const getStatusIcon = (status: number) => {
-    if (status >= 200 && status < 300) return <CheckCircle className="w-4 h-4 text-green-500" />;
-    if (status >= 300 && status < 400) return <AlertTriangle className="w-4 h-4 text-blue-500" />;
-    if (status >= 400 && status < 500) return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
-    return <XCircle className="w-4 h-4 text-red-500" />;
+    if (status >= 200 && status < 300) return <CheckCircle className="w-4 h-4 text-success-500" />;
+    if (status >= 300 && status < 400) return <AlertTriangle className="w-4 h-4 text-info-500" />;
+    if (status >= 400 && status < 500) return <AlertTriangle className="w-4 h-4 text-warning-500" />;
+    return <XCircle className="w-4 h-4 text-danger-500" />;
   };
 
   if (loading && history.length === 0) {
@@ -98,7 +98,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info"></div>
           </div>
         </CardContent>
       </Card>
@@ -119,8 +119,8 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
-            <AlertTriangle className="w-8 h-8 text-red-500 mx-auto mb-2" />
-            <p className="text-red-600">{error}</p>
+            <AlertTriangle className="w-8 h-8 text-danger-500 mx-auto mb-2" />
+            <p className="text-danger-600">{error}</p>
             <Button onClick={loadHistory} className="mt-4">
               Retry
             </Button>
@@ -156,9 +156,9 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
       <CardContent>
         {history.length === 0 ? (
           <div className="text-center py-8">
-            <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-gray-600">No executions yet</p>
-            <p className="text-sm text-gray-500">Execute the request to see history</p>
+            <Clock className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-muted-foreground">No executions yet</p>
+            <p className="text-sm text-muted-foreground">Execute the request to see history</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -174,14 +174,14 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                             {entry.response_status_code}
                           </Badge>
                           <span className="font-medium">{entry.request_method}</span>
-                          <span className="text-gray-600">{entry.request_path}</span>
+                          <span className="text-muted-foreground">{entry.request_path}</span>
                         </div>
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="text-sm text-muted-foreground mt-1">
                           {new Date(entry.executed_at).toLocaleString()}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right text-sm text-gray-500">
+                    <div className="text-right text-sm text-muted-foreground">
                       <div>{formatDuration(entry.response_time_ms)}</div>
                       <div>{formatSize(entry.response_size_bytes)}</div>
                     </div>
@@ -196,17 +196,17 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
 
                     <TabsContent value="response" className="mt-3">
                       {entry.error_message ? (
-                        <div className="bg-red-50 border border-red-200 rounded p-3">
-                          <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
+                        <div className="bg-danger-50 border border-danger-200 rounded p-3">
+                          <div className="flex items-center gap-2 text-danger-700 font-medium mb-2">
                             <XCircle className="w-4 h-4" />
                             Error
                           </div>
-                          <pre className="text-red-600 text-sm whitespace-pre-wrap">
+                          <pre className="text-danger-600 text-sm whitespace-pre-wrap">
                             {entry.error_message}
                           </pre>
                         </div>
                       ) : (
-                        <div className="bg-gray-50 border rounded p-3">
+                        <div className="bg-muted border rounded p-3">
                           <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
                             {entry.response_body || '(empty response)'}
                           </pre>
@@ -219,7 +219,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                         {entry.request_body && (
                           <div>
                             <h4 className="font-medium text-sm mb-2">Request Body</h4>
-                            <div className="bg-gray-50 border rounded p-3">
+                            <div className="bg-muted border rounded p-3">
                               <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
                                 {entry.request_body}
                               </pre>
@@ -229,7 +229,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                         {Object.keys(entry.request_headers).length > 0 && (
                           <div>
                             <h4 className="font-medium text-sm mb-2">Request Headers</h4>
-                            <div className="bg-gray-50 border rounded p-3">
+                            <div className="bg-muted border rounded p-3">
                               {Object.entries(entry.request_headers as Record<string, unknown>).map(([key, value]) => (
                                 <div key={key} className="text-sm">
                                   <span className="font-medium">{key}:</span> {String(value)}
@@ -245,7 +245,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                       <div className="space-y-3">
                         <div>
                           <h4 className="font-medium text-sm mb-2">Response Headers</h4>
-                          <div className="bg-gray-50 border rounded p-3">
+                          <div className="bg-muted border rounded p-3">
                             {Object.keys(entry.response_headers as Record<string, unknown>).length > 0 ? (
                               Object.entries(entry.response_headers as Record<string, unknown>).map(([key, value]) => (
                                 <div key={key} className="text-sm">
@@ -253,7 +253,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
                                 </div>
                               ))
                             ) : (
-                              <span className="text-gray-500 text-sm">(no headers)</span>
+                              <span className="text-muted-foreground text-sm">(no headers)</span>
                             )}
                           </div>
                         </div>

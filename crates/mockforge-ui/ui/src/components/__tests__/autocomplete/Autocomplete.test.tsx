@@ -506,7 +506,7 @@ describe('AutocompleteInput', () => {
 
     // Wait for the state update to apply the highlight class
     await waitFor(() => {
-      expect(suggestionContainer).toHaveClass('bg-blue-50');
+      expect(suggestionContainer).toHaveClass('bg-info-50');
     });
   });
 });

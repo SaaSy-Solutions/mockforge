@@ -213,8 +213,8 @@ export function UserManagementPage() {
 
   const getRoleBadge = (role: string) => {
     const colors = {
-      admin: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-      editor: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+      admin: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300',
+      editor: 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300',
       viewer: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
     };
     return (
@@ -226,17 +226,17 @@ export function UserManagementPage() {
 
   const getStatusBadge = (status: string) => {
     if (status === 'active') {
-      return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+      return <Badge className="bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300">
         <CheckCircle className="w-3 h-3 mr-1" />
         Active
       </Badge>;
     } else if (status === 'pending') {
-      return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+      return <Badge className="bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
         <Clock className="w-3 h-3 mr-1" />
         Pending
       </Badge>;
     } else {
-      return <Badge className="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+      return <Badge className="bg-muted text-foreground dark:bg-gray-800 dark:text-gray-200">
         <XCircle className="w-3 h-3 mr-1" />
         Inactive
       </Badge>;

@@ -129,7 +129,7 @@ export function VbrEntitySelector({
       <CardContent className="space-y-4">
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -142,14 +142,14 @@ export function VbrEntitySelector({
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-sm text-gray-500">Loading entities...</span>
+            <span className="ml-2 text-sm text-muted-foreground">Loading entities...</span>
           </div>
         )}
 
         {/* Error state */}
         {error && (
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+          <div className="p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-md">
+            <p className="text-danger-700 dark:text-danger-200 text-sm">{error}</p>
           </div>
         )}
 
@@ -157,7 +157,7 @@ export function VbrEntitySelector({
         {!loading && !error && (
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {filteredEntities.length === 0 ? (
-              <div className="text-center py-8 text-sm text-gray-500">
+              <div className="text-center py-8 text-sm text-muted-foreground">
                 {searchQuery ? 'No entities found matching your search' : 'No entities available'}
               </div>
             ) : (
@@ -168,20 +168,20 @@ export function VbrEntitySelector({
                   className={cn(
                     'p-3 border rounded-lg cursor-pointer transition-colors',
                     selected === entity.name
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'border-info bg-info-50 dark:bg-info-900/20'
+                      : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
                   )}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {selected === entity.name ? (
-                        <CheckCircle2 className="h-5 w-5 text-blue-500" />
+                        <CheckCircle2 className="h-5 w-5 text-info-500" />
                       ) : (
-                        <Circle className="h-5 w-5 text-gray-400" />
+                        <Circle className="h-5 w-5 text-muted-foreground" />
                       )}
                       <div>
                         <div className="font-medium text-sm">{entity.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                           Table: {entity.table_name}
                         </div>
                       </div>

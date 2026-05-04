@@ -650,10 +650,10 @@ function ConfigurationTab() {
               for AI requests you make.
             </p>
           </div>
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+          <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-lg p-3">
             <div className="flex items-start">
-              <AlertCircle className="w-4 h-4 mr-2 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              <AlertCircle className="w-4 h-4 mr-2 text-warning-600 dark:text-warning-400 mt-0.5" />
+              <p className="text-sm text-warning-700 dark:text-warning-200">
                 Keep your API keys secure. Never share them publicly or commit them to version
                 control.
               </p>
@@ -906,7 +906,7 @@ function AuditLogTab({ orgId }: { orgId: string }) {
             <div key={log.id} className="flex items-start gap-3 p-3 border rounded-lg">
               <div
                 className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
-                  log.event_type === 'byok_config_deleted' ? 'bg-red-500' : 'bg-green-500'
+                  log.event_type === 'byok_config_deleted' ? 'bg-danger-500' : 'bg-success-500'
                 }`}
               />
               <div className="flex-1 min-w-0">

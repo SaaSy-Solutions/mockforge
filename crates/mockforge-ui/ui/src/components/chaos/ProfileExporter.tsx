@@ -228,7 +228,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
     <ModernCard>
       <div className="space-y-6">
         <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-gray-400" />
+          <FileText className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Export/Import Profiles</h3>
         </div>
 
@@ -240,7 +240,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
               <select
                 value={exportFormat}
                 onChange={(e) => setExportFormat(e.target.value as 'json' | 'yaml')}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900"
+                className="px-3 py-2 border border-border rounded-lg bg-card"
               >
                 <option value="json">JSON</option>
                 <option value="yaml">YAML</option>
@@ -286,7 +286,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
           )}
 
           {/* Import Section */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="pt-4 border-t border-border">
             <h4 className="text-sm font-medium mb-3">Import Profile</h4>
             <div className="space-y-3">
               <div>
@@ -296,7 +296,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
                 <select
                   value={importFormat}
                   onChange={(e) => setImportFormat(e.target.value as 'json' | 'yaml')}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card"
                 >
                   <option value="json">JSON</option>
                   <option value="yaml">YAML</option>
@@ -310,7 +310,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
                   type="file"
                   accept=".json,.yaml,.yml"
                   onChange={handleFileUpload}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card"
                 />
               </div>
               <div>
@@ -321,7 +321,7 @@ export function ProfileExporter({ compact = false }: ProfileExporterProps) {
                   value={importContent}
                   onChange={(e) => setImportContent(e.target.value)}
                   placeholder="Paste profile JSON or YAML here..."
-                  className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg font-mono text-sm bg-white dark:bg-gray-900"
+                  className="w-full h-32 px-3 py-2 border border-border rounded-lg font-mono text-sm bg-card"
                 />
               </div>
               <Button

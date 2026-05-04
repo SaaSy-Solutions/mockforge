@@ -12,7 +12,8 @@ import {
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi, type TwoFactorSetup } from '../../services/authApi';
-import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2 } from 'lucide-react';
+import { apiErrorMessage } from '@/utils/errorHandling';
+import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2, AlertCircle } from 'lucide-react';
 
 interface AccountSettingsProps {
     open: boolean;
@@ -51,6 +52,13 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifBanner, setNotifBanner] = useState<Banner>(null);
 
+    // Email verification state — `is_verified` comes from /api/v1/users/me;
+    // resending hits /api/v1/auth/verify-email/resend.
+    const [isVerified, setIsVerified] = useState(true);
+    const [verifyEmailAddress, setVerifyEmailAddress] = useState('');
+    const [verifyResending, setVerifyResending] = useState(false);
+    const [verifyBanner, setVerifyBanner] = useState<Banner>(null);
+
     // GDPR state
     const [gdprBanner, setGdprBanner] = useState<Banner>(null);
     const [exporting, setExporting] = useState(false);
@@ -79,6 +87,8 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setShowDeleteForm(false);
         setDeleteConfirm('');
         setDeleteReason('');
+        setVerifyBanner(null);
+        setVerifyEmailAddress('');
 
         authApi
             .getMe()
@@ -87,6 +97,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                 setTwoFactorEnabled(profile.two_factor_enabled);
                 setEmailNotifications(profile.email_notifications);
                 setSecurityAlerts(profile.security_alerts);
+                setIsVerified(profile.is_verified);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -301,6 +312,43 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         }
     };
 
+    const handleResendVerification = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVerifyResending(true);
+        setVerifyBanner(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const body = verifyEmailAddress.trim()
+                ? { email: verifyEmailAddress.trim() }
+                : {};
+            const response = await fetch('/api/v1/auth/verify-email/resend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    apiErrorMessage(response, errorData, 'Failed to resend verification email'),
+                );
+            }
+            setVerifyBanner({
+                kind: 'success',
+                message: 'Verification email sent. Check your inbox (and spam folder).',
+            });
+        } catch (err) {
+            setVerifyBanner({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Failed to resend verification email',
+            });
+        } finally {
+            setVerifyResending(false);
+        }
+    };
+
     const handleSaveNotifications = async (
         patch: { email_notifications?: boolean; security_alerts?: boolean },
     ) => {
@@ -324,21 +372,53 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-900 max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-lg bg-card max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="space-y-2">
-                    <DialogTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    <DialogTitle className="text-xl font-semibold text-foreground">
                         Account Settings
                     </DialogTitle>
-                    <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                    <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
                         Manage your password, two-factor authentication, and notification preferences.
                     </DialogDescription>
                     <DialogClose onClick={() => onOpenChange(false)} />
                 </DialogHeader>
 
                 <div className="space-y-8">
+                    {/* Email verification banner — only when unverified. */}
+                    {!isVerified && (
+                        <div className="space-y-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+                            <div className="flex items-start gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                <AlertCircle className="h-4 w-4 mt-0.5" />
+                                <span>Verify your email</span>
+                            </div>
+                            <p className="text-xs text-amber-800 dark:text-amber-300">
+                                Some features require a confirmed email address.
+                                {user.email ? ` We'll resend the link to ${user.email}.` : ''}
+                            </p>
+                            {verifyBanner && <Banner banner={verifyBanner} />}
+                            <form onSubmit={handleResendVerification} className="space-y-2">
+                                {!user.email && (
+                                    <LabeledInput
+                                        id="resendEmail"
+                                        label="Email address"
+                                        type="email"
+                                        value={verifyEmailAddress}
+                                        onChange={setVerifyEmailAddress}
+                                        placeholder="you@company.com"
+                                    />
+                                )}
+                                <div className="flex justify-end">
+                                    <Button type="submit" disabled={verifyResending} variant="outline">
+                                        {verifyResending ? 'Sending…' : 'Resend verification email'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
                     {/* Password section */}
                     <form onSubmit={handlePasswordSubmit} className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                             <Shield className="h-4 w-4" />
                             <span>Change password</span>
                         </div>
@@ -381,7 +461,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
 
                     {/* 2FA section */}
                     <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                             <Lock className="h-4 w-4" />
                             <span>Two-factor authentication</span>
                         </div>
@@ -389,12 +469,12 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         {twoFactorBanner && <Banner banner={twoFactorBanner} />}
 
                         {!twoFactorSetup && !showDisableForm && (
-                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md">
+                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                                 <div>
-                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    <div className="text-sm font-medium text-foreground">
                                         {twoFactorEnabled ? '2FA is enabled' : '2FA is disabled'}
                                     </div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400">
+                                    <div className="text-xs text-muted-foreground">
                                         {twoFactorEnabled
                                             ? 'A TOTP code is required to sign in.'
                                             : 'Require a TOTP code at sign-in for added security.'}
@@ -422,28 +502,28 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         )}
 
                         {twoFactorSetup && (
-                            <form onSubmit={handleVerify2FA} className="space-y-3 rounded-md border border-gray-200 dark:border-gray-700 p-4">
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <form onSubmit={handleVerify2FA} className="space-y-3 rounded-md border border-border p-4">
+                                <p className="text-sm text-foreground">
                                     Scan this QR code with an authenticator app, then enter the 6-digit code to confirm.
                                 </p>
                                 <img
                                     src={twoFactorSetup.qr_code_url}
                                     alt="TOTP QR code"
-                                    className="mx-auto h-40 w-40 bg-white p-2 rounded"
+                                    className="mx-auto h-40 w-40 bg-card p-2 rounded"
                                 />
-                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                <div className="text-xs text-muted-foreground">
                                     Secret: <code className="font-mono">{twoFactorSetup.secret}</code>
                                 </div>
 
-                                <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 p-3 text-sm">
+                                <div className="rounded-md bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 p-3 text-sm">
                                     <div className="flex items-center justify-between">
-                                        <strong className="text-yellow-900 dark:text-yellow-200">
+                                        <strong className="text-warning-900 dark:text-warning-200">
                                             Save these backup codes
                                         </strong>
                                         <button
                                             type="button"
                                             onClick={handleCopyBackupCodes}
-                                            className="text-xs inline-flex items-center gap-1 text-yellow-900 dark:text-yellow-200 hover:underline"
+                                            className="text-xs inline-flex items-center gap-1 text-warning-900 dark:text-warning-200 hover:underline"
                                         >
                                             {copiedCodes ? (
                                                 <>
@@ -456,10 +536,10 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                                             )}
                                         </button>
                                     </div>
-                                    <p className="text-xs mt-1 text-yellow-800 dark:text-yellow-300">
+                                    <p className="text-xs mt-1 text-warning-700 dark:text-warning-300">
                                         Each code works once if you lose access to your authenticator. They won't be shown again.
                                     </p>
-                                    <pre className="mt-2 text-xs font-mono grid grid-cols-2 gap-1 text-yellow-900 dark:text-yellow-100">
+                                    <pre className="mt-2 text-xs font-mono grid grid-cols-2 gap-1 text-warning-900 dark:text-warning-100">
                                         {twoFactorSetup.backup_codes.map((code) => (
                                             <span key={code}>{code}</span>
                                         ))}
@@ -493,8 +573,8 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         )}
 
                         {showDisableForm && (
-                            <form onSubmit={handleDisable2FA} className="space-y-3 rounded-md border border-gray-200 dark:border-gray-700 p-4">
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <form onSubmit={handleDisable2FA} className="space-y-3 rounded-md border border-border p-4">
+                                <p className="text-sm text-foreground">
                                     Enter your password to disable two-factor authentication.
                                 </p>
                                 <LabeledInput
@@ -528,14 +608,14 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
 
                     {/* Notification prefs section */}
                     <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                             <Bell className="h-4 w-4" />
                             <span>Notifications</span>
                         </div>
                         {notifBanner && <Banner banner={notifBanner} />}
 
                         <ToggleRow
-                            icon={<Mail className="h-4 w-4 text-gray-600 dark:text-gray-400" />}
+                            icon={<Mail className="h-4 w-4 text-muted-foreground" />}
                             label="Email notifications"
                             description="Welcome messages, subscription updates, and API-token reminders."
                             checked={emailNotifications}
@@ -546,7 +626,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                             disabled={notifSaving}
                         />
                         <ToggleRow
-                            icon={<Shield className="h-4 w-4 text-gray-600 dark:text-gray-400" />}
+                            icon={<Shield className="h-4 w-4 text-muted-foreground" />}
                             label="Security alerts"
                             description="Emails when your password or 2FA is changed."
                             checked={securityAlerts}
@@ -560,19 +640,19 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
 
                     {/* GDPR / privacy section */}
                     <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                             <Download className="h-4 w-4" />
                             <span>Privacy &amp; data</span>
                         </div>
 
                         {gdprBanner && <Banner banner={gdprBanner} />}
 
-                        <div className="flex items-start justify-between gap-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md">
+                        <div className="flex items-start justify-between gap-4 p-3 bg-muted/50 rounded-md">
                             <div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                <div className="text-sm font-medium text-foreground">
                                     Export your data
                                 </div>
-                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                <div className="text-xs text-muted-foreground">
                                     Download a JSON file containing all your account data (GDPR right to data portability).
                                 </div>
                             </div>
@@ -587,12 +667,12 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         </div>
 
                         {!showDeleteForm ? (
-                            <div className="flex items-start justify-between gap-4 p-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10">
+                            <div className="flex items-start justify-between gap-4 p-3 rounded-md border border-danger-200 dark:border-danger-800 bg-danger-50/50 dark:bg-danger-900/10">
                                 <div>
-                                    <div className="text-sm font-medium text-red-900 dark:text-red-200">
+                                    <div className="text-sm font-medium text-danger-900 dark:text-danger-200">
                                         Delete your account
                                     </div>
-                                    <div className="text-xs text-red-700 dark:text-red-300">
+                                    <div className="text-xs text-danger-700 dark:text-danger-300">
                                         Permanently erase all your data. This cannot be undone.
                                     </div>
                                 </div>
@@ -611,9 +691,9 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         ) : (
                             <form
                                 onSubmit={handleDeleteAccount}
-                                className="space-y-3 rounded-md border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 p-4"
+                                className="space-y-3 rounded-md border border-danger-200 dark:border-danger-800 bg-danger-50/50 dark:bg-danger-900/10 p-4"
                             >
-                                <p className="text-sm text-red-900 dark:text-red-200">
+                                <p className="text-sm text-danger-900 dark:text-danger-200">
                                     This action is irreversible. All your workspaces, mocks, tokens, and usage data will be erased.
                                 </p>
                                 <LabeledInput
@@ -666,7 +746,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
 function Banner({ banner }: { banner: NonNullable<Banner> }) {
     const className =
         banner.kind === 'success'
-            ? 'text-sm text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/30 p-3 rounded-md'
+            ? 'text-sm text-success-700 dark:text-success-300 bg-success-100 dark:bg-success-900/30 p-3 rounded-md'
             : 'text-sm text-destructive bg-destructive/10 p-3 rounded-md';
     return <div className={className}>{banner.message}</div>;
 }
@@ -698,7 +778,7 @@ function LabeledInput({
 }: LabeledInputProps) {
     return (
         <div className="space-y-1.5">
-            <label htmlFor={id} className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            <label htmlFor={id} className="text-sm font-medium text-foreground">
                 {label}
             </label>
             <Input
@@ -710,7 +790,7 @@ function LabeledInput({
                 autoFocus={autoFocus}
                 inputMode={inputMode}
                 maxLength={maxLength}
-                className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${error ? 'border-destructive' : ''}`}
+                className={`bg-card text-foreground ${error ? 'border-destructive' : ''}`}
             />
             {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
@@ -728,12 +808,12 @@ interface ToggleRowProps {
 
 function ToggleRow({ icon, label, description, checked, onChange, disabled }: ToggleRowProps) {
     return (
-        <div className="flex items-start justify-between gap-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md">
+        <div className="flex items-start justify-between gap-4 p-3 bg-muted/50 rounded-md">
             <div className="flex items-start gap-2">
                 {icon}
                 <div>
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">{description}</div>
+                    <div className="text-sm font-medium text-foreground">{label}</div>
+                    <div className="text-xs text-muted-foreground">{description}</div>
                 </div>
             </div>
             <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -744,7 +824,7 @@ function ToggleRow({ icon, label, description, checked, onChange, disabled }: To
                     disabled={disabled}
                     className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 dark:peer-focus:ring-brand-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-brand-600" />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 dark:peer-focus:ring-brand-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-card after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-brand-600" />
             </label>
         </div>
     );

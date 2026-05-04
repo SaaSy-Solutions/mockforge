@@ -84,22 +84,22 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
   const getRealityLevelColor = (level: string) => {
     switch (level) {
       case 'real':
-        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
       case 'mock_v3':
-        return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
+        return 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300';
       case 'blended':
-        return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
+        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300';
       case 'chaos_driven':
-        return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
+        return 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300';
       default:
-        return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200';
+        return 'bg-muted text-foreground';
     }
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
       </div>
     );
   }
@@ -112,17 +112,17 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Network className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+              <Network className="h-8 w-8 text-info-600 dark:text-info-400" />
               {currentFederation.name}
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {currentFederation.description || 'Federation Details'}
             </p>
           </div>
@@ -130,7 +130,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
         {onEdit && (
           <button
             onClick={onEdit}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <Edit className="h-4 w-4" />
             Edit
@@ -142,27 +142,27 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Basic Info */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Basic Information
           </h3>
           <div className="space-y-3 text-sm">
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Federation ID:</span>
-              <span className="ml-2 font-mono text-gray-900 dark:text-white">{currentFederation.id}</span>
+              <span className="text-muted-foreground">Federation ID:</span>
+              <span className="ml-2 font-mono text-foreground">{currentFederation.id}</span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Organization ID:</span>
-              <span className="ml-2 font-mono text-gray-900 dark:text-white">{currentFederation.org_id}</span>
+              <span className="text-muted-foreground">Organization ID:</span>
+              <span className="ml-2 font-mono text-foreground">{currentFederation.org_id}</span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Created:</span>
-              <span className="ml-2 text-gray-900 dark:text-white">
+              <span className="text-muted-foreground">Created:</span>
+              <span className="ml-2 text-foreground">
                 {new Date(currentFederation.created_at).toLocaleString()}
               </span>
             </div>
             <div>
-              <span className="text-gray-600 dark:text-gray-400">Updated:</span>
-              <span className="ml-2 text-gray-900 dark:text-white">
+              <span className="text-muted-foreground">Updated:</span>
+              <span className="ml-2 text-foreground">
                 {new Date(currentFederation.updated_at).toLocaleString()}
               </span>
             </div>
@@ -171,7 +171,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
 
         {/* Services Summary */}
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Services Summary
           </h3>
           <div className="space-y-2 text-sm">
@@ -201,33 +201,33 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
 
       {/* Services */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-foreground mb-4">
           Services ({currentFederation.services.length})
         </h3>
         {currentFederation.services.length === 0 ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">No services configured</p>
+          <p className="text-sm text-muted-foreground">No services configured</p>
         ) : (
           <div className="space-y-4">
             {currentFederation.services.map((service, index) => (
               <div
                 key={index}
-                className="p-4 bg-gray-50 dark:bg-gray-800 rounded border-l-4 border-blue-600"
+                className="p-4 bg-muted rounded border-l-4 border-info-600"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <div className="font-medium text-gray-900 dark:text-white">
+                  <div className="font-medium text-foreground">
                     {service.name}
                   </div>
                   <span className={`px-2 py-1 rounded text-xs ${getRealityLevelColor(service.reality_level)}`}>
                     {service.reality_level}
                   </span>
                 </div>
-                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                <div className="space-y-1 text-sm text-muted-foreground">
                   <div>
                     <strong>Workspace ID:</strong>{' '}
                     <span className="font-mono">{service.workspace_id}</span>
                   </div>
                   <div>
-                    <strong>Base Path:</strong> <code className="bg-gray-100 dark:bg-gray-900 px-1 rounded">{service.base_path}</code>
+                    <strong>Base Path:</strong> <code className="bg-muted dark:bg-gray-900 px-1 rounded">{service.base_path}</code>
                   </div>
                   {service.dependencies && service.dependencies.length > 0 && (
                     <div>
@@ -247,7 +247,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
 
       {/* Test Routing */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
           <Play className="h-5 w-5" />
           Test Routing
         </h3>
@@ -256,7 +256,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
             <select
               value={testMethod}
               onChange={(e) => setTestMethod(e.target.value as HttpMethod)}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+              className="px-3 py-2 border border-border rounded-lg bg-card text-foreground text-sm"
               aria-label="HTTP method"
             >
               {HTTP_METHODS.map((m) => (
@@ -268,12 +268,12 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
               value={testPath}
               onChange={(e) => setTestPath(e.target.value)}
               placeholder="/auth/login"
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="flex-1 px-3 py-2 border border-border rounded-lg bg-card text-foreground"
             />
             <button
               onClick={handleTestRoute}
               disabled={!testPath || routeRequest.isPending}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Test Route
             </button>
@@ -281,14 +281,14 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           <button
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs text-info-600 dark:text-info-400 hover:underline"
           >
             {showAdvanced ? 'Hide' : 'Show'} headers & body (forward-compat with route handler)
           </button>
           {showAdvanced && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-xs font-medium text-foreground mb-1">
                   Headers (one per line, <code>Name: value</code>)
                 </label>
                 <textarea
@@ -296,11 +296,11 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
                   onChange={(e) => setTestHeadersText(e.target.value)}
                   rows={4}
                   placeholder={'Authorization: Bearer ...\nX-Trace-Id: abc'}
-                  className="w-full px-3 py-2 font-mono text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 font-mono text-xs border border-border rounded-lg bg-card text-foreground"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-xs font-medium text-foreground mb-1">
                   Body (JSON or raw text)
                 </label>
                 <textarea
@@ -308,18 +308,18 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
                   onChange={(e) => setTestBodyText(e.target.value)}
                   rows={4}
                   placeholder={'{"username": "alice"}'}
-                  className="w-full px-3 py-2 font-mono text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 font-mono text-xs border border-border rounded-lg bg-card text-foreground"
                 />
               </div>
             </div>
           )}
           {routingResult && (
-            <div className="p-4 bg-green-50 dark:bg-green-900 rounded">
+            <div className="p-4 bg-success-50 dark:bg-success-900 rounded">
               <div className="flex items-center gap-2 mb-2">
-                <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="font-medium text-green-900 dark:text-green-200">Routing Successful</span>
+                <CheckCircle className="h-4 w-4 text-success-600 dark:text-success-400" />
+                <span className="font-medium text-success-900 dark:text-success-200">Routing Successful</span>
               </div>
-              <div className="text-sm text-green-800 dark:text-green-300 space-y-1">
+              <div className="text-sm text-success-700 dark:text-success-300 space-y-1">
                 <div>
                   <strong>Service:</strong> {routingResult.service.name}
                 </div>
@@ -327,7 +327,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
                   <strong>Workspace ID:</strong> <span className="font-mono">{routingResult.workspace_id}</span>
                 </div>
                 <div>
-                  <strong>Service Path:</strong> <code className="bg-green-100 dark:bg-green-800 px-1 rounded">{routingResult.service_path}</code>
+                  <strong>Service Path:</strong> <code className="bg-success-100 dark:bg-success-800 px-1 rounded">{routingResult.service_path}</code>
                 </div>
               </div>
             </div>

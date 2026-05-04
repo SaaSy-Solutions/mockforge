@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { X } from 'lucide-react';
-import { Node } from '@xyflow/react';
+import type { Node } from '@xyflow/react';
 import type { ApiCallNodeData } from './ApiCallNode';
 import type { ConditionNodeData } from './ConditionNode';
 import type { DelayNodeData } from './DelayNode';
