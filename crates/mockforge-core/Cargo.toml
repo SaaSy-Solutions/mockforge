@@ -56,7 +56,7 @@ jsonschema = "0.33.0"
 jsonwebtoken = { workspace = true }
 sha2 = { workspace = true }
 openapiv3 = { workspace = true }
-indexmap = "2.0"
+indexmap = "2.14"
 axum = { workspace = true }
 tower = { workspace = true }
 json-patch = "4.0.0"

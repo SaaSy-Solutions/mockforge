@@ -149,7 +149,7 @@ Override configuration with environment variables:
 export MOCKFORGE_MQTT_ENABLED=true
 export MOCKFORGE_MQTT_PORT=1883
 export MOCKFORGE_MQTT_HOST=0.0.0.0
-export MOCKFORGE_MQTT_MAX_CONNECTIONS=1000
+export # Configure via mqtt.max_connections in YAML; max_connections=1000
 
 mockforge serve
 ```

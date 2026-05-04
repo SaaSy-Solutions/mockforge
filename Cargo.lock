@@ -505,7 +505,7 @@ dependencies = [
  "futures-util",
  "handlebars 6.4.0",
  "http 1.4.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "mime",
  "multer",
  "num-traits",
@@ -572,7 +572,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e3ef112905abea9dea592fc868a6873b10ebd3f983e83308f995d6284e9ba41"
 dependencies = [
  "bytes",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "serde",
  "serde_json",
 ]
@@ -4948,7 +4948,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 dependencies = [
  "fallible-iterator",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "stable_deref_trait",
 ]
 
@@ -5446,7 +5446,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http 0.2.12",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -5465,7 +5465,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http 1.4.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "slab",
  "tokio",
  "tokio-util",
@@ -5581,6 +5581,12 @@ dependencies = [
  "equivalent",
  "foldhash 0.2.0",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
 
 [[package]]
 name = "hashify"
@@ -6267,12 +6273,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.13.0"
+version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
+checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "serde",
  "serde_core",
 ]
@@ -6326,7 +6332,7 @@ dependencies = [
  "crossbeam-utils",
  "dashmap 6.1.0",
  "env_logger",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "itoa",
  "log",
  "num-format",
@@ -6975,7 +6981,7 @@ checksum = "02cb977175687f33fa4afa0c95c112b987ea1443e5a51c8f8ff27dc618270cc2"
 dependencies = [
  "cssparser 0.29.6",
  "html5ever 0.29.1",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "selectors 0.24.0",
 ]
 
@@ -7593,7 +7599,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7616,7 +7622,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7637,7 +7643,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -7674,7 +7680,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7714,7 +7720,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7793,7 +7799,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "argon2",
@@ -7837,7 +7843,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-config"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -7847,7 +7853,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7868,7 +7874,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -7888,7 +7894,7 @@ dependencies = [
  "globwalk",
  "hex",
  "hmac",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "json-patch 4.1.0",
  "jsonpath",
  "jsonptr 0.7.1",
@@ -7939,7 +7945,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7972,7 +7978,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
@@ -8005,7 +8011,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8028,7 +8034,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8049,7 +8055,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8075,7 +8081,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8085,7 +8091,7 @@ dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",
  "futures",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "mockforge-core",
  "mockforge-data",
  "mockforge-foundation",
@@ -8113,7 +8119,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -8156,7 +8162,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8235,7 +8241,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",
@@ -8253,7 +8259,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-integration-tests"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "axum 0.8.8",
  "chrono",
@@ -8282,7 +8288,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8297,7 +8303,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-k8s-operator"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8319,7 +8325,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8346,7 +8352,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8371,7 +8377,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "axum 0.8.8",
  "chrono",
@@ -8392,14 +8398,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
  "base64 0.22.1",
  "chrono",
  "globwalk",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "jsonschema",
  "mockforge-foundation",
  "once_cell",
@@ -8418,7 +8424,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8434,7 +8440,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8463,7 +8469,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -8493,7 +8499,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8522,7 +8528,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8562,7 +8568,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8580,7 +8586,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8599,7 +8605,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8624,7 +8630,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "axum 0.8.8",
  "mockforge-core",
@@ -8638,7 +8644,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8671,7 +8677,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-core"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8709,7 +8715,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-server"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-stripe",
@@ -8777,7 +8783,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8797,7 +8803,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -8810,7 +8816,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
@@ -8832,7 +8838,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8869,7 +8875,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
@@ -8897,7 +8903,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-security-core"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -8927,7 +8933,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8954,7 +8960,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8978,14 +8984,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9012,7 +9018,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -9023,7 +9029,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-runner"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9043,7 +9049,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "axum 0.8.8",
  "http 1.4.0",
@@ -9061,7 +9067,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9084,7 +9090,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9115,7 +9121,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9167,7 +9173,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9202,7 +9208,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "globwalk",
  "mockforge-core",
@@ -9213,7 +9219,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9230,7 +9236,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -10055,7 +10061,7 @@ checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
 dependencies = [
  "crc32fast",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "memchr",
 ]
 
@@ -10137,7 +10143,7 @@ version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c8d427828b22ae1fff2833a03d8486c2c881367f1c336349f307f321e7f4d05"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "serde",
  "serde_json",
 ]
@@ -10200,7 +10206,7 @@ checksum = "1e32339a5dc40459130b3bd269e9892439f55b33e772d2a9d402a789baaf4e8a"
 dependencies = [
  "futures-core",
  "futures-sink",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "js-sys",
  "once_cell",
  "pin-project-lite",
@@ -10659,7 +10665,7 @@ checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
 ]
 
 [[package]]
@@ -11002,7 +11008,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "740ebea15c5d1428f910cd1a5f52cebf8d25006245ed8ade92702f4943d91e07"
 dependencies = [
  "base64 0.22.1",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "quick-xml 0.38.4",
  "serde",
  "time",
@@ -12557,7 +12563,7 @@ dependencies = [
  "convert_case 0.6.0",
  "fnv",
  "ident_case",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "proc-macro-crate 3.4.0",
  "proc-macro2",
  "quote 1.0.44",
@@ -13322,7 +13328,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "schemars 0.9.0",
  "schemars 1.2.1",
  "serde_core",
@@ -13349,7 +13355,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "itoa",
  "ryu",
  "serde",
@@ -13840,7 +13846,7 @@ dependencies = [
  "futures-util",
  "hashbrown 0.15.5",
  "hashlink 0.10.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "memchr",
  "native-tls",
@@ -14906,7 +14912,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.3.125"
+version = "0.3.126"
 dependencies = [
  "mockforge-core",
  "serde_json",
@@ -15251,7 +15257,7 @@ version = "0.9.12+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf92845e79fc2e2def6a5d828f0801e29a2f8acc037becc5ab08595c7d5e9863"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 0.7.5+spec-1.1.0",
@@ -15266,7 +15272,7 @@ version = "1.0.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "399b1124a3c9e16766831c6bba21e50192572cdd98706ea114f9502509686ffc"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "serde_core",
  "serde_spanned 1.0.4",
  "toml_datetime 1.1.1+spec-1.1.0",
@@ -15308,7 +15314,7 @@ version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "toml_datetime 0.6.11",
  "winnow 0.5.40",
 ]
@@ -15319,7 +15325,7 @@ version = "0.20.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70f427fce4d84c72b5b732388bf4a9f4531b53f74e2887e3ecb2481f68f66d81"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "toml_datetime 0.6.11",
  "winnow 0.5.40",
 ]
@@ -15330,7 +15336,7 @@ version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "serde",
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
@@ -15344,7 +15350,7 @@ version = "0.23.10+spec-1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "84c8b9f757e028cee9fa244aea147aab2a9ec09d5325a9b01e0a49730c2b5269"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
  "winnow 0.7.14",
@@ -15535,7 +15541,7 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "pin-project-lite",
  "slab",
  "sync_wrapper 1.0.2",
@@ -16087,9 +16093,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.21.0"
+version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b672338555252d43fd2240c714dc444b8c6fb0a5c5335e65a07bba7742735ddb"
+checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "atomic",
  "getrandom 0.4.1",
@@ -16397,7 +16403,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20b3ec880a9ac69ccd92fbdbcf46ee833071cf09f82bb005b2327c7ae6025ae2"
 dependencies = [
  "anyhow",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "wasm-encoder 0.239.0",
  "wasmparser 0.239.0",
 ]
@@ -16409,7 +16415,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb0e353e6a2fbdc176932bbaab493762eb1255a7900fe0fea1a2f96c296cc909"
 dependencies = [
  "anyhow",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "wasm-encoder 0.244.0",
  "wasmparser 0.244.0",
 ]
@@ -16448,7 +16454,7 @@ checksum = "a9b1e81f3eb254cf7404a82cee6926a4a3ccc5aad80cc3d43608a070c67aa1d7"
 dependencies = [
  "bitflags 2.11.0",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "semver",
  "serde",
 ]
@@ -16461,7 +16467,7 @@ checksum = "8c9d90bb93e764f6beabf1d02028c70a2156a6583e63ac4218dd07ef733368b0"
 dependencies = [
  "bitflags 2.11.0",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "semver",
  "serde",
 ]
@@ -16474,7 +16480,7 @@ checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
 dependencies = [
  "bitflags 2.11.0",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "semver",
 ]
 
@@ -16485,7 +16491,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f08c9adee0428b7bddf3890fc27e015ac4b761cc608c822667102b8bfd6995e"
 dependencies = [
  "bitflags 2.11.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "semver",
 ]
 
@@ -16517,7 +16523,7 @@ dependencies = [
  "fxprof-processed-profile",
  "gimli",
  "hashbrown 0.15.5",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "ittapi",
  "libc",
  "log",
@@ -16566,7 +16572,7 @@ dependencies = [
  "cranelift-bitset",
  "cranelift-entity",
  "gimli",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "object",
  "postcard",
@@ -16764,7 +16770,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.11.0",
  "heck 0.5.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "wit-parser 0.236.1",
 ]
 
@@ -17853,7 +17859,7 @@ checksum = "9a4232e841089fa5f3c4fc732a92e1c74e1a3958db3b12f1de5934da2027f1f4"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "prettyplease",
  "syn 2.0.117",
  "wasm-metadata 0.239.0",
@@ -17869,7 +17875,7 @@ checksum = "b7c566e0f4b284dd6561c786d9cb0142da491f46a9fbed79ea69cdad5db17f21"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "prettyplease",
  "syn 2.0.117",
  "wasm-metadata 0.244.0",
@@ -17915,7 +17921,7 @@ checksum = "88a866b19dba2c94d706ec58c92a4c62ab63e482b4c935d2a085ac94caecb136"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "serde",
  "serde_derive",
@@ -17934,7 +17940,7 @@ checksum = "9d66ea20e9553b30172b5e831994e35fbde2d165325bec84fc43dbf6f4eb9cb2"
 dependencies = [
  "anyhow",
  "bitflags 2.11.0",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "serde",
  "serde_derive",
@@ -17953,7 +17959,7 @@ checksum = "16e4833a20cd6e85d6abfea0e63a399472d6f88c6262957c17f546879a80ba15"
 dependencies = [
  "anyhow",
  "id-arena",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "semver",
  "serde",
@@ -17971,7 +17977,7 @@ checksum = "55c92c939d667b7bf0c6bf2d1f67196529758f99a2a45a3355cc56964fd5315d"
 dependencies = [
  "anyhow",
  "id-arena",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "semver",
  "serde",
@@ -17989,7 +17995,7 @@ checksum = "ecc8ac4bc1dc3381b7f59c34f00b67e18f910c2c0f50015669dde7def656a736"
 dependencies = [
  "anyhow",
  "id-arena",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "log",
  "semver",
  "serde",
@@ -18426,7 +18432,7 @@ dependencies = [
  "flate2",
  "getrandom 0.3.4",
  "hmac",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "lzma-rs",
  "memchr",
  "pbkdf2",
@@ -18447,7 +18453,7 @@ checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
 dependencies = [
  "arbitrary",
  "crc32fast",
- "indexmap 2.13.0",
+ "indexmap 2.14.0",
  "memchr",
 ]
 

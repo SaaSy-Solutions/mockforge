@@ -1,3 +1,125 @@
+## [0.3.126] - 2026-05-03
+
+### Added
+
+- **[Observability]** TPS / RPS200 / CPS rate metrics in TUI dashboard + persistent CSV (#326, #79)
+  - **TPS** — successful (200..=399) responses per second
+  - **RPS200** — 200-OK responses per second
+  - **CPS** — accepted TCP connections per second (works for both plain HTTP via `axum::serve` and HTTPS via `axum_server::Server::serve` — make-service wrapper instead of listener wrapper)
+  - Each shown current + lifetime peak in the *Request Stats* panel
+  - Three new columns appended to the `MOCKFORGE_METRICS_LOG_FILE` CSV: `tps,rps_200,cps`. Old positional CSV parsers keep working
+  - New `mockforge-foundation::rate_counters` module hosts the global atomic counters
+- **[CLI]** `--https-port` for nginx-style dual HTTP+HTTPS listeners (#327, #79)
+  - When set, the existing `--http-port` listener stays plain HTTP and a parallel TLS listener spins up on `--https-port`, sharing the same router and admin UI
+  - Example: `mockforge serve --http-port 80 --https-port 443 --tls-cert server.pem --tls-key key.pem`
+  - `--https-port` requires `--tls-cert` + `--tls-key` and must differ from `--http-port`
+- **[Bench]** `bench-chunked --spec` to drive the native chunked bench from POST/PUT/PATCH operations in an OpenAPI spec (#328, #79)
+  - When `--spec` is set, `--target` becomes the base URL and the bench iterates each matching operation sequentially, each running for `--duration`
+  - `--operation-id <id>` narrows to a single op
+- **[Bench]** `bench-chunked` now captures and prints up to five non-2xx response samples — status, `Server` header, first 256 bytes of body (#329, #79)
+  - Critical for diagnosing the "503 from bench, 200 in MockForge log" pattern (almost always an upstream proxy timing out on a slow chunked upload)
+  - Hint output for 5xx spells out the proxy-timeout math: each request takes >= `(total_size_bytes / chunk_size_bytes) * chunk_interval_ms` ms
+
+### Changed
+
+- **[Bench]** `bench-chunked` CLI help: `--total-size-bytes` is now explicitly documented as **per-request** (not total over the run), with the chunks-per-request formula in the help text. Resolves repeat user confusion (#328, #79)
+
+## [0.3.125] - 2026-05-02
+
+### Added
+
+- **[Chaos]** Per-request fault matchers (#306, #79):
+  - `request_matcher.source_ips` — CIDR or bare IP allowlist
+  - `request_matcher.headers` — case-insensitive name + optional exact value
+  - `request_matcher.min_body_size_bytes` — only requests with body ≥ N
+  - `request_matcher.chunked_only` — only `Transfer-Encoding: chunked` requests
+  - AND across fields, OR within a list. Empty matcher matches everything (back-compat)
+  - Applies to all five fault paths: HTTP errors, timeouts, partial responses, payload corruption, connection errors
+- **[Chaos]** TCP-level connection errors via `ChaosTcpListener` (#306, #79):
+  - `connection_error_kind: tcp_reset` — TCP RST at accept time (`SO_LINGER=0` then drop). Clients see `ECONNRESET`
+  - `connection_error_kind: tcp_close` — TCP FIN at accept time. Clients see EOF before any HTTP response
+  - `connection_error_kind: http_503` (default) — application-layer 503 on a healthy connection (back-compat)
+- **[Bench]** `mockforge bench-chunked` — native Rust chunked-encoding traffic generator (#306, #79)
+  - Bypasses k6 entirely. Each worker streams body via `reqwest::Body::wrap_stream`, no Content-Length, guaranteed wire chunking
+  - Supports `--concurrency`, `--duration`, `--chunk-size-bytes`, `--total-size-bytes`, `--chunk-interval-ms`, `--header`, `--insecure`
+- **[TUI]** Peak metrics tracked alongside current values in the dashboard (#306, #79)
+  - CPU, memory, error-rate now show `current (peak X)`
+- **[Observability]** Persistent metrics CSV via `MOCKFORGE_METRICS_LOG_FILE` env var (#306, #79)
+  - 10-second sampling, `timestamp,cpu_pct,mem_mb,total_reqs,err_rate` per row
+  - Survives restarts; charts in any spreadsheet, Grafana, or dashboarding tool
+
+### Changed
+
+- **[Chaos]** `timeout_errors: true` now actually `tokio::sleep(timeout_ms)` then returns **504 Gateway Timeout**, applied uniformly to chunked and non-chunked. Previously this flag was incorrectly mapped to body truncation (#306, #79)
+- **[Chaos]** `partial_response` now distinguishes chunked vs non-chunked truncation (#306, #79):
+  - Non-chunked: truncates body but keeps original `Content-Length` header — clients see unexpected EOF
+  - Chunked: truncates before terminating chunk — no `0\r\n\r\n`, real protocol violation
+- **[Bench]** k6 templates: `bench --chunked-request-bodies` adds `Transfer-Encoding: chunked` header (best-effort — k6/Go's `net/http` may still send Content-Length based on body type)
+
+### Notes
+
+- Adds new public fields to `FaultInjectionConfig`, `K6Config`, and `K6ScriptTemplateData`. External callers building these via struct literal (without `..Default::default()`) need a trivial update.
+
+## [0.3.124] - 2026-04-30
+
+### Fixed
+
+- **[Core]** `cargo test --doc -p mockforge-core` now passes cleanly — stale doctests against types that moved out during the openapi/foundation extractions are marked `ignore` (#285)
+  - Validation release: closes out the chronic CI red on every release tag from v0.3.117 onward
+
+## [0.3.123] - 2026-04-30
+
+### Fixed
+
+- **[UI]** `test_static_assets_content_length` skips its size assertion when no Vite build is present, so `release.yml` (which doesn't run `pnpm`) stops failing (#284)
+  - Validation release for the chronic release-CI red
+
+## [0.3.122] - 2026-04-30
+
+### Fixed
+
+- **[UI]** `admin_ui_build` tests skip cleanly when `ui/dist/index.html` is missing (#283)
+  - Validation release for the chronic release-CI red
+
+## [0.3.121] - 2026-04-29
+
+### Fixed
+
+- **[Registry]** Drop duplicate migration that blocked all sqlite migrations (#282)
+  - `_000010_user_notification_and_preferences.sql` was a stale orphan (byte-identical to `_000011_`) that violated `_sqlx_migrations.UNIQUE(version)` against the legitimate `_000010_federation_scenario_activations.sql`
+  - 26 sqlite tests in `mockforge-registry-core` were failing on every release until this landed
+
+## [0.3.120] - 2026-04-29
+
+### Fixed
+
+- **[HTTP]** Mocks created via `POST /__mockforge/api/mocks` now honor `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` (#281)
+  - Previously, OpenAPI-loaded route handlers expanded `{{faker.email}}`, `{{uuid}}`, `{{randInt …}}`, etc., but mocks registered through the management API shipped the literal template strings to clients
+  - The Node.js SDK and any test setup that creates mocks programmatically were affected
+- **[CI]** `release.yml`'s test step now pre-builds `mockforge` with `--features all-protocols` so e2e tests have a binary that actually starts the WebSocket and gRPC listeners (#281)
+- **[Test]** `test_data_protocol_generation` no longer asserts that a JSON-string field magically becomes a JSON number after in-string template expansion (it doesn't, and never has) (#281)
+
+## [0.3.119] - 2026-04-29
+
+### Added
+
+- **[HTTP]** `--no-rate-limit` CLI flag and `MOCKFORGE_RATE_LIMIT_ENABLED=false` env var to fully disable the per-IP HTTP rate limiter (#280, #79)
+  - `MOCKFORGE_RATE_LIMIT_DISABLED=true` is a documented alias
+  - Reported by @srikr while load-testing the api.github.com spec — sustained load was hitting the default 1000 RPM / 2000 burst limits and returning 429s with `Retry-After: 60`
+  - Workaround prior to this release was setting `MOCKFORGE_RATE_LIMIT_RPM=100000000` / `MOCKFORGE_RATE_LIMIT_BURST=100000000`; that still works and is unchanged
+
+## [0.3.104] – [0.3.118] — 2026-03-29 to 2026-04-23
+
+These releases predate the `chore(release): bump workspace to X.Y.Z`
+commit convention introduced in 0.3.119, so there's no single commit
+to lift detail from per version. Per-release notes are auto-generated
+on each GitHub release page:
+
+- <https://github.com/SaaSy-Solutions/mockforge/releases>
+
+The crates are all published and resolvable on crates.io
+(`cargo search mockforge-cli` lists every version).
+
 ## [0.3.103] - 2026-03-28
 
 ### Added

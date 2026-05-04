@@ -216,12 +216,8 @@ http:
     allowed_headers: ["Content-Type", "Authorization"]
 ```
 
-**Or via environment variable**:
-```bash
-MOCKFORGE_CORS_ENABLED=true \
-MOCKFORGE_CORS_ALLOWED_ORIGINS="http://localhost:3001,http://localhost:5173" \
-mockforge serve --spec api.json
-```
+CORS is YAML-only; configure under `http.cors.*` in `mockforge.yaml`
+(no env-var equivalents in v0.3.x).
 
 **Debugging**: Check browser console for exact CORS error message - it will tell you which header is missing.
 
@@ -368,12 +364,10 @@ ls -la mockforge.yaml
 
 **Solutions**:
 
-1. **Check variable names**
-```bash
-# Correct format: MOCKFORGE_<SECTION>_<OPTION>
-MOCKFORGE_HTTP_PORT=3000       # ✅
-MOCKFORGE_PORT=3000            # ❌ Wrong
-```
+1. **Check variable names**: every recognized env var starts with the
+   prefix `MOCKFORGE_` followed by `<SECTION>_<OPTION>` in upper-case
+   (e.g. `MOCKFORGE_HTTP_PORT`, not `MOCKFORGE_PORT`). Run
+   `mockforge config env` for the canonical list of recognized names.
 
 2. **Check shell reload**
 ```bash
@@ -432,7 +426,8 @@ top -p $(pgrep mockforge)
 
 1. **Limit connection pool**
 ```bash
-MOCKFORGE_MAX_CONNECTIONS=100 mockforge serve --spec api.json
+# config: core.max_connections; or use --max-connections at boot
+mockforge serve --spec api.json
 ```
 
 2. **Disable features not needed**

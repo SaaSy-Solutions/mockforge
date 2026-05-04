@@ -439,7 +439,7 @@ If port 3000 is in use:
 base_url: http://localhost:3001
 
 # Or use environment variable
-MOCKFORGE_PORT=3001 mockforge serve
+MOCKFORGE_HTTP_PORT=3001 mockforge serve
 ```
 
 ## Next Steps

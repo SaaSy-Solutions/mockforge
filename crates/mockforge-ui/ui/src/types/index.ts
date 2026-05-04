@@ -1091,6 +1091,7 @@ export interface UpdateMockEnvironmentRequest {
   drift_budget_config?: Record<string, unknown> | null;
 }
 
+
 export interface CreateFolderRequest {
   name: string;
   description?: string;

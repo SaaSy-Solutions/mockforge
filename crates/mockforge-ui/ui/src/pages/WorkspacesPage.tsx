@@ -1125,6 +1125,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   <WorkspaceMockEnvironmentsPanel workspaceId={selectedWorkspace.summary.id} />
                 )}
 
+
                 {/* Scenario promotions are a cloud-registry feature. */}
                 {IS_CLOUD && (
                   <WorkspacePromotions workspaceId={selectedWorkspace.summary.id} />

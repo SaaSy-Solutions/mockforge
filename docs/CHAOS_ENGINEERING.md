@@ -169,15 +169,19 @@ observability:
       max_connections: 100
 ```
 
-### Environment Variables
+### CLI flags (no MOCKFORGE_CHAOS_* env vars)
+
+Chaos is configured via CLI flags or YAML config — there are no
+`MOCKFORGE_CHAOS_*` env vars in v0.3.x. Use the CLI for ad-hoc runs:
 
 ```bash
-MOCKFORGE_CHAOS_ENABLED=true
-MOCKFORGE_CHAOS_SCENARIO=network_degradation
-MOCKFORGE_CHAOS_LATENCY_MS=500
-MOCKFORGE_CHAOS_HTTP_ERRORS=500,503
-MOCKFORGE_CHAOS_RATE_LIMIT=100
+mockforge serve --chaos --chaos-scenario network_degradation \
+  --chaos-latency-ms 500 \
+  --chaos-http-errors "500,503" \
+  --chaos-rate-limit 100
 ```
+
+Or set the same fields under `observability.chaos.*` in `mockforge.yaml`.
 
 ## CLI Usage
 

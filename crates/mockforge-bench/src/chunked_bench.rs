@@ -67,6 +67,20 @@ pub struct ChunkedBenchConfig {
     pub skip_tls_verify: bool,
 }
 
+/// One captured non-2xx response — used to surface *who* sent the error
+/// (mockforge? a proxy in front?) and *why*. Critical for diagnosing
+/// "I see 503 from the bench but the server log shows 200" — almost
+/// always an upstream proxy timing out on a slow chunked upload.
+#[derive(Debug, Clone)]
+pub struct ErrorSample {
+    pub status: u16,
+    /// `Server` response header, when present. Often reveals the
+    /// proxy: `nginx/1.21.0`, `cloudflare`, `envoy`, `awselb/2.0`, etc.
+    pub server_header: Option<String>,
+    /// First N bytes of the response body, lossy-UTF8'd. Trimmed.
+    pub body_excerpt: String,
+}
+
 /// Aggregate result from a chunked bench run.
 #[derive(Debug, Clone)]
 pub struct ChunkedBenchResult {
@@ -82,7 +96,15 @@ pub struct ChunkedBenchResult {
     pub p95_ms: u64,
     pub p99_ms: u64,
     pub status_counts: HashMap<u16, u64>,
+    /// First N captured non-2xx responses (status, body excerpt, Server
+    /// header). Empty when every request succeeded.
+    pub error_samples: Vec<ErrorSample>,
 }
+
+/// How many distinct error responses to capture body+headers for.
+const MAX_ERROR_SAMPLES: usize = 5;
+/// How many bytes of error response body to keep per sample.
+const ERROR_BODY_EXCERPT_BYTES: usize = 256;
 
 /// Run the chunked-traffic bench. Spawns `concurrency` worker tasks that send
 /// chunked POSTs back-to-back until `duration` elapses, then aggregates stats.
@@ -107,6 +129,7 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
     let bytes_sent = Arc::new(AtomicU64::new(0));
     let latencies: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::with_capacity(8192)));
     let status_counts: Arc<Mutex<HashMap<u16, u64>>> = Arc::new(Mutex::new(HashMap::new()));
+    let error_samples: Arc<Mutex<Vec<ErrorSample>>> = Arc::new(Mutex::new(Vec::new()));
 
     let deadline = Instant::now() + cfg.duration;
     let started_at = Instant::now();
@@ -121,17 +144,24 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         let bytes_sent = bytes_sent.clone();
         let latencies = latencies.clone();
         let status_counts = status_counts.clone();
+        let error_samples = error_samples.clone();
 
         workers.push(tokio::spawn(async move {
             while Instant::now() < deadline {
                 let req_started = Instant::now();
                 match send_one_chunked_request(&client, &cfg).await {
-                    Ok(status) => {
+                    Ok(SendResult { status, sample }) => {
                         successful.fetch_add(1, Ordering::Relaxed);
                         bytes_sent.fetch_add(cfg.total_size_bytes as u64, Ordering::Relaxed);
                         let elapsed_ms = req_started.elapsed().as_millis() as u64;
                         latencies.lock().await.push(elapsed_ms);
                         *status_counts.lock().await.entry(status).or_insert(0) += 1;
+                        if let Some(s) = sample {
+                            let mut g = error_samples.lock().await;
+                            if g.len() < MAX_ERROR_SAMPLES {
+                                g.push(s);
+                            }
+                        }
                     }
                     Err(_e) => {
                         failed.fetch_add(1, Ordering::Relaxed);
@@ -154,6 +184,10 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
     };
     let final_status_counts: HashMap<u16, u64> = {
         let mut g = status_counts.lock().await;
+        std::mem::take(&mut *g)
+    };
+    let final_error_samples: Vec<ErrorSample> = {
+        let mut g = error_samples.lock().await;
         std::mem::take(&mut *g)
     };
     samples.sort_unstable();
@@ -187,13 +221,22 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         p99_ms: p(0.99),
         latencies_ms: samples,
         status_counts: final_status_counts,
+        error_samples: final_error_samples,
     })
+}
+
+/// Per-request outcome from `send_one_chunked_request`. Carries an
+/// `ErrorSample` only for non-2xx responses (and only until the caller
+/// has accumulated `MAX_ERROR_SAMPLES`).
+struct SendResult {
+    status: u16,
+    sample: Option<ErrorSample>,
 }
 
 async fn send_one_chunked_request(
     client: &reqwest::Client,
     cfg: &ChunkedBenchConfig,
-) -> anyhow::Result<u16> {
+) -> anyhow::Result<SendResult> {
     let chunk_size = cfg.chunk_size_bytes;
     let total = cfg.total_size_bytes;
     let interval_ms = cfg.chunk_interval_ms;
@@ -222,12 +265,50 @@ async fn send_one_chunked_request(
         req = req.header(k, v);
     }
     let resp = req.send().await?;
-    Ok(resp.status().as_u16())
+    let status = resp.status().as_u16();
+
+    // For non-2xx responses, capture a small excerpt + the Server header so
+    // the user can tell at a glance whether the error came from MockForge,
+    // an upstream proxy, a CDN, etc. This is the most useful diagnostic for
+    // the "503 from bench, 200 in TUI" pattern (proxy upstream timeout).
+    let sample = if !(200..300).contains(&status) {
+        let server_header = resp
+            .headers()
+            .get(reqwest::header::SERVER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        let bytes = resp.bytes().await.unwrap_or_default();
+        let take = std::cmp::min(bytes.len(), ERROR_BODY_EXCERPT_BYTES);
+        let body_excerpt = String::from_utf8_lossy(&bytes[..take]).trim().to_owned();
+        Some(ErrorSample {
+            status,
+            server_header,
+            body_excerpt,
+        })
+    } else {
+        None
+    };
+
+    Ok(SendResult { status, sample })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_sample_struct_holds_diagnostic_fields() {
+        // Schema sanity: ErrorSample must carry the three pieces a user
+        // needs to diagnose "where did this 503 come from?".
+        let s = ErrorSample {
+            status: 503,
+            server_header: Some("nginx/1.21.0".into()),
+            body_excerpt: "upstream timed out".into(),
+        };
+        assert_eq!(s.status, 503);
+        assert_eq!(s.server_header.as_deref(), Some("nginx/1.21.0"));
+        assert_eq!(s.body_excerpt, "upstream timed out");
+    }
 
     #[tokio::test]
     async fn rejects_zero_concurrency() {

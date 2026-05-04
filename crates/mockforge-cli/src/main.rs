@@ -92,6 +92,13 @@ struct PortArgs {
     #[arg(long, help_heading = "Server Ports")]
     pub http_port: Option<u16>,
 
+    /// HTTPS server port. When set, runs an additional TLS listener
+    /// alongside `--http-port` (which always serves plain HTTP in this
+    /// mode). Requires `--tls-cert` and `--tls-key`. Lets you serve the
+    /// same routes on, e.g., 80 and 443 simultaneously like nginx.
+    #[arg(long, help_heading = "Server Ports")]
+    pub https_port: Option<u16>,
+
     /// WebSocket server port (defaults to config or 3001)
     #[arg(long, help_heading = "Server Ports")]
     pub ws_port: Option<u16>,
@@ -2093,20 +2100,41 @@ enum Commands {
     /// produce on-the-wire chunking (Go's `net/http` decides chunking from
     /// body type and may send Content-Length instead).
     ///
+    /// Without --spec, runs against the single URL given by --target.
+    /// With --spec, --target becomes the base URL and the bench iterates
+    /// every POST/PUT/PATCH operation in the spec sequentially, running
+    /// for --duration each.
+    ///
     /// Examples:
     ///   mockforge bench-chunked --target http://localhost:3000/upload
     ///   mockforge bench-chunked --target http://localhost:3000/upload \
     ///     --concurrency 10 --duration 60 \
     ///     --chunk-size-bytes 4096 --total-size-bytes 10485760 \
     ///     --chunk-interval-ms 50
+    ///   mockforge bench-chunked --spec api.json --target https://192.168.2.86 \
+    ///     --duration 60 --insecure
     #[cfg(feature = "bench")]
     #[command(verbatim_doc_comment)]
     BenchChunked {
-        /// Target URL to send chunked requests to.
+        /// Target URL. Without --spec: full URL of the chunked endpoint
+        /// (e.g. `http://host:3000/upload`). With --spec: base URL only
+        /// (e.g. `https://192.168.2.86`); the path is taken from each
+        /// matching operation in the spec.
         #[arg(short, long)]
         target: String,
 
-        /// HTTP method (POST, PUT, PATCH).
+        /// OpenAPI spec to drive the bench. When set, runs one chunked
+        /// bench per POST/PUT/PATCH operation, each for --duration.
+        #[arg(long)]
+        spec: Option<PathBuf>,
+
+        /// Run only the operation with this `operationId` (when --spec
+        /// is given). Without this flag, all POST/PUT/PATCH ops run.
+        #[arg(long)]
+        operation_id: Option<String>,
+
+        /// HTTP method (POST, PUT, PATCH). Ignored when --spec is set —
+        /// the method comes from each spec operation.
         #[arg(short, long, default_value = "POST")]
         method: String,
 
@@ -2114,19 +2142,29 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         concurrency: u32,
 
-        /// Duration in seconds.
+        /// Duration in seconds. **Per operation** when --spec is set
+        /// (so a spec with 3 POST/PATCH ops and --duration 30 runs
+        /// for ~90s total).
         #[arg(short, long, default_value = "30")]
         duration: u64,
 
-        /// Bytes per chunk emitted into the body stream.
+        /// Size of each chunk emitted into the request body, in bytes.
+        /// The body is streamed without a Content-Length, so hyper sends
+        /// `Transfer-Encoding: chunked` automatically.
         #[arg(long, default_value = "1024")]
         chunk_size_bytes: usize,
 
-        /// Total body size per request, in bytes.
+        /// Body size **per request**, in bytes. With --chunk-size-bytes,
+        /// each request emits `total_size_bytes / chunk_size_bytes` chunks
+        /// at --chunk-interval-ms apart, then the next request starts.
+        /// Total bytes over the whole run = total_size_bytes × completed
+        /// requests. (e.g. 10 MiB / 4 KiB = 2560 chunks per request.)
         #[arg(long, default_value = "1048576")]
         total_size_bytes: usize,
 
-        /// Sleep between chunks (ms). 0 = back-to-back.
+        /// Sleep between chunks (ms). 0 = back-to-back. With non-zero
+        /// values, each request takes at least `(total_size_bytes /
+        /// chunk_size_bytes) * chunk_interval_ms` milliseconds.
         #[arg(long, default_value = "0")]
         chunk_interval_ms: u64,
 
@@ -2275,6 +2313,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 eprintln!("Error: --mtls {} requires --tls-enabled", args.tls.mtls);
                 std::process::exit(1);
             }
+            // --https-port runs a TLS listener alongside the plain --http-port,
+            // so it always needs a cert + key (independent of --tls-enabled).
+            if args.ports.https_port.is_some()
+                && (args.tls.tls_cert.is_none() || args.tls.tls_key.is_none())
+            {
+                eprintln!("Error: --https-port requires --tls-cert and --tls-key");
+                std::process::exit(1);
+            }
+            if let (Some(http), Some(https)) = (args.ports.http_port, args.ports.https_port) {
+                if http == https {
+                    eprintln!(
+                        "Error: --http-port ({}) and --https-port ({}) must differ",
+                        http, https
+                    );
+                    std::process::exit(1);
+                }
+            }
 
             // Validate spec flags (mutually exclusive)
             if !args.spec.is_empty() && args.spec_dir.is_some() {
@@ -2296,6 +2351,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 config_path: args.config,
                 profile: args.profile,
                 http_port: args.ports.http_port,
+                https_port: args.ports.https_port,
                 ws_port: args.ports.ws_port,
                 grpc_port: args.ports.grpc_port,
                 tcp_port: args.ports.tcp_port,
@@ -2938,6 +2994,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(feature = "bench")]
         Commands::BenchChunked {
             target,
+            spec,
+            operation_id,
             method,
             concurrency,
             duration,
@@ -2947,56 +3005,183 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             header,
             insecure,
         } => {
-            use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig};
+            use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
             use std::collections::HashMap;
-            let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
-                Ok(m) => m,
-                Err(_) => {
-                    eprintln!("Invalid HTTP method: {}", method);
-                    std::process::exit(1);
-                }
-            };
+
             let mut headers = HashMap::new();
             for h in header {
                 if let Some((k, v)) = h.split_once(':') {
                     headers.insert(k.trim().to_string(), v.trim().to_string());
                 }
             }
-            let cfg = ChunkedBenchConfig {
-                target_url: target,
-                method,
-                concurrency,
-                duration: std::time::Duration::from_secs(duration),
-                chunk_size_bytes,
-                total_size_bytes,
-                chunk_interval_ms,
-                headers,
-                skip_tls_verify: insecure,
-            };
-            match run(cfg).await {
-                Ok(r) => {
-                    println!("Chunked bench complete in {:?}", r.elapsed);
-                    println!("  Total requests: {}", r.total_requests);
-                    println!("  Successful:     {}", r.successful);
-                    println!("  Failed:         {}", r.failed);
-                    println!("  Bytes sent:     {}", r.bytes_sent);
-                    println!("  Throughput:     {:.2} req/s", r.req_per_sec);
-                    println!(
-                        "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
-                        r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
+
+            // Helper to print one result block; used by both single-target
+            // and spec-driven flows.
+            fn print_result(label: &str, r: &ChunkedBenchResult) {
+                println!("Chunked bench [{}] complete in {:?}", label, r.elapsed);
+                println!("  Total requests: {}", r.total_requests);
+                println!("  Successful:     {}", r.successful);
+                println!("  Failed:         {}", r.failed);
+                println!("  Bytes sent:     {}", r.bytes_sent);
+                println!("  Throughput:     {:.2} req/s", r.req_per_sec);
+                println!(
+                    "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
+                    r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
+                );
+                if !r.status_counts.is_empty() {
+                    println!("  Status codes:");
+                    let mut codes: Vec<_> = r.status_counts.iter().collect();
+                    codes.sort_by_key(|(k, _)| **k);
+                    for (code, n) in codes {
+                        println!("    {} = {}", code, n);
+                    }
+                }
+                // Surface the captured error responses so the user can tell
+                // whether errors came from MockForge, an upstream proxy, a
+                // CDN, etc. Hint at the most common cause when 5xx is
+                // involved (proxy upstream timeout on long chunked uploads).
+                if !r.error_samples.is_empty() {
+                    println!("  Error response samples:");
+                    for s in &r.error_samples {
+                        let server = s.server_header.as_deref().unwrap_or("(no Server header)");
+                        println!("    [{}] Server: {}", s.status, server);
+                        if !s.body_excerpt.is_empty() {
+                            let one_line = s.body_excerpt.replace('\n', " ");
+                            println!("       body: {}", one_line);
+                        }
+                    }
+                    if r.status_counts.keys().any(|c| (500..600).contains(c)) {
+                        println!(
+                            "  Hint: 5xx responses with `Server:` revealing a proxy/LB usually \
+                             mean the proxy timed out reading from upstream. Each chunked request \
+                             takes >= (total_size_bytes / chunk_size_bytes) * chunk_interval_ms; \
+                             if that exceeds the proxy's upstream timeout, errors are inevitable."
+                        );
+                    }
+                }
+            }
+
+            if let Some(spec_path) = spec {
+                // Spec-driven mode: iterate POST/PUT/PATCH operations.
+                use mockforge_bench::request_gen::RequestGenerator;
+                use mockforge_bench::spec_parser::SpecParser;
+
+                let parser = match SpecParser::from_file(&spec_path).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Failed to parse spec {:?}: {}", spec_path, e);
+                        std::process::exit(1);
+                    }
+                };
+                let base_url = target.trim_end_matches('/').to_string();
+                let want_methods = ["POST", "PUT", "PATCH"];
+                let ops: Vec<_> = parser
+                    .get_operations()
+                    .into_iter()
+                    .filter(|op| want_methods.contains(&op.method.to_uppercase().as_str()))
+                    .filter(|op| match &operation_id {
+                        Some(id) => op.operation_id.as_deref() == Some(id.as_str()),
+                        None => true,
+                    })
+                    .collect();
+                if ops.is_empty() {
+                    eprintln!(
+                        "No POST/PUT/PATCH operations matched in {:?}{}",
+                        spec_path,
+                        operation_id
+                            .as_deref()
+                            .map(|id| format!(" (operation-id={id})"))
+                            .unwrap_or_default()
                     );
-                    if !r.status_counts.is_empty() {
-                        println!("  Status codes:");
-                        let mut codes: Vec<_> = r.status_counts.iter().collect();
-                        codes.sort_by_key(|(k, _)| **k);
-                        for (code, n) in codes {
-                            println!("    {} = {}", code, n);
+                    std::process::exit(1);
+                }
+
+                println!(
+                    "→ {} chunked bench {} from {:?} (base {})",
+                    ops.len(),
+                    if ops.len() == 1 {
+                        "operation"
+                    } else {
+                        "operations"
+                    },
+                    spec_path,
+                    base_url
+                );
+
+                let mut any_failed = false;
+                for op in &ops {
+                    let template = match RequestGenerator::generate_template(op) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            eprintln!(
+                                "✗ {} {}: failed to build request template: {}",
+                                op.method, op.path, e
+                            );
+                            any_failed = true;
+                            continue;
+                        }
+                    };
+                    let url = format!("{}{}", base_url, template.generate_path());
+                    let label = op.display_name();
+                    let method =
+                        match reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes()) {
+                            Ok(m) => m,
+                            Err(_) => {
+                                eprintln!("✗ {}: invalid method `{}`", label, op.method);
+                                any_failed = true;
+                                continue;
+                            }
+                        };
+                    println!();
+                    println!("→ {} {}  ({})", op.method.to_uppercase(), op.path, url);
+                    let cfg = ChunkedBenchConfig {
+                        target_url: url,
+                        method,
+                        concurrency,
+                        duration: std::time::Duration::from_secs(duration),
+                        chunk_size_bytes,
+                        total_size_bytes,
+                        chunk_interval_ms,
+                        headers: headers.clone(),
+                        skip_tls_verify: insecure,
+                    };
+                    match run(cfg).await {
+                        Ok(r) => print_result(&label, &r),
+                        Err(e) => {
+                            eprintln!("✗ {}: chunked bench failed: {}", label, e);
+                            any_failed = true;
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("Chunked bench failed: {}", e);
+                if any_failed {
                     std::process::exit(1);
+                }
+            } else {
+                // Single-target mode (original behavior).
+                let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
+                    Ok(m) => m,
+                    Err(_) => {
+                        eprintln!("Invalid HTTP method: {}", method);
+                        std::process::exit(1);
+                    }
+                };
+                let cfg = ChunkedBenchConfig {
+                    target_url: target,
+                    method,
+                    concurrency,
+                    duration: std::time::Duration::from_secs(duration),
+                    chunk_size_bytes,
+                    total_size_bytes,
+                    chunk_interval_ms,
+                    headers,
+                    skip_tls_verify: insecure,
+                };
+                match run(cfg).await {
+                    Ok(r) => print_result("single-target", &r),
+                    Err(e) => {
+                        eprintln!("Chunked bench failed: {}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
         }

@@ -18,16 +18,15 @@ MockForge's security features include:
 
 ### Initial Configuration
 
-Enable encryption when starting MockForge:
+Enable encryption via the `security.encryption.*` block in
+`mockforge.yaml` (see Configuration File below). The encryption key is
+loaded via `MOCKFORGE_ENCRYPTION_KEY` / `MOCKFORGE_MASTER_KEY` /
+`MOCKFORGE_KMS_PROVIDER` (see [Environment Variables](../configuration/environment.md#encryption--secret-storage)).
 
 ```bash
-# Enable encryption with environment variables
-export MOCKFORGE_ENCRYPTION_ENABLED=true
-export MOCKFORGE_ENCRYPTION_ALGORITHM=aes-256-gcm
-export MOCKFORGE_KEY_STORE_PATH=~/.mockforge/keys
-
-# Start MockForge with encryption
-mockforge serve --config config.yaml
+# Start MockForge with encryption configured in YAML
+MOCKFORGE_ENCRYPTION_KEY=$(cat encryption.key) \
+  mockforge serve --config config.yaml
 ```
 
 ### Configuration File
