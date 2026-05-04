@@ -85,6 +85,21 @@ impl Executor for TestExecutor {
             }
         }
 
+        // Bench kind has a real path when payload.target_url is set —
+        // hammers the target with concurrent requests and computes
+        // p50 / p95 / p99 latencies + error rate. No external load tool
+        // needed; for k6/wrk/-style heavy benchmarks the operator can
+        // still wire up a separate executor in a follow-up slice.
+        if self.kind == "bench" {
+            let target_url =
+                job.payload.get("target_url").and_then(|v| v.as_str()).map(String::from);
+            if let Some(target) = target_url {
+                if !target.is_empty() {
+                    return run_real_bench(job, callbacks, started, &target).await;
+                }
+            }
+        }
+
         let steps = Self::synthetic_step_count(&job.payload);
         let step_ms = Self::synthetic_step_ms(&job.payload);
 
@@ -149,6 +164,162 @@ impl Executor for TestExecutor {
             })),
         })
     }
+}
+
+/// Reqwest-based load runner for kind=bench. Hammers the target with
+/// `concurrency` parallel workers for `duration_secs` (both clamped to
+/// safe defaults) and reports p50/p95/p99 latencies + error rate.
+///
+/// Knobs from the queue payload:
+/// - `bench_concurrency` (u32, default 10, capped at 50)
+/// - `bench_duration_secs` (u64, default 10, capped at 60)
+async fn run_real_bench(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    target_url: &str,
+) -> Result<JobOutcome> {
+    let concurrency = job
+        .payload
+        .get("bench_concurrency")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .clamp(1, 50) as u32;
+    let duration_secs = job
+        .payload
+        .get("bench_duration_secs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10)
+        .clamp(1, 60);
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!(
+                    "Bench against {target_url} — concurrency={concurrency}, duration={duration_secs}s",
+                ),
+                "synthetic": false,
+                "tracking_task": 4,
+            }),
+        )
+        .await?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("mockforge-bench/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let target = target_url.to_string();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(duration_secs);
+    let mut handles = Vec::with_capacity(concurrency as usize);
+    for _ in 0..concurrency {
+        let client = client.clone();
+        let target = target.clone();
+        handles.push(tokio::spawn(async move {
+            let mut latencies_ns: Vec<u128> = Vec::new();
+            let mut ok = 0u64;
+            let mut err = 0u64;
+            while std::time::Instant::now() < deadline {
+                let started = std::time::Instant::now();
+                match client.get(&target).send().await {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            ok += 1;
+                        } else {
+                            err += 1;
+                        }
+                    }
+                    Err(_) => err += 1,
+                }
+                latencies_ns.push(started.elapsed().as_nanos());
+            }
+            (latencies_ns, ok, err)
+        }));
+    }
+
+    let mut all_latencies: Vec<u128> = Vec::new();
+    let mut total_ok = 0u64;
+    let mut total_err = 0u64;
+    for h in handles {
+        if let Ok((lats, ok, err)) = h.await {
+            all_latencies.extend(lats);
+            total_ok += ok;
+            total_err += err;
+        }
+    }
+
+    all_latencies.sort_unstable();
+    let total_requests = (total_ok + total_err) as f64;
+    let percentile = |p: f64| -> f64 {
+        if all_latencies.is_empty() {
+            return 0.0;
+        }
+        let idx = ((p / 100.0) * (all_latencies.len() as f64 - 1.0)).round() as usize;
+        let idx = idx.min(all_latencies.len() - 1);
+        all_latencies[idx] as f64 / 1_000_000.0 // → ms
+    };
+    let p50 = percentile(50.0);
+    let p95 = percentile(95.0);
+    let p99 = percentile(99.0);
+    let error_rate_pct = if total_requests > 0.0 {
+        (total_err as f64) / total_requests * 100.0
+    } else {
+        0.0
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            2,
+            "metric",
+            serde_json::json!({
+                "name": "bench_summary",
+                "total_requests": total_ok + total_err,
+                "ok": total_ok,
+                "errors": total_err,
+                "error_rate_pct": error_rate_pct,
+                "p50_ms": p50,
+                "p95_ms": p95,
+                "p99_ms": p99,
+            }),
+        )
+        .await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    // Pass when error rate is < 1% AND p95 < 1000ms. Tighter SLOs are
+    // a follow-up — the suite config could carry user-defined
+    // thresholds.
+    let status = if error_rate_pct < 1.0 && p95 < 1000.0 {
+        JobStatus::Passed
+    } else {
+        JobStatus::Failed
+    };
+    Ok(JobOutcome {
+        status,
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "real_bench",
+            "tracking_task": 4,
+            "kind": "bench",
+            "target_url": target_url,
+            "concurrency": concurrency,
+            "duration_secs": duration_secs,
+            "total_requests": total_ok + total_err,
+            "ok": total_ok,
+            "errors": total_err,
+            "error_rate_pct": error_rate_pct,
+            "p50_ms": p50,
+            "p95_ms": p95,
+            "p99_ms": p99,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
 }
 
 /// OWASP ASVS level-1 header-presence scan. Fetches the target URL and
