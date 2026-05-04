@@ -168,6 +168,21 @@ pub async fn run_finished(
             .await
             .map_err(ApiError::Database)?;
         }
+
+        // Cross-table status mirroring: for kinds where the owning
+        // resource has its own status column, flip it here so the UI's
+        // resource view stays in sync without a separate poll. Each
+        // mark_* helper is idempotent — already-terminal rows are not
+        // changed.
+        if let Err(e) = mirror_kind_status(&state, &run, body.summary.as_ref()).await {
+            tracing::error!(
+                run_id = %run.id,
+                kind = %run.kind,
+                error = %e,
+                "failed to mirror run status onto owning resource — UI may show stale status",
+            );
+        }
+
         return Ok(Json(serde_json::json!({
             "status": run.status,
             "runner_seconds": run.runner_seconds,
@@ -175,6 +190,64 @@ pub async fn run_finished(
     }
     // Already terminal or row gone — idempotent no-op.
     Ok(Json(serde_json::json!({ "status": "noop" })))
+}
+
+/// Cross-table mirror: when the test_run lifecycle finishes, also flip
+/// the owning resource's status (snapshot.status, clone_model.status,
+/// etc.) so the resource view doesn't show "capturing"/"training" for
+/// rows whose backing run already passed/failed.
+///
+/// Each branch is a no-op if the kind doesn't have a paired status
+/// column. All mark_* helpers are idempotent on the terminal value.
+async fn mirror_kind_status(
+    state: &AppState,
+    run: &TestRun,
+    summary: Option<&serde_json::Value>,
+) -> sqlx::Result<()> {
+    use mockforge_registry_core::models::{CloneModel, Snapshot};
+
+    let pool = state.db.pool();
+    match run.kind.as_str() {
+        "snapshot_capture" => {
+            if run.status == "passed" {
+                let storage_url = summary
+                    .and_then(|s| s.get("storage_url"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("synthetic://snapshot");
+                let size_bytes =
+                    summary.and_then(|s| s.get("size_bytes")).and_then(|v| v.as_i64()).unwrap_or(0);
+                let manifest = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
+                Snapshot::mark_ready(pool, run.suite_id, storage_url, size_bytes, &manifest)
+                    .await?;
+            } else {
+                Snapshot::mark_failed(pool, run.suite_id).await?;
+            }
+        }
+        "behavioral_clone" => {
+            if run.status == "passed" {
+                let artifact_url = summary
+                    .and_then(|s| s.get("artifact_url"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("synthetic://clone-model");
+                let metrics = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
+                CloneModel::mark_ready(
+                    pool,
+                    run.suite_id,
+                    artifact_url,
+                    &metrics,
+                    run.runner_seconds.unwrap_or(0),
+                )
+                .await?;
+            } else {
+                CloneModel::mark_failed(pool, run.suite_id).await?;
+            }
+        }
+        // Other kinds (unit/chaos_campaign/contract_diff/replay/flow.*)
+        // don't have a separate per-resource status — the test_runs row
+        // is the source of truth.
+        _ => {}
+    }
+    Ok(())
 }
 
 #[cfg(test)]

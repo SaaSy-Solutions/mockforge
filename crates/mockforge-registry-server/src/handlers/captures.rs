@@ -25,11 +25,13 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+use mockforge_registry_core::models::test_run::EnqueueTestRun;
+
 use crate::{
     error::{ApiError, ApiResult},
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
-    models::{CaptureSession, CloneModel, CloudWorkspace},
+    models::{CaptureSession, CloneModel, CloudWorkspace, TestRun},
     AppState,
 };
 
@@ -153,9 +155,10 @@ pub struct TrainCloneRequest {
 
 /// `POST /api/v1/capture-sessions/{id}/train`
 ///
-/// Inserts a clone_model row in `training` state. Worker enqueue is a
-/// follow-up slice; the row alone lets the UI render the in-progress
-/// training card.
+/// Creates the clone_models row in `training` state AND enqueues a
+/// `behavioral_clone` test_run so the worker actually picks it up. The
+/// CloneTrainExecutor reports back via internal callbacks (status flips
+/// to terminal, runner_seconds metered).
 pub async fn train_clone_from_session(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -172,7 +175,6 @@ pub async fn train_clone_from_session(
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
 
-    // Plan-limit check on max_clone_models.
     let limits = effective_limits(&state, &load_org(&state, workspace.org_id).await?).await?;
     let max_clones = limits.get("max_clone_models").and_then(|v| v.as_i64()).unwrap_or(0);
     if max_clones == 0 {
@@ -191,7 +193,112 @@ pub async fn train_clone_from_session(
     .await
     .map_err(ApiError::Database)?;
 
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: row.id,
+            org_id: workspace.org_id,
+            kind: "behavioral_clone",
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: row.id,
+            kind: "behavioral_clone",
+            payload: serde_json::json!({
+                "session_id": session.id,
+                "clone_model_id": row.id,
+                "name": request.name,
+            }),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue behavioral_clone run");
+    }
+
     Ok(Json(row))
+}
+
+/// `POST /api/v1/capture-sessions/{id}/replay`
+///
+/// Triggers a synthetic replay of the capture session against a target.
+/// Reuses the test_runs lifecycle with kind='replay'. The runner-side
+/// ReplayExecutor synthesizes per-capture events until real impl
+/// (real HTTP replay against `target_url`) lands.
+#[derive(Debug, Deserialize)]
+pub struct ReplaySessionRequest {
+    #[serde(default)]
+    pub target_url: Option<String>,
+    /// How many synthetic captures the executor should pretend to replay.
+    /// Optional — defaults to 5 on the runner side. Ignored once real
+    /// replay lands.
+    #[serde(default)]
+    pub synthetic_captures: Option<u32>,
+}
+
+pub async fn replay_capture_session(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(session_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(request): Json<ReplaySessionRequest>,
+) -> ApiResult<Json<TestRun>> {
+    let session = load_authorized_session(&state, user_id, &headers, session_id).await?;
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), session.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: session.id,
+            org_id: workspace.org_id,
+            kind: "replay",
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("session_id".into(), serde_json::json!(session.id));
+    if let Some(url) = request.target_url.as_deref() {
+        payload.insert("target_url".into(), serde_json::Value::String(url.to_string()));
+    }
+    if let Some(n) = request.synthetic_captures {
+        payload.insert("synthetic_captures".into(), serde_json::json!(n));
+    }
+
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: session.id,
+            kind: "replay",
+            payload: serde_json::Value::Object(payload),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue replay run");
+    }
+
+    Ok(Json(run))
 }
 
 /// `GET /api/v1/clone-models/{id}`

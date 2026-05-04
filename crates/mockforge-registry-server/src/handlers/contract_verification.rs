@@ -227,6 +227,7 @@ pub async fn trigger_diff_run(
         EnqueueTestRun {
             suite_id: svc.id,
             org_id: workspace.org_id,
+            kind: "contract_diff",
             triggered_by: "manual",
             triggered_by_user: Some(user_id),
             git_ref: None,

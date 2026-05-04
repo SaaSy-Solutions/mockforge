@@ -191,6 +191,7 @@ pub async fn trigger_run(
         EnqueueTestRun {
             suite_id: campaign.id,
             org_id: workspace.org_id,
+            kind: "chaos_campaign",
             triggered_by: "manual",
             triggered_by_user: Some(user_id),
             git_ref: None,

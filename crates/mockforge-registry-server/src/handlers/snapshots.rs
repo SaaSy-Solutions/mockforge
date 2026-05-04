@@ -148,6 +148,7 @@ pub async fn capture_snapshot(
         EnqueueTestRun {
             suite_id: snapshot.id,
             org_id: ctx.org_id,
+            kind: "snapshot_capture",
             triggered_by: "manual",
             triggered_by_user: Some(user_id),
             git_ref: None,

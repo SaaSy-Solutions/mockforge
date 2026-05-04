@@ -494,6 +494,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             post(handlers::captures::train_clone_from_session),
         )
         .route(
+            "/api/v1/capture-sessions/{id}/replay",
+            post(handlers::captures::replay_capture_session),
+        )
+        .route(
             "/api/v1/clone-models/{id}",
             get(handlers::captures::get_clone_model)
                 .delete(handlers::captures::delete_clone_model),

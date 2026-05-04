@@ -114,6 +114,7 @@ pub async fn trigger_run(
         EnqueueTestRun {
             suite_id: suite.id,
             org_id: ctx.org_id,
+            kind: &suite.kind,
             triggered_by,
             triggered_by_user: Some(user_id),
             git_ref: request.git_ref.as_deref(),

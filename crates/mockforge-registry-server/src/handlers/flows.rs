@@ -250,6 +250,7 @@ pub async fn trigger_run(
         EnqueueTestRun {
             suite_id: flow.id,
             org_id: workspace.org_id,
+            kind: &flow.kind,
             triggered_by: "manual",
             triggered_by_user: Some(user_id),
             git_ref: None,

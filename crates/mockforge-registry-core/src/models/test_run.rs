@@ -22,8 +22,15 @@ use sqlx::{FromRow, PgPool};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestRun {
     pub id: Uuid,
+    /// Owning resource id. For suite runs this is `test_suites.id`; for
+    /// chaos / flow / snapshot / contract / replay / clone runs it points
+    /// at the matching domain table — `kind` says which.
     pub suite_id: Uuid,
     pub org_id: Uuid,
+    /// What sort of run this is. Mirrors the `kind` vocabulary in
+    /// `test_suites` plus the cross-task additions documented in migration
+    /// 20250101000059_test_execution.sql.
+    pub kind: String,
     pub triggered_by: String,
     #[serde(default)]
     pub triggered_by_user: Option<Uuid>,
@@ -47,6 +54,7 @@ pub struct TestRun {
 pub struct EnqueueTestRun<'a> {
     pub suite_id: Uuid,
     pub org_id: Uuid,
+    pub kind: &'a str,
     pub triggered_by: &'a str,
     pub triggered_by_user: Option<Uuid>,
     pub git_ref: Option<&'a str>,
@@ -74,14 +82,15 @@ impl TestRun {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO test_runs
-                (suite_id, org_id, triggered_by, triggered_by_user, status,
+                (suite_id, org_id, kind, triggered_by, triggered_by_user, status,
                  git_ref, git_sha)
-            VALUES ($1, $2, $3, $4, 'queued', $5, $6)
+            VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)
             RETURNING *
             "#,
         )
         .bind(input.suite_id)
         .bind(input.org_id)
+        .bind(input.kind)
         .bind(input.triggered_by)
         .bind(input.triggered_by_user)
         .bind(input.git_ref)
