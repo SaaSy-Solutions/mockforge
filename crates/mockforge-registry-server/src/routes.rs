@@ -307,6 +307,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/test-runs/{id}/cancel",
             post(handlers::test_runs::cancel_run),
         )
+        .route(
+            "/api/v1/test-runs/{id}/stream",
+            get(handlers::test_runs::stream_run_events),
+        )
         // Tunnel reservation routes (cloud-enablement task #5 / Phase 1).
         // Phase 1 surface only — relay session ingest + custom-domain DNS
         // verification land in follow-up slices.
