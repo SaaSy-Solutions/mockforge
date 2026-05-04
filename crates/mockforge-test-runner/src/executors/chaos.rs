@@ -81,6 +81,60 @@ impl Executor for ChaosExecutor {
             .unwrap_or("(unspecified)");
         let safety_cap = Self::safety_max_duration_ms(&job.payload);
 
+        // For target_kind=hosted_mock, target_ref is the deployment_id.
+        // Try real chaos: enable on the deployment for the run, disable
+        // at the end. If the toggle call fails (deployment doesn't
+        // expose admin, network blip, etc.) we still emit synthetic
+        // events so the run produces a coherent outcome.
+        let real_chaos_target_id = if target_kind == "hosted_mock" {
+            uuid::Uuid::parse_str(target_ref).ok()
+        } else {
+            None
+        };
+        let real_chaos_enabled = if let Some(deployment_id) = real_chaos_target_id {
+            match callbacks.toggle_hosted_chaos(deployment_id, true).await {
+                Ok(()) => {
+                    callbacks
+                        .run_event(
+                            job.run_id,
+                            1,
+                            "log",
+                            serde_json::json!({
+                                "level": "info",
+                                "message": format!(
+                                    "Real chaos enabled on deployment {deployment_id}"
+                                ),
+                                "synthetic": false,
+                                "tracking_task": 7,
+                            }),
+                        )
+                        .await?;
+                    true
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, %deployment_id, "real chaos toggle failed; falling back to synthetic events");
+                    callbacks
+                        .run_event(
+                            job.run_id,
+                            1,
+                            "log",
+                            serde_json::json!({
+                                "level": "warn",
+                                "message": format!(
+                                    "real chaos toggle failed: {e}; emitting synthetic events"
+                                ),
+                                "synthetic": true,
+                                "tracking_task": 7,
+                            }),
+                        )
+                        .await?;
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
         let fault_count = if using_real_config {
             real_faults.len() as u32
         } else {
@@ -90,7 +144,7 @@ impl Executor for ChaosExecutor {
         callbacks
             .run_event(
                 job.run_id,
-                1,
+                2,
                 "log",
                 serde_json::json!({
                     "level": "info",
@@ -100,12 +154,13 @@ impl Executor for ChaosExecutor {
                         target_kind, target_ref, fault_count,
                     ),
                     "synthetic": !using_real_config,
+                    "real_chaos_enabled": real_chaos_enabled,
                     "tracking_task": 7,
                 }),
             )
             .await?;
 
-        let mut next_seq: u32 = 2;
+        let mut next_seq: u32 = 3;
         let mut aborted = false;
         let mut abort_reason: Option<String> = None;
         for i in 1..=fault_count {
@@ -155,6 +210,35 @@ impl Executor for ChaosExecutor {
             next_seq += 1;
         }
 
+        // Disable real chaos at the end of the run if we enabled it.
+        // Best-effort — failure to disable is logged but doesn't change
+        // the run's pass/fail status (the safety_config.max_duration_ms
+        // cap still bounds blast radius).
+        if real_chaos_enabled {
+            if let Some(deployment_id) = real_chaos_target_id {
+                if let Err(e) = callbacks.toggle_hosted_chaos(deployment_id, false).await {
+                    tracing::error!(
+                        error = %e,
+                        %deployment_id,
+                        "failed to disable real chaos at end of run — investigate immediately",
+                    );
+                    callbacks
+                        .run_event(
+                            job.run_id,
+                            next_seq,
+                            "log",
+                            serde_json::json!({
+                                "level": "error",
+                                "message": format!(
+                                    "failed to disable real chaos at end of run: {e} — manual intervention required"
+                                ),
+                            }),
+                        )
+                        .await?;
+                }
+            }
+        }
+
         let elapsed = started.elapsed();
         let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
         let status = if aborted {
@@ -167,10 +251,17 @@ impl Executor for ChaosExecutor {
             status,
             runner_seconds: secs,
             summary: Some(serde_json::json!({
-                "executor_phase": if using_real_config { "config_driven" } else { "synthetic" },
+                "executor_phase": if real_chaos_enabled {
+                    "real_hosted_mock"
+                } else if using_real_config {
+                    "config_driven"
+                } else {
+                    "synthetic"
+                },
                 "tracking_task": 7,
                 "target_kind": target_kind,
                 "target_ref": target_ref,
+                "real_chaos_enabled": real_chaos_enabled,
                 "fault_count": fault_count,
                 "aborted": aborted,
                 "abort_reason": abort_reason,

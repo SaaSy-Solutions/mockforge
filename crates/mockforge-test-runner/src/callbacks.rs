@@ -132,6 +132,27 @@ impl RegistryCallbacks {
         let rows: Vec<EndpointHit> = resp.json().await?;
         Ok(rows)
     }
+
+    /// Toggle chaos on a hosted-mock deployment via the registry's
+    /// internal proxy. Used by the chaos executor for
+    /// target_kind=hosted_mock — the registry resolves the
+    /// deployment's internal Fly URL and forwards the request to
+    /// the container's `/__mockforge/chaos/toggle`.
+    pub async fn toggle_hosted_chaos(&self, deployment_id: Uuid, enabled: bool) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/internal/hosted-mocks/{deployment_id}/chaos",
+            self.base_url.trim_end_matches('/'),
+        );
+        let resp = self
+            .http
+            .post(&url)
+            .bearer_auth(&self.token)
+            .json(&serde_json::json!({ "enabled": enabled }))
+            .send()
+            .await?;
+        resp.error_for_status()?;
+        Ok(())
+    }
 }
 
 /// (method, path, hits) tuple from the workspace endpoint-hits endpoint.

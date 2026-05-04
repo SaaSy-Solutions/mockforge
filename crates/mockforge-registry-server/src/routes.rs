@@ -95,6 +95,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/internal/workspaces/{id}/endpoint-hits",
             get(handlers::internal_test_runs::get_workspace_endpoint_hits),
         )
+        .route(
+            "/api/v1/internal/hosted-mocks/{id}/chaos",
+            post(handlers::internal_test_runs::proxy_chaos_toggle),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))

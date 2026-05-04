@@ -308,6 +308,75 @@ pub struct CaptureExchangeRow {
     pub occurred_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// `POST /api/v1/internal/hosted-mocks/{id}/chaos`
+///
+/// Internal proxy that forwards a chaos-toggle request to the hosted
+/// mock's admin endpoint. The chaos executor calls this for
+/// target_kind=hosted_mock; we resolve the deployment's internal Fly
+/// URL and POST to its `/__mockforge/chaos/toggle`. Lets the runner
+/// inject real faults without needing direct network access to the
+/// container's admin port.
+#[derive(Debug, Deserialize)]
+pub struct ChaosToggleRequest {
+    pub enabled: bool,
+}
+
+pub async fn proxy_chaos_toggle(
+    State(state): State<AppState>,
+    Path(deployment_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(body): Json<ChaosToggleRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    use mockforge_registry_core::models::HostedMock;
+    require_internal_auth(&headers)?;
+
+    let deployment = HostedMock::find_by_id(state.db.pool(), deployment_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".into()))?;
+
+    let base = deployment
+        .internal_url
+        .as_deref()
+        .or(deployment.deployment_url.as_deref())
+        .ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "Deployment has neither internal_url nor deployment_url".into(),
+            )
+        })?;
+
+    // Trim any trailing path; we always target /__mockforge/chaos/toggle.
+    let target = format!(
+        "{}/__mockforge/chaos/toggle",
+        base.trim_end_matches('/').trim_end_matches("/__mockforge")
+    );
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("mockforge-registry-chaos-proxy/1.0")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let resp = client
+        .post(&target)
+        .json(&serde_json::json!({ "enabled": body.enabled }))
+        .send()
+        .await
+        .map_err(|e| ApiError::InvalidRequest(format!("chaos proxy fetch failed: {e}")))?;
+
+    let status = resp.status();
+    let payload: serde_json::Value = resp.json().await.unwrap_or_else(|_| serde_json::json!({}));
+    if !status.is_success() {
+        return Err(ApiError::InvalidRequest(format!(
+            "deployment refused chaos toggle: HTTP {status}"
+        )));
+    }
+    Ok(Json(serde_json::json!({
+        "enabled": body.enabled,
+        "deployment_response": payload,
+    })))
+}
+
 /// One (method, path) tuple observed in the workspace's recent
 /// runtime_captures, with hit count.
 #[allow(missing_docs)]
