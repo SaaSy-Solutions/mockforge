@@ -70,6 +70,21 @@ impl Executor for TestExecutor {
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
 
+        // OWASP kind has a real path when payload.target_url is set —
+        // scan response headers for the standard security-header set.
+        // No external scanner needed; this is a header-presence check
+        // (level-1 OWASP ASVS) that catches the most common
+        // misconfigurations (missing CSP, no HSTS, etc.).
+        if self.kind == "owasp" {
+            let target_url =
+                job.payload.get("target_url").and_then(|v| v.as_str()).map(String::from);
+            if let Some(target) = target_url {
+                if !target.is_empty() {
+                    return run_real_owasp_scan(job, callbacks, started, &target).await;
+                }
+            }
+        }
+
         let steps = Self::synthetic_step_count(&job.payload);
         let step_ms = Self::synthetic_step_ms(&job.payload);
 
@@ -134,6 +149,167 @@ impl Executor for TestExecutor {
             })),
         })
     }
+}
+
+/// OWASP ASVS level-1 header-presence scan. Fetches the target URL and
+/// reports per-header pass/fail for the standard security headers most
+/// services should ship.
+async fn run_real_owasp_scan(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    target_url: &str,
+) -> Result<JobOutcome> {
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("OWASP header scan against {target_url}"),
+                "synthetic": false,
+                "tracking_task": 4,
+            }),
+        )
+        .await?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .user_agent("mockforge-owasp-scan/1.0")
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new());
+
+    let response = match client.get(target_url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            callbacks
+                .run_event(
+                    job.run_id,
+                    2,
+                    "step_fail",
+                    serde_json::json!({
+                        "step": 1,
+                        "name": "fetch_target",
+                        "error": e.to_string(),
+                    }),
+                )
+                .await?;
+            let elapsed = started.elapsed();
+            return Ok(JobOutcome {
+                status: JobStatus::Errored,
+                runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+                summary: Some(serde_json::json!({
+                    "executor_phase": "real_owasp_scan",
+                    "tracking_task": 4,
+                    "kind": "owasp",
+                    "target_url": target_url,
+                    "passed": 0,
+                    "failed": 0,
+                    "errored": 1,
+                    "error": e.to_string(),
+                })),
+            });
+        }
+    };
+
+    let status_code = response.status().as_u16();
+    let headers = response.headers().clone();
+
+    callbacks
+        .run_event(
+            job.run_id,
+            2,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Target returned HTTP {status_code}"),
+                "status_code": status_code,
+                "header_count": headers.len(),
+            }),
+        )
+        .await?;
+
+    // Standard security headers — each row is (header name, OWASP
+    // recommendation, fail severity if missing).
+    let checks: &[(&str, &str, &str)] = &[
+        (
+            "strict-transport-security",
+            "Force HTTPS for at least 6 months (max-age >= 15768000)",
+            "high",
+        ),
+        ("content-security-policy", "Mitigate XSS via CSP", "high"),
+        ("x-content-type-options", "nosniff to block MIME sniffing", "medium"),
+        ("x-frame-options", "DENY/SAMEORIGIN to block clickjacking", "medium"),
+        ("referrer-policy", "Restrict Referer header leakage", "low"),
+        ("permissions-policy", "Lock down camera/microphone/geolocation features", "low"),
+    ];
+
+    let mut next_seq: u32 = 3;
+    let mut passed = 0u32;
+    let mut failed = 0u32;
+    for (i, (header, advice, severity)) in checks.iter().enumerate() {
+        let present = headers.contains_key(*header);
+        let value = headers.get(*header).and_then(|v| v.to_str().ok()).unwrap_or("");
+        if present {
+            passed += 1;
+            callbacks
+                .run_event(
+                    job.run_id,
+                    next_seq,
+                    "step_pass",
+                    serde_json::json!({
+                        "step": i + 1,
+                        "name": format!("header_{header}"),
+                        "header": header,
+                        "value": value,
+                    }),
+                )
+                .await?;
+        } else {
+            failed += 1;
+            callbacks
+                .run_event(
+                    job.run_id,
+                    next_seq,
+                    "step_fail",
+                    serde_json::json!({
+                        "step": i + 1,
+                        "name": format!("header_{header}"),
+                        "header": header,
+                        "severity": severity,
+                        "advice": advice,
+                    }),
+                )
+                .await?;
+        }
+        next_seq += 1;
+    }
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    let status = if failed == 0 {
+        JobStatus::Passed
+    } else {
+        JobStatus::Failed
+    };
+
+    Ok(JobOutcome {
+        status,
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "real_owasp_scan",
+            "tracking_task": 4,
+            "kind": "owasp",
+            "target_url": target_url,
+            "target_status_code": status_code,
+            "checks_total": checks.len(),
+            "passed": passed,
+            "failed": failed,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
 }
 
 #[cfg(test)]
