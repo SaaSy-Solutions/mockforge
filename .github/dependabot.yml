@@ -14,6 +14,19 @@ updates:
     labels:
       - "dependencies"
       - "rust"
+    # Collapse the weekly batch into a single PR per category instead of
+    # one PR per crate. Without this, Mondays produce ~13 separate PRs
+    # and each fans out into 4 workflow runs (CI, Integration, Benchmarks,
+    # Load Test) — the self-hosted runner pool drowns. Major updates are
+    # ignored further down so they never appear here.
+    groups:
+      cargo-patch-and-minor:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+          - "minor"
+      cargo-security:
+        applies-to: security-updates
     ignore:
       # Ignore major version updates for now
       - dependency-name: "*"
@@ -33,3 +46,9 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    # Same rationale as cargo above — bundle every action bump into one PR.
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
