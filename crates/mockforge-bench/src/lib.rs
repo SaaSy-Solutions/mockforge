@@ -29,8 +29,9 @@ pub mod target_parser;
 pub mod wafbench;
 
 pub use cloud_api::{
-    run_bench, run_conformance, CloudBenchInputs, CloudConformanceInputs, CloudRunArtifacts,
-    SpecFormat,
+    run_bench, run_conformance, run_crud_flow, run_owasp, run_security, run_wafbench,
+    CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudOwaspInputs,
+    CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
 };
 pub use command::BenchCommand;
 pub use crud_flow::{CrudFlow, CrudFlowConfig, CrudFlowDetector, FlowStep};
