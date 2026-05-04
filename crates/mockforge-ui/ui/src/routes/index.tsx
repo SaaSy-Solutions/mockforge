@@ -99,6 +99,9 @@ const CloudFlowsPage = lazy(() => import('../pages/CloudFlowsPage').then(m => ({
 // Cloud contract & verification (#8) — monitored services + diff runs
 const CloudContractPage = lazy(() => import('../pages/CloudContractPage').then(m => ({ default: m.CloudContractPage })));
 
+// Cloud recorder + behavioral cloning (#6)
+const CloudRecorderPage = lazy(() => import('../pages/CloudRecorderPage').then(m => ({ default: m.CloudRecorderPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -231,6 +234,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-chaos', element: <CloudChaosPage /> },
   { path: '/cloud-flows', element: <CloudFlowsPage /> },
   { path: '/cloud-contract', element: <CloudContractPage /> },
+  { path: '/cloud-recorder', element: <CloudRecorderPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },

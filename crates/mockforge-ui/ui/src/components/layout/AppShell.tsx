@@ -163,6 +163,7 @@ const navSections = [
       { id: 'cloud-chaos', labelKey: 'tab.cloudChaos', icon: Zap },
       { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
+      { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
       { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
     ]
   },
@@ -265,6 +266,8 @@ const cloudNavItemIds = new Set([
   'cloud-flows',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
+  // Cloud recorder + behavioral cloning via cloudRecorderApi.
+  'cloud-recorder',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
