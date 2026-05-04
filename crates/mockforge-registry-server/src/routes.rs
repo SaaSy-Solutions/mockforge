@@ -417,6 +417,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             patch(handlers::observability::update_dashboard)
                 .delete(handlers::observability::delete_dashboard),
         )
+        .route(
+            "/api/v1/organizations/{org_id}/observability/traces/query",
+            post(handlers::observability::query_traces),
+        )
         // Chaos campaigns + resilience patterns (cloud-enablement #7 / Phase 1).
         // Run trigger / kill-switch worker / target authorization land
         // in follow-up slices once #4 worker pool is up.
