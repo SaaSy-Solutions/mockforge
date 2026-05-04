@@ -33,7 +33,7 @@ jobs:
 
     - name: Setup sccache (GHA backend)
       id: sccache
-      uses: mozilla-actions/sccache-action@v0.0.5
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
 
     - name: Verify sccache works
