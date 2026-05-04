@@ -260,8 +260,40 @@ pub async fn trigger_run(
     .await
     .map_err(ApiError::Database)?;
 
-    // Push payload includes the flow's current_version_id so the
-    // runner-side FlowExecutor knows which config to load.
+    // Push payload includes the flow's current_version_id AND its
+    // config — saves the runner a round trip to fetch what it needs to
+    // execute. Loading the version is best-effort: a missing version
+    // (FK should prevent it but races are possible) is logged and the
+    // run still queues with whatever metadata we have, so the runner
+    // can record the failure with context.
+    let version_config: Option<serde_json::Value> = match flow.current_version_id {
+        Some(vid) => match mockforge_registry_core::models::flow::FlowVersion::find_by_id(
+            state.db.pool(),
+            vid,
+        )
+        .await
+        {
+            Ok(Some(v)) => Some(v.config),
+            Ok(None) => {
+                tracing::warn!(
+                    flow_id = %flow.id,
+                    version_id = %vid,
+                    "flow.current_version_id points at missing FlowVersion",
+                );
+                None
+            }
+            Err(e) => {
+                tracing::warn!(
+                    flow_id = %flow.id,
+                    error = %e,
+                    "failed to load FlowVersion for run payload",
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
         crate::run_queue::EnqueuedJob {
@@ -273,6 +305,7 @@ pub async fn trigger_run(
                 "flow_kind": flow.kind,
                 "flow_name": flow.name,
                 "current_version_id": flow.current_version_id,
+                "config": version_config,
             }),
         },
     )
