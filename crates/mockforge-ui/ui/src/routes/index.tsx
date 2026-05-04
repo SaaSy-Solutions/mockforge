@@ -75,6 +75,9 @@ const LearningHubPage = lazy(() => import('../pages/LearningHubPage').then(m => 
 // User Management
 const UserManagementPage = lazy(() => import('../pages/UserManagementPage').then(m => ({ default: m.UserManagementPage })));
 
+// Notification Channels (cloud-only — incident dispatch destinations)
+const NotificationChannelsPage = lazy(() => import('../pages/NotificationChannelsPage').then(m => ({ default: m.NotificationChannelsPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -199,6 +202,7 @@ export const routes: RouteConfig[] = [
 
   // User Management
   { path: '/user-management', element: <UserManagementPage /> },
+  { path: '/notification-channels', element: <NotificationChannelsPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },

@@ -102,6 +102,7 @@ const en: Dictionary = {
   'tab.byok': 'BYOK Keys',
   'tab.usage': 'Plan & Usage',
   'tab.userManagement': 'User Management',
+  'tab.notificationChannels': 'Notification Channels',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requires a local MockForge instance',

@@ -69,6 +69,7 @@ import {
   Radio as RadioIcon,
   MessageCircle as MessageCircleIcon,
   LifeBuoy,
+  Bell,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -199,6 +200,7 @@ const navSections = [
       { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
       { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
+      { id: 'notification-channels', labelKey: 'tab.notificationChannels', icon: Bell },
       // user-management retired (#15) — surface lives inside the
       // Organization page's Members / Roles / Activity tabs now.
     ]
@@ -237,6 +239,9 @@ const cloudNavItemIds = new Set([
   // Tunnels page detects cloud mode and dispatches CRUD + DNS verify
   // through cloudTunnelsApi against /api/v1/organizations/{org_id}/tunnels.
   'tunnels',
+  // Notification channels (cloud-only) — incident dispatch destinations
+  // wired through cloudNotificationsApi.
+  'notification-channels',
   'config',
   'organization',
   'billing',
