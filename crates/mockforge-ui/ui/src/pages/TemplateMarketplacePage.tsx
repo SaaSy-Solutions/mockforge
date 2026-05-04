@@ -38,8 +38,8 @@ import {
   Download as DownloadIcon,
   Visibility as ViewIcon,
 } from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
+import { IconButton } from '@mui/material';
+import { Tooltip } from '@mui/material';
 import { authenticatedFetch } from '../utils/apiClient';
 import { useAuthStore } from '../stores/useAuthStore';
 import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';

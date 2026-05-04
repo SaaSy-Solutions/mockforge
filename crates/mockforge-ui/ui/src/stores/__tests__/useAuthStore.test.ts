@@ -15,6 +15,7 @@ vi.mock('../../services/authApi', () => ({
     refreshToken: vi.fn(),
     isCloud: vi.fn(() => false),
     updateProfile: vi.fn(),
+    getMe: vi.fn(),
   },
 }));
 
@@ -124,6 +125,42 @@ describe('useAuthStore', () => {
       email: 'viewer@mockforge.dev',
     });
     expect(result.current.isAuthenticated).toBe(true);
+  });
+
+  it('hydrates admin role from /users/me in cloud mode (login response lacks is_admin)', async () => {
+    vi.mocked(authApi.isCloud).mockReturnValue(true);
+    // Cloud login response normalizes to role='user' since the backend
+    // doesn't include is_admin/role in /api/v1/auth/login. The store must
+    // call getMe() to discover that this user is actually an admin.
+    vi.mocked(authApi.login).mockResolvedValueOnce({
+      token: createToken({ id: 'u-1', username: 'rootuser', email: 'root@mockforge.dev', role: 'user' }),
+      refresh_token: 'r',
+      user: { id: 'u-1', username: 'rootuser', email: 'root@mockforge.dev', role: 'user' },
+      expires_in: 3600,
+    });
+    vi.mocked(authApi.getMe).mockResolvedValueOnce({
+      user_id: 'u-1',
+      username: 'rootuser',
+      email: 'root@mockforge.dev',
+      is_verified: true,
+      is_admin: true,
+      two_factor_enabled: false,
+      email_notifications: true,
+      security_alerts: true,
+      preferences: {},
+      created_at: '2026-01-15T00:00:00Z',
+      updated_at: '2026-01-15T00:00:00Z',
+    });
+
+    const { result } = renderHook(() => useAuthStore());
+    await act(async () => {
+      await result.current.login('rootuser', 'pw');
+    });
+
+    expect(authApi.getMe).toHaveBeenCalled();
+    expect(result.current.user?.role).toBe('admin');
+    expect(result.current.user?.is_verified).toBe(true);
+    expect(result.current.user?.created_at).toBe('2026-01-15T00:00:00Z');
   });
 
   it('handles login failure with invalid credentials', async () => {

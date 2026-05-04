@@ -119,7 +119,7 @@ export function ContextMenuTrigger({ children, onContextMenu }: { children: Reac
 
 export function ContextMenuContent({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("bg-white border border-gray-200 rounded-md shadow-lg py-1 min-w-[200px]", className)}>
+    <div className={cn("bg-popover text-popover-foreground border border-border rounded-md shadow-lg py-1 min-w-[200px]", className)}>
       {children}
     </div>
   );

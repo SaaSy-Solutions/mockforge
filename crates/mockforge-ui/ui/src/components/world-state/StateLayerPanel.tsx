@@ -29,13 +29,13 @@ export const StateLayerPanel: React.FC<StateLayerPanelProps> = ({
         {layers.map((layer) => (
           <label
             key={layer.id}
-            className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
+            className="flex items-center space-x-2 cursor-pointer hover:bg-muted p-2 rounded"
           >
             <input
               type="checkbox"
               checked={layer.enabled}
               onChange={(e) => onLayerToggle(layer.id, e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-info-600 rounded focus:ring-blue-500"
             />
             <span className="text-sm font-medium">{layer.name}</span>
           </label>

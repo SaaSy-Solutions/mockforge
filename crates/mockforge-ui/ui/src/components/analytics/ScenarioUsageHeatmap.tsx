@@ -48,11 +48,11 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Scenario Usage Heatmap</h3>
         </div>
         <div className="h-96 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading scenario usage...</div>
+          <div className="animate-pulse text-muted-foreground">Loading scenario usage...</div>
         </div>
       </Card>
     );
@@ -62,10 +62,10 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="h-5 w-5 text-gray-400" />
+          <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Scenario Usage Heatmap</h3>
         </div>
-        <div className="h-96 flex items-center justify-center text-gray-400">
+        <div className="h-96 flex items-center justify-center text-muted-foreground">
           {error ? `Error: ${error.message}` : 'No scenario usage data available'}
         </div>
       </Card>
@@ -73,13 +73,13 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
   }
 
   const getColor = (usageCount: number, maxUsage: number) => {
-    if (usageCount === 0) return 'bg-gray-100 dark:bg-gray-800';
+    if (usageCount === 0) return 'bg-muted';
     const intensity = usageCount / maxUsage;
-    if (intensity < 0.2) return 'bg-green-100 dark:bg-green-900/30';
-    if (intensity < 0.4) return 'bg-green-200 dark:bg-green-800/40';
-    if (intensity < 0.6) return 'bg-green-300 dark:bg-green-700/50';
-    if (intensity < 0.8) return 'bg-green-400 dark:bg-green-600/60';
-    return 'bg-green-500 dark:bg-green-500/70';
+    if (intensity < 0.2) return 'bg-success-100 dark:bg-success-900/30';
+    if (intensity < 0.4) return 'bg-success/30';
+    if (intensity < 0.6) return 'bg-success/50';
+    if (intensity < 0.8) return 'bg-success-400 dark:bg-success-600/60';
+    return 'bg-success-500 dark:bg-success-500/70';
   };
 
   const formatDate = (timestamp?: number | null) => {
@@ -91,10 +91,10 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <TrendingUp className="h-5 w-5 text-success-600 dark:text-success-400" />
           <h3 className="text-lg font-semibold">Scenario Usage Heatmap</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           Top {heatmapData.scenarios.length} scenarios by usage
         </div>
       </div>
@@ -108,24 +108,24 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
             <div key={scenario.scenario_id || index} className="group">
               <div className="flex items-center gap-3 mb-1">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  <div className="text-sm font-medium text-foreground truncate">
                     {scenario.scenario_id}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     Last used: {formatDate(scenario.last_used_at)}
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                <div className="text-sm font-semibold text-foreground">
                   {scenario.usage_count.toLocaleString()}
                 </div>
               </div>
-              <div className="relative h-6 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div className="relative h-6 bg-muted rounded-full overflow-hidden">
                 <div
                   className={`h-full ${color} transition-all duration-300 rounded-full flex items-center justify-end pr-2`}
                   style={{ width: `${Math.max(widthPercent, 5)}%` }}
                 >
                   {scenario.usage_count > 0 && (
-                    <span className="text-xs font-medium text-white dark:text-gray-900">
+                    <span className="text-xs font-medium text-white dark:text-foreground">
                       {scenario.usage_count.toLocaleString()}
                     </span>
                   )}
@@ -137,15 +137,15 @@ export const ScenarioUsageHeatmap: React.FC<ScenarioUsageHeatmapProps> = ({
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-2 mt-6 text-xs text-gray-600 dark:text-gray-400">
+      <div className="flex items-center justify-center gap-2 mt-6 text-xs text-muted-foreground">
         <span>Less</span>
         <div className="flex gap-1">
-          <div className="w-4 h-4 bg-gray-100 dark:bg-gray-800 rounded" />
-          <div className="w-4 h-4 bg-green-100 dark:bg-green-900/30 rounded" />
-          <div className="w-4 h-4 bg-green-200 dark:bg-green-800/40 rounded" />
-          <div className="w-4 h-4 bg-green-300 dark:bg-green-700/50 rounded" />
-          <div className="w-4 h-4 bg-green-400 dark:bg-green-600/60 rounded" />
-          <div className="w-4 h-4 bg-green-500 dark:bg-green-500/70 rounded" />
+          <div className="w-4 h-4 bg-muted rounded" />
+          <div className="w-4 h-4 bg-success-100 dark:bg-success-900/30 rounded" />
+          <div className="w-4 h-4 bg-success/30 rounded" />
+          <div className="w-4 h-4 bg-success/50 rounded" />
+          <div className="w-4 h-4 bg-success-400 dark:bg-success-600/60 rounded" />
+          <div className="w-4 h-4 bg-success-500 dark:bg-success-500/70 rounded" />
         </div>
         <span>More</span>
       </div>

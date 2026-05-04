@@ -172,10 +172,10 @@ export function SupportPage() {
         </CardHeader>
         <CardContent>
           {success && (
-            <Alert className="mb-4 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+            <Alert className="mb-4 bg-success-50 dark:bg-success-900/20 border-success-200 dark:border-success-800">
               <div className="flex items-center gap-2">
-                <Send className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="text-green-800 dark:text-green-200">
+                <Send className="h-4 w-4 text-success-600 dark:text-success-400" />
+                <span className="text-success-700 dark:text-success-200">
                   Support request submitted successfully! We'll send a confirmation email and respond within your plan's SLA.
                 </span>
               </div>
@@ -183,8 +183,8 @@ export function SupportPage() {
           )}
 
           {error && (
-            <Alert className="mb-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-              <span className="text-red-800 dark:text-red-200">{error}</span>
+            <Alert className="mb-4 bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+              <span className="text-danger-700 dark:text-danger-200">{error}</span>
             </Alert>
           )}
 
@@ -197,7 +197,7 @@ export function SupportPage() {
                 id="category"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value as SupportRequest['category'] })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card"
                 required
               >
                 <option value="technical">Technical Support</option>
@@ -216,7 +216,7 @@ export function SupportPage() {
                 id="priority"
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value as SupportRequest['priority'] })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card"
                 required
               >
                 <option value="low">Low - General question</option>
@@ -251,7 +251,7 @@ export function SupportPage() {
                 placeholder="Please provide as much detail as possible about your issue, including steps to reproduce if applicable..."
                 required
                 rows={8}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 resize-y"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card resize-y"
               />
             </div>
 

@@ -30,13 +30,13 @@ interface LogEntry {
 
 const methodClass = (m: string) =>
   m === 'GET'
-    ? 'bg-info-50 text-info-600 bg-blue-100 text-blue-700 dark:bg-info-900/20 dark:text-info-400'
+    ? 'bg-info-50 text-info-600 bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-400'
     : m === 'POST'
-    ? 'bg-success-50 text-success-600 bg-green-100 text-green-700 dark:bg-success-900/20 dark:text-success-400'
+    ? 'bg-success-50 text-success-600 bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400'
     : m === 'PUT'
-    ? 'bg-warning-50 text-warning-600 bg-yellow-100 text-yellow-700 dark:bg-warning-900/20 dark:text-warning-400'
+    ? 'bg-warning-50 text-warning-600 bg-warning-100 text-warning-700 dark:bg-warning-900/20 dark:text-warning-400'
     : m === 'DELETE'
-    ? 'bg-danger-50 text-danger-600 bg-red-100 text-red-700 dark:bg-danger-900/20 dark:text-danger-400'
+    ? 'bg-danger-50 text-danger-600 bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400'
     : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-400';
 
 export function RequestLog() {
@@ -126,7 +126,7 @@ export function RequestLog() {
       priority: 'high',
       mobileLabel: 'Endpoint',
       render: (value: unknown) => (
-        <span className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate" title={value as string}>
+        <span className="font-mono text-sm text-foreground truncate" title={value as string}>
           {value as string}
         </span>
       )
@@ -164,7 +164,7 @@ export function RequestLog() {
       priority: 'medium',
       render: (value: unknown) => (
         <div className="flex items-center gap-1">
-          <Clock className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+          <Clock className="h-3 w-3 text-muted-foreground" />
           <span className="font-mono text-sm">{fmtTime(value as string)}</span>
         </div>
       ),
@@ -177,7 +177,7 @@ export function RequestLog() {
       hideOnMobile: true,
       render: (value: unknown) => (
         <div className="flex items-center gap-1">
-          <Globe className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+          <Globe className="h-3 w-3 text-muted-foreground" />
           <span className="font-mono text-sm">{value as string}</span>
         </div>
       ),
@@ -193,7 +193,7 @@ export function RequestLog() {
         const host = headers?.['host'] || headers?.['Host'] || '—';
         return (
           <div className="flex items-center gap-1">
-            <Server className="h-3 w-3 text-gray-600 dark:text-gray-400" />
+            <Server className="h-3 w-3 text-muted-foreground" />
             <span className="font-mono text-sm truncate" title={host}>{host}</span>
           </div>
         );
@@ -209,7 +209,7 @@ export function RequestLog() {
     <div className="flex items-center gap-2">
       <FileText className="h-5 w-5" />
       <span>Recent Requests</span>
-      <span className="text-xs text-gray-500 ml-1">(Auto-refreshes every 2s)</span>
+      <span className="text-xs text-muted-foreground ml-1">(Auto-refreshes every 2s)</span>
     </div>
   );
 
@@ -282,13 +282,13 @@ export function RequestLog() {
           {/* Left Side - Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Filters:</span>
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Filters:</span>
             </div>
 
             {/* Status Code Filters */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wide font-medium">Status</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Status</span>
               <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-1">
                 {(['all','2xx','4xx','5xx'] as StatusFamily[]).map(sf => (
                   <SegBtn key={sf} active={statusFamily === sf} onClick={() => setStatusFamily(sf)}>
@@ -300,7 +300,7 @@ export function RequestLog() {
 
             {/* Method Filters */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-wide font-medium">Method</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Method</span>
               <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-1">
                 {(['ALL','GET','POST','PUT','DELETE','PATCH'] as const).map(m => (
                   <SegBtn key={m} active={(method ?? 'ALL') === m} onClick={() => setMethod(m === 'ALL' ? null : m)}>

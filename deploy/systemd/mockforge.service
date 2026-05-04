@@ -1,0 +1,70 @@
+; mockforge serve as a systemd service.
+;
+; Setup:
+;   sudo install -m 0755 deploy/scripts/run-forever.sh /usr/local/bin/  # optional fallback
+;   sudo install -m 0755 target/release/mockforge /usr/local/bin/mockforge
+;   sudo useradd -r -s /usr/sbin/nologin mockforge
+;   sudo install -d -o mockforge -g mockforge /etc/mockforge /var/log/mockforge
+;   sudo cp your-spec.yaml /etc/mockforge/spec.yaml
+;   sudo install -m 0644 deploy/systemd/mockforge.service /etc/systemd/system/
+;   sudo systemctl daemon-reload
+;   sudo systemctl enable --now mockforge
+;
+; Notes for issue #79:
+;   * `Restart=always` + `RestartSec=5` matches what `run-forever.sh` does;
+;     pick whichever wrapper fits your host. Don't run both.
+;   * `MemoryMax` and `LimitNOFILE` are the two knobs most likely to need
+;     tuning under heavy chunked-upload load. Defaults below are reasonable
+;     starting points for a 4 GiB host.
+;   * `MOCKFORGE_METRICS_LOG_FILE` writes a CSV row every 10s (CPU, mem,
+;     TPS, RPS200, CPS, error rate). Plot it in Grafana for postmortems.
+
+[Unit]
+Description=MockForge mock API server
+Documentation=https://github.com/SaaSy-Solutions/mockforge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mockforge
+Group=mockforge
+WorkingDirectory=/etc/mockforge
+
+# Override the ExecStart line via a drop-in (`systemctl edit mockforge`)
+# rather than editing this file in place. Common flags:
+#   --spec /etc/mockforge/spec.yaml
+#   --http-port 80 --https-port 443
+#   --tls-cert /etc/mockforge/tls/server.pem
+#   --tls-key  /etc/mockforge/tls/server.key
+#   --admin --admin-port 9080
+#   --no-rate-limit
+ExecStart=/usr/local/bin/mockforge serve --spec /etc/mockforge/spec.yaml --http-port 8080 --admin --admin-port 9080
+
+Environment=MOCKFORGE_METRICS_LOG_FILE=/var/log/mockforge/metrics.csv
+Environment=RUST_LOG=info
+
+# Restart on any non-clean exit (panic, OOM kill, segfault).
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# Resource limits — tune for your host.
+LimitNOFILE=65536
+MemoryMax=2G
+TasksMax=4096
+
+# Graceful shutdown: SIGTERM → drain → SIGKILL after 30s.
+TimeoutStopSec=30
+KillMode=mixed
+
+# Hardening (drop if it conflicts with your spec/tls paths).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/mockforge
+ReadOnlyPaths=/etc/mockforge
+
+[Install]
+WantedBy=multi-user.target

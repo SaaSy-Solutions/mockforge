@@ -21,15 +21,15 @@ function NotFoundPage() {
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
           <div className="text-6xl mb-4">🚧</div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          <h2 className="text-2xl font-bold text-foreground mb-2">
             {t('app.pageNotFoundTitle')}
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
+          <p className="text-muted-foreground mb-6">
             {t('app.pageNotFoundBody')}
           </p>
           <button
             onClick={() => navigate('/dashboard')}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            className="px-6 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg font-medium transition-colors"
           >
             {t('app.goToDashboard')}
           </button>
@@ -144,8 +144,8 @@ function App() {
               <Suspense fallback={
                 <div className="flex items-center justify-center h-64">
                   <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="mt-4 text-gray-600 dark:text-gray-400">{t('app.loading')}</p>
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
+                    <p className="mt-4 text-muted-foreground">{t('app.loading')}</p>
                   </div>
                 </div>
               }>

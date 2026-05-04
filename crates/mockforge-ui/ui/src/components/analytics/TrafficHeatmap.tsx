@@ -19,11 +19,11 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Calendar className="h-5 w-5 text-gray-400" />
+          <Calendar className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Traffic Patterns</h3>
         </div>
         <div className="h-96 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading...</div>
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       </Card>
     );
@@ -33,10 +33,10 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Calendar className="h-5 w-5 text-gray-400" />
+          <Calendar className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Traffic Patterns</h3>
         </div>
-        <div className="h-96 flex items-center justify-center text-gray-400">
+        <div className="h-96 flex items-center justify-center text-muted-foreground">
           {error ? 'Error loading data' : 'No data available'}
         </div>
       </Card>
@@ -57,23 +57,24 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
   const maxValue = Math.max(...data.patterns.map((p) => p.request_count), 1);
 
   const getColor = (value: number) => {
-    if (value === 0) return 'bg-gray-100 dark:bg-gray-800';
+    if (value === 0) return 'bg-muted';
     const intensity = value / maxValue;
-    if (intensity < 0.2) return 'bg-blue-100 dark:bg-blue-900/30';
-    if (intensity < 0.4) return 'bg-blue-200 dark:bg-blue-800/40';
-    if (intensity < 0.6) return 'bg-blue-300 dark:bg-blue-700/50';
-    if (intensity < 0.8) return 'bg-blue-400 dark:bg-blue-600/60';
-    return 'bg-blue-500 dark:bg-blue-500/70';
+    // Single info-token ramp via opacity — themable and consistent across modes.
+    if (intensity < 0.2) return 'bg-info/20';
+    if (intensity < 0.4) return 'bg-info/40';
+    if (intensity < 0.6) return 'bg-info/60';
+    if (intensity < 0.8) return 'bg-info/80';
+    return 'bg-info';
   };
 
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <Calendar className="h-5 w-5 text-info-600 dark:text-info-400" />
           <h3 className="text-lg font-semibold">Traffic Heatmap</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           Requests by hour and day of week
         </div>
       </div>
@@ -86,7 +87,7 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
             {hours.map((hour) => (
               <div
                 key={hour}
-                className="flex-shrink-0 w-8 text-xs text-center text-gray-600 dark:text-gray-400"
+                className="flex-shrink-0 w-8 text-xs text-center text-muted-foreground"
               >
                 {hour}
               </div>
@@ -97,7 +98,7 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
           {dayNames.map((dayName, dayIndex) => (
             <div key={dayIndex} className="flex mb-1">
               {/* Day label */}
-              <div className="w-16 text-sm text-gray-700 dark:text-gray-300 flex items-center">
+              <div className="w-16 text-sm text-foreground flex items-center">
                 {dayName}
               </div>
 
@@ -112,7 +113,7 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
                     key={hour}
                     className={`
                       flex-shrink-0 w-8 h-8 mx-0.5 rounded ${color}
-                      hover:ring-2 hover:ring-blue-500 cursor-pointer
+                      hover:ring-2 hover:ring-ring cursor-pointer
                       transition-all
                     `}
                     title={`${dayName} ${hour}:00 - ${value.toLocaleString()} requests`}
@@ -123,15 +124,15 @@ export const TrafficHeatmap: React.FC<TrafficHeatmapProps> = ({ days = 7, worksp
           ))}
 
           {/* Legend */}
-          <div className="flex items-center justify-center gap-2 mt-4 text-xs text-gray-600 dark:text-gray-400">
+          <div className="flex items-center justify-center gap-2 mt-4 text-xs text-muted-foreground">
             <span>Less</span>
             <div className="flex gap-1">
-              <div className="w-4 h-4 bg-gray-100 dark:bg-gray-800 rounded" />
-              <div className="w-4 h-4 bg-blue-100 dark:bg-blue-900/30 rounded" />
-              <div className="w-4 h-4 bg-blue-200 dark:bg-blue-800/40 rounded" />
-              <div className="w-4 h-4 bg-blue-300 dark:bg-blue-700/50 rounded" />
-              <div className="w-4 h-4 bg-blue-400 dark:bg-blue-600/60 rounded" />
-              <div className="w-4 h-4 bg-blue-500 dark:bg-blue-500/70 rounded" />
+              <div className="w-4 h-4 bg-muted rounded" />
+              <div className="w-4 h-4 bg-info/20 rounded" />
+              <div className="w-4 h-4 bg-info/40 rounded" />
+              <div className="w-4 h-4 bg-info/60 rounded" />
+              <div className="w-4 h-4 bg-info/80 rounded" />
+              <div className="w-4 h-4 bg-info rounded" />
             </div>
             <span>More</span>
           </div>

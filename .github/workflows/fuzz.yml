@@ -1,9 +1,7 @@
 name: Fuzz Testing
 
+# Cron disabled — runner queue contention; manual workflow_dispatch still works.
 on:
-  schedule:
-    # Run fuzz tests daily at 2 AM UTC
-    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       duration:
@@ -36,7 +34,7 @@ jobs:
         run: cargo install cargo-fuzz
 
       - name: Cache fuzz corpus
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: crates/mockforge-core/fuzz/corpus
           key: fuzz-corpus-${{ github.sha }}

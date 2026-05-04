@@ -243,14 +243,14 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                 </h3>
                 <div className="bg-muted/30 rounded-md p-4 space-y-3">
                   {traceData.rules_executed.map((rule, idx) => (
-                    <div key={idx} className="border-l-2 border-yellow-500 pl-3">
+                    <div key={idx} className="border-l-2 border-warning pl-3">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-medium">{rule.name}</span>
                         <Badge variant={rule.condition_matched ? 'default' : 'secondary'} className="text-xs">
                           {rule.rule_type}
                         </Badge>
                         {rule.condition_matched && (
-                          <Badge variant="outline" className="text-xs bg-green-500/10">
+                          <Badge variant="outline" className="text-xs bg-success-500/10">
                             Matched
                           </Badge>
                         )}
@@ -285,7 +285,7 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                 </h3>
                 <div className="bg-muted/30 rounded-md p-4 space-y-3">
                   {traceData.template_expansions.map((expansion, idx) => (
-                    <div key={idx} className="border-l-2 border-blue-500 pl-3">
+                    <div key={idx} className="border-l-2 border-info pl-3">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs text-muted-foreground">Step {expansion.step}</span>
                         <Badge variant="outline" className="text-xs">
@@ -378,13 +378,13 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                 </h3>
                 <div className="bg-muted/30 rounded-md p-4 space-y-3">
                   {traceData.schema_validation_diff.length === 0 ? (
-                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                    <div className="flex items-center gap-2 text-sm text-success-600 dark:text-success-400">
                       <CheckCircle className="h-4 w-4" />
                       <span>Payload is valid according to the contract schema</span>
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 text-sm text-yellow-600 dark:text-yellow-400 mb-3">
+                      <div className="flex items-center gap-2 text-sm text-warning-600 dark:text-warning-400 mb-3">
                         <AlertCircle className="h-4 w-4" />
                         <span>
                           Found {traceData.schema_validation_diff.length} validation
@@ -395,7 +395,7 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                         {traceData.schema_validation_diff.map((error, idx) => (
                           <div
                             key={idx}
-                            className="border-l-2 border-yellow-500 pl-3 py-2 bg-yellow-500/10 rounded-r"
+                            className="border-l-2 border-warning pl-3 py-2 bg-warning-500/10 rounded-r"
                           >
                             <div className="flex items-center gap-2 mb-1">
                               <code className="text-xs font-mono bg-background px-2 py-0.5 rounded">
@@ -416,13 +416,13 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                             <div className="text-xs space-y-1 mt-2">
                               <div>
                                 <span className="text-muted-foreground">Expected: </span>
-                                <span className="font-medium text-green-600 dark:text-green-400">
+                                <span className="font-medium text-success-600 dark:text-success-400">
                                   {error.expected}
                                 </span>
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Found: </span>
-                                <span className="font-medium text-red-600 dark:text-red-400">
+                                <span className="font-medium text-danger-600 dark:text-danger-400">
                                   {error.found}
                                 </span>
                               </div>
@@ -432,7 +432,7 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
                                 </div>
                               )}
                               {error.schema_info && (
-                                <div className="mt-2 pt-2 border-t border-yellow-500/30">
+                                <div className="mt-2 pt-2 border-t border-warning/30">
                                   <div className="text-xs text-muted-foreground">
                                     Schema Info:
                                   </div>

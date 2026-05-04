@@ -22,13 +22,13 @@ export function ContextMenu({ children, items, position, onClose }: ContextMenuP
         onClick={onClose}
       />
       <div
-        className="absolute z-50 min-w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black/5 py-1"
+        className="absolute z-50 min-w-48 rounded-md shadow-lg bg-popover text-popover-foreground border border-border py-1"
         style={{ left: position.x, top: position.y }}
       >
         {items.map((item, index) => (
           <button
             key={index}
-            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors duration-150"
+            className="flex items-center w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-150"
             onClick={() => {
               item.onClick();
               onClose();

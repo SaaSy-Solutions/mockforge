@@ -30,19 +30,19 @@ const appTypeIcons: Record<AppType, React.ReactNode> = {
 // App type color mapping
 const appTypeColors: Record<AppType, { bg: string; text: string; border: string }> = {
   web: {
-    bg: 'bg-blue-50 dark:bg-blue-900/20',
-    text: 'text-blue-700 dark:text-blue-300',
-    border: 'border-blue-200 dark:border-blue-800',
+    bg: 'bg-info-50 dark:bg-info-900/20',
+    text: 'text-info-700 dark:text-info-300',
+    border: 'border-info-200 dark:border-info-800',
   },
   mobile_ios: {
-    bg: 'bg-gray-50 dark:bg-gray-800',
-    text: 'text-gray-700 dark:text-gray-300',
-    border: 'border-gray-200 dark:border-gray-700',
+    bg: 'bg-muted',
+    text: 'text-foreground',
+    border: 'border-border',
   },
   mobile_android: {
-    bg: 'bg-green-50 dark:bg-green-900/20',
-    text: 'text-green-700 dark:text-green-300',
-    border: 'border-green-200 dark:border-green-800',
+    bg: 'bg-success-50 dark:bg-success-900/20',
+    text: 'text-success-700 dark:text-success-300',
+    border: 'border-success-200 dark:border-success-800',
   },
   internal_tool: {
     bg: 'bg-purple-50 dark:bg-purple-900/20',
@@ -55,9 +55,9 @@ const appTypeColors: Record<AppType, { bg: string; text: string; border: string 
     border: 'border-orange-200 dark:border-orange-800',
   },
   other: {
-    bg: 'bg-gray-50 dark:bg-gray-800',
-    text: 'text-gray-700 dark:text-gray-300',
-    border: 'border-gray-200 dark:border-gray-700',
+    bg: 'bg-muted',
+    text: 'text-foreground',
+    border: 'border-border',
   },
 };
 
@@ -97,7 +97,7 @@ function AppCard({ app }: { app: ConsumingApp }) {
             href={app.repository_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="ml-2 text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-gray-200"
             title="View repository"
           >
             <ExternalLink className="w-4 h-4" />
@@ -111,30 +111,30 @@ function AppCard({ app }: { app: ConsumingApp }) {
 // SDK method card component
 function SDKMethodCard({ sdkMethod, isExpanded, onToggle }: { sdkMethod: SDKMethod; isExpanded: boolean; onToggle: () => void }) {
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between text-left"
+        className="w-full px-4 py-3 bg-muted hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between text-left"
       >
         <div className="flex items-center gap-3">
-          <div className="text-gray-500 dark:text-gray-400">
+          <div className="text-muted-foreground">
             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </div>
           <div>
-            <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+            <div className="font-medium text-sm text-foreground">
               {sdkMethod.sdk_name}
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <div className="text-xs text-muted-foreground mt-0.5">
               {sdkMethod.method_name}
             </div>
           </div>
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
+        <div className="text-xs text-muted-foreground">
           {sdkMethod.consuming_apps.length} {sdkMethod.consuming_apps.length === 1 ? 'app' : 'apps'}
         </div>
       </button>
       {isExpanded && sdkMethod.consuming_apps.length > 0 && (
-        <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4 bg-card border-t border-border">
           <div className="space-y-2">
             {sdkMethod.consuming_apps.map((app) => (
               <AppCard key={app.app_id} app={app} />
@@ -218,7 +218,7 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedCons
   if (loading) {
     return (
       <ModernCard className="p-4">
-        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 dark:border-gray-400"></div>
           <span className="text-sm">Loading consumer impact...</span>
         </div>
@@ -238,7 +238,7 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedCons
   if (!impact) {
     return (
       <ModernCard className="p-4">
-        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-2 text-muted-foreground">
           <Users className="w-4 h-4" />
           <span className="text-sm">No consumer mappings found for this endpoint</span>
         </div>
@@ -249,17 +249,17 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedCons
   return (
     <ModernCard className="p-4 mt-4">
       <div className="flex items-start gap-2 mb-4">
-        <Users className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+        <Users className="w-5 h-5 text-info-600 dark:text-info-400 mt-0.5" />
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 dark:text-gray-100">Consumer Impact</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{impact.impact_summary}</p>
+          <h3 className="font-semibold text-foreground">Consumer Impact</h3>
+          <p className="text-sm text-muted-foreground mt-1">{impact.impact_summary}</p>
         </div>
       </div>
 
       {/* Affected Apps Summary */}
       {impact.affected_apps.length > 0 && (
         <div className="mb-4">
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <div className="text-xs font-medium text-foreground mb-2">
             Affected Applications ({impact.affected_apps.length})
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -273,7 +273,7 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedCons
       {/* SDK Methods */}
       {impact.affected_sdk_methods.length > 0 && (
         <div>
-          <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <div className="text-xs font-medium text-foreground mb-2">
             Affected SDK Methods ({impact.affected_sdk_methods.length})
           </div>
           <div className="space-y-2">
@@ -293,8 +293,8 @@ export function ConsumerImpactPanel({ incidentId, endpoint, method, affectedCons
       )}
 
       {/* Endpoint Info */}
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="text-xs text-gray-500 dark:text-gray-400">
+      <div className="mt-4 pt-4 border-t border-border">
+        <div className="text-xs text-muted-foreground">
           <span className="font-medium">Endpoint:</span> {method} {endpoint}
         </div>
       </div>

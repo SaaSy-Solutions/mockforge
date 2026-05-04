@@ -88,7 +88,7 @@ export function ConditionBuilder({ condition, onUpdate, onCancel }: ConditionBui
 
         {codeMode ? (
           <div className="space-y-2 mt-2">
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            <div className="text-xs text-muted-foreground mb-2">
               Enter a JavaScript/TypeScript expression (e.g., &quot;count &gt; 10 &amp;&amp; status == &apos;active&apos;&quot;)
             </div>
             <Input

@@ -83,7 +83,7 @@ export default function PerformancePage() {
 
       {/* Status Banner */}
       {isRunning && status && (
-        <Card className="border-blue-200 bg-blue-50">
+        <Card className="border-info-200 bg-info-50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -95,7 +95,7 @@ export default function PerformancePage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <div className="h-3 w-3 bg-green-500 rounded-full animate-pulse"></div>
+                <div className="h-3 w-3 bg-success-500 rounded-full animate-pulse"></div>
                 <span className="text-sm font-medium">Active</span>
               </div>
             </div>

@@ -104,12 +104,12 @@ export function WorkspaceSettingsDialog({
         <div className="space-y-6">
           {/* Sync Configuration Section */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Directory Synchronization</h3>
+            <h3 className="text-lg font-medium text-foreground">Directory Synchronization</h3>
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <Label htmlFor="sync-enabled">Enable Directory Sync</Label>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   Automatically sync workspace changes with a local directory
                 </p>
               </div>
@@ -142,7 +142,7 @@ export function WorkspaceSettingsDialog({
                       <FolderOpen className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Directory where workspace files will be synchronized
                   </p>
                 </div>
@@ -193,7 +193,7 @@ export function WorkspaceSettingsDialog({
                     onChange={(e) => setConfig(prev => ({ ...prev, filename_pattern: e.target.value }))}
                     placeholder="{name}"
                   />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Pattern for exported files. Use {'{name}'} for workspace name, {'{id}'} for workspace ID
                   </p>
                 </div>
@@ -202,7 +202,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="realtime-monitoring">Real-time Monitoring</Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Automatically sync changes as they happen
                       </p>
                     </div>
@@ -216,7 +216,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="include-metadata">Include Metadata</Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Include workspace metadata files in sync
                       </p>
                     </div>
@@ -230,7 +230,7 @@ export function WorkspaceSettingsDialog({
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <Label htmlFor="force-overwrite">Force Overwrite</Label>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Overwrite existing files without confirmation
                       </p>
                     </div>
@@ -250,7 +250,7 @@ export function WorkspaceSettingsDialog({
                     onChange={(e) => setConfig(prev => ({ ...prev, exclude_pattern: e.target.value }))}
                     placeholder="*.tmp,*.log"
                   />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     Regex pattern for files to exclude from sync
                   </p>
                 </div>

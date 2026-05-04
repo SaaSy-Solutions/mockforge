@@ -7,6 +7,10 @@ export interface User {
   email: string;
   role: 'admin' | 'user' | 'viewer';
   preferences?: UserPreferences;
+  /** Cloud-only: hydrated from /api/v1/users/me; absent in local admin mode. */
+  is_verified?: boolean;
+  /** Cloud-only: account creation timestamp from /api/v1/users/me. */
+  created_at?: string;
 }
 
 export interface AuthState {
@@ -279,6 +283,21 @@ export interface DashboardData {
   servers: ServerStatus[];
   recent_logs: RequestLog[];
   system: SystemInfo;
+  cloud_metrics?: CloudDashboardMetrics;
+}
+
+export interface CloudDashboardMetrics {
+  active_deployments: number;
+  total_deployments: number;
+  workspaces: number;
+  services: number;
+  fixtures: number;
+  federations: number;
+  requests_2xx: number;
+  requests_4xx: number;
+  requests_5xx: number;
+  egress_bytes: number;
+  period_start: string | null;
 }
 
 export interface LatencyMetrics {

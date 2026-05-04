@@ -33,7 +33,7 @@ export const FederationList: React.FC<FederationListProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
       </div>
     );
   }
@@ -41,7 +41,7 @@ export const FederationList: React.FC<FederationListProps> = ({
   if (error) {
     return (
       <Card className="p-6">
-        <div className="text-red-600 dark:text-red-400">
+        <div className="text-danger-600 dark:text-danger-400">
           Error loading federations: {error.message}
         </div>
       </Card>
@@ -61,15 +61,15 @@ export const FederationList: React.FC<FederationListProps> = ({
   const getRealityLevelColor = (level: string) => {
     switch (level) {
       case 'real':
-        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
       case 'mock_v3':
-        return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
+        return 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300';
       case 'blended':
-        return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200';
+        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300';
       case 'chaos_driven':
-        return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200';
+        return 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300';
       default:
-        return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200';
+        return 'bg-muted text-foreground';
     }
   };
 
@@ -78,15 +78,15 @@ export const FederationList: React.FC<FederationListProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Federations</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <h2 className="text-2xl font-bold text-foreground">Federations</h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Compose multiple workspaces into federated virtual systems
           </p>
         </div>
         {onCreate && (
           <button
             onClick={onCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Create Federation
@@ -97,11 +97,11 @@ export const FederationList: React.FC<FederationListProps> = ({
       {/* Federation List */}
       {!federations || federations.length === 0 ? (
         <Card className="p-8 text-center">
-          <p className="text-gray-600 dark:text-gray-400 mb-4">No federations found</p>
+          <p className="text-muted-foreground mb-4">No federations found</p>
           {onCreate && (
             <button
               onClick={onCreate}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
             >
               Create Your First Federation
             </button>
@@ -114,14 +114,14 @@ export const FederationList: React.FC<FederationListProps> = ({
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <Network className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    <Network className="h-5 w-5 text-info-600 dark:text-info-400" />
+                    <h3 className="text-lg font-semibold text-foreground">
                       {federation.name}
                     </h3>
                   </div>
 
                   {federation.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    <p className="text-sm text-muted-foreground mb-3">
                       {federation.description}
                     </p>
                   )}
@@ -129,7 +129,7 @@ export const FederationList: React.FC<FederationListProps> = ({
                   <ActiveScenarioBadge federationId={federation.id} />
 
                   <div className="space-y-2">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-sm text-muted-foreground">
                       <strong>Services:</strong> {federation.services.length}
                     </div>
 
@@ -137,13 +137,13 @@ export const FederationList: React.FC<FederationListProps> = ({
                       {federation.services.map((service) => (
                         <div
                           key={service.name}
-                          className="flex items-center gap-2 px-3 py-1 bg-gray-50 dark:bg-gray-800 rounded text-sm"
+                          className="flex items-center gap-2 px-3 py-1 bg-muted rounded text-sm"
                         >
-                          <span className="font-medium text-gray-900 dark:text-white">
+                          <span className="font-medium text-foreground">
                             {service.name}
                           </span>
-                          <ArrowRight className="h-3 w-3 text-gray-400" />
-                          <span className="text-gray-600 dark:text-gray-400">
+                          <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-muted-foreground">
                             {service.base_path}
                           </span>
                           <span
@@ -155,7 +155,7 @@ export const FederationList: React.FC<FederationListProps> = ({
                       ))}
                     </div>
 
-                    <div className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                    <div className="text-xs text-muted-foreground mt-2">
                       Updated {new Date(federation.updated_at).toLocaleDateString()}
                     </div>
                   </div>
@@ -165,7 +165,7 @@ export const FederationList: React.FC<FederationListProps> = ({
                   {onSelect && (
                     <button
                       onClick={() => onSelect(federation)}
-                      className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                      className="p-2 text-muted-foreground hover:text-info-600 dark:hover:text-info-400 transition-colors"
                       title="View Details"
                     >
                       <Edit className="h-4 w-4" />
@@ -173,7 +173,7 @@ export const FederationList: React.FC<FederationListProps> = ({
                   )}
                   <button
                     onClick={() => handleDelete(federation.id, federation.name)}
-                    className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    className="p-2 text-muted-foreground hover:text-danger-600 dark:hover:text-danger-400 transition-colors"
                     title="Delete Federation"
                   >
                     <Trash2 className="h-4 w-4" />

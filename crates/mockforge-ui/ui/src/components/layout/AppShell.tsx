@@ -269,6 +269,9 @@ const cloudNavItemIds = new Set([
   // Cloud flows — versioned scenario / state-machine / orchestration /
   // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
   'cloud-flows',
+  // Chains share the flows resource (kind='chain') and are executed by
+  // the ChainExecutor in mockforge-test-runner (#354).
+  'chains',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.

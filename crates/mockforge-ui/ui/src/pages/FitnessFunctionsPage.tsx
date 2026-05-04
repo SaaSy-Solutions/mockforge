@@ -62,7 +62,7 @@ function ScopeBadge({ scope }: { scope: FitnessFunction['scope'] }) {
     : labels[scope.type];
 
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-300">
       <Icon className="w-3 h-3" />
       {label}
     </span>
@@ -103,12 +103,12 @@ function FitnessFunctionRow({
   };
 
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+    <div className="border-b border-border last:border-b-0 hover:bg-accent hover:text-accent-foreground/50 transition-colors">
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <h3 className="text-sm font-semibold text-foreground">
                 {func.name}
               </h3>
               <FunctionTypeBadge type={func.function_type} />
@@ -120,11 +120,11 @@ function FitnessFunctionRow({
               )}
             </div>
 
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+            <p className="text-sm text-muted-foreground mb-2">
               {func.description}
             </p>
 
-            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>Created: {formatDate(func.created_at)}</span>
               <span>Updated: {formatDate(func.updated_at)}</span>
             </div>
@@ -151,7 +151,7 @@ function FitnessFunctionRow({
               variant="outline"
               size="sm"
               onClick={() => onDelete(func.id)}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -321,7 +321,7 @@ function FitnessFunctionForm({
             placeholder="25"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Maximum allowed response size increase percentage (e.g., 25 for 25%)
           </p>
         </div>
@@ -337,7 +337,7 @@ function FitnessFunctionForm({
               placeholder="/v1/mobile/*"
               required
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Endpoint pattern to check (supports * wildcard)
             </p>
           </div>
@@ -362,7 +362,7 @@ function FitnessFunctionForm({
             placeholder="100"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Maximum number of fields allowed
           </p>
         </div>
@@ -378,7 +378,7 @@ function FitnessFunctionForm({
             placeholder="10"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Maximum schema depth allowed
           </p>
         </div>
@@ -535,13 +535,13 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
         <ModernCard className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Total Tests</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <p className="text-sm text-muted-foreground">Total Tests</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
                 {summary.totalTests}
               </p>
             </div>
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-              <BarChart3 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="p-3 bg-info-100 dark:bg-info-900/20 rounded-lg">
+              <BarChart3 className="w-6 h-6 text-info-600 dark:text-info-400" />
             </div>
           </div>
         </ModernCard>
@@ -549,13 +549,13 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
         <ModernCard className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Passed</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+              <p className="text-sm text-muted-foreground">Passed</p>
+              <p className="text-2xl font-bold text-success-600 dark:text-success-400 mt-1">
                 {summary.passedTests}
               </p>
             </div>
-            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-              <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div className="p-3 bg-success-100 dark:bg-success-900/20 rounded-lg">
+              <CheckCircle2 className="w-6 h-6 text-success-600 dark:text-success-400" />
             </div>
           </div>
         </ModernCard>
@@ -563,13 +563,13 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
         <ModernCard className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Failed</p>
-              <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+              <p className="text-sm text-muted-foreground">Failed</p>
+              <p className="text-2xl font-bold text-danger-600 dark:text-danger-400 mt-1">
                 {summary.failedTests}
               </p>
             </div>
-            <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
-              <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
+            <div className="p-3 bg-danger-100 dark:bg-danger-900/20 rounded-lg">
+              <XCircle className="w-6 h-6 text-danger-600 dark:text-danger-400" />
             </div>
           </div>
         </ModernCard>
@@ -577,8 +577,8 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
         <ModernCard className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Pass Rate</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <p className="text-sm text-muted-foreground">Pass Rate</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
                 {summary.passRate.toFixed(1)}%
               </p>
             </div>
@@ -596,25 +596,25 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Endpoint</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Total</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Passed</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Failed</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Pass Rate</th>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Endpoint</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Total</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Passed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Failed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Pass Rate</th>
                   </tr>
                 </thead>
                 <tbody>
                   {summary.endpointResults.map((result, idx) => {
                     const passRate = result.total > 0 ? (result.passed / result.total) * 100 : 0;
                     return (
-                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td className="p-3 text-sm font-mono text-gray-900 dark:text-gray-100">{result.endpoint}</td>
-                        <td className="p-3 text-sm text-gray-600 dark:text-gray-400">{result.total}</td>
-                        <td className="p-3 text-sm text-green-600 dark:text-green-400">{result.passed}</td>
-                        <td className="p-3 text-sm text-red-600 dark:text-red-400">{result.failed}</td>
+                      <tr key={idx} className="border-b border-border hover:bg-accent hover:text-accent-foreground/50">
+                        <td className="p-3 text-sm font-mono text-foreground">{result.endpoint}</td>
+                        <td className="p-3 text-sm text-muted-foreground">{result.total}</td>
+                        <td className="p-3 text-sm text-success-600 dark:text-success-400">{result.passed}</td>
+                        <td className="p-3 text-sm text-danger-600 dark:text-danger-400">{result.failed}</td>
                         <td className="p-3">
-                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-green-600 dark:text-green-400' : passRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-success-600 dark:text-success-400' : passRate >= 50 ? 'text-warning-600 dark:text-warning-400' : 'text-danger-600 dark:text-danger-400'}`}>
                             {passRate.toFixed(1)}%
                           </span>
                         </td>
@@ -635,25 +635,25 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Function</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Total</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Passed</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Failed</th>
-                    <th className="text-left p-3 font-semibold text-sm text-gray-700 dark:text-gray-300">Pass Rate</th>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Function</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Total</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Passed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Failed</th>
+                    <th className="text-left p-3 font-semibold text-sm text-foreground">Pass Rate</th>
                   </tr>
                 </thead>
                 <tbody>
                   {summary.functionResults.map((result, idx) => {
                     const passRate = result.total > 0 ? (result.passed / result.total) * 100 : 0;
                     return (
-                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <td className="p-3 text-sm text-gray-900 dark:text-gray-100">{result.functionName}</td>
-                        <td className="p-3 text-sm text-gray-600 dark:text-gray-400">{result.total}</td>
-                        <td className="p-3 text-sm text-green-600 dark:text-green-400">{result.passed}</td>
-                        <td className="p-3 text-sm text-red-600 dark:text-red-400">{result.failed}</td>
+                      <tr key={idx} className="border-b border-border hover:bg-accent hover:text-accent-foreground/50">
+                        <td className="p-3 text-sm text-foreground">{result.functionName}</td>
+                        <td className="p-3 text-sm text-muted-foreground">{result.total}</td>
+                        <td className="p-3 text-sm text-success-600 dark:text-success-400">{result.passed}</td>
+                        <td className="p-3 text-sm text-danger-600 dark:text-danger-400">{result.failed}</td>
                         <td className="p-3">
-                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-green-600 dark:text-green-400' : passRate >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <span className={`text-sm font-semibold ${passRate >= 80 ? 'text-success-600 dark:text-success-400' : passRate >= 50 ? 'text-warning-600 dark:text-warning-400' : 'text-danger-600 dark:text-danger-400'}`}>
                             {passRate.toFixed(1)}%
                           </span>
                         </td>
@@ -783,7 +783,7 @@ export function FitnessFunctionsPage() {
       />
 
       <div className="flex justify-between items-center">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           {functions.length} fitness function{functions.length !== 1 ? 's' : ''} registered
         </div>
         <div className="flex gap-2">
@@ -810,7 +810,7 @@ export function FitnessFunctionsPage() {
       {/* Fitness Functions List */}
       <Section title="Registered Fitness Functions">
         {isLoading ? (
-          <div className="p-4 text-center text-gray-500">Loading...</div>
+          <div className="p-4 text-center text-muted-foreground">Loading...</div>
         ) : functions.length === 0 ? (
           <EmptyState
             icon={<Activity className="w-6 h-6" />}
@@ -818,7 +818,7 @@ export function FitnessFunctionsPage() {
             description="Create your first fitness function to start enforcing contract constraints"
           />
         ) : (
-          <div className="border border-gray-200 dark:border-gray-700 rounded-lg divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="border border-border rounded-lg divide-y divide-border">
             {(Array.isArray(functions) ? functions : []).map((func) => (
               <FitnessFunctionRow
                 key={func.id}
@@ -879,7 +879,7 @@ export function FitnessFunctionsPage() {
             <Button
               onClick={confirmDelete}
               disabled={deleteMutation.isPending}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
             </Button>
@@ -902,28 +902,28 @@ export function FitnessFunctionsPage() {
                 <ModernCard key={idx}>
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                      <h4 className="font-semibold text-foreground">
                         {result.function_name}
                       </h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {result.message}
                       </p>
                     </div>
                     {result.passed ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <CheckCircle2 className="w-5 h-5 text-success-500" />
                     ) : (
-                      <XCircle className="w-5 h-5 text-red-500" />
+                      <XCircle className="w-5 h-5 text-danger-500" />
                     )}
                   </div>
                   {result.metrics && typeof result.metrics === 'object' && Object.keys(result.metrics).length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">
                         Metrics:
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {Object.entries(result.metrics).map(([key, value]) => (
                           <div key={key} className="text-xs">
-                            <span className="text-gray-500 dark:text-gray-400">{key}:</span>{' '}
+                            <span className="text-muted-foreground">{key}:</span>{' '}
                             <span className="font-mono font-semibold">{typeof value === 'number' ? value.toFixed(2) : String(value ?? '')}</span>
                           </div>
                         ))}
