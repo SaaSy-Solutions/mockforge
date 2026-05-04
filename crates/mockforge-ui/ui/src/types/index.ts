@@ -927,7 +927,12 @@ export interface SyncStatus {
   enabled: boolean;
   target_directory?: string;
   sync_direction: SyncDirection;
+  directory_structure?: SyncDirectoryStructure;
   realtime_monitoring: boolean;
+  include_metadata?: boolean;
+  filename_pattern?: string;
+  exclude_pattern?: string;
+  force_overwrite?: boolean;
   last_sync?: string;
   status: string;
 }
@@ -945,6 +950,9 @@ export interface ConfigureSyncRequest {
   realtime_monitoring: boolean;
   directory_structure?: SyncDirectoryStructure;
   filename_pattern?: string;
+  include_metadata?: boolean;
+  exclude_pattern?: string;
+  force_overwrite?: boolean;
 }
 
 export interface ConfirmSyncChangesRequest {
@@ -1061,6 +1069,11 @@ export interface SecurityWarning {
 
 export interface CreateWorkspaceRequest {
   name: string;
+  description?: string;
+}
+
+export interface UpdateWorkspaceRequest {
+  name?: string;
   description?: string;
 }
 

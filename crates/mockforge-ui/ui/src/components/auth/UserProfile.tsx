@@ -28,9 +28,9 @@ export function UserProfile() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+        return 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300';
       case 'viewer':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
     }
@@ -59,7 +59,7 @@ export function UserProfile() {
         className="flex items-center space-x-2 px-3 py-2 rounded-md hover:bg-accent transition-colors"
       >
         <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground text-sm font-medium">
+          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-foreground-foreground text-sm font-medium">
             {(user.username || user.email || 'U').charAt(0).toUpperCase()}
           </div>
           <div className="text-left">
@@ -87,7 +87,7 @@ export function UserProfile() {
           <div className="absolute right-0 mt-2 w-64 bg-card border rounded-md shadow-lg z-20">
             <div className="p-4 border-b">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-gray-900 dark:text-gray-100-foreground font-medium">
+                <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-foreground-foreground font-medium">
                   {(user.username || user.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div>

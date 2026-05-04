@@ -161,7 +161,7 @@ export function DialogHeader({ children, className }: DialogHeaderProps) {
 
 export function DialogTitle({ children, className, id = "dialog-title" }: DialogTitleProps) {
   return (
-    <h2 id={id} className={cn("text-lg font-semibold text-gray-900 dark:text-gray-100", className)}>
+    <h2 id={id} className={cn("text-lg font-semibold text-foreground", className)}>
       {children}
     </h2>
   );
@@ -169,7 +169,7 @@ export function DialogTitle({ children, className, id = "dialog-title" }: Dialog
 
 export function DialogDescription({ children, className, id = "dialog-description" }: DialogDescriptionProps) {
   return (
-    <p id={id} className={cn("text-sm text-gray-600 dark:text-gray-400 mt-1", className)}>
+    <p id={id} className={cn("text-sm text-muted-foreground mt-1", className)}>
       {children}
     </p>
   );

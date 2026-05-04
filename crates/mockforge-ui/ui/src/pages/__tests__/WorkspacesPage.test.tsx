@@ -43,6 +43,12 @@ vi.mock('../../components/workspace/EnvironmentManager', () => ({
 vi.mock('../../components/workspace/WorkspacePromotions', () => ({
   default: () => null,
 }));
+vi.mock('../../components/workspace/WorkspaceFederationScenariosPanel', () => ({
+  default: () => null,
+}));
+vi.mock('../../components/workspace/WorkspaceSyncPanel', () => ({
+  default: () => null,
+}));
 
 // Set default mocks
 vi.mocked(useWorkspaceStore).mockReturnValue({
@@ -412,23 +418,19 @@ describe('WorkspacesPage', () => {
     expect(screen.getByText('Failed to load workspaces')).toBeInTheDocument();
   });
 
-  it('opens encryption settings', async () => {
+  it('hides encryption button in local mode (cloud-only feature)', async () => {
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
     // Select workspace by clicking on the description
     fireEvent.click(screen.getByText('Development workspace'));
 
-    // Wait for the workspace to load and Encryption button to appear
+    // Wait for the workspace to load
     await waitFor(() => {
-      expect(screen.getByText('Encryption')).toBeInTheDocument();
+      expect(screen.getByText('New Folder')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Encryption'));
-
-    // Wait for the dialog to appear
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
-    });
+    // Encryption is gated behind IS_CLOUD (local backend has no encryption endpoints)
+    expect(screen.queryByText('Encryption')).not.toBeInTheDocument();
   });
 
   it('validates required fields in create workspace', () => {

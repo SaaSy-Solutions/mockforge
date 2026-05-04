@@ -379,7 +379,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
                       <div className="space-y-2 text-sm font-mono">
                         {Object.entries(chainDetails.variables).map(([key, value]) => (
                           <div key={key} className="flex">
-                            <span className="text-blue-600 dark:text-blue-400">{key}:</span>
+                            <span className="text-info-600 dark:text-info-400">{key}:</span>
                             <span className="ml-2 text-muted-foreground">
                               {typeof value === 'string' ? value : JSON.stringify(value) as string}
                             </span>
@@ -423,7 +423,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
                               <div className="font-mono text-xs bg-muted/50 p-2 rounded mt-1 space-y-1">
                                 {Object.entries(link.request.headers).map(([key, value]) => (
                                   <div key={key}>
-                                    <span className="text-blue-600 dark:text-blue-400">{key}:</span>{' '}
+                                    <span className="text-info-600 dark:text-info-400">{key}:</span>{' '}
                                     <span className="text-muted-foreground">{value}</span>
                                   </div>
                                 ))}
@@ -448,7 +448,7 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
                                   const stringValue = typeof value === 'string' ? value : String(value);
                                   return (
                                     <div key={key}>
-                                      <span className="text-green-600 dark:text-green-400">{key}</span> ←{' '}
+                                      <span className="text-success-600 dark:text-success-400">{key}</span> ←{' '}
                                       <span className="text-muted-foreground">{stringValue}</span>
                                     </div>
                                   );

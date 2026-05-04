@@ -51,11 +51,11 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
   if (error) {
     return (
       <div className="p-6">
-        <Card className="p-6 border-red-200 bg-red-50 dark:bg-red-900/20">
-          <h2 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">
+        <Card className="p-6 border-danger-200 bg-danger-50 dark:bg-danger-900/20">
+          <h2 className="text-lg font-semibold text-danger-700 dark:text-danger-200 mb-2">
             Error Loading Pillar Analytics
           </h2>
-          <p className="text-red-600 dark:text-red-300">
+          <p className="text-danger-600 dark:text-danger-300">
             {error instanceof Error ? error.message : 'Failed to load pillar usage metrics'}
           </p>
         </Card>
@@ -68,10 +68,10 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Pillar Usage Analytics
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Track adoption of MockForge's foundational pillars across your workspaces
           </p>
         </div>
@@ -87,7 +87,7 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
         <PillarRankingsCard data={rankings} isLoading={rankingsLoading} />
 
         <Card className="p-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-xl font-semibold text-foreground mb-4">
             Pillar Usage Distribution
           </h2>
           <PillarUsageChart data={metrics} isLoading={isLoading} />
@@ -116,19 +116,19 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
 
         {metrics?.devx && (
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               DevX Pillar
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               SDK installations: {metrics.devx.sdk_installations}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Client generations: {metrics.devx.client_generations}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Playground sessions: {metrics.devx.playground_sessions}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               CLI commands: {metrics.devx.cli_commands}
             </p>
           </Card>
@@ -136,19 +136,19 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
 
         {metrics?.cloud && (
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               Cloud Pillar
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Shared scenarios: {metrics.cloud.shared_scenarios_count}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Marketplace downloads: {metrics.cloud.marketplace_downloads}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Org templates used: {metrics.cloud.org_templates_used}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Collaborative workspaces: {metrics.cloud.collaborative_workspaces}
             </p>
           </Card>
@@ -156,19 +156,19 @@ export const PillarAnalyticsDashboard: React.FC<PillarAnalyticsDashboardProps> =
 
         {metrics?.ai && (
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-foreground mb-4">
               AI Pillar
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               AI-generated mocks: {metrics.ai.ai_generated_mocks}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               AI contract diffs: {metrics.ai.ai_contract_diffs}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Voice commands: {metrics.ai.voice_commands}
             </p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               LLM-assisted operations: {metrics.ai.llm_assisted_operations}
             </p>
           </Card>

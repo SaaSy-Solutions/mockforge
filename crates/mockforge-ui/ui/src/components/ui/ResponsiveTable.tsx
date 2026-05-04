@@ -67,7 +67,7 @@ function MobileCard<T>({
 
   return (
     <div className={cn(
-      'bg-card border border-gray-200 dark:border-gray-800 rounded-lg p-4 space-y-3',
+      'bg-card border border-border rounded-lg p-4 space-y-3',
       'table-row-hover spring-in animate-fade-in-up',
       onRowClick && 'cursor-pointer'
     )}
@@ -81,10 +81,10 @@ function MobileCard<T>({
 
           return (
             <div key={column.key} className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <span className="text-sm font-medium text-muted-foreground">
                 {column.mobileLabel || column.label}
               </span>
-              <span className="text-base text-gray-900 dark:text-gray-100 font-medium">
+              <span className="text-base text-foreground font-medium">
                 {displayValue}
               </span>
             </div>
@@ -98,7 +98,7 @@ function MobileCard<T>({
           <div className="divider-subtle"></div>
 
           <button
-            className="flex items-center justify-between w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            className="flex items-center justify-between w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
             onClick={(e) => {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
@@ -118,10 +118,10 @@ function MobileCard<T>({
 
                 return (
                   <div key={column.key} className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    <span className="text-xs font-medium text-muted-foreground">
                       {column.mobileLabel || column.label}
                     </span>
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-sm text-muted-foreground">
                       {displayValue}
                     </span>
                   </div>
@@ -176,8 +176,8 @@ function DesktopTable<T>({
 
   return (
     <div className="overflow-x-auto custom-scrollbar">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-800">
+      <table className="min-w-full divide-y divide-border">
+        <thead className="bg-muted">
           <tr>
             {columns.map((column) => (
               <th
@@ -223,7 +223,7 @@ function DesktopTable<T>({
             ))}
           </tr>
         </thead>
-        <tbody className="bg-background divide-y divide-gray-200 dark:divide-gray-700">
+        <tbody className="bg-background divide-y divide-border">
           {sortedData.map((row, index) => (
             <tr
               key={index}
@@ -241,7 +241,7 @@ function DesktopTable<T>({
                 return (
                   <td
                     key={column.key}
-                    className="px-6 py-4 whitespace-nowrap text-base text-gray-900 dark:text-gray-100"
+                    className="px-6 py-4 whitespace-nowrap text-base text-foreground"
                   >
                     {displayValue}
                   </td>
@@ -288,7 +288,7 @@ export function ResponsiveTable<T>({
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
           <div key={i} className="animate-pulse">
-            <div className="h-16 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+            <div className="h-16 bg-muted rounded-lg"></div>
           </div>
         ))}
       </div>
@@ -298,11 +298,11 @@ export function ResponsiveTable<T>({
   if (filteredData.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="text-xl font-bold text-gray-600 dark:text-gray-400 mb-2">
+        <div className="text-xl font-bold text-muted-foreground mb-2">
           {searchQuery ? 'No matching results' : emptyMessage}
         </div>
         {searchQuery && (
-          <p className="text-base text-gray-600 dark:text-gray-400">
+          <p className="text-base text-muted-foreground">
             Try adjusting your search terms
           </p>
         )}
@@ -321,9 +321,9 @@ export function ResponsiveTable<T>({
               placeholder={searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-base bg-background focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
+              className="w-full pl-10 pr-4 py-2 border border-border rounded-lg text-base bg-background focus:ring-2 focus:ring-brand/20 focus:border-brand transition-colors"
             />
-            <Icons.Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <Icons.Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           </div>
 
           {searchQuery && (
@@ -369,7 +369,7 @@ export function ResponsiveTable<T>({
       </div>
 
       {/* Results summary */}
-      <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
           Showing {filteredData.length} of {data.length} {data.length === 1 ? 'item' : 'items'}
         </span>

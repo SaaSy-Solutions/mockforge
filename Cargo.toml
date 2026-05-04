@@ -87,7 +87,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.125"
+version = "0.3.126"
 edition = "2021"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
 license = "MIT OR Apache-2.0"
@@ -181,7 +181,7 @@ thiserror = "2.0"
 regex = "1.10"
 once_cell = "1"
 url = "2.5"
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.23", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.9"
 base64 = "0.22"

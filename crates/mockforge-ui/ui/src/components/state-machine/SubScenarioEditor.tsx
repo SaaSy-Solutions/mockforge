@@ -190,13 +190,13 @@ export function SubScenarioEditor({
           {loading ? (
             <div className="flex items-center gap-2 py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm text-gray-500">Loading state machines...</span>
+              <span className="text-sm text-muted-foreground">Loading state machines...</span>
             </div>
           ) : (
             <select
               value={selectedResourceType}
               onChange={(e) => setSelectedResourceType(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md bg-white dark:bg-gray-800"
+              className="w-full px-3 py-2 border rounded-md bg-card"
             >
               <option value="">Select a state machine...</option>
               {availableSubScenarios.map((sm) => (
@@ -233,7 +233,7 @@ export function SubScenarioEditor({
                   placeholder="Parent variable"
                   className="flex-1"
                 />
-                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 <Input
                   value={mapping.value}
                   onChange={(e) =>
@@ -253,7 +253,7 @@ export function SubScenarioEditor({
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-muted-foreground">
             Map parent state machine variables to sub-scenario input variables
           </p>
         </div>
@@ -283,7 +283,7 @@ export function SubScenarioEditor({
                   placeholder="Sub-scenario variable"
                   className="flex-1"
                 />
-                <ArrowRight className="h-4 w-4 text-gray-400" />
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 <Input
                   value={mapping.value}
                   onChange={(e) =>
@@ -303,7 +303,7 @@ export function SubScenarioEditor({
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-xs text-muted-foreground">
             Map sub-scenario output variables back to parent state machine variables
           </p>
         </div>

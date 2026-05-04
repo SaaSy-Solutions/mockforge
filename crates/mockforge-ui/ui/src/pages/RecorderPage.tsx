@@ -170,15 +170,15 @@ export function RecorderPage() {
             {isRecording ? (
               <button
                 onClick={stopRecording}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                className="px-4 py-2 bg-danger-600 text-white rounded-lg hover:bg-destructive/90 flex items-center gap-2"
               >
-                <div className="h-2 w-2 bg-white rounded-full animate-pulse" />
+                <div className="h-2 w-2 bg-card rounded-full animate-pulse" />
                 Stop Recording
               </button>
             ) : (
               <button
                 onClick={startRecording}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2"
               >
                 <Play className="h-4 w-4" />
                 Start Recording
@@ -206,10 +206,10 @@ export function RecorderPage() {
             {scenarios.map(scenario => (
               <ModernCard key={scenario.name}>
                 <div className="mb-4">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                  <h3 className="font-semibold text-foreground mb-2">
                     {scenario.name}
                   </h3>
-                  <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="space-y-1 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <Clock className="h-3 w-3" />
                       {new Date(scenario.started_at).toLocaleString()}
@@ -221,14 +221,14 @@ export function RecorderPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => replayScenario(scenario.name)}
-                    className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center justify-center gap-2 text-sm"
                   >
                     <Play className="h-3 w-3" />
                     Replay
                   </button>
                   <button
                     onClick={() => exportScenario(scenario.name)}
-                    className="flex-1 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center gap-2 text-sm"
+                    className="flex-1 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 flex items-center justify-center gap-2 text-sm"
                   >
                     <Download className="h-3 w-3" />
                     Export
@@ -248,19 +248,19 @@ export function RecorderPage() {
         {/* Filters */}
         <div className="flex gap-4 mb-6">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search by path or method..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-card text-foreground"
             />
           </div>
           <select
             value={protocolFilter}
             onChange={(e) => setProtocolFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+            className="px-4 py-2 border border-border rounded-lg bg-card text-foreground"
           >
             <option value="all">All Protocols</option>
             <option value="HTTP">HTTP</option>
@@ -276,11 +276,11 @@ export function RecorderPage() {
             <div className="space-y-2 max-h-[600px] overflow-y-auto">
               {loading ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 dark:text-gray-400">Loading requests...</p>
+                  <p className="text-muted-foreground">Loading requests...</p>
                 </div>
               ) : filteredRequests.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 dark:text-gray-400">No requests found</p>
+                  <p className="text-muted-foreground">No requests found</p>
                 </div>
               ) : (
                 filteredRequests.map(req => (
@@ -289,8 +289,8 @@ export function RecorderPage() {
                     onClick={() => setSelectedRequest(req)}
                     className={`p-4 rounded-lg cursor-pointer border ${
                       selectedRequest?.id === req.id
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        ? 'border-info bg-info-50 dark:bg-info-900/20'
+                        : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -308,7 +308,7 @@ export function RecorderPage() {
                         {req.status_code}
                       </ModernBadge>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span>{req.protocol}</span>
                       <span>{req.duration_ms.toFixed(2)}ms</span>
                       <span>{new Date(req.timestamp).toLocaleTimeString()}</span>
@@ -323,36 +323,36 @@ export function RecorderPage() {
           <ModernCard>
             {!selectedRequest ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 dark:text-gray-400">
+                <p className="text-muted-foreground">
                   Select a request to view details
                 </p>
               </div>
             ) : (
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
                 <div>
-                  <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Request Headers</h4>
-                  <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+                  <h4 className="font-semibold text-foreground mb-2">Request Headers</h4>
+                  <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-xs font-mono">
                     {JSON.stringify(selectedRequest.request_headers, null, 2)}
                   </pre>
                 </div>
                 {selectedRequest.request_body && (
                   <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Request Body</h4>
-                    <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono max-h-40">
+                    <h4 className="font-semibold text-foreground mb-2">Request Body</h4>
+                    <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-xs font-mono max-h-40">
                       {selectedRequest.request_body}
                     </pre>
                   </div>
                 )}
                 <div>
-                  <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Response Headers</h4>
-                  <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono">
+                  <h4 className="font-semibold text-foreground mb-2">Response Headers</h4>
+                  <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-xs font-mono">
                     {JSON.stringify(selectedRequest.response_headers, null, 2)}
                   </pre>
                 </div>
                 {selectedRequest.response_body && (
                   <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Response Body</h4>
-                    <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto text-xs font-mono max-h-40">
+                    <h4 className="font-semibold text-foreground mb-2">Response Body</h4>
+                    <pre className="bg-muted p-3 rounded-lg overflow-x-auto text-xs font-mono max-h-40">
                       {selectedRequest.response_body}
                     </pre>
                   </div>

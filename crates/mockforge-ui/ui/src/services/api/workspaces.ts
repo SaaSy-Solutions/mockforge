@@ -20,6 +20,7 @@ import type {
   WorkspaceResponse,
   CreateWorkspaceRequest,
   CreateWorkspaceResponse,
+  UpdateWorkspaceRequest,
   FolderResponse,
   CreateFolderRequest,
   CreateFolderResponse,
@@ -63,12 +64,15 @@ class WorkspacesApiMixin {
     }) as Promise<CreateWorkspaceResponse>;
   }
 
-  async openWorkspaceFromDirectory(directory: string): Promise<CreateWorkspaceResponse> {
-    return fetchJson(`${WORKSPACE_API_BASE}/open-from-directory`, {
-      method: 'POST',
+  async updateWorkspace(
+    workspaceId: string,
+    request: UpdateWorkspaceRequest
+  ): Promise<{ message: string }> {
+    return fetchJson(`${WORKSPACE_API_BASE}/${workspaceId}`, {
+      method: isCloud ? 'PATCH' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ directory }),
-    }) as Promise<CreateWorkspaceResponse>;
+      body: JSON.stringify(request),
+    }) as Promise<{ message: string }>;
   }
 
   async deleteWorkspace(workspaceId: string): Promise<{ message: string }> {
@@ -114,7 +118,8 @@ class WorkspacesApiMixin {
   }
 
   async previewImport(request: ImportToWorkspaceRequest): Promise<ImportResponse> {
-    return fetchJson('/__mockforge/import/preview', {
+    const path = isCloud ? '/api/v1/import/preview' : '/__mockforge/import/preview';
+    return fetchJson(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

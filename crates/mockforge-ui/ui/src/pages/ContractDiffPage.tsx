@@ -38,8 +38,8 @@ import { AIStudioNav } from '../components/ai/AIStudioNav';
 // Confidence indicator component
 function ConfidenceIndicator({ confidence }: { confidence: number }) {
   const percentage = Math.round(confidence * 100);
-  const color = confidence >= 0.8 ? 'text-green-600' : confidence >= 0.5 ? 'text-yellow-600' : 'text-red-600';
-  const bgColor = confidence >= 0.8 ? 'bg-green-100' : confidence >= 0.5 ? 'bg-yellow-100' : 'bg-red-100';
+  const color = confidence >= 0.8 ? 'text-success-600' : confidence >= 0.5 ? 'text-warning-600' : 'text-danger-600';
+  const bgColor = confidence >= 0.8 ? 'bg-success-100' : confidence >= 0.5 ? 'bg-warning-100' : 'bg-danger-100';
 
   return (
     <div className={`inline-flex items-center px-2 py-1 rounded-full ${bgColor}`}>
@@ -51,10 +51,10 @@ function ConfidenceIndicator({ confidence }: { confidence: number }) {
 // Severity badge component
 function SeverityBadge({ severity }: { severity: string }) {
   const colors: Record<string, { bg: string; text: string }> = {
-    critical: { bg: 'bg-red-100', text: 'text-red-800' },
+    critical: { bg: 'bg-danger-100', text: 'text-danger-700' },
     high: { bg: 'bg-orange-100', text: 'text-orange-800' },
-    medium: { bg: 'bg-yellow-100', text: 'text-yellow-800' },
-    low: { bg: 'bg-blue-100', text: 'text-blue-800' },
+    medium: { bg: 'bg-warning-100', text: 'text-warning-700' },
+    low: { bg: 'bg-info-100', text: 'text-info-700' },
   };
 
   const style = colors[severity] || colors.low;
@@ -91,21 +91,21 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-gray-200">
-            <th className="text-left p-3 font-semibold text-sm text-gray-700">Path</th>
-            <th className="text-left p-3 font-semibold text-sm text-gray-700">Type</th>
+          <tr className="border-b border-border">
+            <th className="text-left p-3 font-semibold text-sm text-foreground">Path</th>
+            <th className="text-left p-3 font-semibold text-sm text-foreground">Type</th>
             {hasClassification && (
-              <th className="text-left p-3 font-semibold text-sm text-gray-700">Classification</th>
+              <th className="text-left p-3 font-semibold text-sm text-foreground">Classification</th>
             )}
             {hasSchemaFormat && (
-              <th className="text-left p-3 font-semibold text-sm text-gray-700">Schema Format</th>
+              <th className="text-left p-3 font-semibold text-sm text-foreground">Schema Format</th>
             )}
             {hasProtocolInfo && (
-              <th className="text-left p-3 font-semibold text-sm text-gray-700">Protocol Info</th>
+              <th className="text-left p-3 font-semibold text-sm text-foreground">Protocol Info</th>
             )}
-            <th className="text-left p-3 font-semibold text-sm text-gray-700">Severity</th>
-            <th className="text-left p-3 font-semibold text-sm text-gray-700">Confidence</th>
-            <th className="text-left p-3 font-semibold text-sm text-gray-700">Description</th>
+            <th className="text-left p-3 font-semibold text-sm text-foreground">Severity</th>
+            <th className="text-left p-3 font-semibold text-sm text-foreground">Confidence</th>
+            <th className="text-left p-3 font-semibold text-sm text-foreground">Description</th>
           </tr>
         </thead>
         <tbody>
@@ -119,24 +119,24 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
             const fieldName = mismatch.context?.field_name as string | undefined;
 
             return (
-              <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="p-3 text-sm font-mono text-gray-900">{mismatch.path}</td>
-                <td className="p-3 text-sm text-gray-600">{mismatch.mismatch_type}</td>
+              <tr key={idx} className="border-b border-gray-100 hover:bg-muted">
+                <td className="p-3 text-sm font-mono text-foreground">{mismatch.path}</td>
+                <td className="p-3 text-sm text-muted-foreground">{mismatch.mismatch_type}</td>
                 {hasClassification && (
                   <td className="p-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       {isBreaking && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-300">
                           Breaking
                         </span>
                       )}
                       {isAdditive && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-300">
                           Additive
                         </span>
                       )}
                       {changeCategory && (
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           {changeCategory.replace(/_/g, ' ')}
                         </span>
                       )}
@@ -146,7 +146,7 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
                 {hasSchemaFormat && (
                   <td className="p-3">
                     {schemaFormat && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-300">
                         {schemaFormat.replace(/_/g, ' ').toUpperCase()}
                       </span>
                     )}
@@ -156,17 +156,17 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
                   <td className="p-3">
                     <div className="flex flex-col gap-1 text-xs">
                       {service && (
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span className="text-muted-foreground">
                           <span className="font-semibold">Service:</span> {service}
                         </span>
                       )}
                       {method && (
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span className="text-muted-foreground">
                           <span className="font-semibold">Method:</span> {method}
                         </span>
                       )}
                       {fieldName && (
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span className="text-muted-foreground">
                           <span className="font-semibold">Field:</span> {fieldName}
                         </span>
                       )}
@@ -179,20 +179,20 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
                 <td className="p-3">
                   <ConfidenceIndicator confidence={mismatch.confidence} />
                 </td>
-                <td className="p-3 text-sm text-gray-700">
+                <td className="p-3 text-sm text-foreground">
                   <div>{mismatch.description}</div>
                   {mismatch.expected && (
-                    <div className="mt-1 text-xs text-gray-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       <span className="font-semibold">Expected:</span> {mismatch.expected}
                     </div>
                   )}
                   {mismatch.actual && (
-                    <div className="mt-1 text-xs text-gray-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       <span className="font-semibold">Actual:</span> {mismatch.actual}
                     </div>
                   )}
                   {mismatch.context?.old_type && mismatch.context?.new_type && (
-                    <div className="mt-1 text-xs text-gray-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       <span className="font-semibold">Type Change:</span> {mismatch.context.old_type} → {mismatch.context.new_type}
                     </div>
                   )}
@@ -213,16 +213,16 @@ function DiffViewer({ mismatch }: { mismatch: ContractDiffResult['mismatches'][0
       <div className="grid grid-cols-2 gap-4">
         {mismatch.expected && (
           <div>
-            <Label className="text-xs font-semibold text-gray-600 mb-2 block">Expected</Label>
-            <div className="bg-green-50 border border-green-200 rounded p-3 font-mono text-xs">
+            <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Expected</Label>
+            <div className="bg-success-50 border border-success-200 rounded p-3 font-mono text-xs">
               <pre className="whitespace-pre-wrap">{mismatch.expected}</pre>
             </div>
           </div>
         )}
         {mismatch.actual && (
           <div>
-            <Label className="text-xs font-semibold text-gray-600 mb-2 block">Actual</Label>
-            <div className="bg-red-50 border border-red-200 rounded p-3 font-mono text-xs">
+            <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Actual</Label>
+            <div className="bg-danger-50 border border-danger-200 rounded p-3 font-mono text-xs">
               <pre className="whitespace-pre-wrap">{mismatch.actual}</pre>
             </div>
           </div>
@@ -247,14 +247,14 @@ function RecommendationsList({ recommendations }: { recommendations: ContractDif
   return (
     <div className="space-y-3">
       {recommendations.map((rec, idx) => (
-        <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-white">
+        <div key={idx} className="border border-border rounded-lg p-4 bg-card">
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
-              <p className="text-sm text-gray-900">{rec.recommendation}</p>
+              <p className="text-sm text-foreground">{rec.recommendation}</p>
               {rec.suggested_fix && (
-                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                  <p className="text-xs font-semibold text-blue-900 mb-1">Suggested Fix:</p>
-                  <p className="text-xs text-blue-800">{rec.suggested_fix}</p>
+                <div className="mt-2 p-2 bg-info-50 border border-info-200 rounded">
+                  <p className="text-xs font-semibold text-info-900 mb-1">Suggested Fix:</p>
+                  <p className="text-xs text-info-700">{rec.suggested_fix}</p>
                 </div>
               )}
             </div>
@@ -281,16 +281,16 @@ function CorrectionProposals({ corrections }: { corrections: ContractDiffResult[
   return (
     <div className="space-y-3">
       {corrections.map((correction, idx) => (
-        <div key={idx} className="border border-gray-200 rounded-lg p-4 bg-white">
+        <div key={idx} className="border border-border rounded-lg p-4 bg-card">
           <div className="flex items-start justify-between mb-2">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900 mb-1">{correction.description}</p>
-              <p className="text-xs text-gray-600 font-mono mb-2">Path: {correction.path}</p>
+              <p className="text-sm font-semibold text-foreground mb-1">{correction.description}</p>
+              <p className="text-xs text-muted-foreground font-mono mb-2">Path: {correction.path}</p>
               <div className="flex items-center gap-2">
                 <ModernBadge variant="outline">{correction.operation}</ModernBadge>
                 {correction.value && (
-                  <div className="text-xs text-gray-600">
-                    Value: <code className="bg-gray-100 px-1 rounded">{JSON.stringify(correction.value)}</code>
+                  <div className="text-xs text-muted-foreground">
+                    Value: <code className="bg-muted px-1 rounded">{JSON.stringify(correction.value)}</code>
                   </div>
                 )}
               </div>
@@ -475,7 +475,7 @@ export function ContractDiffPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">{contract.contract_id}</h3>
-                      <p className="text-sm text-gray-600">Version: {contract.version}</p>
+                      <p className="text-sm text-muted-foreground">Version: {contract.version}</p>
                     </div>
                     <ModernBadge variant="outline">{contract.protocol.toUpperCase()}</ModernBadge>
                   </div>
@@ -495,26 +495,26 @@ export function ContractDiffPage() {
           <ModernCard>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Captures</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.total_captures ?? 0}</p>
+                <p className="text-sm text-muted-foreground">Total Captures</p>
+                <p className="text-2xl font-bold text-foreground">{statistics.total_captures ?? 0}</p>
               </div>
-              <FileText className="w-8 h-8 text-blue-500" />
+              <FileText className="w-8 h-8 text-info-500" />
             </div>
           </ModernCard>
           <ModernCard>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Analyzed</p>
-                <p className="text-2xl font-bold text-gray-900">{statistics.analyzed_captures ?? 0}</p>
+                <p className="text-sm text-muted-foreground">Analyzed</p>
+                <p className="text-2xl font-bold text-foreground">{statistics.analyzed_captures ?? 0}</p>
               </div>
-              <CheckCircle2 className="w-8 h-8 text-green-500" />
+              <CheckCircle2 className="w-8 h-8 text-success-500" />
             </div>
           </ModernCard>
           <ModernCard>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Sources</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.sources && typeof statistics.sources === 'object' && !Array.isArray(statistics.sources) ? statistics.sources : {}).length}</p>
+                <p className="text-sm text-muted-foreground">Sources</p>
+                <p className="text-2xl font-bold text-foreground">{Object.keys(statistics.sources && typeof statistics.sources === 'object' && !Array.isArray(statistics.sources) ? statistics.sources : {}).length}</p>
               </div>
               <TrendingUp className="w-8 h-8 text-purple-500" />
             </div>
@@ -522,8 +522,8 @@ export function ContractDiffPage() {
           <ModernCard>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Methods</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(statistics.methods && typeof statistics.methods === 'object' && !Array.isArray(statistics.methods) ? statistics.methods : {}).length}</p>
+                <p className="text-sm text-muted-foreground">Methods</p>
+                <p className="text-2xl font-bold text-foreground">{Object.keys(statistics.methods && typeof statistics.methods === 'object' && !Array.isArray(statistics.methods) ? statistics.methods : {}).length}</p>
               </div>
               <Filter className="w-8 h-8 text-orange-500" />
             </div>
@@ -568,27 +568,27 @@ export function ContractDiffPage() {
             </div>
 
             {/* Request List */}
-            <div className="border border-gray-200 rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
+            <div className="border border-border rounded-lg divide-y divide-gray-200 max-h-96 overflow-y-auto">
               {capturesLoading ? (
-                <div className="p-4 text-center text-gray-500">Loading...</div>
+                <div className="p-4 text-center text-muted-foreground">Loading...</div>
               ) : captures.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">No captured requests</div>
+                <div className="p-4 text-center text-muted-foreground">No captured requests</div>
               ) : (
                 captures.map(capture => (
                   <div
                     key={capture.id}
                     onClick={() => setSelectedCapture(capture.id || null)}
                     className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                      selectedCapture === capture.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                      selectedCapture === capture.id ? 'bg-info-50 border-l-4 border-info' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <ModernBadge variant="outline">{capture.method}</ModernBadge>
-                          <span className="text-sm font-mono text-gray-900">{capture.path}</span>
+                          <span className="text-sm font-mono text-foreground">{capture.path}</span>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span>{capture.source}</span>
                           {capture.analyzed && (
                             <ModernBadge variant="success" size="sm">Analyzed</ModernBadge>
@@ -602,7 +602,7 @@ export function ContractDiffPage() {
             </div>
 
             {/* Pagination controls */}
-            <div className="flex items-center justify-between text-xs text-gray-600">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>
                 {(() => {
                   const pageCount = captures.length;
@@ -680,31 +680,31 @@ export function ContractDiffPage() {
           <Section title="Analysis Results">
             <div className="space-y-4">
               {/* Overall Status */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                 <div className="flex items-center gap-4">
                   {analysisResult.matches ? (
-                    <CheckCircle2 className="w-6 h-6 text-green-500" />
+                    <CheckCircle2 className="w-6 h-6 text-success-500" />
                   ) : (
-                    <XCircle className="w-6 h-6 text-red-500" />
+                    <XCircle className="w-6 h-6 text-danger-500" />
                   )}
                   <div>
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-foreground">
                       {analysisResult.matches ? 'Contract Matches' : 'Contract Mismatches Detected'}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {(analysisResult.mismatches ?? []).length} mismatch(es) found
                     </p>
                     {/* Show protocol and schema format info if available */}
                     {(analysisResult.metadata?.contract_format || selectedProtocol !== 'http') && (
                       <div className="flex items-center gap-2 mt-1">
                         {selectedProtocol !== 'http' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-300">
                             <Network className="w-3 h-3 mr-1" />
                             {selectedProtocol.toUpperCase()}
                           </span>
                         )}
                         {analysisResult.metadata?.contract_format && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-xs text-muted-foreground">
                             Format: {analysisResult.metadata.contract_format}
                           </span>
                         )}

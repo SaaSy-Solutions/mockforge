@@ -133,6 +133,23 @@ pub struct SystemInfo {
     pub peak_error_rate: f64,
     #[serde(default)]
     pub peaks_since: Option<DateTime<Utc>>,
+    /// Successful (200..=399) responses per second, sampled over the last
+    /// metrics interval. "API transactions/sec" in load-testing terms.
+    #[serde(default)]
+    pub tps: f64,
+    #[serde(default)]
+    pub peak_tps: f64,
+    /// 200-OK responses per second over the last metrics interval.
+    #[serde(default)]
+    pub rps_200: f64,
+    #[serde(default)]
+    pub peak_rps_200: f64,
+    /// Accepted TCP connections per second (plain HTTP path; reads 0 for
+    /// HTTPS-only setups).
+    #[serde(default)]
+    pub cps: f64,
+    #[serde(default)]
+    pub peak_cps: f64,
 }
 
 // ── Request logs ─────────────────────────────────────────────────────

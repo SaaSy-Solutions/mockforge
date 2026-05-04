@@ -21,6 +21,10 @@ pub(crate) struct ServeArgs {
     pub(crate) config_path: Option<PathBuf>,
     pub(crate) profile: Option<String>,
     pub(crate) http_port: Option<u16>,
+    /// HTTPS server port. When set, an additional TLS listener runs
+    /// alongside `http_port` (which always serves plain HTTP in this mode).
+    /// Requires `tls_cert` + `tls_key`.
+    pub(crate) https_port: Option<u16>,
     pub(crate) ws_port: Option<u16>,
     pub(crate) grpc_port: Option<u16>,
     pub(crate) tcp_port: Option<u16>,
@@ -102,6 +106,7 @@ impl Default for ServeArgs {
             config_path: None,
             profile: None,
             http_port: None,
+            https_port: None,
             ws_port: None,
             grpc_port: None,
             tcp_port: None,
@@ -2023,6 +2028,17 @@ pub async fn handle_serve(
         println!("✅ Chaos middleware integrated - latency recording enabled");
     }
 
+    // Layer the HTTP metrics middleware as the outermost wrapper so every
+    // response — including chaos-mutated ones — bumps the rate-counter
+    // snapshot the dashboard's TPS / RPS200 sampler reads from. Without
+    // this layer those gauges stay flat at 0 even under heavy traffic
+    // (issue #79: `record_response` was wired but never on the request
+    // path).
+    {
+        use axum::middleware::from_fn;
+        http_app = http_app.layer(from_fn(mockforge_http::collect_http_metrics));
+    }
+
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
     println!(
@@ -2154,9 +2170,24 @@ pub async fn handle_serve(
     } else {
         None
     };
+    // Dual HTTP+HTTPS mode: when --https-port is set, the HTTP listener on
+    // --http-port is forced to plain HTTP and a second TLS listener is
+    // spawned on --https-port. Mirrors how nginx/apache let you serve the
+    // same routes on 80 and 443 simultaneously.
+    let dual_https_port = serve_args.https_port;
+    let plain_http_tls_config = if dual_https_port.is_some() {
+        None
+    } else {
+        http_tls_config_final.clone()
+    };
+    // Clones for the parallel HTTPS listener (taken before the HTTP spawn
+    // moves the originals). `Router` and `Option<Arc<RwLock<ChaosConfig>>>`
+    // are both cheap to clone.
+    let http_app_clone_for_dual = http_app.clone();
+    let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
     let http_handle = tokio::spawn(async move {
         tokio::select! {
-            result = mockforge_http::serve_router_with_tls_notify_chaos(http_port, http_app, http_tls_config_final, Some(http_bound_tx), chaos_listener_cfg) => {
+            result = mockforge_http::serve_router_with_tls_notify_chaos(http_port, http_app, plain_http_tls_config, Some(http_bound_tx), chaos_listener_cfg) => {
                 result.map_err(|e| format!("HTTP server error: {}", e))
             }
             _ = http_shutdown.cancelled() => {
@@ -2164,6 +2195,41 @@ pub async fn handle_serve(
             }
         }
     });
+
+    // Spawn the parallel HTTPS listener on --https-port if requested.
+    // Reuses the same router (cloned) and the TLS config built above.
+    let https_handle = if let Some(https_port) = dual_https_port {
+        // Build the HTTPS TLS config from the CLI/file-derived config.
+        // serve_args is moved into handle_serve so we re-derive from
+        // http_tls_config_final, which already incorporates CLI overrides.
+        // If the user passed --https-port without --tls-enabled but with
+        // cert+key, fabricate an enabled TLS config so the second listener
+        // serves HTTPS even when the first is plain.
+        let mut https_tls = http_tls_config_final.clone();
+        if https_tls.as_ref().map(|t| !t.enabled).unwrap_or(true) {
+            // Promote to enabled if cert+key are present; the CLI validates
+            // that this is the case when --https-port is set.
+            if let Some(t) = https_tls.as_mut() {
+                t.enabled = true;
+            }
+        }
+        let https_app = http_app_clone_for_dual.clone();
+        let https_shutdown = shutdown_token.clone();
+        let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
+        Some(tokio::spawn(async move {
+            println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
+            tokio::select! {
+                result = mockforge_http::serve_router_with_tls_notify_chaos(https_port, https_app, https_tls, None, chaos_listener_cfg_https) => {
+                    result.map_err(|e| format!("HTTPS server error: {}", e))
+                }
+                _ = https_shutdown.cancelled() => {
+                    Ok(())
+                }
+            }
+        }))
+    } else {
+        None
+    };
 
     // Start WebSocket server
     let ws_handle: tokio::task::JoinHandle<Result<(), String>> = {
@@ -2820,6 +2886,32 @@ pub async fn handle_serve(
                     eprintln!("❌ {}", error);
                     Some(error)
                 }
+            }
+        }
+        result = async {
+            // Pend forever when --https-port wasn't passed; otherwise this
+            // arm watches the second TLS listener for shutdown / errors.
+            if let Some(handle) = https_handle {
+                Some(handle.await)
+            } else {
+                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
+            }
+        } => {
+            match result {
+                Some(Ok(Ok(()))) => {
+                    println!("🔒 HTTPS server stopped gracefully");
+                    None
+                }
+                Some(Ok(Err(e))) => {
+                    eprintln!("❌ {}", e);
+                    Some(e)
+                }
+                Some(Err(e)) => {
+                    let error = format!("HTTPS server task panicked: {}", e);
+                    eprintln!("❌ {}", error);
+                    Some(error)
+                }
+                None => None,
             }
         }
         result = ws_handle => {

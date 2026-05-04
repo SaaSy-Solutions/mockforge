@@ -123,6 +123,9 @@ pub async fn collect_http_metrics(
     // Record metrics with pillar information
     registry.record_http_request_with_pillar(&method, status_code, duration_seconds, pillar);
 
+    // Bump TPS / RPS counters for the dashboard rate sampler.
+    mockforge_foundation::rate_counters::record_response(status_code);
+
     // Record errors separately with pillar
     if status_code >= 400 {
         let error_type = if status_code >= 500 {
@@ -462,5 +465,39 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    /// Issue #79 regression — the middleware must actually advance the
+    /// `mockforge_foundation::rate_counters` snapshot so the dashboard's
+    /// TPS / RPS200 sampler can compute non-zero rates. Earlier landings
+    /// of TPS/RPS/CPS asserted only response status, which let a quiet
+    /// regression slip through where the layer wasn't wired onto the
+    /// production router. This test pins the actual counter delta.
+    #[tokio::test]
+    async fn middleware_advances_rate_counters_on_2xx() {
+        use mockforge_foundation::rate_counters;
+
+        let app = Router::new()
+            .route("/ok", axum::routing::get(test_handler))
+            .layer(middleware::from_fn(collect_http_metrics));
+
+        let before = rate_counters::snapshot();
+        let request = Request::builder().uri("/ok").body(Body::empty()).unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let after = rate_counters::snapshot();
+
+        assert!(
+            after.successful > before.successful,
+            "200 OK must bump SUCCESSFUL_RESPONSES_TOTAL: before={} after={}",
+            before.successful,
+            after.successful
+        );
+        assert!(
+            after.ok > before.ok,
+            "200 OK must bump OK_RESPONSES_TOTAL: before={} after={}",
+            before.ok,
+            after.ok
+        );
     }
 }

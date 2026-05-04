@@ -47,9 +47,9 @@ function statusBadge(status: RunStatus) {
 }
 
 function rateColor(rate: number): string {
-  if (rate >= 90) return 'text-green-600 dark:text-green-400';
-  if (rate >= 70) return 'text-yellow-600 dark:text-yellow-400';
-  return 'text-red-600 dark:text-red-400';
+  if (rate >= 90) return 'text-success-600 dark:text-success-400';
+  if (rate >= 70) return 'text-warning-600 dark:text-warning-400';
+  return 'text-danger-600 dark:text-danger-400';
 }
 
 export function ConformancePage() {
@@ -215,10 +215,10 @@ export function ConformancePage() {
       />
 
       {error && (
-        <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
-          <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-800">
+        <div className="rounded-lg border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-900/20 p-4 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-danger-600 dark:text-danger-400" />
+          <span className="text-sm text-danger-700 dark:text-danger-300">{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto text-danger-600 hover:text-danger-700">
             <XCircle className="h-4 w-4" />
           </button>
         </div>
@@ -230,7 +230,7 @@ export function ConformancePage() {
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Target URL *
                 </label>
                 <Input
@@ -240,7 +240,7 @@ export function ConformancePage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   Base Path
                 </label>
                 <Input
@@ -253,7 +253,7 @@ export function ConformancePage() {
 
             {/* Category filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Categories {selectedCategories.length > 0 && `(${selectedCategories.length} selected)`}
               </label>
               <div className="flex flex-wrap gap-2">
@@ -263,8 +263,8 @@ export function ConformancePage() {
                     onClick={() => toggleCategory(cat)}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       selectedCategories.includes(cat)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-foreground hover:bg-gray-200 dark:hover:bg-gray-700'
                     }`}
                   >
                     {cat}
@@ -277,7 +277,7 @@ export function ConformancePage() {
             <div>
               <button
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground dark:hover:text-gray-200"
               >
                 {showAdvanced ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 Advanced Options
@@ -285,7 +285,7 @@ export function ConformancePage() {
               {showAdvanced && (
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       API Key
                     </label>
                     <Input
@@ -296,7 +296,7 @@ export function ConformancePage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-sm font-medium text-foreground mb-1">
                       Basic Auth
                     </label>
                     <Input
@@ -305,11 +305,11 @@ export function ConformancePage() {
                       onChange={e => setBasicAuth(e.target.value)}
                     />
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
                     <input type="checkbox" checked={skipTls} onChange={e => setSkipTls(e.target.checked)} className="rounded" />
                     Skip TLS verification
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
                     <input type="checkbox" checked={allOperations} onChange={e => setAllOperations(e.target.checked)} className="rounded" />
                     Test all operations
                   </label>
@@ -339,15 +339,15 @@ export function ConformancePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {statusBadge(activeRun.status)}
-                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="text-sm text-muted-foreground">
                     {activeRun.checks_done} / {activeRun.total_checks} checks
                   </span>
                 </div>
               </div>
               {activeRun.total_checks > 0 && (
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div className="w-full bg-muted rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    className="bg-primary h-2 rounded-full transition-all duration-300"
                     style={{ width: `${(activeRun.checks_done / activeRun.total_checks) * 100}%` }}
                   />
                 </div>
@@ -364,20 +364,20 @@ export function ConformancePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <ModernCard>
               <div className="p-4 text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total_checks}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Total Checks</div>
+                <div className="text-2xl font-bold text-foreground">{summary.total_checks}</div>
+                <div className="text-xs text-muted-foreground">Total Checks</div>
               </div>
             </ModernCard>
             <ModernCard>
               <div className="p-4 text-center">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.passed}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Passed</div>
+                <div className="text-2xl font-bold text-success-600 dark:text-success-400">{summary.passed}</div>
+                <div className="text-xs text-muted-foreground">Passed</div>
               </div>
             </ModernCard>
             <ModernCard>
               <div className="p-4 text-center">
-                <div className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.failed}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Failed</div>
+                <div className="text-2xl font-bold text-danger-600 dark:text-danger-400">{summary.failed}</div>
+                <div className="text-xs text-muted-foreground">Failed</div>
               </div>
             </ModernCard>
             <ModernCard>
@@ -385,7 +385,7 @@ export function ConformancePage() {
                 <div className={`text-2xl font-bold ${rateColor(summary.overall_rate)}`}>
                   {summary.overall_rate.toFixed(1)}%
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Pass Rate</div>
+                <div className="text-xs text-muted-foreground">Pass Rate</div>
               </div>
             </ModernCard>
           </div>
@@ -395,7 +395,7 @@ export function ConformancePage() {
             <ModernCard>
               <div className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Category Results</h3>
+                  <h3 className="text-sm font-semibold text-foreground">Category Results</h3>
                   <Button variant="outline" size="sm" onClick={exportJson} className="flex items-center gap-1">
                     <Download className="h-3 w-3" />
                     Export JSON
@@ -404,27 +404,27 @@ export function ConformancePage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Category</th>
-                        <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Passed</th>
-                        <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Total</th>
-                        <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Rate</th>
-                        <th className="py-2 px-3 text-gray-600 dark:text-gray-400 font-medium w-32"></th>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-3 text-muted-foreground font-medium">Category</th>
+                        <th className="text-right py-2 px-3 text-muted-foreground font-medium">Passed</th>
+                        <th className="text-right py-2 px-3 text-muted-foreground font-medium">Total</th>
+                        <th className="text-right py-2 px-3 text-muted-foreground font-medium">Rate</th>
+                        <th className="py-2 px-3 text-muted-foreground font-medium w-32"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(categories).map(([name, cat]) => (
-                        <tr key={name} className="border-b border-gray-100 dark:border-gray-800">
-                          <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{name}</td>
-                          <td className="py-2 px-3 text-right text-green-600 dark:text-green-400">{cat.passed}</td>
-                          <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">{cat.total}</td>
+                        <tr key={name} className="border-b border-border">
+                          <td className="py-2 px-3 text-foreground">{name}</td>
+                          <td className="py-2 px-3 text-right text-success-600 dark:text-success-400">{cat.passed}</td>
+                          <td className="py-2 px-3 text-right text-muted-foreground">{cat.total}</td>
                           <td className={`py-2 px-3 text-right font-medium ${rateColor(cat.rate)}`}>
                             {cat.rate.toFixed(1)}%
                           </td>
                           <td className="py-2 px-3">
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                            <div className="w-full bg-muted rounded-full h-1.5">
                               <div
-                                className={`h-1.5 rounded-full ${cat.rate >= 90 ? 'bg-green-500' : cat.rate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                className={`h-1.5 rounded-full ${cat.rate >= 90 ? 'bg-success-500' : cat.rate >= 70 ? 'bg-warning-500' : 'bg-danger-500'}`}
                                 style={{ width: `${cat.rate}%` }}
                               />
                             </div>
@@ -442,7 +442,7 @@ export function ConformancePage() {
           {failures && failures.length > 0 && (
             <ModernCard className="mt-4">
               <div className="p-6">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                <h3 className="text-sm font-semibold text-foreground mb-4">
                   Failed Checks ({failures.length})
                 </h3>
                 <div className="space-y-2">
@@ -450,21 +450,21 @@ export function ConformancePage() {
                     const key = `${f.check_name}-${i}`;
                     const isExpanded = expandedFailures.has(key);
                     return (
-                      <div key={key} className="border border-gray-200 dark:border-gray-700 rounded-lg">
+                      <div key={key} className="border border-border rounded-lg">
                         <button
-                          className="w-full flex items-center gap-2 p-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                          className="w-full flex items-center gap-2 p-3 text-left hover:bg-accent hover:text-accent-foreground/50"
                           onClick={() => toggleFailure(key)}
                         >
                           {isExpanded
-                            ? <ChevronDown className="h-4 w-4 text-gray-400" />
-                            : <ChevronRight className="h-4 w-4 text-gray-400" />
+                            ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           }
-                          <XCircle className="h-4 w-4 text-red-500" />
-                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{f.check_name}</span>
+                          <XCircle className="h-4 w-4 text-danger-500" />
+                          <span className="text-sm font-medium text-foreground">{f.check_name}</span>
                           <ModernBadge variant="default" className="ml-auto">{f.category}</ModernBadge>
                         </button>
                         {isExpanded && (
-                          <div className="px-10 pb-3 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                          <div className="px-10 pb-3 space-y-1 text-xs text-muted-foreground">
                             <div><span className="font-medium">Expected:</span> {f.expected}</div>
                             <div><span className="font-medium">Actual:</span> {f.actual}</div>
                             {f.details && <div><span className="font-medium">Details:</span> {f.details}</div>}
@@ -482,11 +482,11 @@ export function ConformancePage() {
           {activeRun.status === 'failed' && activeRun.error && (
             <ModernCard className="mt-4">
               <div className="p-6">
-                <div className="flex items-center gap-2 text-red-600 dark:text-red-400 mb-2">
+                <div className="flex items-center gap-2 text-danger-600 dark:text-danger-400 mb-2">
                   <AlertTriangle className="h-4 w-4" />
                   <h3 className="text-sm font-semibold">Run Failed</h3>
                 </div>
-                <p className="text-sm text-gray-700 dark:text-gray-300">{activeRun.error}</p>
+                <p className="text-sm text-foreground">{activeRun.error}</p>
               </div>
             </ModernCard>
           )}
@@ -501,23 +501,23 @@ export function ConformancePage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">ID</th>
-                      <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Target</th>
-                      <th className="text-left py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Status</th>
-                      <th className="text-right py-2 px-3 text-gray-600 dark:text-gray-400 font-medium">Progress</th>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">ID</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Target</th>
+                      <th className="text-left py-2 px-3 text-muted-foreground font-medium">Status</th>
+                      <th className="text-right py-2 px-3 text-muted-foreground font-medium">Progress</th>
                       <th className="py-2 px-3"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {runs.map(run => (
-                      <tr key={run.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/30">
-                        <td className="py-2 px-3 font-mono text-xs text-gray-600 dark:text-gray-400">
+                      <tr key={run.id} className="border-b border-border hover:bg-accent hover:text-accent-foreground/30">
+                        <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
                           {run.id.slice(0, 8)}...
                         </td>
-                        <td className="py-2 px-3 text-gray-900 dark:text-gray-100">{run.target_url}</td>
+                        <td className="py-2 px-3 text-foreground">{run.target_url}</td>
                         <td className="py-2 px-3">{statusBadge(run.status)}</td>
-                        <td className="py-2 px-3 text-right text-gray-600 dark:text-gray-400">
+                        <td className="py-2 px-3 text-right text-muted-foreground">
                           {run.checks_done}/{run.total_checks}
                         </td>
                         <td className="py-2 px-3 text-right">

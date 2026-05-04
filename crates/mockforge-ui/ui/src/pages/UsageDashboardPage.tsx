@@ -145,9 +145,9 @@ const getUsagePercentage = (used: number, limit: number) => {
 };
 
 const getUsageColor = (percentage: number) => {
-  if (percentage > 90) return 'bg-red-500';
-  if (percentage > 75) return 'bg-yellow-500';
-  return 'bg-green-500';
+  if (percentage > 90) return 'bg-danger-500';
+  if (percentage > 75) return 'bg-warning-500';
+  return 'bg-success-500';
 };
 
 const METRIC_LABELS: Record<string, string> = {
@@ -270,7 +270,7 @@ export function UsageDashboardPage() {
     return (
       <div className="container mx-auto p-6">
         <div className="text-center py-12 space-y-4">
-          <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+          <AlertCircle className="w-12 h-12 mx-auto text-danger-500" />
           <h2 className="text-lg font-semibold">Failed to load usage data</h2>
           <p className="text-sm text-muted-foreground">
             {usageErrorDetail instanceof Error ? usageErrorDetail.message : 'An unexpected error occurred'}
@@ -374,10 +374,10 @@ export function UsageDashboardPage() {
 
           {/* Server-driven alerts (persistent, dismissible) */}
           {alertsData && alertsData.alerts.length > 0 && (
-            <Card className="border-yellow-500">
+            <Card className="border-warning">
               <CardHeader>
                 <CardTitle className="flex items-center text-base">
-                  <AlertCircle className="w-5 h-5 text-yellow-500 mr-2" />
+                  <AlertCircle className="w-5 h-5 text-warning-500 mr-2" />
                   Active Alerts
                 </CardTitle>
                 <CardDescription>
@@ -410,7 +410,7 @@ export function UsageDashboardPage() {
                 ))}
                 <a
                   href="/billing"
-                  className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                  className="inline-flex items-center mt-2 text-sm font-medium text-info-600 hover:text-info-700 dark:text-info-400 dark:hover:text-info-300"
                 >
                   Upgrade plan
                   <ArrowUpRight className="w-3 h-3 ml-1" />
@@ -421,10 +421,10 @@ export function UsageDashboardPage() {
 
           {/* Inline computed warning (instant, in-session, no dismissal) */}
           {highUsageMetrics.length > 0 && (
-            <Card className="border-yellow-500">
+            <Card className="border-warning">
               <CardContent className="p-4">
                 <div className="flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-warning-500 mt-0.5" />
                   <div className="flex-1">
                     <h3 className="font-semibold mb-1">Usage Warning</h3>
                     <p className="text-sm text-muted-foreground">
@@ -434,7 +434,7 @@ export function UsageDashboardPage() {
                     </p>
                     <a
                       href="/billing"
-                      className="inline-flex items-center mt-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                      className="inline-flex items-center mt-2 text-sm font-medium text-info-600 hover:text-info-700 dark:text-info-400 dark:hover:text-info-300"
                     >
                       Upgrade plan
                       <ArrowUpRight className="w-3 h-3 ml-1" />
@@ -471,7 +471,7 @@ export function UsageDashboardPage() {
             </div>
           ) : historyError ? (
             <div className="text-center py-12 space-y-4">
-              <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+              <AlertCircle className="w-12 h-12 mx-auto text-danger-500" />
               <h2 className="text-lg font-semibold">Failed to load usage history</h2>
               <Button variant="outline" onClick={() => refetchHistory()}>
                 <RefreshCw className="w-4 h-4 mr-2" />
@@ -585,7 +585,7 @@ export function UsageDashboardPage() {
             </div>
           ) : lifetimeError || !lifetime ? (
             <div className="text-center py-12 space-y-4">
-              <AlertCircle className="w-12 h-12 mx-auto text-red-500" />
+              <AlertCircle className="w-12 h-12 mx-auto text-danger-500" />
               <h2 className="text-lg font-semibold">Failed to load lifetime totals</h2>
               <Button variant="outline" onClick={() => refetchLifetime()}>
                 <RefreshCw className="w-4 h-4 mr-2" />

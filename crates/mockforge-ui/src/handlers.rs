@@ -130,6 +130,21 @@ pub struct SystemMetrics {
     pub peak_error_rate: f64,
     /// Timestamp peaks were last reset / metrics started — gives a window for long runs
     pub peaks_since: chrono::DateTime<Utc>,
+    /// Successful (status 200..=399) responses per second over the last
+    /// monitoring tick (~10s). "API transactions/sec" in load-testing terms.
+    pub tps: f64,
+    /// Peak `tps` observed since `peaks_since`.
+    pub peak_tps: f64,
+    /// HTTP `200 OK` responses per second over the last monitoring tick.
+    pub rps_200: f64,
+    /// Peak `rps_200` observed since `peaks_since`.
+    pub peak_rps_200: f64,
+    /// Accepted TCP connections per second over the last monitoring tick
+    /// (plain HTTP path only — the TLS path uses `axum-server`'s own accept
+    /// loop and is not yet instrumented).
+    pub cps: f64,
+    /// Peak `cps` observed since `peaks_since`.
+    pub peak_cps: f64,
 }
 
 /// Time series data point
@@ -336,12 +351,19 @@ pub struct AdminState {
 impl AdminState {
     /// Start system monitoring background task.
     ///
-    /// If `MOCKFORGE_METRICS_LOG_FILE` is set, appends a CSV row
-    /// (timestamp,cpu_pct,mem_mb,total_reqs,err_rate) on each tick — gives
-    /// a multi-day, restart-surviving record that can be charted in any
-    /// spreadsheet, Grafana, or dashboarding tool.
+    /// If `MOCKFORGE_METRICS_LOG_FILE` is set, appends a CSV row on each
+    /// tick — `timestamp,cpu_pct,mem_mb,total_reqs,err_rate,tps,rps_200,cps`
+    /// — giving a multi-day, restart-surviving record that can be charted
+    /// in any spreadsheet, Grafana, or dashboarding tool.
+    ///
+    /// `tps`, `rps_200`, and `cps` columns were added in 0.3.126; downstream
+    /// consumers that key off the header row will pick them up automatically,
+    /// positional parsers will still see the original five columns first.
     pub async fn start_system_monitoring(&self) {
+        use mockforge_foundation::rate_counters;
         use std::io::Write as _;
+        use std::time::Instant;
+
         let state_clone = self.clone();
         let metrics_log_path = std::env::var("MOCKFORGE_METRICS_LOG_FILE").ok();
         tokio::spawn(async move {
@@ -357,7 +379,10 @@ impl AdminState {
                             let needs_header =
                                 std::fs::metadata(p).map(|m| m.len() == 0).unwrap_or(true);
                             if needs_header {
-                                let _ = writeln!(f, "timestamp,cpu_pct,mem_mb,total_reqs,err_rate");
+                                let _ = writeln!(
+                                    f,
+                                    "timestamp,cpu_pct,mem_mb,total_reqs,err_rate,tps,rps_200,cps"
+                                );
                             }
                             tracing::info!("system metrics CSV → {}", p);
                             Some(f)
@@ -374,6 +399,11 @@ impl AdminState {
             };
 
             tracing::info!("Starting system monitoring background task");
+
+            // Baseline for rate computation — first tick produces 0/sec
+            // because we have no `prev` yet, which is the desired behavior.
+            let mut prev_snapshot = rate_counters::snapshot();
+            let mut prev_sample_at = Instant::now();
 
             loop {
                 // Refresh system information
@@ -393,19 +423,37 @@ impl AdminState {
                 // Update system metrics
                 let memory_mb_u64 = memory_usage_mb as u64;
 
+                // Compute per-second rates from rate-counter deltas. First
+                // tick after start: dt is small but counters haven't moved
+                // either, so rates are 0 — fine.
+                let now = Instant::now();
+                let cur_snapshot = rate_counters::snapshot();
+                let dt_secs = now.saturating_duration_since(prev_sample_at).as_secs_f64().max(0.01);
+                let tps = cur_snapshot.successful.saturating_sub(prev_snapshot.successful) as f64
+                    / dt_secs;
+                let rps_200 = cur_snapshot.ok.saturating_sub(prev_snapshot.ok) as f64 / dt_secs;
+                let cps =
+                    cur_snapshot.accepts.saturating_sub(prev_snapshot.accepts) as f64 / dt_secs;
+                prev_snapshot = cur_snapshot;
+                prev_sample_at = now;
+
                 // Only log every 10 refreshes to avoid spam
                 if refresh_count.is_multiple_of(10) {
                     tracing::debug!(
-                        "System metrics updated: CPU={:.1}%, Mem={}MB, Threads={}",
+                        "System metrics updated: CPU={:.1}%, Mem={}MB, Threads={}, TPS={:.1}, RPS200={:.1}, CPS={:.1}",
                         cpu_usage,
                         memory_mb_u64,
-                        active_threads
+                        active_threads,
+                        tps,
+                        rps_200,
+                        cps,
                     );
                 }
 
                 state_clone
                     .update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads)
                     .await;
+                state_clone.update_rate_metrics(tps, rps_200, cps).await;
 
                 if let Some(file) = metrics_log.as_mut() {
                     let m = state_clone.metrics.read().await;
@@ -419,12 +467,15 @@ impl AdminState {
                     drop(m);
                     let _ = writeln!(
                         file,
-                        "{},{:.2},{},{},{:.6}",
+                        "{},{:.2},{},{},{:.6},{:.2},{:.2},{:.2}",
                         Utc::now().to_rfc3339(),
                         cpu_usage,
                         memory_mb_u64,
                         total_reqs,
-                        err_rate
+                        err_rate,
+                        tps,
+                        rps_200,
+                        cps,
                     );
                     let _ = file.flush();
                 }
@@ -490,6 +541,12 @@ impl AdminState {
                 peak_cpu_usage_percent: 0.0,
                 peak_error_rate: 0.0,
                 peaks_since: Utc::now(),
+                tps: 0.0,
+                peak_tps: 0.0,
+                rps_200: 0.0,
+                peak_rps_200: 0.0,
+                cps: 0.0,
+                peak_cps: 0.0,
             })),
             config: Arc::new(RwLock::new(ConfigurationState {
                 latency_profile: LatencyProfile {
@@ -695,7 +752,28 @@ impl AdminState {
         sm.peak_memory_usage_mb = sm.memory_usage_mb;
         sm.peak_cpu_usage_percent = sm.cpu_usage_percent;
         sm.peak_error_rate = 0.0;
+        sm.peak_tps = sm.tps;
+        sm.peak_rps_200 = sm.rps_200;
+        sm.peak_cps = sm.cps;
         sm.peaks_since = Utc::now();
+    }
+
+    /// Update per-second rate metrics (TPS / RPS / CPS) and their peaks.
+    /// Called from the system-monitoring background task once per tick.
+    pub async fn update_rate_metrics(&self, tps: f64, rps_200: f64, cps: f64) {
+        let mut sm = self.system_metrics.write().await;
+        sm.tps = tps;
+        sm.rps_200 = rps_200;
+        sm.cps = cps;
+        if tps > sm.peak_tps {
+            sm.peak_tps = tps;
+        }
+        if rps_200 > sm.peak_rps_200 {
+            sm.peak_rps_200 = rps_200;
+        }
+        if cps > sm.peak_cps {
+            sm.peak_cps = cps;
+        }
     }
 
     /// Update time series data with new metrics
@@ -1072,6 +1150,12 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         peak_cpu_usage_percent: system_metrics.peak_cpu_usage_percent,
         peak_error_rate: system_metrics.peak_error_rate,
         peaks_since: system_metrics.peaks_since,
+        tps: system_metrics.tps,
+        peak_tps: system_metrics.peak_tps,
+        rps_200: system_metrics.rps_200,
+        peak_rps_200: system_metrics.peak_rps_200,
+        cps: system_metrics.cps,
+        peak_cps: system_metrics.peak_cps,
     };
 
     let servers = vec![
@@ -4436,13 +4520,6 @@ pub async fn create_workspace(
     Json(ApiResponse::success("Workspace created".to_string()))
 }
 
-pub async fn open_workspace_from_directory(
-    State(_state): State<AdminState>,
-    Json(_request): Json<serde_json::Value>,
-) -> Json<ApiResponse<String>> {
-    Json(ApiResponse::success("Workspace opened from directory".to_string()))
-}
-
 // Reality Slider API handlers
 
 /// Get current reality level
@@ -5193,6 +5270,12 @@ mod tests {
             peak_cpu_usage_percent: 45.5,
             peak_error_rate: 0.0,
             peaks_since: Utc::now(),
+            tps: 0.0,
+            peak_tps: 0.0,
+            rps_200: 0.0,
+            peak_rps_200: 0.0,
+            cps: 0.0,
+            peak_cps: 0.0,
         };
 
         assert_eq!(metrics.active_threads, 10);

@@ -45,18 +45,18 @@ export function LiveLogsPanel() {
   const getConnectionStatusIndicator = () => {
     switch (connectionStatus) {
       case 'connected':
-        return <div className="flex items-center space-x-2 text-green-600">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+        return <div className="flex items-center space-x-2 text-success-600">
+          <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
           <span className="text-sm">Connected</span>
         </div>;
       case 'connecting':
-        return <div className="flex items-center space-x-2 text-yellow-600">
-          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+        return <div className="flex items-center space-x-2 text-warning-600">
+          <div className="w-2 h-2 bg-warning-500 rounded-full animate-pulse" />
           <span className="text-sm">Connecting...</span>
         </div>;
       case 'disconnected':
-        return <div className="flex items-center space-x-2 text-red-600">
-          <div className="w-2 h-2 bg-red-500 rounded-full" />
+        return <div className="flex items-center space-x-2 text-danger-600">
+          <div className="w-2 h-2 bg-danger-500 rounded-full" />
           <span className="text-sm">Disconnected</span>
         </div>;
     }
