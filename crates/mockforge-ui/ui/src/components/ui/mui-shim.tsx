@@ -1612,6 +1612,23 @@ interface TabsProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color' |
 const TabsContext = React.createContext<{ value: any; onChange?: (e: any, v: any) => void }>({ value: undefined });
 
 export function Tabs({ value, onChange, variant, orientation = 'horizontal', centered, className, children, sx, style, ...rest }: TabsProps) {
+  // MUI auto-numbers Tab children with their position when no `value` prop
+  // is set on the Tab; the shim has to do the same so consumers like
+  // MarketplaceTabs (which pass numeric `value` from `useLocation`) get the
+  // expected idx back via onChange and can index into their tab arrays.
+  let tabIndex = 0;
+  const decoratedChildren = React.Children.map(children, (child) => {
+    if (React.isValidElement(child) && child.type === Tab) {
+      const tabProps = child.props as TabProps;
+      if (tabProps.value === undefined) {
+        const idx = tabIndex++;
+        return React.cloneElement(child as React.ReactElement<TabProps>, { value: idx });
+      }
+      tabIndex++;
+    }
+    return child;
+  });
+
   return (
     <TabsContext.Provider value={{ value, onChange }}>
       <div
@@ -1626,7 +1643,7 @@ export function Tabs({ value, onChange, variant, orientation = 'horizontal', cen
         style={{ ...sxToStyle(sx), ...style }}
         {...rest}
       >
-        {children}
+        {decoratedChildren}
       </div>
     </TabsContext.Provider>
   );
@@ -1644,7 +1661,11 @@ interface TabProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, '
 
 export function Tab({ label, value, icon, iconPosition = 'top', disabled, className, children, sx, style, ...rest }: TabProps) {
   const ctx = React.useContext(TabsContext);
-  const selected = ctx.value === value;
+  // Coerce both sides through Number when both are numeric — Tabs `value` is
+  // often a number from a parent state hook while Tab `value` may have been
+  // injected as a number too. Strict-equal works fine in that case; we just
+  // also accept exact matches across types.
+  const selected = ctx.value === value || (ctx.value !== undefined && String(ctx.value) === String(value));
   const dir = iconPosition === 'top' || iconPosition === 'bottom' ? 'flex-col' : 'flex-row';
   return (
     <button
