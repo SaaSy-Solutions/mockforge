@@ -293,6 +293,41 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/ai-studio/quota",
             get(handlers::ai_studio::quota),
         )
+        // Voice handlers — cloud equivalents of /api/v2/voice/* so the
+        // local Voice page can dispatch through aiStudioApi when in
+        // cloud mode (#353).
+        .route(
+            "/api/v1/ai-studio/voice/process",
+            post(handlers::ai_studio::voice_process),
+        )
+        .route(
+            "/api/v1/ai-studio/voice/transpile-hook",
+            post(handlers::ai_studio::voice_transpile_hook),
+        )
+        .route(
+            "/api/v1/ai-studio/voice/create-workspace-scenario",
+            post(handlers::ai_studio::voice_create_workspace_scenario),
+        )
+        // MockAI rule explanations + traffic-based OpenAPI generation
+        // (#353). Workspace-scoped reads/writes for rules; org-scoped
+        // generation since runtime traffic aggregates across all hosted
+        // mocks under the org.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/mockai/rule-explanations",
+            get(handlers::mockai::list_rule_explanations),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/mockai/rule-explanations/{rule_id}",
+            get(handlers::mockai::get_rule_explanation),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/mockai/learn",
+            post(handlers::mockai::learn_from_examples),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/mockai/generate-openapi-from-traffic",
+            post(handlers::mockai::generate_openapi_from_traffic),
+        )
         // Test execution suite routes (cloud-enablement task #4 / Phase 1).
         // Suites are user-authored definitions; runs/events/schedules/artifacts
         // come in follow-up slices once the worker pool exists.

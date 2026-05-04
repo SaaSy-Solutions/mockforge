@@ -18,6 +18,7 @@ pub mod incident;
 pub mod learning;
 pub mod login_attempt;
 pub mod mock_environment;
+pub mod mockai_rule_explanation;
 pub mod notification_channel;
 pub mod observability_query;
 pub mod org_template;
@@ -77,6 +78,7 @@ pub use hosted_mock::{
 };
 pub use incident::{Incident, IncidentEvent};
 pub use learning::{LearningLesson, LearningProgress, LearningRecipe, LearningTrack};
+pub use mockai_rule_explanation::MockaiRuleExplanation;
 pub use notification_channel::NotificationChannel;
 pub use observability_query::{ObservabilityDashboard, ObservabilitySavedQuery};
 pub use org_template::OrgTemplate;

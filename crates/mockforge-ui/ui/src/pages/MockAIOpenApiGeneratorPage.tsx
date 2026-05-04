@@ -19,6 +19,9 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { aiStudioApi } from '../services/api/aiStudio';
+import { isCloudMode } from '../utils/cloudMode';
+import { useCloudOrgId } from '../hooks/useCloudOrgId';
 import {
   PageHeader,
   Section,
@@ -63,6 +66,7 @@ export function MockAIOpenApiGeneratorPage() {
     min_confidence: 0.7,
   });
   const [showPreview, setShowPreview] = useState(false);
+  const cloudOrgId = useCloudOrgId();
 
   const handleInputChange = useCallback(
     (field: keyof GenerationRequest, value: string | number | undefined) => {
@@ -101,7 +105,33 @@ export function MockAIOpenApiGeneratorPage() {
         request.path_pattern = formData.path_pattern.trim();
       }
 
-      const response = await apiService.generateOpenApiFromTraffic(request);
+      let response: GenerationResult;
+      if (isCloudMode()) {
+        if (!cloudOrgId) {
+          throw new Error('No cloud organization is selected');
+        }
+        // Cloud generator omits database_path (deployment-driven) and
+        // returns spec/metadata in a slightly different shape — fold it
+        // into GenerationResult so the rendering code stays uniform.
+        const cloudResp = await aiStudioApi.generateOpenApiFromTraffic(cloudOrgId, {
+          since: request.since,
+          until: request.until,
+          path_pattern: request.path_pattern,
+          min_confidence: request.min_confidence,
+        });
+        response = {
+          spec: cloudResp.spec,
+          metadata: {
+            requests_analyzed: cloudResp.metadata.requests_analyzed,
+            paths_inferred: cloudResp.metadata.paths_inferred,
+            path_confidence: {},
+            generated_at: cloudResp.metadata.generated_at,
+            duration_ms: cloudResp.metadata.duration_ms,
+          },
+        };
+      } else {
+        response = await apiService.generateOpenApiFromTraffic(request);
+      }
       setResult(response);
       setShowPreview(true);
 
@@ -119,7 +149,7 @@ export function MockAIOpenApiGeneratorPage() {
     } finally {
       setLoading(false);
     }
-  }, [formData]);
+  }, [formData, cloudOrgId]);
 
   const handleDownload = useCallback(() => {
     if (!result) return;

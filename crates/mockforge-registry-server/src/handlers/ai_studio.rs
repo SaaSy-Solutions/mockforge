@@ -46,14 +46,15 @@ pub struct UsageMeta {
     pub tokens_limit: i64,
 }
 
-/// Internal: what each handler hands to `run_completion`.
-struct PromptInputs {
-    system: String,
-    user: String,
+/// Internal: what each handler hands to `run_completion`. `pub(crate)`
+/// so the sibling mockai handler module can reuse the same pipeline.
+pub(crate) struct PromptInputs {
+    pub(crate) system: String,
+    pub(crate) user: String,
     /// Optional model override; falls back to BYOK / platform default.
-    model: Option<String>,
-    temperature: f64,
-    max_tokens: u32,
+    pub(crate) model: Option<String>,
+    pub(crate) temperature: f64,
+    pub(crate) max_tokens: u32,
 }
 
 // --- /chat ------------------------------------------------------------------
@@ -278,12 +279,173 @@ pub async fn quota(
     }))
 }
 
+// --- /voice/* ---------------------------------------------------------------
+//
+// Cloud equivalents of the local-only `/api/v2/voice/*` endpoints. Each
+// is a thin wrapper over `run_completion` with a fixed system prompt;
+// they exist so the local Voice page (and its child components) can
+// dispatch through `aiStudioApi` when `isCloudMode()` is true.
+
+#[derive(Debug, Deserialize)]
+pub struct VoiceProcessRequest {
+    /// User-spoken / typed natural-language instruction.
+    pub command: String,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceProcessResponse {
+    /// LLM-derived JSON summarizing the parsed intent. Best-effort;
+    /// `None` if the model didn't return parseable JSON.
+    pub intent: Option<serde_json::Value>,
+    /// Raw model output, always returned for fallback rendering.
+    pub content: String,
+    #[serde(flatten)]
+    pub meta: UsageMeta,
+}
+
+/// `POST /api/v1/ai-studio/voice/process`
+pub async fn voice_process(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<VoiceProcessRequest>,
+) -> ApiResult<Json<VoiceProcessResponse>> {
+    if request.command.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("command must not be empty".into()));
+    }
+    let inputs = PromptInputs {
+        system: "You are a voice-command parser for MockForge. The user describes a mock \
+                 they want to build. Output a single JSON object with fields: intent (one of \
+                 \"create_endpoint\" | \"modify_response\" | \"add_scenario\" | \"unknown\"), \
+                 confidence (0..1), and parsed (any object summarizing the parsed details). \
+                 Return ONLY the JSON, no prose."
+            .into(),
+        user: request.command,
+        model: request.model,
+        temperature: 0.2,
+        max_tokens: 800,
+    };
+    let (content, meta) = run_completion(&state, user_id, &headers, inputs).await?;
+    let intent = extract_json_payload(&content);
+    Ok(Json(VoiceProcessResponse {
+        intent,
+        content,
+        meta,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VoiceTranspileHookRequest {
+    /// Natural-language description of the hook behavior.
+    pub description: String,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceTranspileHookResponse {
+    /// Generated JavaScript hook source.
+    pub hook_source: String,
+    /// Raw model output (same as hook_source unless the model added prose).
+    pub content: String,
+    #[serde(flatten)]
+    pub meta: UsageMeta,
+}
+
+/// `POST /api/v1/ai-studio/voice/transpile-hook`
+pub async fn voice_transpile_hook(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<VoiceTranspileHookRequest>,
+) -> ApiResult<Json<VoiceTranspileHookResponse>> {
+    if request.description.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("description must not be empty".into()));
+    }
+    let inputs = PromptInputs {
+        system: "You write MockForge JavaScript hooks. Given the user's description, output \
+                 a single JS function body (no markdown fences, no surrounding prose) that \
+                 implements the described behavior. The function receives `(req, res, ctx)` \
+                 and may modify `res.status`, `res.headers`, `res.body`."
+            .into(),
+        user: request.description,
+        model: request.model,
+        temperature: 0.3,
+        max_tokens: 1024,
+    };
+    let (content, meta) = run_completion(&state, user_id, &headers, inputs).await?;
+    let hook_source = strip_code_fences(&content);
+    Ok(Json(VoiceTranspileHookResponse {
+        hook_source,
+        content,
+        meta,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VoiceCreateScenarioRequest {
+    /// Natural-language description of the desired workspace scenario.
+    pub description: String,
+    /// Workspace context (name / id) that the model can reference.
+    #[serde(default)]
+    pub workspace_context: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VoiceCreateScenarioResponse {
+    /// Best-effort parsed scenario JSON. `None` if model output wasn't JSON.
+    pub scenario: Option<serde_json::Value>,
+    /// Raw model output, always returned for fallback rendering.
+    pub content: String,
+    #[serde(flatten)]
+    pub meta: UsageMeta,
+}
+
+/// `POST /api/v1/ai-studio/voice/create-workspace-scenario`
+pub async fn voice_create_workspace_scenario(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<VoiceCreateScenarioRequest>,
+) -> ApiResult<Json<VoiceCreateScenarioResponse>> {
+    if request.description.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("description must not be empty".into()));
+    }
+    let context_blurb = request
+        .workspace_context
+        .as_ref()
+        .map(|c| format!("\n\nWorkspace context: {c}"))
+        .unwrap_or_default();
+    let inputs = PromptInputs {
+        system: "You build MockForge workspace scenarios. Output a single JSON object with \
+                 fields: name, description, steps (array of {action, target, value} objects). \
+                 Return ONLY the JSON, no prose, no markdown fences."
+            .into(),
+        user: format!("{}{}", request.description, context_blurb),
+        model: request.model,
+        temperature: 0.3,
+        max_tokens: 1500,
+    };
+    let (content, meta) = run_completion(&state, user_id, &headers, inputs).await?;
+    let scenario = extract_json_payload(&content);
+    Ok(Json(VoiceCreateScenarioResponse {
+        scenario,
+        content,
+        meta,
+    }))
+}
+
 // --- shared pipeline --------------------------------------------------------
 
 /// Runs the full provider-routing + quota + LLM-call + metering pipeline
 /// for one prompt. Returns the model's raw text plus the usage metadata
-/// every AI Studio response embeds.
-async fn run_completion(
+/// every AI Studio response embeds. `pub(crate)` so the mockai handler
+/// module can reuse the same pipeline.
+pub(crate) async fn run_completion(
     state: &AppState,
     user_id: uuid::Uuid,
     headers: &HeaderMap,
@@ -408,7 +570,7 @@ fn build_llm_call(provider: &Provider, prompt: PromptInputs) -> ApiResult<LlmCal
 /// Best-effort JSON extraction. Returns `None` if `text` doesn't look like
 /// JSON. Tolerates a single ```json fence wrapper because models love
 /// adding them despite system-prompt instructions.
-fn extract_json_payload(text: &str) -> Option<serde_json::Value> {
+pub(crate) fn extract_json_payload(text: &str) -> Option<serde_json::Value> {
     let trimmed = text.trim();
     let stripped = trimmed
         .strip_prefix("```json")
@@ -418,6 +580,21 @@ fn extract_json_payload(text: &str) -> Option<serde_json::Value> {
     let stripped = stripped.strip_suffix("```").map(str::trim_end).unwrap_or(stripped);
 
     serde_json::from_str(stripped).ok()
+}
+
+/// Strip surrounding ```...``` markdown code fences (with or without a
+/// language tag). Used for hook source extraction where the model
+/// sometimes wraps the JS body despite system-prompt instructions.
+fn strip_code_fences(text: &str) -> String {
+    let trimmed = text.trim();
+    let after_open = trimmed
+        .strip_prefix("```javascript")
+        .or_else(|| trimmed.strip_prefix("```js"))
+        .or_else(|| trimmed.strip_prefix("```"))
+        .map(|s| s.trim_start_matches('\n'))
+        .unwrap_or(trimmed);
+    let stripped = after_open.strip_suffix("```").map(str::trim_end).unwrap_or(after_open);
+    stripped.to_string()
 }
 
 #[cfg(test)]

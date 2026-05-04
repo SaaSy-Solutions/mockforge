@@ -8,6 +8,8 @@ import { Mic, MicOff, Loader2, CheckCircle2, XCircle, Download, Play } from 'luc
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { aiStudioApi } from '../../services/api/aiStudio';
+import { isCloudMode } from '../../utils/cloudMode';
 
 interface VoiceInputProps {
   onCommandProcessed?: (result: VoiceCommandResult) => void;
@@ -144,23 +146,40 @@ export function VoiceInput({ onCommandProcessed, className }: VoiceInputProps) {
     setError(null);
 
     try {
-      const response = await fetch('/api/v2/voice/process', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ command }),
-      });
+      let data: any;
+      if (isCloudMode()) {
+        // Cloud handler returns { intent, content, ...meta }. The local
+        // shape `{ data: { parsed, spec } }` is what the rendering code
+        // below expects, so adapt: parsed = intent.parsed, spec = none
+        // (cloud voice/process is intent-parsing only, not spec gen).
+        const cloudResp = await aiStudioApi.voiceProcess({ command });
+        const intent =
+          (cloudResp.intent && typeof cloudResp.intent === 'object'
+            ? (cloudResp.intent as Record<string, unknown>)
+            : {}) || {};
+        data = {
+          parsed: (intent.parsed as Record<string, unknown>) ?? {},
+          spec: undefined,
+        };
+      } else {
+        const response = await fetch('/api/v2/voice/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ command }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        }
+
+        const responseData = await response.json();
+
+        // Handle ApiResponse wrapper
+        data = responseData.data || responseData;
       }
-
-      const responseData = await response.json();
-
-      // Handle ApiResponse wrapper
-      const data = responseData.data || responseData;
 
       const result: VoiceCommandResult = {
         command,

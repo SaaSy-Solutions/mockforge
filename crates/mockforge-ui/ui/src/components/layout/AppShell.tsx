@@ -239,10 +239,16 @@ const cloudNavItemIds = new Set([
   'plugin-registry',
   'pillar-analytics',
   'status',
-  // AI Studio chat is wired end-to-end (handler + UI client + page dispatcher).
-  // Other AI nav items (mockai, mockai-rules, mockai-openapi-generator, voice)
-  // stay local-only until their pages are migrated to use aiStudioApi.
+  // AI Studio chat + the rest of the MockAI suite are wired end-to-end
+  // through aiStudioApi: chat / generate-openapi / explain-rule plus the
+  // post-#353 cloud routes for rule explanations, learn, generate-from-
+  // traffic, and the three voice handlers (process / transpile-hook /
+  // create-workspace-scenario).
   'ai-studio',
+  'mockai',
+  'mockai-rules',
+  'mockai-openapi-generator',
+  'voice',
   // Import dispatches to /api/v1/import/preview + /api/v1/workspaces/{id}/import
   // when isCloudMode(); requires an active workspace selection.
   'import',
