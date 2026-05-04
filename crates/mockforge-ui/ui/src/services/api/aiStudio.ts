@@ -80,6 +80,23 @@ export interface AiExplainRuleResponse extends AiUsageMeta {
   explanation: string;
 }
 
+// --- quota snapshot ---------------------------------------------------------
+
+export interface AiQuotaResponse {
+  /** Which key would pay for the next call. */
+  provider: 'byok' | 'platform' | 'disabled';
+  /** Tokens used this billing period. */
+  tokens_used_this_period: number;
+  /** Monthly platform-token limit. -1 means unlimited. */
+  tokens_limit: number;
+  /**
+   * True if a chat call right now would clear the quota check. False
+   * means quota exhausted (Platform) or AI fully disabled (Free without
+   * BYOK). Use to disable the send button / show an upgrade nudge.
+   */
+  call_allowed: boolean;
+}
+
 // --- service ----------------------------------------------------------------
 
 class AiStudioApiService {
@@ -123,6 +140,14 @@ class AiStudioApiService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
     }) as Promise<AiExplainRuleResponse>;
+  }
+
+  /** `GET /api/v1/ai-studio/quota` — read-only, no metering side effects. */
+  async getQuota(): Promise<AiQuotaResponse> {
+    this.ensureCloud('getQuota');
+    return fetchJsonWithErrorBody(
+      '/api/v1/ai-studio/quota',
+    ) as Promise<AiQuotaResponse>;
   }
 }
 
