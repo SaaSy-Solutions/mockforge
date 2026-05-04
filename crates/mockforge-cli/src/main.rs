@@ -2103,16 +2103,18 @@ enum Commands {
     /// Without --spec, runs against the single URL given by --target.
     /// With --spec, --target becomes the base URL and the bench iterates
     /// every POST/PUT/PATCH operation in the spec sequentially, running
-    /// for --duration each.
+    /// for --duration each. --base-path is prepended to every spec path
+    /// (priority: CLI > spec.servers, matching `mockforge bench`).
     ///
     /// Examples:
     ///   mockforge bench-chunked --target http://localhost:3000/upload
     ///   mockforge bench-chunked --target http://localhost:3000/upload \
-    ///     --concurrency 10 --duration 60 \
+    ///     --concurrency 10 --duration 60s \
     ///     --chunk-size-bytes 4096 --total-size-bytes 10485760 \
     ///     --chunk-interval-ms 50
     ///   mockforge bench-chunked --spec api.json --target https://192.168.2.86 \
-    ///     --duration 60 --insecure
+    ///     --base-path /v1.0 --duration 10m --insecure \
+    ///     --validate-requests --export-requests
     #[cfg(feature = "bench")]
     #[command(verbatim_doc_comment)]
     BenchChunked {
@@ -2128,6 +2130,19 @@ enum Commands {
         #[arg(long)]
         spec: Option<PathBuf>,
 
+        /// API base path prefix (e.g., "/api" or "/v1.0").
+        ///
+        /// Prepends this path to each spec-derived operation path before
+        /// the URL is built. Priority (matches `mockforge bench`):
+        ///   1. CLI --base-path (even empty string to disable)
+        ///   2. Base path from spec's `servers` URL
+        ///   3. None
+        ///
+        /// Only applied when --spec is given. Ignored in single-target
+        /// mode (the user-provided --target URL is used verbatim).
+        #[arg(long, value_name = "PATH")]
+        base_path: Option<String>,
+
         /// Run only the operation with this `operationId` (when --spec
         /// is given). Without this flag, all POST/PUT/PATCH ops run.
         #[arg(long)]
@@ -2142,11 +2157,11 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         concurrency: u32,
 
-        /// Duration in seconds. **Per operation** when --spec is set
-        /// (so a spec with 3 POST/PATCH ops and --duration 30 runs
-        /// for ~90s total).
-        #[arg(short, long, default_value = "30")]
-        duration: u64,
+        /// Duration (e.g., 30s, 5m, 1h, or bare seconds like 600).
+        /// **Per operation** when --spec is set — a spec with 3 POST/PATCH
+        /// ops and --duration 30s runs for ~90s total.
+        #[arg(short, long, default_value = "30s")]
+        duration: String,
 
         /// Size of each chunk emitted into the request body, in bytes.
         /// The body is streamed without a Content-Length, so hyper sends
@@ -2175,6 +2190,29 @@ enum Commands {
         /// Skip TLS certificate verification (for self-signed test servers).
         #[arg(long)]
         insecure: bool,
+
+        /// Pre-flight: validate every spec operation can produce a usable
+        /// request before running the bench. Currently checks that path
+        /// templates can be filled in (no missing required path params)
+        /// and that the resolved method is POST/PUT/PATCH. Validation
+        /// failures are written to `<output>/chunked-request-violations.json`
+        /// and abort the run with a non-zero exit. No-op without --spec.
+        #[arg(long)]
+        validate_requests: bool,
+
+        /// After the run, write a JSON file describing each operation's
+        /// request shape (method, URL, headers, body sizing) and the
+        /// resulting status-code distribution + captured error samples,
+        /// to `<output>/chunked-requests.json`. Useful for diffing against
+        /// real-system behavior. No-op without --spec.
+        #[arg(long)]
+        export_requests: bool,
+
+        /// Output directory for `chunked-requests.json` /
+        /// `chunked-request-violations.json` (when --export-requests /
+        /// --validate-requests is set). Created if missing.
+        #[arg(short, long, default_value = "bench-results")]
+        output: PathBuf,
     },
 
     /// Convert a HAR file to conformance custom-checks YAML
@@ -2995,6 +3033,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::BenchChunked {
             target,
             spec,
+            base_path,
             operation_id,
             method,
             concurrency,
@@ -3004,9 +3043,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             chunk_interval_ms,
             header,
             insecure,
+            validate_requests,
+            export_requests,
+            output,
         } => {
             use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
+            use mockforge_bench::command::BenchCommand;
             use std::collections::HashMap;
+
+            // Match `mockforge bench`'s humantime parsing so users can pass
+            // "30s", "5m", "1h", or bare seconds. Issue #79: previously a
+            // bare u64 (in seconds) which rejected `-d 600s`.
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "Invalid --duration {:?}: {}. Examples: 30s, 5m, 1h, 600",
+                        duration, e
+                    );
+                    std::process::exit(1);
+                }
+            };
 
             let mut headers = HashMap::new();
             for h in header {
@@ -3074,6 +3131,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     }
                 };
                 let base_url = target.trim_end_matches('/').to_string();
+                // CLI --base-path > spec.servers > none. Empty string from CLI
+                // explicitly disables (matches `mockforge bench` semantics).
+                let effective_base_path: Option<String> = match &base_path {
+                    Some(p) if p.is_empty() => None,
+                    Some(p) => Some(p.clone()),
+                    None => parser.get_base_path(),
+                };
                 let want_methods = ["POST", "PUT", "PATCH"];
                 let ops: Vec<_> = parser
                     .get_operations()
@@ -3096,49 +3160,123 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     std::process::exit(1);
                 }
 
+                // Pre-flight validation. Any failure here aborts before
+                // touching the network so the bench doesn't half-run.
+                let mut violations: Vec<serde_json::Value> = Vec::new();
+                let mut planned: Vec<(
+                    String, // label
+                    String, // method
+                    String, // url
+                    String, // op.path
+                )> = Vec::with_capacity(ops.len());
+                for op in &ops {
+                    let label = op.display_name();
+                    match RequestGenerator::generate_template(op) {
+                        Ok(template) => {
+                            let path_with_base = match &effective_base_path {
+                                Some(bp) if !bp.is_empty() => {
+                                    format!("{}{}", bp, template.generate_path())
+                                }
+                                _ => template.generate_path().to_string(),
+                            };
+                            let url = format!("{}{}", base_url, path_with_base);
+                            if reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes())
+                                .is_err()
+                            {
+                                violations.push(serde_json::json!({
+                                    "operation": label,
+                                    "method": op.method,
+                                    "path": op.path,
+                                    "kind": "invalid_method",
+                                    "detail": format!("`{}` is not a valid HTTP method", op.method),
+                                }));
+                            } else {
+                                planned.push((
+                                    label,
+                                    op.method.to_uppercase(),
+                                    url,
+                                    op.path.clone(),
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            violations.push(serde_json::json!({
+                                "operation": label,
+                                "method": op.method,
+                                "path": op.path,
+                                "kind": "template_build_failure",
+                                "detail": e.to_string(),
+                            }));
+                        }
+                    }
+                }
+
+                if validate_requests {
+                    if !violations.is_empty() {
+                        if let Err(e) = std::fs::create_dir_all(&output) {
+                            eprintln!("Failed to create output directory {:?}: {}", output, e);
+                            std::process::exit(1);
+                        }
+                        let path = output.join("chunked-request-violations.json");
+                        let payload = serde_json::json!({
+                            "spec": spec_path.display().to_string(),
+                            "base_url": base_url,
+                            "base_path": effective_base_path,
+                            "violations": violations,
+                        });
+                        match serde_json::to_string_pretty(&payload) {
+                            Ok(s) => {
+                                if let Err(e) = std::fs::write(&path, s) {
+                                    eprintln!("Failed to write {:?}: {}", path, e);
+                                }
+                            }
+                            Err(e) => eprintln!("Failed to serialize violations: {}", e),
+                        }
+                        eprintln!(
+                            "✗ --validate-requests: {} violation(s); see {:?}",
+                            violations.len(),
+                            path
+                        );
+                        std::process::exit(1);
+                    } else {
+                        println!("✅ --validate-requests: all {} operations OK", planned.len());
+                    }
+                }
+
                 println!(
-                    "→ {} chunked bench {} from {:?} (base {})",
-                    ops.len(),
-                    if ops.len() == 1 {
+                    "→ {} chunked bench {} from {:?} (base {}{})",
+                    planned.len(),
+                    if planned.len() == 1 {
                         "operation"
                     } else {
                         "operations"
                     },
                     spec_path,
-                    base_url
+                    base_url,
+                    effective_base_path
+                        .as_deref()
+                        .map(|bp| format!(", base-path {}", bp))
+                        .unwrap_or_default()
                 );
 
                 let mut any_failed = false;
-                for op in &ops {
-                    let template = match RequestGenerator::generate_template(op) {
-                        Ok(t) => t,
-                        Err(e) => {
-                            eprintln!(
-                                "✗ {} {}: failed to build request template: {}",
-                                op.method, op.path, e
-                            );
+                let mut export_records: Vec<serde_json::Value> = Vec::new();
+                for (label, method_str, url, op_path) in &planned {
+                    let method = match reqwest::Method::from_bytes(method_str.as_bytes()) {
+                        Ok(m) => m,
+                        Err(_) => {
+                            eprintln!("✗ {}: invalid method `{}`", label, method_str);
                             any_failed = true;
                             continue;
                         }
                     };
-                    let url = format!("{}{}", base_url, template.generate_path());
-                    let label = op.display_name();
-                    let method =
-                        match reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes()) {
-                            Ok(m) => m,
-                            Err(_) => {
-                                eprintln!("✗ {}: invalid method `{}`", label, op.method);
-                                any_failed = true;
-                                continue;
-                            }
-                        };
                     println!();
-                    println!("→ {} {}  ({})", op.method.to_uppercase(), op.path, url);
+                    println!("→ {} {}  ({})", method_str, op_path, url);
                     let cfg = ChunkedBenchConfig {
-                        target_url: url,
+                        target_url: url.clone(),
                         method,
                         concurrency,
-                        duration: std::time::Duration::from_secs(duration),
+                        duration: std::time::Duration::from_secs(duration_secs),
                         chunk_size_bytes,
                         total_size_bytes,
                         chunk_interval_ms,
@@ -3146,18 +3284,91 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         skip_tls_verify: insecure,
                     };
                     match run(cfg).await {
-                        Ok(r) => print_result(&label, &r),
+                        Ok(r) => {
+                            print_result(label, &r);
+                            if export_requests {
+                                export_records.push(serde_json::json!({
+                                    "operation": label,
+                                    "method": method_str,
+                                    "url": url,
+                                    "spec_path": op_path,
+                                    "headers": headers,
+                                    "chunk_size_bytes": chunk_size_bytes,
+                                    "total_size_bytes": total_size_bytes,
+                                    "chunk_interval_ms": chunk_interval_ms,
+                                    "concurrency": concurrency,
+                                    "duration_secs": duration_secs,
+                                    "result": {
+                                        "total_requests": r.total_requests,
+                                        "successful": r.successful,
+                                        "failed": r.failed,
+                                        "bytes_sent": r.bytes_sent,
+                                        "elapsed_ms": r.elapsed.as_millis(),
+                                        "req_per_sec": r.req_per_sec,
+                                        "avg_latency_ms": r.avg_latency_ms,
+                                        "p50_ms": r.p50_ms,
+                                        "p95_ms": r.p95_ms,
+                                        "p99_ms": r.p99_ms,
+                                        "status_counts": r.status_counts,
+                                        "error_samples": r.error_samples.iter().map(|s| serde_json::json!({
+                                            "status": s.status,
+                                            "server_header": s.server_header,
+                                            "body_excerpt": s.body_excerpt,
+                                        })).collect::<Vec<_>>(),
+                                    },
+                                }));
+                            }
+                        }
                         Err(e) => {
                             eprintln!("✗ {}: chunked bench failed: {}", label, e);
                             any_failed = true;
                         }
                     }
                 }
+
+                if export_requests {
+                    if let Err(e) = std::fs::create_dir_all(&output) {
+                        eprintln!("Failed to create output directory {:?}: {}", output, e);
+                    } else {
+                        let path = output.join("chunked-requests.json");
+                        let payload = serde_json::json!({
+                            "spec": spec_path.display().to_string(),
+                            "base_url": base_url,
+                            "base_path": effective_base_path,
+                            "operations": export_records,
+                        });
+                        match serde_json::to_string_pretty(&payload) {
+                            Ok(s) => match std::fs::write(&path, s) {
+                                Ok(_) => println!(
+                                    "📝 --export-requests: wrote {} operations to {:?}",
+                                    export_records.len(),
+                                    path
+                                ),
+                                Err(e) => eprintln!("Failed to write {:?}: {}", path, e),
+                            },
+                            Err(e) => eprintln!("Failed to serialize export: {}", e),
+                        }
+                    }
+                }
+
                 if any_failed {
                     std::process::exit(1);
                 }
             } else {
-                // Single-target mode (original behavior).
+                // Single-target mode (original behavior). --base-path,
+                // --validate-requests, --export-requests are spec-only.
+                if base_path.is_some() {
+                    eprintln!(
+                        "Note: --base-path has no effect without --spec; \
+                         single-target mode uses --target verbatim"
+                    );
+                }
+                if validate_requests {
+                    eprintln!("Note: --validate-requests requires --spec (skipped)");
+                }
+                if export_requests {
+                    eprintln!("Note: --export-requests requires --spec (skipped)");
+                }
                 let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
                     Ok(m) => m,
                     Err(_) => {
@@ -3169,7 +3380,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     target_url: target,
                     method,
                     concurrency,
-                    duration: std::time::Duration::from_secs(duration),
+                    duration: std::time::Duration::from_secs(duration_secs),
                     chunk_size_bytes,
                     total_size_bytes,
                     chunk_interval_ms,
