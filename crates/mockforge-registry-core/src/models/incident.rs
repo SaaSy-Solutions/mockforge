@@ -301,4 +301,75 @@ impl Incident {
         .fetch_all(pool)
         .await
     }
+
+    /// Open incidents that haven't been dispatched to notification channels
+    /// yet. The dispatcher worker polls this; once it inserts a
+    /// `notification_dispatched` incident_event for an incident, that
+    /// incident drops out of the list.
+    ///
+    /// Capped at `limit` rows so a backlog can't OOM the worker.
+    pub async fn list_pending_dispatch(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT i.*
+              FROM incidents i
+             WHERE i.status = 'open'
+               AND NOT EXISTS (
+                   SELECT 1 FROM incident_events e
+                    WHERE e.incident_id = i.id
+                      AND e.event_type = 'notification_dispatched'
+               )
+             ORDER BY i.created_at ASC
+             LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Worker-callback: record one dispatch attempt per (incident, channel).
+    /// `result` is freeform JSON — typically `{"ok": true, "status": 204}`
+    /// for success or `{"ok": false, "error": "..."}` for failure.
+    /// Multiple rows per incident are expected (one per channel).
+    pub async fn record_notification_attempt(
+        pool: &PgPool,
+        incident_id: Uuid,
+        channel_id: Uuid,
+        result: &serde_json::Value,
+    ) -> sqlx::Result<()> {
+        let mut payload = result.clone();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("channel_id".into(), serde_json::json!(channel_id));
+        }
+        sqlx::query(
+            "INSERT INTO incident_events (incident_id, event_type, payload) \
+             VALUES ($1, 'notification_sent', $2)",
+        )
+        .bind(incident_id)
+        .bind(payload)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Worker-callback: incident has been processed by the dispatcher.
+    /// Inserting this row removes the incident from
+    /// `list_pending_dispatch`. Idempotent: a duplicate insert is fine —
+    /// the next poll just finds zero pending rows.
+    pub async fn mark_dispatched(
+        pool: &PgPool,
+        incident_id: Uuid,
+        summary: &serde_json::Value,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            "INSERT INTO incident_events (incident_id, event_type, payload) \
+             VALUES ($1, 'notification_dispatched', $2)",
+        )
+        .bind(incident_id)
+        .bind(summary)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
 }

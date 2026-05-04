@@ -152,6 +152,30 @@ impl Snapshot {
         Ok(rows > 0)
     }
 
+    /// Retention worker callback: transition `ready` snapshots whose
+    /// `expires_at` has passed to `expired`. Returns the snapshots
+    /// affected so the worker can reclaim their blobs after the row
+    /// flip lands. Idempotent: rows already in `expired` are skipped.
+    pub async fn mark_expired_batch(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            UPDATE snapshots SET status = 'expired'
+             WHERE id IN (
+                 SELECT id FROM snapshots
+                  WHERE status = 'ready'
+                    AND expires_at IS NOT NULL
+                    AND expires_at <= NOW()
+                  ORDER BY expires_at ASC
+                  LIMIT $1
+             )
+             RETURNING *
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    }
+
     /// Workspace-scoped count, used for the `max_snapshots` plan-limit
     /// check before allowing a new capture.
     pub async fn count_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<i64> {
