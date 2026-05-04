@@ -127,6 +127,28 @@ pub async fn update_channel(
     Ok(Json(updated))
 }
 
+/// `POST /api/v1/organizations/{org_id}/notification-channels/{id}/test-fire`
+///
+/// Fires a synthetic dispatch through this channel only — bypassing
+/// routing rules — so an operator can validate webhook URLs / Slack
+/// hooks without raising a real incident. Returns the dispatch result
+/// inline so the UI can render success / error in the channel form.
+pub async fn test_fire_channel(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((org_id, id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    authorize_org(&state, user_id, &headers, org_id).await?;
+    let channel = load_authorized_channel(&state, org_id, id).await?;
+    if !channel.enabled {
+        return Err(ApiError::InvalidRequest("Channel is disabled — enable it first".into()));
+    }
+
+    let result = crate::workers::incident_dispatcher::test_fire(&channel).await;
+    Ok(Json(result))
+}
+
 /// `DELETE /api/v1/organizations/{org_id}/notification-channels/{id}`
 pub async fn delete_channel(
     State(state): State<AppState>,

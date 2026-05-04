@@ -302,6 +302,78 @@ async fn post_webhook_style(
     }
 }
 
+/// User-facing test-fire: post a synthetic incident-shaped payload to a
+/// single channel and return the result. Used by the
+/// `POST /notification-channels/{id}/test-fire` route so operators can
+/// validate URLs without raising a real incident.
+pub async fn test_fire(channel: &NotificationChannel) -> serde_json::Value {
+    let client = match reqwest::Client::builder()
+        .timeout(HTTP_TIMEOUT)
+        .user_agent("mockforge-registry/1.0 (test-fire)")
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return serde_json::json!({
+                "ok": false,
+                "kind": channel.kind,
+                "error": format!("failed to build HTTP client: {e}"),
+            });
+        }
+    };
+    let synthetic = synthetic_incident(channel.org_id);
+    let result = send_to_channel(&client, channel, &synthetic).await;
+    match result {
+        ChannelResult::Sent { status_code } => serde_json::json!({
+            "ok": true,
+            "kind": channel.kind,
+            "status_code": status_code,
+        }),
+        ChannelResult::Failed { error } => serde_json::json!({
+            "ok": false,
+            "kind": channel.kind,
+            "error": error,
+        }),
+        ChannelResult::Skipped { reason } => serde_json::json!({
+            "ok": false,
+            "kind": channel.kind,
+            "skipped": true,
+            "reason": reason,
+        }),
+    }
+}
+
+/// Build a fake Incident the test-fire path can post. Field values are
+/// recognizable so the operator's webhook receiver can render them as
+/// "this is a test" rather than a real alert. Doesn't touch the DB.
+fn synthetic_incident(org_id: uuid::Uuid) -> Incident {
+    use chrono::Utc;
+    Incident {
+        id: uuid::Uuid::nil(),
+        org_id,
+        workspace_id: None,
+        source: "mockforge.test_fire".into(),
+        source_ref: None,
+        dedupe_key: format!("test-fire-{}", Utc::now().timestamp()),
+        severity: "low".into(),
+        status: "open".into(),
+        title: "MockForge test notification".into(),
+        description: Some(
+            "This is a test message from the notification-channel test-fire \
+             endpoint. If you're seeing this, the channel is wired up correctly."
+                .into(),
+        ),
+        postmortem_url: None,
+        assigned_to: None,
+        acknowledged_by: None,
+        acknowledged_at: None,
+        resolved_by: None,
+        resolved_at: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // The pure routing logic is exercised in routing_rule.rs::tests; the

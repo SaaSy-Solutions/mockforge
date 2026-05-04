@@ -558,6 +558,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             patch(handlers::notification_channels::update_channel)
                 .delete(handlers::notification_channels::delete_channel),
         )
+        .route(
+            "/api/v1/organizations/{org_id}/notification-channels/{id}/test-fire",
+            post(handlers::notification_channels::test_fire_channel),
+        )
         // Routing rule routes (cloud-enablement task #3 / Phase 1).
         // Maps (severity × source × workspace) → channel_ids[]; the
         // dispatcher worker (separate slice) evaluates these per-incident
