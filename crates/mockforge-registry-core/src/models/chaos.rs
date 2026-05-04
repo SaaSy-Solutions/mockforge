@@ -130,7 +130,48 @@ impl ChaosCampaign {
 }
 
 #[cfg(feature = "postgres")]
+pub struct CreateChaosCampaignReport<'a> {
+    pub campaign_id: Uuid,
+    pub run_id: Uuid,
+    pub fault_count: i32,
+    pub aborted: bool,
+    pub abort_reason: Option<&'a str>,
+    pub summary: Option<&'a serde_json::Value>,
+    pub recommendations: Option<&'a serde_json::Value>,
+}
+
+#[cfg(feature = "postgres")]
 impl ChaosCampaignReport {
+    /// Worker-callback: chaos run finished, persist the report row.
+    /// Idempotent on (campaign_id, run_id) — re-running with the same
+    /// run_id returns the existing row instead of inserting a duplicate.
+    pub async fn create(pool: &PgPool, input: CreateChaosCampaignReport<'_>) -> sqlx::Result<Self> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            INSERT INTO chaos_campaign_reports
+                (campaign_id, run_id, fault_count, aborted, abort_reason,
+                 summary, recommendations)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (campaign_id, run_id) DO UPDATE SET
+                fault_count = EXCLUDED.fault_count,
+                aborted = EXCLUDED.aborted,
+                abort_reason = EXCLUDED.abort_reason,
+                summary = EXCLUDED.summary,
+                recommendations = EXCLUDED.recommendations
+            RETURNING *
+            "#,
+        )
+        .bind(input.campaign_id)
+        .bind(input.run_id)
+        .bind(input.fault_count)
+        .bind(input.aborted)
+        .bind(input.abort_reason)
+        .bind(input.summary)
+        .bind(input.recommendations)
+        .fetch_one(pool)
+        .await
+    }
+
     pub async fn list_by_campaign(pool: &PgPool, campaign_id: Uuid) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM chaos_campaign_reports WHERE campaign_id = $1 \

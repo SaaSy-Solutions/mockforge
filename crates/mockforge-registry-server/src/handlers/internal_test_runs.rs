@@ -204,7 +204,8 @@ async fn mirror_kind_status(
     run: &TestRun,
     summary: Option<&serde_json::Value>,
 ) -> sqlx::Result<()> {
-    use mockforge_registry_core::models::{CloneModel, Snapshot};
+    use mockforge_registry_core::models::chaos::CreateChaosCampaignReport;
+    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
 
     let pool = state.db.pool();
     match run.kind.as_str() {
@@ -242,9 +243,44 @@ async fn mirror_kind_status(
                 CloneModel::mark_failed(pool, run.suite_id).await?;
             }
         }
-        // Other kinds (unit/chaos_campaign/contract_diff/replay/flow.*)
-        // don't have a separate per-resource status — the test_runs row
-        // is the source of truth.
+        "chaos_campaign" => {
+            // Persist the per-run report row so the campaign's history
+            // tab has data, regardless of pass/fail. Aborted runs land
+            // here too (status='failed'/'cancelled') so the UI can
+            // show abort_reason.
+            let aborted = !matches!(run.status.as_str(), "passed");
+            let abort_reason: Option<String> = if aborted {
+                summary
+                    .and_then(|s| s.get("abort_reason"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .or_else(|| Some(run.status.clone()))
+            } else {
+                None
+            };
+            let fault_count = summary
+                .and_then(|s| s.get("fault_count"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+                .clamp(0, i32::MAX as i64) as i32;
+            let recommendations = summary.and_then(|s| s.get("recommendations").cloned());
+            ChaosCampaignReport::create(
+                pool,
+                CreateChaosCampaignReport {
+                    campaign_id: run.suite_id,
+                    run_id: run.id,
+                    fault_count,
+                    aborted,
+                    abort_reason: abort_reason.as_deref(),
+                    summary,
+                    recommendations: recommendations.as_ref(),
+                },
+            )
+            .await?;
+        }
+        // Other kinds (unit/contract_diff/replay/flow.*) don't have a
+        // separate per-resource status — the test_runs row is the
+        // source of truth.
         _ => {}
     }
     Ok(())
