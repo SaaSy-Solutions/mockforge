@@ -141,6 +141,7 @@ const navSections = [
       { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
       { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
       { id: 'contract-diff', labelKey: 'tab.contractDiff', icon: GitCompare },
+      { id: 'cloud-contract', labelKey: 'tab.cloudContract', icon: GitCompare },
     ]
   },
   {
@@ -262,6 +263,8 @@ const cloudNavItemIds = new Set([
   // Cloud flows — versioned scenario / state-machine / orchestration /
   // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
   'cloud-flows',
+  // Cloud contract diff + verification via cloudContractApi.
+  'cloud-contract',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
