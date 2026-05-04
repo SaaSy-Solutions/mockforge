@@ -210,17 +210,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // For now, serve without TLS but with TLS configuration validated
             // In production, users should use a reverse proxy for TLS termination
-            axum::serve(listener, router).with_graceful_shutdown(shutdown_signal()).await?;
+            axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
         } else {
-            axum::serve(listener, router).with_graceful_shutdown(shutdown_signal()).await?;
+            axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
         }
     } else {
-        axum::serve(listener, router).with_graceful_shutdown(shutdown_signal()).await?;
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
     }
 
     #[cfg(not(feature = "rustls"))]
     {
-        axum::serve(listener, router).with_graceful_shutdown(shutdown_signal()).await?;
+        axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
     }
 
     info!("Server shutdown complete");
