@@ -37,9 +37,9 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-800">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted">
         <div className="animate-pulse">
-          <div className="w-16 h-4 bg-gray-300 dark:bg-gray-600 rounded"></div>
+          <div className="w-16 h-4 bg-muted rounded"></div>
         </div>
       </div>
     );
@@ -47,7 +47,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
 
   if (!activeEnvironment) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted text-muted-foreground">
         <span className="text-sm">No Environment</span>
       </div>
     );
@@ -64,7 +64,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
             style={{ backgroundColor: activeEnvironment.color.hex }}
           />
         )}
-        <span className="text-xs text-gray-600 dark:text-gray-400">
+        <span className="text-xs text-muted-foreground">
           {activeEnvironment.name}
         </span>
       </div>
@@ -76,7 +76,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground"
         >
           {activeEnvironment.color && (
             <div
@@ -84,13 +84,13 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
               style={{ backgroundColor: activeEnvironment.color.hex }}
             />
           )}
-          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          <span className="text-sm font-medium text-foreground">
             {activeEnvironment.name}
           </span>
           {activeEnvironment.is_global && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">(Global)</span>
+            <span className="text-xs text-muted-foreground">(Global)</span>
           )}
-          <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
 
@@ -105,7 +105,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
           )}
           <span className="font-medium">{activeEnvironment.name}</span>
           {activeEnvironment.is_global && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">(Global)</span>
+            <span className="text-xs text-muted-foreground">(Global)</span>
           )}
         </DropdownMenuItem>
 
@@ -127,7 +127,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
                 )}
                 <span>{environment.name}</span>
                 {environment.is_global && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">(Global)</span>
+                  <span className="text-xs text-muted-foreground">(Global)</span>
                 )}
               </DropdownMenuItem>
             ))}
@@ -135,7 +135,7 @@ export function EnvironmentIndicator({ workspaceId, compact = false }: Environme
         )}
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled className="text-xs text-gray-500 dark:text-gray-400">
+        <DropdownMenuItem disabled className="text-xs text-muted-foreground">
           {availableEnvironments.length} environment{availableEnvironments.length !== 1 ? 's' : ''} available
         </DropdownMenuItem>
       </DropdownMenuContent>

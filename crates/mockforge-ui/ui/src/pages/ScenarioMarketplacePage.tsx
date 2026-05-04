@@ -43,8 +43,8 @@ import {
   Launch as LaunchIcon,
   DeleteForever as YankIcon,
 } from '@mui/icons-material';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
+import { IconButton } from '@mui/material';
+import { Tooltip } from '@mui/material';
 import { PublishScenarioModal } from '../components/marketplace/PublishScenarioModal';
 import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
 import { authenticatedFetch } from '../utils/apiClient';

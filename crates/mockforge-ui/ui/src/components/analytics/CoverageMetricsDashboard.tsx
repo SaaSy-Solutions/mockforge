@@ -36,16 +36,16 @@ export const CoverageMetricsDashboard: React.FC<CoverageMetricsDashboardProps> =
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Coverage Metrics Dashboard
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Track scenario usage, test coverage, and mock health across your workspaces
           </p>
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
         >
           <Filter className="h-4 w-4" />
           <span>Filters</span>
@@ -57,7 +57,7 @@ export const CoverageMetricsDashboard: React.FC<CoverageMetricsDashboardProps> =
         <Card className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Minimum Coverage (%)
               </label>
               <input
@@ -69,11 +69,11 @@ export const CoverageMetricsDashboard: React.FC<CoverageMetricsDashboardProps> =
                   setMinCoverage(e.target.value ? parseFloat(e.target.value) : undefined)
                 }
                 placeholder="Show only endpoints below this coverage"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Max Staleness (days)
               </label>
               <input
@@ -84,7 +84,7 @@ export const CoverageMetricsDashboard: React.FC<CoverageMetricsDashboardProps> =
                   setMaxStalenessDays(e.target.value ? parseInt(e.target.value) : undefined)
                 }
                 placeholder="Show only items exceeding this threshold"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
               />
             </div>
           </div>
@@ -94,8 +94,8 @@ export const CoverageMetricsDashboard: React.FC<CoverageMetricsDashboardProps> =
       {/* Drift Percentage - Prominent Display */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <DriftPercentageDashboard workspaceId={workspaceId} orgId={orgId} />
-        <div className="flex items-center justify-center p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-          <div className="text-center text-gray-400">
+        <div className="flex items-center justify-center p-6 border-2 border-dashed border-border rounded-lg">
+          <div className="text-center text-muted-foreground">
             <BarChart3 className="h-12 w-12 mx-auto mb-2 opacity-50" />
             <p className="text-sm">Additional metrics placeholder</p>
           </div>

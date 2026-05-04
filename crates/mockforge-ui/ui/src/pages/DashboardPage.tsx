@@ -198,7 +198,7 @@ export function DashboardPage() {
         action={
           <div className="flex items-center gap-3 text-sm">
             {/* WebSocket connection indicator */}
-            <div className={`flex items-center gap-1.5 ${wsConnected ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'}`}>
+            <div className={`flex items-center gap-1.5 ${wsConnected ? 'text-success-600 dark:text-success-400' : 'text-muted-foreground'}`}>
               {wsConnected ? (
                 <Wifi className="h-3.5 w-3.5" />
               ) : (
@@ -208,14 +208,14 @@ export function DashboardPage() {
                 {wsConnected ? 'Streaming' : 'Polling'}
               </span>
             </div>
-            <div className="relative flex items-center gap-2 text-green-600 dark:text-green-400">
+            <div className="relative flex items-center gap-2 text-success-600 dark:text-success-400">
               <div className="relative">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <div className="absolute inset-0 w-2 h-2 rounded-full bg-green-500 animate-ping opacity-75" />
+                <div className="w-2 h-2 rounded-full bg-success-500 animate-pulse" />
+                <div className="absolute inset-0 w-2 h-2 rounded-full bg-success-500 animate-ping opacity-75" />
               </div>
               <span className="font-medium">Live</span>
               {isFetching && !wsConnected && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">(updating...)</span>
+                <span className="text-xs text-muted-foreground ml-1">(updating...)</span>
               )}
             </div>
           </div>
@@ -255,7 +255,7 @@ export function DashboardPage() {
         {/* Failure Counters */}
         <div className="divider-soft my-8"></div>
         <div className="visual-group">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Response Status Distribution</h3>
+          <h3 className="text-lg font-bold text-foreground mb-4">Response Status Distribution</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 grid-gap-md">
           <MetricCard
             title="Success Responses"
@@ -299,13 +299,13 @@ export function DashboardPage() {
              />
           ) : (
             <div className="text-center py-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 mb-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
                 <MetricIcon metric="performance" size="2xl" />
               </div>
-              <div className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+              <div className="text-lg font-medium text-foreground mb-2">
                 No Latency Data Available
               </div>
-              <p className="text-gray-600 dark:text-gray-400">
+              <p className="text-muted-foreground">
                 Latency metrics will appear here once requests have been processed.
               </p>
             </div>
@@ -345,17 +345,17 @@ export function DashboardPage() {
             title="All Systems Operational"
             message="MockForge is running normally with all services active."
           />
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+          <div className="bg-card border border-border rounded-xl p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Version</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <h3 className="font-semibold text-foreground">Version</h3>
+                <p className="text-sm text-muted-foreground mt-1">
                   {system.version}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Routes</p>
-                <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                <p className="text-sm text-muted-foreground">Routes</p>
+                <p className="text-lg font-semibold text-foreground">
                   {system.total_routes}
                 </p>
               </div>

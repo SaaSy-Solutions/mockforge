@@ -64,10 +64,10 @@ export const AnalyticsDashboardV2: React.FC = () => {
       {/* Header with title and controls */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Analytics Dashboard
           </h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Comprehensive traffic analytics and metrics visualization
           </p>
         </div>
@@ -75,15 +75,15 @@ export const AnalyticsDashboardV2: React.FC = () => {
         <div className="flex items-center gap-4">
           {/* Live updates toggle */}
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label className="text-sm font-medium text-foreground">
               Live Updates
             </label>
             <button
               onClick={() => setLiveUpdatesEnabled(!liveUpdatesEnabled)}
               className={`
                 relative inline-flex h-6 w-11 items-center rounded-full
-                transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                ${liveUpdatesEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}
+                transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
+                ${liveUpdatesEnabled ? 'bg-primary' : 'bg-muted'}
               `}
             >
               <span
@@ -94,8 +94,8 @@ export const AnalyticsDashboardV2: React.FC = () => {
               />
             </button>
             {isConnected && (
-              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                <span className="h-2 w-2 rounded-full bg-green-600 animate-pulse" />
+              <span className="flex items-center gap-1 text-xs text-success-600 dark:text-success-400">
+                <span className="h-2 w-2 rounded-full bg-success-600 animate-pulse" />
                 Connected
               </span>
             )}
@@ -111,8 +111,8 @@ export const AnalyticsDashboardV2: React.FC = () => {
 
       {/* Error display */}
       {error && (
-        <Card className="p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-600 dark:text-red-400">
+        <Card className="p-4 bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+          <p className="text-sm text-danger-600 dark:text-danger-400">
             Error loading analytics: {error.message}
           </p>
         </Card>
@@ -120,8 +120,8 @@ export const AnalyticsDashboardV2: React.FC = () => {
 
       {/* WebSocket error display */}
       {wsError && liveUpdatesEnabled && (
-        <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
-          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+        <Card className="p-4 bg-warning-50 dark:bg-warning-900/20 border-warning-200 dark:border-warning-800">
+          <p className="text-sm text-warning-600 dark:text-warning-400">
             Live updates unavailable: {wsError}
           </p>
         </Card>

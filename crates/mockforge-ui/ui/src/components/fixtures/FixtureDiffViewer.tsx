@@ -14,11 +14,11 @@ export function FixtureDiffViewer({ diff, onClose, onApply }: FixtureDiffViewerP
     const getLineStyle = (type: DiffChange['type']) => {
       switch (type) {
         case 'add':
-          return 'bg-green-50 border-l-4 border-green-500 text-green-800';
+          return 'bg-success-50 border-l-4 border-success text-success-700';
         case 'remove':
-          return 'bg-red-50 border-l-4 border-red-500 text-red-800';
+          return 'bg-danger-50 border-l-4 border-destructive text-danger-700';
         case 'modify':
-          return 'bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800';
+          return 'bg-warning-50 border-l-4 border-warning text-warning-700';
         default:
           return '';
       }
@@ -47,7 +47,7 @@ export function FixtureDiffViewer({ diff, onClose, onApply }: FixtureDiffViewerP
         </span>
         <span>{change.content}</span>
         {change.type === 'modify' && change.old_content && (
-          <div className="mt-1 pl-20 text-red-600">
+          <div className="mt-1 pl-20 text-danger-600">
             <span className="inline-block w-8 text-center">-</span>
             <span>{change.old_content}</span>
           </div>
@@ -68,9 +68,9 @@ export function FixtureDiffViewer({ diff, onClose, onApply }: FixtureDiffViewerP
           <div>
             <h2 className="text-lg font-semibold">Fixture Diff: {diff.name}</h2>
             <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
-              <span className="text-green-600">+{addedLines} added</span>
-              <span className="text-red-600">-{removedLines} removed</span>
-              <span className="text-yellow-600">~{modifiedLines} modified</span>
+              <span className="text-success-600">+{addedLines} added</span>
+              <span className="text-danger-600">-{removedLines} removed</span>
+              <span className="text-warning-600">~{modifiedLines} modified</span>
               <span>• {new Date(diff.timestamp).toLocaleString()}</span>
             </div>
           </div>
@@ -104,9 +104,9 @@ export function FixtureDiffViewer({ diff, onClose, onApply }: FixtureDiffViewerP
           <div className="text-xs text-muted-foreground">
             <div className="flex items-center space-x-4">
               <span>Legend:</span>
-              <span className="text-green-600">+ Added lines</span>
-              <span className="text-red-600">- Removed lines</span>
-              <span className="text-yellow-600">~ Modified lines</span>
+              <span className="text-success-600">+ Added lines</span>
+              <span className="text-danger-600">- Removed lines</span>
+              <span className="text-warning-600">~ Modified lines</span>
             </div>
           </div>
         </div>

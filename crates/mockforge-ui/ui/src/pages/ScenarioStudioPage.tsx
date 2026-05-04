@@ -6,18 +6,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+  MarkerType,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  Connection,
   NodeTypes,
   ReactFlowInstance,
-  MarkerType,
 } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
@@ -487,7 +489,7 @@ export function ScenarioStudioPage() {
   return (
     <div className="flex h-[calc(100vh-120px)]">
       {/* Flow List Sidebar */}
-      <div className="w-80 border-r bg-white dark:bg-gray-800 flex flex-col">
+      <div className="w-80 border-r bg-card flex flex-col">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold mb-4">Scenario Studio</h2>
           <Button
@@ -593,7 +595,7 @@ export function ScenarioStudioPage() {
         {selectedFlow ? (
           <>
             {/* Toolbar */}
-            <div className="flex items-center justify-between p-4 border-b bg-white dark:bg-gray-800">
+            <div className="flex items-center justify-between p-4 border-b bg-card">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold">{selectedFlow.name}</h3>
                 <span className="text-sm text-muted-foreground">
@@ -643,7 +645,7 @@ export function ScenarioStudioPage() {
                 nodeTypes={nodeTypes}
                 fitView
                 attributionPosition="bottom-left"
-                className="bg-gray-50 dark:bg-gray-900"
+                className="bg-muted"
               >
                 <Background />
                 <Controls />

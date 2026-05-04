@@ -378,7 +378,7 @@ export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
     return React.createElement('div', { className: 'space-y-4' }, [
       React.createElement('h3', {
         key: 'title',
-        className: 'text-xl font-bold text-gray-900 dark:text-gray-100'
+        className: 'text-xl font-bold text-foreground'
       }, 'Keyboard Shortcuts'),
       React.createElement('div', {
         key: 'content',
@@ -392,7 +392,7 @@ export function useShortcutsHelp(shortcuts: KeyboardShortcut[]) {
           }, [
             React.createElement('span', {
               key: 'desc',
-              className: 'text-base text-gray-600 dark:text-gray-400'
+              className: 'text-base text-muted-foreground'
             }, shortcut.description),
             React.createElement('kbd', {
               key: 'kbd',

@@ -49,7 +49,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filter }) => {
       <button
         onClick={() => setShowMenu(!showMenu)}
         disabled={isExporting}
-        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+        className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted text-white rounded-lg transition-colors"
       >
         <Download className="h-4 w-4" />
         {isExporting ? 'Exporting...' : 'Export'}
@@ -61,16 +61,16 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filter }) => {
             className="fixed inset-0 z-10"
             onClick={() => setShowMenu(false)}
           />
-          <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20">
+          <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border z-20">
             <button
               onClick={handleExportCSV}
-              className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg"
+              className="w-full px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-t-lg"
             >
               Export as CSV
             </button>
             <button
               onClick={handleExportJSON}
-              className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 rounded-b-lg"
+              className="w-full px-4 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-b-lg"
             >
               Export as JSON
             </button>

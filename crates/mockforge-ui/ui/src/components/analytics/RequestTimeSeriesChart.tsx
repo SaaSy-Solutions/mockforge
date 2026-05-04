@@ -7,6 +7,7 @@ import { Line } from 'react-chartjs-2';
 import { Card } from '../ui/Card';
 import { useRequestTimeSeries, type AnalyticsFilter } from '@/hooks/useAnalyticsV2';
 import { Activity } from 'lucide-react';
+import { getSeriesPalette } from '../../utils/chartTheme';
 
 interface RequestTimeSeriesChartProps {
   filter?: AnalyticsFilter;
@@ -19,11 +20,11 @@ export const RequestTimeSeriesChart: React.FC<RequestTimeSeriesChartProps> = ({ 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Activity className="h-5 w-5 text-gray-400" />
+          <Activity className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Request Rate</h3>
         </div>
         <div className="h-80 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading...</div>
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       </Card>
     );
@@ -33,10 +34,10 @@ export const RequestTimeSeriesChart: React.FC<RequestTimeSeriesChartProps> = ({ 
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Activity className="h-5 w-5 text-gray-400" />
+          <Activity className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Request Rate</h3>
         </div>
-        <div className="h-80 flex items-center justify-center text-gray-400">
+        <div className="h-80 flex items-center justify-center text-muted-foreground">
           {error ? 'Error loading data' : 'No data available'}
         </div>
       </Card>
@@ -52,13 +53,7 @@ export const RequestTimeSeriesChart: React.FC<RequestTimeSeriesChartProps> = ({ 
       })
     ) || [];
 
-  const colors = [
-    { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' }, // blue
-    { border: 'rgb(34, 197, 94)', bg: 'rgba(34, 197, 94, 0.1)' }, // green
-    { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }, // purple
-    { border: 'rgb(245, 158, 11)', bg: 'rgba(245, 158, 11, 0.1)' }, // orange
-    { border: 'rgb(236, 72, 153)', bg: 'rgba(236, 72, 153, 0.1)' }, // pink
-  ];
+  const colors = getSeriesPalette();
 
   const chartData = {
     labels: timestamps,
@@ -133,10 +128,10 @@ export const RequestTimeSeriesChart: React.FC<RequestTimeSeriesChartProps> = ({ 
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <Activity className="h-5 w-5 text-info-600 dark:text-info-400" />
           <h3 className="text-lg font-semibold">Request Rate by Protocol</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           Total: {totalRequests.toFixed(0)} requests
         </div>
       </div>

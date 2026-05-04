@@ -88,13 +88,13 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-card">
         <DialogHeader className="space-y-2">
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
+          <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <Settings className="h-5 w-5" />
             Preferences
           </DialogTitle>
-          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
             Customize your experience with MockForge
           </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -102,24 +102,24 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
         <TabsProvider value={activeTab} onValueChange={setActiveTab}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 bg-gray-100 dark:bg-gray-800">
-              <TabsTrigger value="theme" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+            <TabsList className="grid w-full grid-cols-5 bg-muted">
+              <TabsTrigger value="theme" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Palette className="h-4 w-4" />
                 <span className="hidden sm:inline">Theme</span>
               </TabsTrigger>
-              <TabsTrigger value="logs" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="logs" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline">Logs</span>
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="notifications" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Bell className="h-4 w-4" />
                 <span className="hidden sm:inline">Notifications</span>
               </TabsTrigger>
-              <TabsTrigger value="search" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="search" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Search className="h-4 w-4" />
                 <span className="hidden sm:inline">Search</span>
               </TabsTrigger>
-              <TabsTrigger value="ui" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="ui" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Settings className="h-4 w-4" />
                 <span className="hidden sm:inline">UI</span>
               </TabsTrigger>
@@ -128,7 +128,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
             <TabsContent value="theme" className="space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
+                  <label className="text-sm font-medium text-foreground mb-3 block">
                     Theme Mode
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -142,7 +142,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                         className={`flex items-center gap-2 p-3 rounded-lg border transition-all ${
                           preferences.theme.theme === value
                             ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
-                            : 'border-gray-300 dark:border-gray-600 hover:border-orange-300 dark:hover:border-orange-600 text-gray-700 dark:text-gray-300'
+                            : 'border-border hover:border-orange-300 dark:hover:border-orange-600 text-foreground'
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -153,7 +153,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
+                  <label className="text-sm font-medium text-foreground mb-3 block">
                     Accent Color
                   </label>
                   <div className="flex gap-2">
@@ -164,7 +164,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                         className={`w-8 h-8 rounded-full border-2 transition-all ${
                           preferences.theme.accentColor === value
                             ? 'border-gray-900 dark:border-gray-100 scale-110 shadow-lg'
-                            : 'border-gray-300 dark:border-gray-600 hover:scale-105'
+                            : 'border-border hover:scale-105'
                         }`}
                         style={{ backgroundColor: swatch }}
                         title={label}
@@ -176,10 +176,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       High Contrast
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Increase contrast for better accessibility
                     </p>
                   </div>
@@ -195,10 +195,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Auto-scroll
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Automatically scroll to new log entries
                     </p>
                   </div>
@@ -210,10 +210,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Pause on Error
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Pause log streaming when errors occur
                     </p>
                   </div>
@@ -225,10 +225,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Show Timestamps
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Display timestamps in log entries
                     </p>
                   </div>
@@ -240,10 +240,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Compact View
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Use compact layout for log entries
                     </p>
                   </div>
@@ -254,7 +254,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
                     Default Time Range (hours)
                   </label>
                   <Input
@@ -263,12 +263,12 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="168"
                     value={preferences.logs.defaultTimeRange}
                     onChange={(e) => updateLogs({ defaultTimeRange: parseInt(e.target.value) || 24 })}
-                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="w-24 bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
                     Items Per Page
                   </label>
                   <Input
@@ -278,7 +278,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     step="10"
                     value={preferences.logs.itemsPerPage}
                     onChange={(e) => updateLogs({ itemsPerPage: parseInt(e.target.value) || 100 })}
-                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="w-24 bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
               </div>
@@ -288,10 +288,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Enable Sounds
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Play notification sounds
                     </p>
                   </div>
@@ -303,10 +303,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Show Toasts
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Display toast notifications
                     </p>
                   </div>
@@ -318,10 +318,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Notify on Errors
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Show notifications for error events
                     </p>
                   </div>
@@ -333,10 +333,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Notify on Success
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Show notifications for successful operations
                     </p>
                   </div>
@@ -347,7 +347,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
                     Toast Duration (seconds)
                   </label>
                   <Input
@@ -356,7 +356,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="30"
                     value={preferences.notifications.toastDuration}
                     onChange={(e) => updateNotifications({ toastDuration: parseInt(e.target.value) || 5 })}
-                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="w-24 bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
               </div>
@@ -365,7 +365,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
             <TabsContent value="search" className="space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 block">
+                  <label className="text-sm font-medium text-foreground mb-3 block">
                     Default Search Scope
                   </label>
                   <div className="grid grid-cols-2 gap-2">
@@ -392,10 +392,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Case Sensitive
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Match case in search queries
                     </p>
                   </div>
@@ -407,10 +407,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Regex Enabled
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Allow regular expressions in search
                     </p>
                   </div>
@@ -421,7 +421,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
                     Max History Items
                   </label>
                   <Input
@@ -430,7 +430,7 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                     max="50"
                     value={preferences.search.maxHistoryItems}
                     onChange={(e) => updateSearch({ maxHistoryItems: parseInt(e.target.value) || 10 })}
-                    className="w-24 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                    className="w-24 bg-card text-foreground placeholder:text-muted-foreground dark:placeholder:text-muted-foreground"
                   />
                 </div>
               </div>
@@ -440,10 +440,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Sidebar Collapsed
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Start with collapsed sidebar
                     </p>
                   </div>
@@ -455,10 +455,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Confirm Delete
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Show confirmation dialogs for delete actions
                     </p>
                   </div>
@@ -470,10 +470,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Auto-save
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Automatically save changes
                     </p>
                   </div>
@@ -485,10 +485,10 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <label className="text-sm font-medium text-foreground">
                       Keyboard Shortcuts
                     </label>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                    <p className="text-xs text-muted-foreground">
                       Enable keyboard shortcuts
                     </p>
                   </div>
@@ -499,13 +499,13 @@ export function Preferences({ open, onOpenChange }: PreferencesProps) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 block">
+                  <label className="text-sm font-medium text-foreground mb-2 block">
                     Default Page
                   </label>
                   <select
                     value={preferences.ui.defaultPage}
                     onChange={(e) => updateUI({ defaultPage: e.target.value })}
-                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    className="w-full p-2 border border-border rounded-md bg-card text-foreground"
                   >
                     <option value="dashboard">Dashboard</option>
                     <option value="services">Services</option>

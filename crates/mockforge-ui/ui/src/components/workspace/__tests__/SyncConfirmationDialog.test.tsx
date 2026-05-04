@@ -290,13 +290,13 @@ describe('SyncConfirmationDialog', () => {
       />
     );
 
-    const greenIcons = document.querySelectorAll('.text-green-500');
+    const greenIcons = document.querySelectorAll('.text-success-500');
     expect(greenIcons.length).toBeGreaterThan(0); // created
 
-    const blueIcons = document.querySelectorAll('.text-blue-500');
+    const blueIcons = document.querySelectorAll('.text-info-500');
     expect(blueIcons.length).toBeGreaterThan(0); // modified
 
-    const redIcons = document.querySelectorAll('.text-red-500');
+    const redIcons = document.querySelectorAll('.text-danger-500');
     expect(redIcons.length).toBeGreaterThan(0); // deleted
   });
 

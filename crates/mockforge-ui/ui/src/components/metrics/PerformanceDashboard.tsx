@@ -51,8 +51,8 @@ export function PerformanceDashboard() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading performance metrics...</p>
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-info-600 mb-4"></div>
+          <p className="text-muted-foreground">Loading performance metrics...</p>
         </div>
       </div>
     );
@@ -75,8 +75,8 @@ export function PerformanceDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Performance Dashboard</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <h2 className="text-2xl font-bold text-foreground">Performance Dashboard</h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Real-time latency analysis and performance metrics
           </p>
         </div>
@@ -170,14 +170,14 @@ function PercentileChart({ percentiles }: { percentiles: Record<string, number> 
         return (
           <div key={key} className="space-y-1">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-700 dark:text-gray-300">
+              <span className="font-medium text-foreground">
                 {percentileLabels[key]}
               </span>
-              <span className="text-gray-600 dark:text-gray-400 font-mono">
+              <span className="text-muted-foreground font-mono">
                 {value}ms
               </span>
             </div>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+            <div className="w-full bg-muted rounded-full h-3">
               <div
                 className={`h-3 rounded-full transition-all duration-500 ${color}`}
                 style={{ width: `${percentage}%` }}
@@ -196,7 +196,7 @@ function PercentileChart({ percentiles }: { percentiles: Record<string, number> 
  */
 function LatencyTimeSeriesChart({ data }: { data: Array<[string, number]> }) {
   if (data.length === 0) {
-    return <p className="text-sm text-gray-500 dark:text-gray-400">No latency data available</p>;
+    return <p className="text-sm text-muted-foreground">No latency data available</p>;
   }
 
   // Convert timestamps to Date objects and extract values
@@ -223,7 +223,7 @@ function LatencyTimeSeriesChart({ data }: { data: Array<[string, number]> }) {
           return (
             <div
               key={index}
-              className="flex-1 bg-blue-500 hover:bg-blue-600 rounded-t-sm transition-all duration-300 cursor-pointer"
+              className="flex-1 bg-info-500 hover:bg-primary rounded-t-sm transition-all duration-300 cursor-pointer"
               style={{
                 height: `${height}%`,
                 minHeight: '2px',
@@ -233,11 +233,11 @@ function LatencyTimeSeriesChart({ data }: { data: Array<[string, number]> }) {
           );
         })}
       </div>
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex justify-between text-xs text-muted-foreground">
         <span>{displayPoints[0]?.time.toLocaleTimeString() || ''}</span>
         <span>{displayPoints[displayPoints.length - 1]?.time.toLocaleTimeString() || ''}</span>
       </div>
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex justify-between text-xs text-muted-foreground">
         <span>Min: {min}ms</span>
         <span>Max: {max}ms</span>
         <span>Avg: {Math.round(values.reduce((a, b) => a + b, 0) / values.length)}ms</span>
@@ -265,13 +265,13 @@ function EndpointPerformanceTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700">
-            <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Endpoint</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Requests</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">P50</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">P95</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">P99</th>
-            <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Error Rate</th>
+          <tr className="border-b border-border">
+            <th className="text-left py-3 px-4 font-semibold text-foreground">Endpoint</th>
+            <th className="text-right py-3 px-4 font-semibold text-foreground">Requests</th>
+            <th className="text-right py-3 px-4 font-semibold text-foreground">P50</th>
+            <th className="text-right py-3 px-4 font-semibold text-foreground">P95</th>
+            <th className="text-right py-3 px-4 font-semibold text-foreground">P99</th>
+            <th className="text-right py-3 px-4 font-semibold text-foreground">Error Rate</th>
           </tr>
         </thead>
         <tbody>
@@ -283,31 +283,31 @@ function EndpointPerformanceTable({
             return (
               <tr
                 key={endpoint}
-                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                className="border-b border-border hover:bg-accent hover:text-accent-foreground/50"
               >
-                <td className="py-3 px-4 font-mono text-xs text-gray-900 dark:text-gray-100">
+                <td className="py-3 px-4 font-mono text-xs text-foreground">
                   {endpoint}
                 </td>
-                <td className="py-3 px-4 text-right text-gray-700 dark:text-gray-300">
+                <td className="py-3 px-4 text-right text-foreground">
                   {requestCount.toLocaleString()}
                 </td>
-                <td className="py-3 px-4 text-right font-mono text-gray-700 dark:text-gray-300">
+                <td className="py-3 px-4 text-right font-mono text-foreground">
                   {percentiles.p50 || 0}ms
                 </td>
-                <td className="py-3 px-4 text-right font-mono text-gray-700 dark:text-gray-300">
+                <td className="py-3 px-4 text-right font-mono text-foreground">
                   {percentiles.p95 || 0}ms
                 </td>
-                <td className="py-3 px-4 text-right font-mono text-gray-700 dark:text-gray-300">
+                <td className="py-3 px-4 text-right font-mono text-foreground">
                   {percentiles.p99 || 0}ms
                 </td>
                 <td className="py-3 px-4 text-right">
                   <span
                     className={`font-medium ${
                       errorRate < 1
-                        ? 'text-green-600 dark:text-green-400'
+                        ? 'text-success-600 dark:text-success-400'
                         : errorRate < 5
-                        ? 'text-yellow-600 dark:text-yellow-400'
-                        : 'text-red-600 dark:text-red-400'
+                        ? 'text-warning-600 dark:text-warning-400'
+                        : 'text-danger-600 dark:text-danger-400'
                     }`}
                   >
                     {errorRate.toFixed(2)}%
@@ -327,11 +327,11 @@ function EndpointPerformanceTable({
  */
 function getPercentileColor(percentile: string): string {
   const colors: Record<string, string> = {
-    p50: 'bg-green-500',
-    p75: 'bg-blue-500',
-    p90: 'bg-yellow-500',
+    p50: 'bg-success-500',
+    p75: 'bg-info-500',
+    p90: 'bg-warning-500',
     p95: 'bg-orange-500',
-    p99: 'bg-red-500',
+    p99: 'bg-danger-500',
     p999: 'bg-purple-500',
   };
   return colors[percentile] || 'bg-gray-500';

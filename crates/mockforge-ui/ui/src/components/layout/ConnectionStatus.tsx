@@ -26,27 +26,27 @@ interface ConnectionStatusProps {
 
 const stateConfig: Record<ConnectionState, { color: string; label: string; icon: 'wifi' | 'wifi-off' | 'loader' | 'cloud' }> = {
   connected: {
-    color: 'bg-green-500',
+    color: 'bg-success-500',
     label: 'Connected',
     icon: 'wifi',
   },
   connecting: {
-    color: 'bg-yellow-500',
+    color: 'bg-warning-500',
     label: 'Connecting...',
     icon: 'loader',
   },
   reconnecting: {
-    color: 'bg-yellow-500',
+    color: 'bg-warning-500',
     label: 'Reconnecting...',
     icon: 'loader',
   },
   disconnected: {
-    color: 'bg-red-500',
+    color: 'bg-danger-500',
     label: 'Disconnected',
     icon: 'wifi-off',
   },
   cloud: {
-    color: 'bg-blue-500',
+    color: 'bg-info-500',
     label: 'Cloud',
     icon: 'cloud',
   },
@@ -79,7 +79,7 @@ export function ConnectionStatus({
         <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', config.color)} />
       </span>
       {showLabel && (
-        <span className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
           <Icon className={cn('h-3 w-3', (state === 'connecting' || state === 'reconnecting') && 'animate-spin')} />
           {config.label}
         </span>

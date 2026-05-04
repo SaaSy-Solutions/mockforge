@@ -11,6 +11,7 @@ import { useThemePaletteStore } from './stores/useThemePaletteStore'
 import { registerServiceWorker, unregisterServiceWorker } from './utils/serviceWorker'
 import { I18nProvider } from './i18n/I18nProvider'
 import { initErrorReporting } from './services/errorReporting'
+import { initChartTheme } from './utils/chartTheme'
 
 // Lazy load React Query DevTools only in development
 const ReactQueryDevtools = import.meta.env.DEV
@@ -23,6 +24,10 @@ const ReactQueryDevtools = import.meta.env.DEV
 
 // Initialize theme store
 useThemePaletteStore.getState().init();
+// Bridge brand tokens into Chart.js global defaults — must run after the
+// palette store has applied its initial CSS vars so the first chart paint
+// already uses brand colors.
+initChartTheme();
 void initErrorReporting();
 
 // Always unregister service workers in dev to prevent stale cache issues

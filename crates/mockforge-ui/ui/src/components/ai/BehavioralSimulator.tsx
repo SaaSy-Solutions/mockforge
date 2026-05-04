@@ -257,17 +257,17 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
   const getIntentionColor = (intention: string) => {
     switch (intention.toLowerCase()) {
       case 'browse':
-        return 'text-blue-600 dark:text-blue-400';
+        return 'text-info-600 dark:text-info-400';
       case 'shop':
-        return 'text-green-600 dark:text-green-400';
+        return 'text-success-600 dark:text-success-400';
       case 'buy':
         return 'text-purple-600 dark:text-purple-400';
       case 'abandon':
-        return 'text-red-600 dark:text-red-400';
+        return 'text-danger-600 dark:text-danger-400';
       case 'retry':
-        return 'text-yellow-600 dark:text-yellow-400';
+        return 'text-warning-600 dark:text-warning-400';
       default:
-        return 'text-gray-600 dark:text-gray-400';
+        return 'text-muted-foreground';
     }
   };
 
@@ -308,7 +308,7 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
                 placeholder="existing-persona-123"
                 className="mt-2"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Attach to existing persona (primary mode)
               </p>
             </div>
@@ -369,7 +369,7 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
           </h3>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {agents.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+              <p className="text-sm text-muted-foreground text-center py-4">
                 No agents created yet
               </p>
             ) : (
@@ -378,15 +378,15 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
                   key={agent.agent_id}
                   className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                     selectedAgent === agent.agent_id
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'border-info bg-info-50 dark:bg-info-900/20'
+                      : 'border-border hover:bg-accent hover:text-accent-foreground'
                   }`}
                   onClick={() => setSelectedAgent(agent.agent_id)}
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium text-sm">{agent.agent_id.substring(0, 16)}...</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         Persona: {agent.persona_id.substring(0, 16)}...
                       </div>
                     </div>
@@ -394,7 +394,7 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
                       <div className={`text-xs font-medium ${getIntentionColor(agent.current_intention)}`}>
                         {agent.current_intention}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         {agent.session_history.length} interactions
                       </div>
                     </div>
@@ -469,7 +469,7 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Cart</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="text-sm text-muted-foreground">
                   {selectedAgentData.state_awareness.cart.is_empty
                     ? 'Empty'
                     : `${selectedAgentData.state_awareness.cart.item_count} items, $${selectedAgentData.state_awareness.cart.total_value.toFixed(2)}`}
@@ -477,7 +477,7 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Recent Errors</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="text-sm text-muted-foreground">
                   {selectedAgentData.state_awareness.recent_errors.length} errors
                 </div>
               </div>
@@ -498,13 +498,13 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
             <div className="space-y-3">
               <div>
                 <div className="text-sm font-medium mb-1">Policy Type</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 capitalize">
+                <div className="text-sm text-muted-foreground capitalize">
                   {selectedAgentData.behavior_policy.policy_type.replace('-', ' ')}
                 </div>
               </div>
               <div>
                 <div className="text-sm font-medium mb-1">Description</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+                <div className="text-sm text-muted-foreground">
                   {selectedAgentData.behavior_policy.description}
                 </div>
               </div>
@@ -513,9 +513,9 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
                   <div className="text-sm font-medium mb-2">Rules</div>
                   <div className="space-y-1">
                     {selectedAgentData.behavior_policy.rules.map((rule, idx) => (
-                      <div key={idx} className="text-xs p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                      <div key={idx} className="text-xs p-2 bg-muted rounded">
                         <div className="font-medium">{rule.condition}</div>
-                        <div className="text-gray-600 dark:text-gray-400">→ {rule.action}</div>
+                        <div className="text-muted-foreground">→ {rule.action}</div>
                       </div>
                     ))}
                   </div>
@@ -537,14 +537,14 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
             {simulationHistory.map((sim, idx) => (
               <div
                 key={idx}
-                className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                className="p-4 border border-border rounded-lg"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center space-x-3">
                     {getActionIcon(sim.next_action.action_type)}
                     <div>
                       <div className="font-medium">{sim.next_action.action_type} {sim.next_action.target}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <div className="text-xs text-muted-foreground">
                         {new Date().toLocaleTimeString()}
                       </div>
                     </div>
@@ -553,11 +553,11 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
                     {sim.intention}
                   </div>
                 </div>
-                <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+                <div className="text-sm text-foreground mb-2">
                   {sim.reasoning}
                 </div>
                 {sim.tokens_used && (
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     Tokens: {sim.tokens_used.toLocaleString()} • Cost: ${sim.cost_usd?.toFixed(4) || '0.0000'}
                   </div>
                 )}

@@ -9,29 +9,29 @@ interface StateIndicatorProps {
 
 const stateConfig: Record<string, { color: string; icon: React.ReactNode; bgColor: string }> = {
   pending: {
-    color: 'text-yellow-600',
+    color: 'text-warning-600',
     icon: <Clock className="h-4 w-4" />,
-    bgColor: 'bg-yellow-100 dark:bg-yellow-900',
+    bgColor: 'bg-warning-100 dark:bg-warning-900',
   },
   active: {
-    color: 'text-green-600',
+    color: 'text-success-600',
     icon: <CheckCircle2 className="h-4 w-4" />,
-    bgColor: 'bg-green-100 dark:bg-green-900',
+    bgColor: 'bg-success-100 dark:bg-success-900',
   },
   inactive: {
     color: 'text-gray-600',
     icon: <XCircle className="h-4 w-4" />,
-    bgColor: 'bg-gray-100 dark:bg-gray-800',
+    bgColor: 'bg-muted',
   },
   error: {
-    color: 'text-red-600',
+    color: 'text-danger-600',
     icon: <AlertCircle className="h-4 w-4" />,
-    bgColor: 'bg-red-100 dark:bg-red-900',
+    bgColor: 'bg-danger-100 dark:bg-danger-900',
   },
   processing: {
-    color: 'text-blue-600',
+    color: 'text-info-600',
     icon: <Loader2 className="h-4 w-4 animate-spin" />,
-    bgColor: 'bg-blue-100 dark:bg-blue-900',
+    bgColor: 'bg-info-100 dark:bg-info-900',
   },
 };
 

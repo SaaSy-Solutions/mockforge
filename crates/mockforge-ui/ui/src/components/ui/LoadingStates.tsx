@@ -78,9 +78,9 @@ export function LoadingState({
         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-brand/10 mb-4 pulse-subtle">
           <Icon icon={Icons.Activity} size="xl" color="brand" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
+        <h3 className="text-lg font-bold text-foreground mb-2">{title}</h3>
         {description && (
-          <p className="text-base text-gray-600 dark:text-gray-400 max-w-md mx-auto">{description}</p>
+          <p className="text-base text-muted-foreground max-w-md mx-auto">{description}</p>
         )}
       </div>
     );
@@ -89,9 +89,9 @@ export function LoadingState({
   return (
     <div className={cn('flex flex-col items-center justify-center text-center', sizeClasses[size], className)}>
       <Spinner size={size === 'sm' ? 'md' : size === 'md' ? 'lg' : 'xl'} className="mb-4" />
-      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
+      <h3 className="text-lg font-bold text-foreground mb-2">{title}</h3>
       {description && (
-        <p className="text-base text-gray-600 dark:text-gray-400 max-w-md">{description}</p>
+        <p className="text-base text-muted-foreground max-w-md">{description}</p>
       )}
     </div>
   );
@@ -139,14 +139,14 @@ export function EmptyState({
       sizeClasses[size],
       className
     )}>
-      <div className="p-4 rounded-full bg-gray-100 dark:bg-gray-800 mb-6 spring-in">
+      <div className="p-4 rounded-full bg-muted mb-6 spring-in">
         {icon || defaultIcon}
       </div>
-      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+      <h3 className="text-2xl font-bold text-foreground mb-3">
         {title}
       </h3>
       {description && (
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
+        <p className="text-lg text-muted-foreground mb-8 max-w-md">
           {description}
         </p>
       )}
@@ -195,20 +195,20 @@ export function ErrorState({
       sizeClasses[size],
       className
     )}>
-      <div className="p-4 rounded-full bg-red-50 dark:bg-red-900/20 mb-6 spring-in">
+      <div className="p-4 rounded-full bg-danger-50 dark:bg-danger-900/20 mb-6 spring-in">
         <StatusIcon status="error" size="3xl" />
       </div>
-      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+      <h3 className="text-2xl font-bold text-foreground mb-3">
         {title}
       </h3>
       <div className="space-y-3">
         {description && (
-          <p className="text-lg text-gray-600 dark:text-gray-400 max-w-md">
+          <p className="text-lg text-muted-foreground max-w-md">
             {description}
           </p>
         )}
         {errorMessage && (
-          <div className="text-sm font-mono text-red-700 dark:text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg p-3 max-w-md">
+          <div className="text-sm font-mono text-danger-700 dark:text-danger-500 bg-danger-50 dark:bg-danger-900/20 rounded-lg p-3 max-w-md">
             {errorMessage}
           </div>
         )}
@@ -257,14 +257,14 @@ export function SuccessState({
       sizeClasses[size],
       className
     )}>
-      <div className="p-4 rounded-full bg-green-50 dark:bg-green-900/20 mb-6 spring-bounce">
+      <div className="p-4 rounded-full bg-success-50 dark:bg-success-900/20 mb-6 spring-bounce">
         <StatusIcon status="success" size="3xl" />
       </div>
-      <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+      <h3 className="text-2xl font-bold text-foreground mb-3">
         {title}
       </h3>
       {description && (
-        <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 max-w-md">
+        <p className="text-lg text-muted-foreground mb-8 max-w-md">
           {description}
         </p>
       )}

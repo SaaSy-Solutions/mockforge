@@ -29,21 +29,21 @@ interface StatusResponse {
 function StatusIcon({ status }: { status: string }) {
   switch (status) {
     case 'operational':
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      return <CheckCircle2 className="h-5 w-5 text-success-500" />;
     case 'degraded':
-      return <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+      return <AlertTriangle className="h-5 w-5 text-warning-500" />;
     case 'down':
-      return <XCircle className="h-5 w-5 text-red-500" />;
+      return <XCircle className="h-5 w-5 text-danger-500" />;
     default:
-      return <Clock className="h-5 w-5 text-gray-500" />;
+      return <Clock className="h-5 w-5 text-muted-foreground" />;
   }
 }
 
 function StatusBadge({ status }: { status: string }) {
   const colors = {
-    operational: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    degraded: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    down: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+    operational: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300',
+    degraded: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300',
+    down: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300',
   };
 
   return (
@@ -83,8 +83,8 @@ export function StatusPage() {
   if (error) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <Alert className="bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-          <span className="text-red-800 dark:text-red-200">
+        <Alert className="bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+          <span className="text-danger-700 dark:text-danger-200">
             Failed to load status information. Please try again later.
           </span>
         </Alert>
@@ -181,7 +181,7 @@ export function StatusPage() {
         <CardContent>
           {incidents.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
+              <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-success-500" />
               <p>No incidents reported. All systems operational.</p>
             </div>
           ) : (

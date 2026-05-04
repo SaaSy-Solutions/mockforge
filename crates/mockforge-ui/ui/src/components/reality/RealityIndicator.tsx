@@ -19,24 +19,24 @@ const REALITY_LEVEL_CONFIG = [
     name: 'Static Stubs',
     icon: Shield,
     color: 'text-gray-500',
-    bgColor: 'bg-gray-100 dark:bg-gray-800',
-    borderColor: 'border-gray-300 dark:border-gray-700',
+    bgColor: 'bg-muted',
+    borderColor: 'border-border',
   },
   {
     value: 2,
     name: 'Light Simulation',
     icon: Activity,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-    borderColor: 'border-blue-300 dark:border-blue-700',
+    color: 'text-info-500',
+    bgColor: 'bg-info-50 dark:bg-info-900/20',
+    borderColor: 'border-info-300 dark:border-info-700',
   },
   {
     value: 3,
     name: 'Moderate Realism',
     icon: Gauge,
-    color: 'text-green-500',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
-    borderColor: 'border-green-300 dark:border-green-700',
+    color: 'text-success-500',
+    bgColor: 'bg-success-50 dark:bg-success-900/20',
+    borderColor: 'border-success-300 dark:border-success-700',
   },
   {
     value: 4,
@@ -50,9 +50,9 @@ const REALITY_LEVEL_CONFIG = [
     value: 5,
     name: 'Production Chaos',
     icon: Zap,
-    color: 'text-red-500',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
-    borderColor: 'border-red-300 dark:border-red-700',
+    color: 'text-danger-500',
+    bgColor: 'bg-danger-50 dark:bg-danger-900/20',
+    borderColor: 'border-danger-300 dark:border-danger-700',
   },
 ] as const;
 
@@ -74,7 +74,7 @@ export function RealityIndicator({
   if (isLoading || !realityData) {
     return (
       <Badge variant="outline" className={cn('animate-pulse', className)}>
-        <div className="h-3 w-8 bg-gray-200 dark:bg-gray-700 rounded" />
+        <div className="h-3 w-8 bg-muted rounded" />
       </Badge>
     );
   }

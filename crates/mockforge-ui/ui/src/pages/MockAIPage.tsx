@@ -56,12 +56,12 @@ function FeatureCard({
       onClick={handleClick}
     >
       <div className="flex items-start justify-between mb-4">
-        <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">{icon}</div>
+        <div className="p-3 bg-info-100 dark:bg-info-900 rounded-lg">{icon}</div>
         {badge && <Badge variant="default">{badge}</Badge>}
       </div>
       <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{description}</p>
-      <div className="flex items-center text-sm text-blue-600 dark:text-blue-400">
+      <p className="text-sm text-muted-foreground mb-4">{description}</p>
+      <div className="flex items-center text-sm text-info-600 dark:text-info-400">
         <span>Learn more</span>
         <ArrowRight className="h-4 w-4 ml-1" />
       </div>
@@ -114,7 +114,7 @@ export function MockAIPage() {
       title: 'OpenAPI Generation',
       description:
         'Generate OpenAPI 3.0 specifications from recorded HTTP traffic using AI-powered pattern detection',
-      icon: <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
+      icon: <FileText className="h-6 w-6 text-info-600 dark:text-info-400" />,
       link: '/mockai-openapi-generator',
       badge: 'New',
     },
@@ -122,14 +122,14 @@ export function MockAIPage() {
       title: 'Rules Dashboard',
       description:
         'View and explore all generated behavioral rules with detailed explanations and confidence scores',
-      icon: <BarChart3 className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
+      icon: <BarChart3 className="h-6 w-6 text-info-600 dark:text-info-400" />,
       link: '/mockai-rules',
     },
     {
       title: 'Intelligent Responses API',
       description:
         'Generate context-aware mock responses using the server-side MockAI response endpoint',
-      icon: <Sparkles className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
+      icon: <Sparkles className="h-6 w-6 text-info-600 dark:text-info-400" />,
       link: '#',
       badge: 'API',
       onClick: () => {
@@ -140,7 +140,7 @@ export function MockAIPage() {
       title: 'Learning API',
       description:
         'Train MockAI with example request/response pairs using the learning endpoint',
-      icon: <Brain className="h-6 w-6 text-blue-600 dark:text-blue-400" />,
+      icon: <Brain className="h-6 w-6 text-info-600 dark:text-info-400" />,
       link: '#',
       badge: 'API',
       onClick: () => {
@@ -163,18 +163,18 @@ export function MockAIPage() {
         <Card className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-2">
+              <div className="text-3xl font-bold text-info-600 dark:text-info-400 mb-2">
                 {stats?.rulesCount ?? 0}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 Generated Rules
               </div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
+              <div className="text-3xl font-bold text-success-600 dark:text-success-400 mb-2">
                 {stats?.openApiGenerated ? 'Yes' : 'No'}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 OpenAPI Specs Generated
               </div>
             </div>
@@ -182,7 +182,7 @@ export function MockAIPage() {
               <div className="text-3xl font-bold text-purple-600 dark:text-purple-400 mb-2">
                 <Zap className="h-8 w-8 mx-auto" />
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-muted-foreground">
                 AI-Powered
               </div>
             </div>
@@ -237,20 +237,20 @@ export function MockAIPage() {
       {/* Getting Started */}
       <Card className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
         <div className="flex items-start gap-4">
-          <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
-            <BookOpen className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          <div className="p-3 bg-info-100 dark:bg-info-900 rounded-lg">
+            <BookOpen className="h-6 w-6 text-info-600 dark:text-info-400" />
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold mb-2">Getting Started</h3>
-            <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
+            <p className="text-sm text-foreground mb-4">
               Start using MockAI to enhance your mock APIs with intelligent behavior:
             </p>
-            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700 dark:text-gray-300">
+            <ol className="list-decimal list-inside space-y-2 text-sm text-foreground">
               <li>
                 Record API traffic using the{' '}
                 <Link
                   to="/recorder"
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                  className="text-info-600 dark:text-info-400 hover:underline"
                 >
                   API Flight Recorder
                 </Link>
@@ -259,7 +259,7 @@ export function MockAIPage() {
                 Generate OpenAPI specs from recorded traffic using the{' '}
                 <Link
                   to="/mockai-openapi-generator"
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                  className="text-info-600 dark:text-info-400 hover:underline"
                 >
                   OpenAPI Generator
                 </Link>
@@ -268,7 +268,7 @@ export function MockAIPage() {
                 View and understand generated rules in the{' '}
                 <Link
                   to="/mockai-rules"
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                  className="text-info-600 dark:text-info-400 hover:underline"
                 >
                   Rules Dashboard
                 </Link>
@@ -288,21 +288,21 @@ export function MockAIPage() {
           Documentation & Resources
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+          <div className="p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
             <div className="flex items-center gap-2 mb-2">
-              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <FileText className="h-4 w-4 text-info-600 dark:text-info-400" />
               <div className="font-medium">OpenAPI Generation Guide</div>
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-sm text-muted-foreground">
               Learn how to generate OpenAPI specs from recorded traffic with AI-powered pattern detection
             </div>
           </div>
-          <div className="p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+          <div className="p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer">
             <div className="flex items-center gap-2 mb-2">
               <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               <div className="font-medium">Rule Explanations Guide</div>
             </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">
+            <div className="text-sm text-muted-foreground">
               Understand how MockAI generates and explains behavioral rules with confidence scores
             </div>
           </div>
@@ -310,47 +310,47 @@ export function MockAIPage() {
       </Card>
 
       {/* Tips & Best Practices */}
-      <Card className="p-6 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+      <Card className="p-6 bg-info-50 dark:bg-info-900/20 border-info-200 dark:border-info-800">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Zap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <Zap className="h-5 w-5 text-info-600 dark:text-info-400" />
           Tips & Best Practices
         </h3>
         <div className="space-y-3 text-sm">
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">1</span>
+            <div className="w-6 h-6 rounded-full bg-info-100 dark:bg-info-900 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-info-600 dark:text-info-400">1</span>
             </div>
             <div>
-              <div className="font-medium text-gray-900 dark:text-gray-100">
+              <div className="font-medium text-foreground">
                 Record Comprehensive Traffic
               </div>
-              <div className="text-gray-700 dark:text-gray-300">
+              <div className="text-foreground">
                 Capture diverse examples of your API endpoints to improve pattern detection and confidence scores
               </div>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">2</span>
+            <div className="w-6 h-6 rounded-full bg-info-100 dark:bg-info-900 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-info-600 dark:text-info-400">2</span>
             </div>
             <div>
-              <div className="font-medium text-gray-900 dark:text-gray-100">
+              <div className="font-medium text-foreground">
                 Review Confidence Scores
               </div>
-              <div className="text-gray-700 dark:text-gray-300">
+              <div className="text-foreground">
                 High confidence rules (≥80%) are more reliable. Review and validate lower confidence rules manually
               </div>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">3</span>
+            <div className="w-6 h-6 rounded-full bg-info-100 dark:bg-info-900 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-xs font-bold text-info-600 dark:text-info-400">3</span>
             </div>
             <div>
-              <div className="font-medium text-gray-900 dark:text-gray-100">
+              <div className="font-medium text-foreground">
                 Use Time Filters
               </div>
-              <div className="text-gray-700 dark:text-gray-300">
+              <div className="text-foreground">
                 Filter by time range to focus on recent API changes and maintain up-to-date specifications
               </div>
             </div>
