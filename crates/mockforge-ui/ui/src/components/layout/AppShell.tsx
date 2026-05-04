@@ -120,6 +120,7 @@ const navSections = [
       { id: 'scenario-studio', labelKey: 'tab.scenarioStudio', icon: Film },
       { id: 'orchestration-builder', labelKey: 'tab.orchestrationBuilder', icon: GitBranch },
       { id: 'orchestration-execution', labelKey: 'tab.orchestrationExecution', icon: PlayCircle },
+      { id: 'cloud-flows', labelKey: 'tab.cloudFlows', icon: GitBranch },
     ]
   },
   {
@@ -258,6 +259,9 @@ const cloudNavItemIds = new Set([
   'cloud-traces',
   // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
   'cloud-chaos',
+  // Cloud flows — versioned scenario / state-machine / orchestration /
+  // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
+  'cloud-flows',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',

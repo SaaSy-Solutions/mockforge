@@ -93,6 +93,9 @@ const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => 
 // Cloud chaos (#7) — campaign authoring + run history
 const CloudChaosPage = lazy(() => import('../pages/CloudChaosPage').then(m => ({ default: m.CloudChaosPage })));
 
+// Cloud flows (#9 + #14) — versioned scenario / state-machine / orchestration / chain definitions
+const CloudFlowsPage = lazy(() => import('../pages/CloudFlowsPage').then(m => ({ default: m.CloudFlowsPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -223,6 +226,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
   { path: '/cloud-traces', element: <CloudTracesPage /> },
   { path: '/cloud-chaos', element: <CloudChaosPage /> },
+  { path: '/cloud-flows', element: <CloudFlowsPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },
