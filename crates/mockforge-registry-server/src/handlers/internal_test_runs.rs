@@ -308,6 +308,40 @@ pub struct CaptureExchangeRow {
     pub occurred_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// `GET /api/v1/internal/tunnel-reservations/by-subdomain/{subdomain}`
+///
+/// Internal-only — the tunnel relay (mockforge-tunnel deployed as a
+/// Fly app) calls this to authorize incoming subdomain claims. Returns
+/// the reservation row when the subdomain exists + is in
+/// status='reserved', else 404. Lets the relay enforce the cloud
+/// reservation table without copying the schema into its own store.
+pub async fn get_tunnel_reservation_by_subdomain(
+    State(state): State<AppState>,
+    Path(subdomain): Path<String>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    use mockforge_registry_core::models::TunnelReservation;
+    require_internal_auth(&headers)?;
+
+    let row = TunnelReservation::find_by_subdomain(state.db.pool(), &subdomain)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Subdomain not reserved".into()))?;
+
+    // Echo back the fields the relay needs to authorize the connection
+    // and route to the right backend. We deliberately don't include
+    // workspace_id or other internals the relay shouldn't need.
+    Ok(Json(serde_json::json!({
+        "id": row.id,
+        "org_id": row.org_id,
+        "name": row.name,
+        "subdomain": row.subdomain,
+        "custom_domain": row.custom_domain,
+        "custom_domain_verified": row.custom_domain_verified,
+        "status": row.status,
+    })))
+}
+
 /// `POST /api/v1/internal/hosted-mocks/{id}/chaos`
 ///
 /// Internal proxy that forwards a chaos-toggle request to the hosted

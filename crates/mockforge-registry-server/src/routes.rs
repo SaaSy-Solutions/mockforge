@@ -99,6 +99,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/internal/hosted-mocks/{id}/chaos",
             post(handlers::internal_test_runs::proxy_chaos_toggle),
         )
+        .route(
+            "/api/v1/internal/tunnel-reservations/by-subdomain/{subdomain}",
+            get(handlers::internal_test_runs::get_tunnel_reservation_by_subdomain),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))
