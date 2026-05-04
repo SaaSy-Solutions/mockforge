@@ -210,25 +210,21 @@ export function AIStudioPage() {
 
     try {
       const result = await dispatchChat(inputMessage);
-      {
-        const assistantMessage: ChatMessage = {
-          role: 'assistant',
-          content: result.message,
-          timestamp: new Date(),
-          intent: result.intent,
-          data: result.data,
-        };
-        setChatMessages(prev => [...prev, assistantMessage]);
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: result.message,
+        timestamp: new Date(),
+        intent: result.intent,
+        data: result.data,
+      };
+      setChatMessages(prev => [...prev, assistantMessage]);
 
-        // If a spec was generated, show a success toast with download option
-        const hasSpec = result.data.data?.spec || (result.data.data?.type === 'openapi_spec' && result.data.data?.spec);
-        if (hasSpec && (result.data.intent === 'generate_mock' || result.data.intent === 'GenerateMock')) {
-          toast.success('Mock API generated successfully!', {
-            description: 'You can preview and download the OpenAPI spec from the chat.',
-          });
-        }
-      } else {
-        throw new Error(result.error || 'Unknown error');
+      // If a spec was generated, show a success toast with download option
+      const hasSpec = result.data.data?.spec || (result.data.data?.type === 'openapi_spec' && result.data.data?.spec);
+      if (hasSpec && (result.data.intent === 'generate_mock' || result.data.intent === 'GenerateMock')) {
+        toast.success('Mock API generated successfully!', {
+          description: 'You can preview and download the OpenAPI spec from the chat.',
+        });
       }
     } catch (err) {
       logger.error('Failed to send chat message', err);
