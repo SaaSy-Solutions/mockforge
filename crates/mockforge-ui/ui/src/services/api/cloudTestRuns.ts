@@ -55,6 +55,35 @@ export interface CreateScheduleRequest {
   timezone?: string;
 }
 
+export interface TestSuite {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  kind: string;
+  config: Record<string, unknown>;
+  target_workspace_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTestSuiteRequest {
+  name: string;
+  description?: string;
+  kind: string;
+  config: Record<string, unknown>;
+  target_workspace_id?: string;
+}
+
+export interface UpdateTestSuiteRequest {
+  name?: string;
+  description?: string | null;
+  config?: Record<string, unknown>;
+  /** Pass `null` to clear the target_workspace_id link. */
+  target_workspace_id?: string | null;
+}
+
 export interface TestRunStreamEvent {
   type: string;
   data: unknown;
@@ -159,6 +188,58 @@ class CloudTestRunsApi {
   async deleteSchedule(id: string): Promise<{ deleted: boolean }> {
     this.guard('deleteSchedule');
     return fetchJsonWithErrorBody(`/api/v1/test-schedules/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ deleted: boolean }>;
+  }
+
+  // --- suites --------------------------------------------------------------
+
+  async listSuitesForWorkspace(
+    workspaceId: string,
+    kind?: string,
+  ): Promise<TestSuite[]> {
+    this.guard('listSuitesForWorkspace');
+    const qs = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+    return fetchJsonWithErrorBody(
+      `/api/v1/workspaces/${workspaceId}/test-suites${qs}`,
+    ) as Promise<TestSuite[]>;
+  }
+
+  async createSuite(
+    workspaceId: string,
+    body: CreateTestSuiteRequest,
+  ): Promise<TestSuite> {
+    this.guard('createSuite');
+    return fetchJsonWithErrorBody(
+      `/api/v1/workspaces/${workspaceId}/test-suites`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    ) as Promise<TestSuite>;
+  }
+
+  async getSuite(id: string): Promise<TestSuite> {
+    this.guard('getSuite');
+    return fetchJsonWithErrorBody(`/api/v1/test-suites/${id}`) as Promise<TestSuite>;
+  }
+
+  async updateSuite(
+    id: string,
+    body: UpdateTestSuiteRequest,
+  ): Promise<TestSuite> {
+    this.guard('updateSuite');
+    return fetchJsonWithErrorBody(`/api/v1/test-suites/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }) as Promise<TestSuite>;
+  }
+
+  async deleteSuite(id: string): Promise<{ deleted: boolean }> {
+    this.guard('deleteSuite');
+    return fetchJsonWithErrorBody(`/api/v1/test-suites/${id}`, {
       method: 'DELETE',
     }) as Promise<{ deleted: boolean }>;
   }

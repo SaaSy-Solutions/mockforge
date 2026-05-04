@@ -19,6 +19,7 @@ pub mod chaos;
 pub mod clone_train;
 pub mod contract;
 pub mod flow;
+pub mod integration;
 pub mod replay;
 pub mod snapshot;
 pub mod test;

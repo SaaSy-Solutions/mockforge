@@ -38,6 +38,12 @@ import {
   ArrowDownward as ArrowDownwardIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import {
+  cloudTestRunsApi,
+  type TestSuite,
+} from '../services/api/cloudTestRuns';
 
 interface WorkflowStep {
   id: string;
@@ -102,6 +108,111 @@ const IntegrationTestBuilder: React.FC = () => {
   const [generatedCode, setGeneratedCode] = useState('');
   const [codeDialogOpen, setCodeDialogOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState('rust');
+
+  const cloud = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [cloudSuites, setCloudSuites] = useState<TestSuite[]>([]);
+  const [cloudSuiteId, setCloudSuiteId] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState<'save' | 'run' | null>(null);
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null);
+
+  // Refresh the saved-suites list when the workspace changes. Only
+  // visible in cloud mode; local mode keeps its single-page nature.
+  useEffect(() => {
+    if (!cloud || !activeWorkspace?.id) return;
+    cloudTestRunsApi
+      .listSuitesForWorkspace(activeWorkspace.id, 'integration')
+      .then((rows) => setCloudSuites(rows))
+      .catch(() => setCloudSuites([]));
+  }, [cloud, activeWorkspace?.id]);
+
+  const handleLoadCloudSuite = async (id: string) => {
+    try {
+      const suite = await cloudTestRunsApi.getSuite(id);
+      setCloudSuiteId(suite.id);
+      const cfg = (suite.config ?? {}) as Record<string, unknown>;
+      const steps = Array.isArray(cfg.steps) ? (cfg.steps as WorkflowStep[]) : [];
+      const setup = (cfg.setup as IntegrationWorkflow['setup']) ?? {
+        variables: {},
+        base_url: 'http://localhost:3000',
+        headers: {},
+        timeout_ms: 30000,
+      };
+      setWorkflow({
+        id: suite.id,
+        name: suite.name,
+        description: suite.description ?? '',
+        steps,
+        setup,
+      });
+      setCloudMessage(`Loaded cloud suite '${suite.name}'.`);
+    } catch (err) {
+      setCloudMessage(
+        err instanceof Error ? err.message : 'Failed to load cloud suite',
+      );
+    }
+  };
+
+  const handleSaveToCloud = async () => {
+    if (!activeWorkspace?.id) {
+      setCloudMessage('Select a workspace before saving to cloud.');
+      return;
+    }
+    setCloudBusy('save');
+    setCloudMessage(null);
+    try {
+      const config = { steps: workflow.steps, setup: workflow.setup };
+      if (cloudSuiteId) {
+        const updated = await cloudTestRunsApi.updateSuite(cloudSuiteId, {
+          name: workflow.name,
+          description: workflow.description,
+          config,
+        });
+        setCloudMessage(`Updated cloud suite '${updated.name}'.`);
+      } else {
+        const created = await cloudTestRunsApi.createSuite(activeWorkspace.id, {
+          name: workflow.name,
+          description: workflow.description,
+          kind: 'integration',
+          config,
+        });
+        setCloudSuiteId(created.id);
+        setCloudMessage(`Created cloud suite '${created.name}'.`);
+      }
+      const refreshed = await cloudTestRunsApi.listSuitesForWorkspace(
+        activeWorkspace.id,
+        'integration',
+      );
+      setCloudSuites(refreshed);
+    } catch (err) {
+      setCloudMessage(
+        err instanceof Error ? err.message : 'Failed to save to cloud',
+      );
+    } finally {
+      setCloudBusy(null);
+    }
+  };
+
+  const handleRunOnCloud = async () => {
+    if (!cloudSuiteId) {
+      setCloudMessage('Save the workflow to cloud before running.');
+      return;
+    }
+    setCloudBusy('run');
+    setCloudMessage(null);
+    try {
+      const run = await cloudTestRunsApi.triggerRun(cloudSuiteId);
+      setCloudMessage(
+        `Run ${run.id} enqueued (${run.status}). Watch progress in Cloud Test Runs.`,
+      );
+    } catch (err) {
+      setCloudMessage(
+        err instanceof Error ? err.message : 'Failed to enqueue run',
+      );
+    } finally {
+      setCloudBusy(null);
+    }
+  };
 
   const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
@@ -245,6 +356,61 @@ const IntegrationTestBuilder: React.FC = () => {
                 }
                 sx={{ mb: 3 }}
               />
+
+              {cloud && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle2" gutterBottom>
+                    Cloud
+                  </Typography>
+                  {cloudSuites.length > 0 && (
+                    <FormControl fullWidth sx={{ mb: 1 }}>
+                      <InputLabel>Load saved suite</InputLabel>
+                      <Select
+                        value={cloudSuiteId ?? ''}
+                        label="Load saved suite"
+                        onChange={(e) =>
+                          e.target.value && handleLoadCloudSuite(String(e.target.value))
+                        }
+                      >
+                        <MenuItem value="">— select —</MenuItem>
+                        {cloudSuites.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>
+                            {s.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleSaveToCloud}
+                    disabled={cloudBusy !== null || !activeWorkspace?.id}
+                    sx={{ mb: 1 }}
+                  >
+                    {cloudBusy === 'save'
+                      ? 'Saving…'
+                      : cloudSuiteId
+                      ? 'Update on cloud'
+                      : 'Save to cloud'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={handleRunOnCloud}
+                    disabled={cloudBusy !== null || !cloudSuiteId || workflow.steps.length === 0}
+                    sx={{ mb: 1 }}
+                  >
+                    {cloudBusy === 'run' ? 'Enqueueing…' : 'Run on cloud'}
+                  </Button>
+                  {cloudMessage && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {cloudMessage}
+                    </Typography>
+                  )}
+                </>
+              )}
 
               <Divider sx={{ my: 2 }} />
 

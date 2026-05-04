@@ -85,6 +85,29 @@ impl Executor for TestExecutor {
             }
         }
 
+        // Integration kind has a real path when the suite config carries
+        // a workflow with `setup.base_url` + `steps[]`. Each step is
+        // executed as a real HTTP request with assertions + extracts;
+        // see integration.rs (#356).
+        if self.kind == "integration" {
+            let workflow_config = job
+                .payload
+                .get("config")
+                .filter(|c| {
+                    c.get("steps")
+                        .and_then(|v| v.as_array())
+                        .map(|a| !a.is_empty())
+                        .unwrap_or(false)
+                })
+                .cloned();
+            if let Some(config) = workflow_config {
+                return crate::executors::integration::run_integration(
+                    job, callbacks, started, &config,
+                )
+                .await;
+            }
+        }
+
         // Bench kind has a real path when payload.target_url is set —
         // hammers the target with concurrent requests and computes
         // p50 / p95 / p99 latencies + error rate. No external load tool

@@ -258,6 +258,10 @@ const cloudNavItemIds = new Set([
   // Cloud test runs — org-wide history with SSE event tailing via
   // cloudTestRunsApi.streamRunEvents.
   'cloud-test-runs',
+  // Integration Test Builder persists as test_suite kind='integration'
+  // and runs through the IntegrationExecutor in mockforge-test-runner
+  // (#356).
+  'integration-test-builder',
   // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
   'cloud-traces',
   // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
