@@ -84,6 +84,9 @@ const CloudSnapshotsPage = lazy(() => import('../pages/CloudSnapshotsPage').then
 // Cloud incidents (org-wide #3)
 const CloudIncidentsPage = lazy(() => import('../pages/CloudIncidentsPage').then(m => ({ default: m.CloudIncidentsPage })));
 
+// Cloud test runs (#4) — org-wide history with SSE live stream
+const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m => ({ default: m.CloudTestRunsPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -211,6 +214,7 @@ export const routes: RouteConfig[] = [
   { path: '/notification-channels', element: <NotificationChannelsPage /> },
   { path: '/cloud-snapshots', element: <CloudSnapshotsPage /> },
   { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
+  { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },

@@ -147,6 +147,7 @@ const navSections = [
       { id: 'testing', labelKey: 'tab.testing', icon: TestTube },
       { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
       { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
+      { id: 'cloud-test-runs', labelKey: 'tab.cloudTestRuns', icon: PlayCircle },
       { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
       { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
       { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
@@ -248,6 +249,9 @@ const cloudNavItemIds = new Set([
   // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
   // (different feature from drift IncidentDashboard).
   'cloud-incidents',
+  // Cloud test runs — org-wide history with SSE event tailing via
+  // cloudTestRunsApi.streamRunEvents.
+  'cloud-test-runs',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',

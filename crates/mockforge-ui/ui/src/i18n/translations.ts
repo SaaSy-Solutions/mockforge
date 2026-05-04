@@ -105,6 +105,7 @@ const en: Dictionary = {
   'tab.notificationChannels': 'Notification Channels',
   'tab.cloudSnapshots': 'Snapshots',
   'tab.cloudIncidents': 'Cloud Incidents',
+  'tab.cloudTestRuns': 'Cloud Test Runs',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requires a local MockForge instance',
