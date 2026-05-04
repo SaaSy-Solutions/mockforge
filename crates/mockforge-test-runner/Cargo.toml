@@ -36,6 +36,9 @@ chrono = { workspace = true }
 # HTTP for callbacks to registry (mTLS-secured POSTs)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
+# URL-encoding for runtime-stats path_prefix query strings (#355).
+urlencoding = "2.1"
+
 # YAML parser used by ContractExecutor when an OpenAPI spec is served as YAML.
 serde_yaml = "0.9"
 

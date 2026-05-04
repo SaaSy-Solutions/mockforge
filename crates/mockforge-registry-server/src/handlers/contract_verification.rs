@@ -336,6 +336,112 @@ pub async fn delete_fitness_function(
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+/// `POST /api/v1/fitness-functions/{id}/runs`
+///
+/// Triggers a `fitness_evaluation` test_run for one fitness function.
+/// Same lifecycle as #4 test runs: inserts a `test_runs` row + Redis
+/// queue job; the runner-side `ContractExecutor::fitness_evaluation`
+/// picks it up, queries the registry's internal endpoints for the
+/// metric, and reports passed/failed. Failures get translated into a
+/// fitness-source incident by the registry-side post-processing in the
+/// run-finished handler.
+pub async fn trigger_fitness_run(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<TestRun>> {
+    let fn_row = FitnessFunction::find_by_id(state.db.pool(), id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
+    authorize_workspace(&state, user_id, &headers, fn_row.workspace_id).await?;
+
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), fn_row.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: fn_row.id,
+            org_id: workspace.org_id,
+            kind: "fitness_evaluation",
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: fn_row.id,
+            kind: "fitness_evaluation",
+            payload: serde_json::json!({
+                "fitness_function_id": fn_row.id,
+                "fitness_kind": fn_row.kind,
+                "fitness_name": fn_row.name,
+                "fitness_config": fn_row.config,
+                "workspace_id": fn_row.workspace_id,
+            }),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue fitness_evaluation run");
+    }
+
+    Ok(Json(run))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateFitnessFunctionRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub config: Option<serde_json::Value>,
+}
+
+/// `PATCH /api/v1/fitness-functions/{id}` — rename / reconfigure.
+pub async fn update_fitness_function(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateFitnessFunctionRequest>,
+) -> ApiResult<Json<FitnessFunction>> {
+    let fn_row = FitnessFunction::find_by_id(state.db.pool(), id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
+    authorize_workspace(&state, user_id, &headers, fn_row.workspace_id).await?;
+
+    let new_name = request.name.unwrap_or_else(|| fn_row.name.clone());
+    let new_config = request.config.unwrap_or_else(|| fn_row.config.clone());
+
+    let updated: FitnessFunction = sqlx::query_as(
+        r#"
+        UPDATE fitness_functions
+        SET name = $1, config = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING *
+        "#,
+    )
+    .bind(new_name)
+    .bind(new_config)
+    .bind(id)
+    .fetch_one(state.db.pool())
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(Json(updated))
+}
+
 // --- verification suites ---------------------------------------------------
 
 /// `GET /api/v1/workspaces/{workspace_id}/verification-suites`

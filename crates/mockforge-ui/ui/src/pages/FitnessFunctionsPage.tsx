@@ -17,7 +17,10 @@ import {
   BarChart3,
   TrendingUp,
 } from 'lucide-react';
-import { driftApi, type FitnessFunction, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident } from '../services/driftApi';
+import { driftApi, type FitnessFunction, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident, type FitnessFunctionType, type FitnessScope } from '../services/driftApi';
+import { cloudFitnessApi, type CloudFitnessFunction } from '../services/api/cloudFitness';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { useDriftIncidents } from '../hooks/useApi';
 import {
   PageHeader,
@@ -679,19 +682,89 @@ export function FitnessFunctionsPage() {
   const [showSummary, setShowSummary] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
+  const cloud = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+
+  // Adapt the cloud row shape onto the local FitnessFunction shape so
+  // the rest of the page (cards / forms / dialogs) stays put.
+  const cloudKindToFunctionType = (kind: string): FitnessFunctionType => {
+    switch (kind) {
+      case 'latency_threshold':
+        return 'latency_p95';
+      case 'error_rate':
+        return 'error_rate';
+      case 'contract_stability':
+      case 'custom_query':
+      default:
+        return 'custom';
+    }
+  };
+  const adaptCloudRow = (row: CloudFitnessFunction): FitnessFunction => ({
+    id: row.id,
+    name: row.name,
+    description:
+      typeof row.config?.description === 'string'
+        ? (row.config.description as string)
+        : '',
+    function_type: cloudKindToFunctionType(row.kind),
+    config: row.config ?? {},
+    scope:
+      (row.config?.scope as FitnessScope) ?? { type: 'global' },
+    enabled: true,
+    created_at: Date.parse(row.created_at) / 1000,
+    updated_at: Date.parse(row.updated_at) / 1000,
+  });
+
   // Fetch fitness functions
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['fitness-functions'],
-    queryFn: () => driftApi.listFitnessFunctions(),
+    queryKey: ['fitness-functions', cloud, activeWorkspace?.id],
+    queryFn: async () => {
+      if (cloud) {
+        if (!activeWorkspace?.id) {
+          return { functions: [] as FitnessFunction[] };
+        }
+        const rows = await cloudFitnessApi.listForWorkspace(activeWorkspace.id);
+        return { functions: rows.map(adaptCloudRow) };
+      }
+      return driftApi.listFitnessFunctions();
+    },
   });
 
   // Fetch incidents to aggregate fitness results
   const { data: incidentsData } = useDriftIncidents({}, { refetchInterval: 10000 });
   const incidents = incidentsData?.incidents || [];
 
+  // Map a local-form CreateFitnessFunctionRequest onto the cloud
+  // shape (kind + config blob). Description and scope ride along in
+  // config so they're preserved on round-trips.
+  const localTypeToCloudKind = (t: FitnessFunctionType): string => {
+    if (t === 'latency_p95' || t === 'latency_p99') return 'latency_threshold';
+    if (t === 'error_rate') return 'error_rate';
+    if (t === 'contract_drift') return 'contract_stability';
+    return 'custom_query';
+  };
+  const toCloudCreate = (request: CreateFitnessFunctionRequest) => ({
+    name: request.name,
+    kind: localTypeToCloudKind(request.function_type),
+    config: {
+      ...(request.config ?? {}),
+      description: request.description,
+      scope: request.scope,
+    },
+  });
+
   // Create mutation
   const createMutation = useMutation({
-    mutationFn: (request: CreateFitnessFunctionRequest) => driftApi.createFitnessFunction(request),
+    mutationFn: async (request: CreateFitnessFunctionRequest) => {
+      if (cloud) {
+        if (!activeWorkspace?.id) {
+          throw new Error('No active workspace selected.');
+        }
+        await cloudFitnessApi.create(activeWorkspace.id, toCloudCreate(request));
+        return;
+      }
+      await driftApi.createFitnessFunction(request);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
       setShowForm(false);
@@ -705,8 +778,16 @@ export function FitnessFunctionsPage() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }) =>
-      driftApi.updateFitnessFunction(id, request),
+    mutationFn: async ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }) => {
+      if (cloud) {
+        await cloudFitnessApi.update(id, {
+          name: request.name,
+          config: toCloudCreate(request).config,
+        });
+        return;
+      }
+      await driftApi.updateFitnessFunction(id, request);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
       setShowForm(false);
@@ -720,7 +801,13 @@ export function FitnessFunctionsPage() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => driftApi.deleteFitnessFunction(id),
+    mutationFn: async (id: string) => {
+      if (cloud) {
+        await cloudFitnessApi.delete(id);
+        return;
+      }
+      await driftApi.deleteFitnessFunction(id);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
     },
@@ -730,9 +817,26 @@ export function FitnessFunctionsPage() {
     },
   });
 
-  // Test mutation
+  // Test mutation — in cloud mode this triggers an asynchronous
+  // fitness_evaluation test_run; results stream over Cloud Test Runs SSE
+  // and the row's status updates after.
   const testMutation = useMutation({
-    mutationFn: (id: string) => driftApi.testFitnessFunction(id, {}),
+    mutationFn: async (id: string) => {
+      if (cloud) {
+        const run = await cloudFitnessApi.triggerRun(id);
+        return {
+          results: [
+            {
+              function_id: id,
+              function_name: '(cloud)',
+              passed: true,
+              message: `Run ${run.id} enqueued (${run.status}). Watch progress in Cloud Test Runs.`,
+            } as FitnessTestResult,
+          ],
+        };
+      }
+      return driftApi.testFitnessFunction(id, {});
+    },
     onSuccess: (data) => {
       setTestResults(data.results || []);
       setShowTestResults(true);

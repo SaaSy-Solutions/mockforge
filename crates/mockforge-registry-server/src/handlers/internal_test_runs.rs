@@ -13,11 +13,11 @@
 //! cert plumbing lands separately.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -451,6 +451,165 @@ pub async fn get_workspace_endpoint_hits(
     .await
     .map_err(ApiError::Database)?;
     Ok(Json(rows))
+}
+
+/// `GET /api/v1/internal/workspaces/{id}/runtime-stats?window_minutes=N&path_prefix=X`
+///
+/// Internal-only — the FitnessExecutor (#355) calls this to evaluate
+/// latency / error-rate fitness functions. Aggregates over
+/// `runtime_captures` because that's where the cloud-side request log
+/// for a workspace lives (`runtime_request_logs` is deployment-scoped,
+/// not workspace-scoped).
+pub async fn get_workspace_runtime_stats(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<Uuid>,
+    Query(params): Query<RuntimeStatsQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Json<WorkspaceRuntimeStats>> {
+    require_internal_auth(&headers)?;
+    let window_minutes = params.window_minutes.unwrap_or(60).clamp(1, 60 * 24 * 7);
+    let path_prefix = params.path_prefix.unwrap_or_default();
+    let interval_str = format!("{} minutes", window_minutes);
+
+    let row: WorkspaceRuntimeStatsRow = sqlx::query_as(
+        r#"
+        WITH window_rows AS (
+            SELECT
+                COALESCE(rc.duration_ms, 0)::float8 AS duration_ms,
+                rc.response_status_code AS status
+            FROM runtime_captures rc
+            WHERE rc.workspace_id = $1
+              AND rc.occurred_at >= NOW() - ($2::text)::interval
+              AND ($3 = '' OR rc.path LIKE $3 || '%')
+        )
+        SELECT
+            COUNT(*)::int8                                            AS total_requests,
+            COALESCE(
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY duration_ms),
+                0.0
+            )::float8                                                 AS p50_ms,
+            COALESCE(
+                PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms),
+                0.0
+            )::float8                                                 AS p95_ms,
+            COALESCE(
+                PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms),
+                0.0
+            )::float8                                                 AS p99_ms,
+            COUNT(*) FILTER (WHERE status >= 500)::int8               AS server_errors,
+            COUNT(*) FILTER (WHERE status >= 400 AND status < 500)::int8 AS client_errors
+        FROM window_rows
+        "#,
+    )
+    .bind(workspace_id)
+    .bind(&interval_str)
+    .bind(&path_prefix)
+    .fetch_one(state.db.pool())
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(WorkspaceRuntimeStats {
+        window_minutes,
+        path_prefix,
+        total_requests: row.total_requests,
+        p50_ms: row.p50_ms,
+        p95_ms: row.p95_ms,
+        p99_ms: row.p99_ms,
+        server_errors: row.server_errors,
+        client_errors: row.client_errors,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RuntimeStatsQuery {
+    #[serde(default)]
+    pub window_minutes: Option<i64>,
+    #[serde(default)]
+    pub path_prefix: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WorkspaceRuntimeStats {
+    pub window_minutes: i64,
+    pub path_prefix: String,
+    pub total_requests: i64,
+    pub p50_ms: f64,
+    pub p95_ms: f64,
+    pub p99_ms: f64,
+    pub server_errors: i64,
+    pub client_errors: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct WorkspaceRuntimeStatsRow {
+    total_requests: i64,
+    p50_ms: f64,
+    p95_ms: f64,
+    p99_ms: f64,
+    server_errors: i64,
+    client_errors: i64,
+}
+
+/// Body for `POST /api/v1/internal/incidents/raise-from-runner` —
+/// the runner-side incident raise that the FitnessExecutor uses
+/// when an evaluation fails.
+#[derive(Debug, Deserialize)]
+pub struct RaiseIncidentFromRunnerBody {
+    pub workspace_id: Uuid,
+    pub source: String,
+    #[serde(default)]
+    pub source_ref: Option<String>,
+    pub dedupe_key: String,
+    pub severity: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// `POST /api/v1/internal/incidents/raise-from-runner`
+///
+/// Runner-side incident raise. Used by the FitnessExecutor (#355) to
+/// translate a failed fitness evaluation into a fitness-source
+/// incident. Looks up the workspace's org_id so the runner doesn't
+/// need it on hand.
+pub async fn raise_incident_from_runner(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RaiseIncidentFromRunnerBody>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_internal_auth(&headers)?;
+    use mockforge_registry_core::models::incident::RaiseIncidentInput;
+    use mockforge_registry_core::models::Incident;
+
+    let workspace = mockforge_registry_core::models::CloudWorkspace::find_by_id(
+        state.db.pool(),
+        body.workspace_id,
+    )
+    .await
+    .map_err(ApiError::Database)?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+
+    let incident = Incident::raise(
+        state.db.pool(),
+        RaiseIncidentInput {
+            org_id: workspace.org_id,
+            workspace_id: Some(body.workspace_id),
+            source: &body.source,
+            source_ref: body.source_ref.as_deref(),
+            dedupe_key: &body.dedupe_key,
+            severity: &body.severity,
+            title: &body.title,
+            description: body.description.as_deref(),
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(serde_json::json!({
+        "id": incident.id,
+        "status": incident.status,
+        "dedupe_key": incident.dedupe_key,
+    })))
 }
 
 /// `GET /api/v1/internal/capture-sessions/{id}/exchanges`

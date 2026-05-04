@@ -40,6 +40,29 @@ impl Executor for ContractExecutor {
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
         let started = Instant::now();
+
+        // Fitness evaluation has its own real path that queries the
+        // workspace's runtime stats and (optionally) raises an
+        // incident when the threshold is breached. See #355.
+        if self.kind == "fitness_evaluation" {
+            let workspace_id = job
+                .payload
+                .get("workspace_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            let fitness_kind =
+                job.payload.get("fitness_kind").and_then(|v| v.as_str()).map(String::from);
+            let fitness_config = job.payload.get("fitness_config").cloned();
+            if let (Some(ws_id), Some(kind), Some(cfg)) =
+                (workspace_id, fitness_kind, fitness_config)
+            {
+                return crate::executors::fitness::run_real_fitness(
+                    job, callbacks, started, ws_id, &kind, &cfg,
+                )
+                .await;
+            }
+        }
+
         callbacks.run_started(job.run_id).await?;
 
         let service_name = job

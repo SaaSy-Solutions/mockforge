@@ -267,6 +267,10 @@ const cloudNavItemIds = new Set([
   'cloud-flows',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
+  // Fitness functions persist via cloudFitnessApi (workspace-scoped)
+  // and execute through the FitnessExecutor in mockforge-test-runner
+  // (#355). Failures raise a fitness-source incident.
+  'fitness-functions',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
   'cloud-recorder',
   // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /

@@ -96,6 +96,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::internal_test_runs::get_workspace_endpoint_hits),
         )
         .route(
+            "/api/v1/internal/workspaces/{id}/runtime-stats",
+            get(handlers::internal_test_runs::get_workspace_runtime_stats),
+        )
+        .route(
+            "/api/v1/internal/incidents/raise-from-runner",
+            post(handlers::internal_test_runs::raise_incident_from_runner),
+        )
+        .route(
             "/api/v1/internal/hosted-mocks/{id}/chaos",
             post(handlers::internal_test_runs::proxy_chaos_toggle),
         )
@@ -521,7 +529,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/fitness-functions/{id}",
-            axum::routing::delete(handlers::contract_verification::delete_fitness_function),
+            axum::routing::patch(handlers::contract_verification::update_fitness_function)
+                .delete(handlers::contract_verification::delete_fitness_function),
+        )
+        .route(
+            "/api/v1/fitness-functions/{id}/runs",
+            post(handlers::contract_verification::trigger_fitness_run),
         )
         .route(
             "/api/v1/workspaces/{workspace_id}/verification-suites",

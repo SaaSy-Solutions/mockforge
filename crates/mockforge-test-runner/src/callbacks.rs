@@ -133,6 +133,46 @@ impl RegistryCallbacks {
         Ok(rows)
     }
 
+    /// Pull aggregate latency / error stats for a workspace. Used by
+    /// the FitnessExecutor (#355) to evaluate latency_threshold and
+    /// error_rate fitness functions. `path_prefix` is optional ("" =
+    /// no filter); `window_minutes` clamped to 1..=10080 server-side.
+    pub async fn fetch_workspace_runtime_stats(
+        &self,
+        workspace_id: Uuid,
+        window_minutes: i64,
+        path_prefix: Option<&str>,
+    ) -> Result<WorkspaceRuntimeStats> {
+        let mut url = format!(
+            "{}/api/v1/internal/workspaces/{workspace_id}/runtime-stats?window_minutes={window_minutes}",
+            self.base_url.trim_end_matches('/'),
+        );
+        if let Some(p) = path_prefix {
+            if !p.is_empty() {
+                url.push_str("&path_prefix=");
+                url.push_str(&urlencoding::encode(p));
+            }
+        }
+        let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
+        let resp = resp.error_for_status()?;
+        let stats: WorkspaceRuntimeStats = resp.json().await?;
+        Ok(stats)
+    }
+
+    /// Raise an incident from the runner side. Used by the
+    /// FitnessExecutor (#355) when a fitness function evaluates as
+    /// failed — same dedupe semantics as raise_incident_external on
+    /// the public surface, but auth'd via the internal token.
+    pub async fn raise_incident(&self, body: RaiseIncidentBody<'_>) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/internal/incidents/raise-from-runner",
+            self.base_url.trim_end_matches('/'),
+        );
+        let resp = self.http.post(&url).bearer_auth(&self.token).json(&body).send().await?;
+        resp.error_for_status()?;
+        Ok(())
+    }
+
     /// Toggle chaos on a hosted-mock deployment via the registry's
     /// internal proxy. Used by the chaos executor for
     /// target_kind=hosted_mock — the registry resolves the
@@ -162,6 +202,38 @@ pub struct EndpointHit {
     pub method: String,
     pub path: String,
     pub hits: i64,
+}
+
+/// Aggregate latency / error stats for a workspace returned by
+/// `/api/v1/internal/workspaces/{id}/runtime-stats`. Used by the
+/// FitnessExecutor (#355).
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkspaceRuntimeStats {
+    pub window_minutes: i64,
+    pub path_prefix: String,
+    pub total_requests: i64,
+    pub p50_ms: f64,
+    pub p95_ms: f64,
+    pub p99_ms: f64,
+    pub server_errors: i64,
+    pub client_errors: i64,
+}
+
+/// Body for `RegistryCallbacks::raise_incident`. Mirrors the registry's
+/// internal `RaiseIncidentFromRunnerBody`.
+#[allow(missing_docs)] // wire-format struct; field semantics live on the registry side
+#[derive(Debug, Serialize)]
+pub struct RaiseIncidentBody<'a> {
+    pub workspace_id: Uuid,
+    pub source: &'a str,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_ref: Option<&'a str>,
+    pub dedupe_key: &'a str,
+    pub severity: &'a str,
+    pub title: &'a str,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<&'a str>,
 }
 
 #[derive(Serialize)]
