@@ -110,8 +110,20 @@ impl Default for ExecutorRegistry {
     fn default() -> Self {
         let mut by_kind: HashMap<&'static str, Box<dyn Executor>> = HashMap::new();
 
-        // Test execution suite (#4) — five kinds map to the same impl.
-        for k in ["unit", "integration", "conformance", "bench", "owasp"] {
+        // Test execution suite (#4) — kinds that share the TestExecutor
+        // impl. The cloud_api path (run_cloud_*) handles bench/owasp/
+        // conformance/security/wafbench/crud_flow when payloads opt in;
+        // unit/integration fall through to synthetic mode.
+        for k in [
+            "unit",
+            "integration",
+            "conformance",
+            "bench",
+            "owasp",
+            "security",
+            "wafbench",
+            "crud_flow",
+        ] {
             by_kind.insert(k, Box::new(test::TestExecutor::for_kind(k)));
         }
 
@@ -185,6 +197,9 @@ mod tests {
             "conformance",
             "bench",
             "owasp",
+            "security",
+            "wafbench",
+            "crud_flow",
             "chaos_campaign",
             "behavioral_clone",
             "snapshot_capture",
