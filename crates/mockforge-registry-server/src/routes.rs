@@ -87,6 +87,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/internal/test-runs/{id}/finish",
             post(handlers::internal_test_runs::run_finished),
         )
+        .route(
+            "/api/v1/internal/capture-sessions/{id}/exchanges",
+            get(handlers::internal_test_runs::get_capture_exchanges),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))

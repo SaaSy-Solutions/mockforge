@@ -286,6 +286,71 @@ async fn mirror_kind_status(
     Ok(())
 }
 
+/// Wire-format row returned by the capture-exchanges endpoint. Pulls
+/// the columns the replay executor needs from runtime_captures, joined
+/// against capture_session_members so only exchanges in the requested
+/// session are returned.
+#[allow(missing_docs)] // wire-format struct; columns documented in migration
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct CaptureExchangeRow {
+    pub capture_id: String,
+    pub method: String,
+    pub path: String,
+    pub query_params: Option<String>,
+    pub request_headers: String,
+    pub request_body: Option<String>,
+    pub request_body_encoding: String,
+    pub response_status_code: Option<i32>,
+    pub response_headers: Option<String>,
+    pub response_body: Option<String>,
+    pub response_body_encoding: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub occurred_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// `GET /api/v1/internal/capture-sessions/{id}/exchanges`
+///
+/// Internal-only — the replay executor calls this to fetch the
+/// captured exchanges it should replay against the target URL.
+/// Cross-deployment because runtime_captures rows can come from any
+/// hosted-mock in the org; the session itself owns the authoritative
+/// list via capture_session_members.
+pub async fn get_capture_exchanges(
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<Vec<CaptureExchangeRow>>> {
+    require_internal_auth(&headers)?;
+    let rows = sqlx::query_as::<_, CaptureExchangeRow>(
+        r#"
+        SELECT rc.capture_id,
+               rc.method,
+               rc.path,
+               rc.query_params,
+               rc.request_headers,
+               rc.request_body,
+               rc.request_body_encoding,
+               rc.response_status_code,
+               rc.response_headers,
+               rc.response_body,
+               rc.response_body_encoding,
+               rc.duration_ms,
+               rc.occurred_at
+          FROM runtime_captures rc
+          JOIN capture_session_members csm
+            ON csm.capture_id = rc.capture_id::uuid
+         WHERE csm.session_id = $1
+         ORDER BY rc.occurred_at ASC
+         LIMIT 1000
+        "#,
+    )
+    .bind(session_id)
+    .fetch_all(state.db.pool())
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(Json(rows))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
