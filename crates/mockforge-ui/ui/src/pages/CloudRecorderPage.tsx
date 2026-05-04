@@ -13,7 +13,7 @@ import {
     Trash2,
     Brain,
     PlayCircle,
-    Tape,
+    CassetteTape,
     Database,
 } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
@@ -140,7 +140,7 @@ const CloudView: React.FC = () => {
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
-                        <Tape className="w-6 h-6 text-cyan-500" />
+                        <CassetteTape className="w-6 h-6 text-cyan-500" />
                         Recorder & Behavioral Cloning
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
@@ -182,7 +182,7 @@ const CloudView: React.FC = () => {
             </h2>
             {sessions.length === 0 && !sessionsQuery.isLoading ? (
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center mb-8">
-                    <Tape className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                    <CassetteTape className="w-12 h-12 mx-auto text-gray-400 mb-3" />
                     <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mb-2">
                         No sessions yet
                     </h3>
