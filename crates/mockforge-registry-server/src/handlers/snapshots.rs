@@ -18,6 +18,7 @@ use axum::{
 };
 use chrono::{Duration, Utc};
 use mockforge_registry_core::models::snapshot::CreateSnapshot;
+use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ use crate::{
     error::{ApiError, ApiResult},
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
-    models::{CloudWorkspace, Snapshot, UsageCounter},
+    models::{CloudWorkspace, Snapshot, TestRun, UsageCounter},
     AppState,
 };
 
@@ -136,7 +137,43 @@ pub async fn capture_snapshot(
     .await
     .map_err(ApiError::Database)?;
 
-    // TODO follow-up slice: enqueue snapshot_capture run on worker pool.
+    // Pair the snapshot row with a test_runs row so it shares the runner
+    // pool + concurrency cap + runner_seconds metering with everything
+    // else. Snapshot.status remains 'capturing' until the executor
+    // reports back via Snapshot::mark_ready (separate slice — for now
+    // the worker only updates test_runs, leaving snapshot.status as a
+    // known follow-up gap).
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: snapshot.id,
+            org_id: ctx.org_id,
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: snapshot.id,
+            kind: "snapshot_capture",
+            payload: serde_json::json!({
+                "workspace_id": workspace_id,
+                "hosted_deployment_id": request.hosted_deployment_id,
+            }),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue snapshot_capture run");
+    }
 
     Ok(Json(snapshot))
 }

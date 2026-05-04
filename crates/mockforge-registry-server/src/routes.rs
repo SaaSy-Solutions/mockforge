@@ -440,6 +440,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::contract_verification::list_service_diff_runs),
         )
         .route(
+            "/api/v1/monitored-services/{id}/diff",
+            post(handlers::contract_verification::trigger_diff_run),
+        )
+        .route(
             "/api/v1/contract-diff-runs/{id}",
             get(handlers::contract_verification::get_diff_run),
         )

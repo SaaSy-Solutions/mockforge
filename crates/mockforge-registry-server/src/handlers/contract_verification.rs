@@ -27,6 +27,7 @@ use axum::{
     Json,
 };
 use mockforge_registry_core::models::contract_verification::CreateMonitoredService;
+use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -35,7 +36,7 @@ use crate::{
     middleware::{resolve_org_context, AuthUser},
     models::{
         CloudWorkspace, ContractDiffFinding, ContractDiffRun, FitnessFunction, MonitoredService,
-        VerificationSuite,
+        TestRun, VerificationSuite,
     },
     AppState,
 };
@@ -197,6 +198,65 @@ pub async fn list_diff_findings(
         .await
         .map_err(ApiError::Database)?;
     Ok(Json(findings))
+}
+
+/// `POST /api/v1/monitored-services/{id}/diff`
+///
+/// Triggers a contract diff run. Same lifecycle pattern as #4 test runs:
+/// pushes a test_runs row + Redis job with kind='contract_diff'. The
+/// runner-side ContractExecutor synthesizes findings until real impl
+/// (ai_contract_diff pipeline) lands.
+pub async fn trigger_diff_run(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<TestRun>> {
+    let svc = MonitoredService::find_by_id(state.db.pool(), id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
+    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), svc.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: svc.id,
+            org_id: workspace.org_id,
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: svc.id,
+            kind: "contract_diff",
+            payload: serde_json::json!({
+                "service_name": svc.name,
+                "base_url": svc.base_url,
+                "openapi_spec_url": svc.openapi_spec_url,
+                "traffic_source": svc.traffic_source,
+            }),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue contract_diff run");
+    }
+
+    Ok(Json(run))
 }
 
 // --- fitness functions -----------------------------------------------------
