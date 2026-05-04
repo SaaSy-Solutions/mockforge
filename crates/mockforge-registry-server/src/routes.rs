@@ -2,7 +2,7 @@
 
 use axum::{
     middleware,
-    routing::{delete, get, patch, post, put},
+    routing::{any, delete, get, patch, post, put},
     Router,
 };
 
@@ -112,6 +112,15 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/marketplace/templates/search", post(handlers::templates::search_templates))
         .route("/api/v1/marketplace/templates/{name}/{version}", get(handlers::templates::get_template))
         .route("/api/v1/marketplace/templates/{name}/{version}/reviews", get(handlers::template_reviews::get_template_reviews))
+        // Cloud recorder proxy plane (Phase 5).
+        // Public on purpose — the session token in the URL is the auth.
+        // The user's clients cannot carry MockForge JWTs, so the token
+        // model has to be self-contained. Token is generated server-
+        // side from 32 bytes of entropy (see cloud_proxy::generate_session_token).
+        .route(
+            "/api/v1/cloud-runs/recorder-proxy/sess/{token}/{*tail}",
+            any(handlers::cloud_proxy::proxy_handler),
+        )
         // Showcase + Learning Hub read paths (public; cloud-enablement task #12).
         .route("/api/v1/showcase/entries", get(handlers::showcase::list_showcase_entries))
         .route("/api/v1/showcase/entries/{slug}", get(handlers::showcase::get_showcase_entry))
@@ -330,6 +339,22 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route(
             "/api/v1/test-runs/{id}/stream",
             get(handlers::test_runs::stream_run_events),
+        )
+        // Cloud recorder proxy routes (Phase 5).
+        // Auth-gated CRUD over forwarding sessions.
+        .route(
+            "/api/v1/cloud-runs/recorder-proxy/sessions",
+            get(handlers::cloud_proxy::list_sessions)
+                .post(handlers::cloud_proxy::create_session),
+        )
+        .route(
+            "/api/v1/cloud-runs/recorder-proxy/sessions/{id}",
+            get(handlers::cloud_proxy::get_session)
+                .delete(handlers::cloud_proxy::delete_session),
+        )
+        .route(
+            "/api/v1/cloud-runs/recorder-proxy/sessions/{id}/captures",
+            get(handlers::cloud_proxy::list_captures),
         )
         .route(
             "/api/v1/test-suites/{suite_id}/schedules",

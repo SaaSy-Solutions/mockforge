@@ -6,6 +6,7 @@ pub mod audit_log;
 pub mod capture;
 pub mod chaos;
 pub mod cloud_fixture;
+pub mod cloud_proxy;
 pub mod cloud_service;
 pub mod cloud_workspace;
 pub mod contract_verification;
@@ -63,6 +64,10 @@ pub use audit_log::record_audit_event;
 pub use audit_log::AuditEventType;
 pub use capture::{CaptureSession, CloneModel};
 pub use chaos::{ChaosCampaign, ChaosCampaignReport, ResiliencePattern};
+pub use cloud_proxy::{
+    generate_session_token, CloudProxyCapture, CloudProxySession, DEFAULT_SESSION_TTL_HOURS,
+    MAX_SESSION_TTL_HOURS, PROXY_BODY_MAX_BYTES,
+};
 pub use cloud_workspace::Workspace as CloudWorkspace;
 pub use contract_verification::{
     ContractDiffFinding, ContractDiffRun, FitnessFunction, MonitoredService, VerificationSuite,
