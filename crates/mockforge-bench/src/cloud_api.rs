@@ -497,6 +497,84 @@ impl Default for CloudCrudFlowInputs {
     }
 }
 
+/// Format hint for data-driven test vectors.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DataFormat {
+    /// CSV (with or without header — see [`CloudDataDrivenInputs::csv_has_header`]).
+    Csv,
+    /// JSON array of objects.
+    Json,
+    /// Sniff from the first non-whitespace byte: `{`/`[` → JSON, otherwise CSV.
+    #[default]
+    Auto,
+}
+
+impl DataFormat {
+    fn extension(self, bytes: &[u8]) -> &'static str {
+        match self {
+            DataFormat::Csv => "csv",
+            DataFormat::Json => "json",
+            DataFormat::Auto => match bytes.iter().find(|b| !b.is_ascii_whitespace()) {
+                Some(b'{') | Some(b'[') => "json",
+                _ => "csv",
+            },
+        }
+    }
+}
+
+/// Inputs for [`run_data_driven`] — k6 load test driven by per-iteration
+/// test vectors loaded from a CSV or JSON file.
+///
+/// `data_bytes` is the file content. The cloud runner typically downloads
+/// this from Tigris (S3-compatible) before invoking the wrapper —
+/// `mockforge_bench::cloud_api` itself stays storage-agnostic.
+#[derive(Debug, Clone)]
+pub struct CloudDataDrivenInputs {
+    pub spec_bytes: Vec<u8>,
+    pub spec_format: SpecFormat,
+    pub data_bytes: Vec<u8>,
+    pub data_format: DataFormat,
+    pub target_url: String,
+    pub base_path: Option<String>,
+    pub duration: String,
+    pub vus: u32,
+    pub scenario: String,
+    /// `"unique-per-vu"` (default), `"unique-per-iteration"`, `"random"`,
+    /// or `"sequential"`.
+    pub distribution: String,
+    /// Comma-separated `column:target` mappings (e.g.
+    /// `"user_id:path.id,name:body.name"`).
+    pub mappings: Option<String>,
+    /// When true, each row provides method + uri + body itself instead of
+    /// being mapped onto an OpenAPI operation.
+    pub per_uri_control: bool,
+    pub auth: Option<String>,
+    pub headers: Option<String>,
+    pub skip_tls_verify: bool,
+}
+
+impl Default for CloudDataDrivenInputs {
+    fn default() -> Self {
+        Self {
+            spec_bytes: Vec::new(),
+            spec_format: SpecFormat::Auto,
+            data_bytes: Vec::new(),
+            data_format: DataFormat::Auto,
+            target_url: String::new(),
+            base_path: None,
+            duration: "30s".to_string(),
+            vus: 10,
+            scenario: "constant".to_string(),
+            distribution: "unique-per-vu".to_string(),
+            mappings: None,
+            per_uri_control: false,
+            auth: None,
+            headers: None,
+            skip_tls_verify: false,
+        }
+    }
+}
+
 /// Run an OWASP API Security Top 10 test.
 ///
 /// Requires k6 on `$PATH`.
@@ -686,6 +764,63 @@ pub async fn run_crud_flow(inputs: CloudCrudFlowInputs) -> Result<CloudRunArtifa
         crud_flow: true,
         flow_config: flow_config_path,
         extract_fields: inputs.extract_fields,
+        ..default_bench_command(&output_dir)
+    };
+
+    cmd.execute().await?;
+    read_artifacts(&output_dir)
+}
+
+/// Run a k6 load test driven by per-iteration test vectors loaded from
+/// CSV or JSON.
+///
+/// Requires k6 on `$PATH`. The cloud runner is responsible for fetching
+/// `data_bytes` from object storage (typically Tigris) before calling
+/// this — `cloud_api` itself stays storage-agnostic.
+pub async fn run_data_driven(inputs: CloudDataDrivenInputs) -> Result<CloudRunArtifacts> {
+    if inputs.target_url.trim().is_empty() {
+        return Err(BenchError::Other("target_url is required".to_string()));
+    }
+    if inputs.spec_bytes.is_empty() {
+        return Err(BenchError::Other("spec_bytes is required for data-driven runs".to_string()));
+    }
+    if inputs.data_bytes.is_empty() {
+        return Err(BenchError::Other("data_bytes is required for data-driven runs".to_string()));
+    }
+    if !K6Executor::is_k6_installed() {
+        return Err(BenchError::K6NotFound);
+    }
+    enforce_ssrf(&inputs.target_url).await?;
+
+    let workdir = TempDir::new()
+        .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
+    let spec_path = write_spec(workdir.path(), &inputs.spec_bytes, inputs.spec_format)?;
+    let output_dir = workdir.path().join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| BenchError::Other(format!("Failed to create output dir: {}", e)))?;
+
+    // Write data to a tempdir file with the right extension — the
+    // BenchCommand's data_file path drives the loader's CSV-vs-JSON
+    // detection, so the extension matters.
+    let data_filename = format!("data.{}", inputs.data_format.extension(&inputs.data_bytes));
+    let data_path = workdir.path().join(data_filename);
+    std::fs::write(&data_path, &inputs.data_bytes)
+        .map_err(|e| BenchError::Other(format!("Failed to write data file: {}", e)))?;
+
+    let cmd = BenchCommand {
+        spec: vec![spec_path],
+        target: inputs.target_url,
+        base_path: inputs.base_path,
+        duration: inputs.duration,
+        vus: inputs.vus,
+        scenario: inputs.scenario,
+        auth: inputs.auth,
+        headers: inputs.headers,
+        skip_tls_verify: inputs.skip_tls_verify,
+        data_file: Some(data_path),
+        data_distribution: inputs.distribution,
+        data_mappings: inputs.mappings,
+        per_uri_control: inputs.per_uri_control,
         ..default_bench_command(&output_dir)
     };
 
@@ -980,5 +1115,49 @@ mod tests {
     async fn run_crud_flow_rejects_missing_inputs() {
         let err = run_crud_flow(CloudCrudFlowInputs::default()).await.unwrap_err();
         assert!(matches!(err, BenchError::Other(_)));
+    }
+
+    #[test]
+    fn data_format_extension_for_known_inputs() {
+        assert_eq!(DataFormat::Auto.extension(b"  [{\"a\":1}]"), "json");
+        assert_eq!(DataFormat::Auto.extension(b"col1,col2\nv1,v2\n"), "csv");
+        assert_eq!(DataFormat::Csv.extension(b"[]"), "csv");
+        assert_eq!(DataFormat::Json.extension(b"col1,col2"), "json");
+    }
+
+    #[tokio::test]
+    async fn run_data_driven_rejects_missing_inputs() {
+        let no_target = run_data_driven(CloudDataDrivenInputs {
+            spec_bytes: br#"{"openapi":"3.0.0"}"#.to_vec(),
+            data_bytes: b"a,b\n1,2\n".to_vec(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(no_target, BenchError::Other(_)));
+
+        let no_spec = run_data_driven(CloudDataDrivenInputs {
+            target_url: "https://x.com".to_string(),
+            data_bytes: b"a,b\n1,2\n".to_vec(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(&no_spec, BenchError::Other(msg) if msg.contains("spec_bytes")),
+            "got: {no_spec}",
+        );
+
+        let no_data = run_data_driven(CloudDataDrivenInputs {
+            target_url: "https://x.com".to_string(),
+            spec_bytes: br#"{"openapi":"3.0.0"}"#.to_vec(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        assert!(
+            matches!(&no_data, BenchError::Other(msg) if msg.contains("data_bytes")),
+            "got: {no_data}",
+        );
     }
 }

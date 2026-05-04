@@ -112,8 +112,8 @@ impl Default for ExecutorRegistry {
 
         // Test execution suite (#4) — kinds that share the TestExecutor
         // impl. The cloud_api path (run_cloud_*) handles bench/owasp/
-        // conformance/security/wafbench/crud_flow when payloads opt in;
-        // unit/integration fall through to synthetic mode.
+        // conformance/security/wafbench/crud_flow/data_driven when
+        // payloads opt in; unit/integration fall through to synthetic mode.
         for k in [
             "unit",
             "integration",
@@ -123,6 +123,7 @@ impl Default for ExecutorRegistry {
             "security",
             "wafbench",
             "crud_flow",
+            "data_driven",
         ] {
             by_kind.insert(k, Box::new(test::TestExecutor::for_kind(k)));
         }
@@ -200,6 +201,7 @@ mod tests {
             "security",
             "wafbench",
             "crud_flow",
+            "data_driven",
             "chaos_campaign",
             "behavioral_clone",
             "snapshot_capture",
