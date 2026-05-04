@@ -109,6 +109,48 @@ impl ShowcaseEntry {
             .await
     }
 
+    /// Admin authoring: flip is_published. Idempotent — repeated calls
+    /// with the same value just bump updated_at.
+    pub async fn set_published(
+        pool: &PgPool,
+        id: Uuid,
+        published: bool,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE showcase_entries SET is_published = $2, updated_at = NOW() \
+             WHERE id = $1 RETURNING *",
+        )
+        .bind(id)
+        .bind(published)
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Admin authoring: flip is_featured (homepage spotlight).
+    pub async fn set_featured(
+        pool: &PgPool,
+        id: Uuid,
+        featured: bool,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            "UPDATE showcase_entries SET is_featured = $2, updated_at = NOW() \
+             WHERE id = $1 RETURNING *",
+        )
+        .bind(id)
+        .bind(featured)
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+        let rows = sqlx::query("DELETE FROM showcase_entries WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected();
+        Ok(rows > 0)
+    }
+
     pub async fn create(pool: &PgPool, input: CreateShowcaseEntry<'_>) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"

@@ -183,6 +183,110 @@ pub async fn complete_learning_lesson(
     Ok(Json(serde_json::json!({ "completed": true, "lesson_id": lesson.id })))
 }
 
+// --- admin authoring (#12 Phase 2) -----------------------------------------
+
+/// `POST /api/v1/admin/showcase/entries`
+///
+/// Submit a showcase entry. Lands in is_published=false; an admin
+/// flips publish via PATCH. Body matches CreateShowcaseEntry shape.
+#[derive(Debug, Deserialize)]
+pub struct AdminCreateShowcaseRequest {
+    pub slug: String,
+    pub title: String,
+    pub description: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub screenshots: Vec<String>,
+    #[serde(default)]
+    pub demo_url: Option<String>,
+    #[serde(default)]
+    pub source_url: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+pub async fn admin_create_showcase_entry(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Json(body): Json<AdminCreateShowcaseRequest>,
+) -> ApiResult<Json<ShowcaseEntry>> {
+    use mockforge_registry_core::models::showcase::CreateShowcaseEntry;
+    if body.slug.trim().is_empty() || body.title.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("slug and title are required".into()));
+    }
+    let row = ShowcaseEntry::create(
+        state.db.pool(),
+        CreateShowcaseEntry {
+            slug: &body.slug,
+            org_id: None,
+            submitted_by: Some(user_id),
+            title: &body.title,
+            description: &body.description,
+            body: body.body.as_deref(),
+            screenshots: &body.screenshots,
+            demo_url: body.demo_url.as_deref(),
+            source_url: body.source_url.as_deref(),
+            tags: &body.tags,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+    Ok(Json(row))
+}
+
+/// `PATCH /api/v1/admin/showcase/entries/{id}`
+///
+/// Toggle is_published / is_featured. Body has both as optional bool;
+/// fields the caller doesn't send stay untouched. Site-admin scope —
+/// per-org submission auth is a separate flow.
+#[derive(Debug, Deserialize)]
+pub struct AdminUpdateShowcaseRequest {
+    #[serde(default)]
+    pub is_published: Option<bool>,
+    #[serde(default)]
+    pub is_featured: Option<bool>,
+}
+
+pub async fn admin_update_showcase_entry(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AdminUpdateShowcaseRequest>,
+) -> ApiResult<Json<ShowcaseEntry>> {
+    let pool = state.db.pool();
+    let mut current = ShowcaseEntry::find_by_id(pool, id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Showcase entry not found".into()))?;
+
+    if let Some(p) = body.is_published {
+        current = ShowcaseEntry::set_published(pool, id, p)
+            .await
+            .map_err(ApiError::Database)?
+            .unwrap_or(current);
+    }
+    if let Some(f) = body.is_featured {
+        current = ShowcaseEntry::set_featured(pool, id, f)
+            .await
+            .map_err(ApiError::Database)?
+            .unwrap_or(current);
+    }
+    Ok(Json(current))
+}
+
+pub async fn admin_delete_showcase_entry(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let deleted = ShowcaseEntry::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    if !deleted {
+        return Err(ApiError::InvalidRequest("Showcase entry not found".into()));
+    }
+    Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
 /// `GET /api/v1/learning/progress`
 pub async fn list_learning_progress(
     State(state): State<AppState>,

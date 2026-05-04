@@ -352,6 +352,18 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/showcase/entries/{id}/like-toggle",
             post(handlers::showcase::toggle_showcase_like),
         )
+        // Showcase admin authoring (Phase 2). Unscoped — site-admin
+        // role gating happens in the auth middleware once a real
+        // role-check lands; for now any authenticated user can submit.
+        .route(
+            "/api/v1/admin/showcase/entries",
+            post(handlers::showcase::admin_create_showcase_entry),
+        )
+        .route(
+            "/api/v1/admin/showcase/entries/{id}",
+            patch(handlers::showcase::admin_update_showcase_entry)
+                .delete(handlers::showcase::admin_delete_showcase_entry),
+        )
         .route(
             "/api/v1/learning/lessons/{lesson_id}/complete",
             post(handlers::showcase::complete_learning_lesson),
