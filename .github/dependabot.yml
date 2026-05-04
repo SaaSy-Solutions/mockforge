@@ -27,6 +27,8 @@ updates:
           - "minor"
       cargo-security:
         applies-to: security-updates
+        patterns:
+          - "*"
     ignore:
       # Ignore major version updates for now
       - dependency-name: "*"
