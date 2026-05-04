@@ -228,6 +228,56 @@ pub async fn explain_rule(
     Ok(Json(ExplainRuleResponse { explanation, meta }))
 }
 
+// --- /quota -----------------------------------------------------------------
+
+/// What the UI needs to render the AI provider/quota banner before the
+/// user has issued a prompt. Mirrors the shape `UsageMeta` returns in
+/// post-call responses, plus a boolean for "can I call right now."
+#[derive(Debug, Serialize)]
+pub struct QuotaResponse {
+    /// 'byok' | 'platform' | 'disabled'
+    pub provider: &'static str,
+    /// Tokens used this billing period.
+    pub tokens_used_this_period: i64,
+    /// Monthly platform-token limit. `-1` means unlimited.
+    pub tokens_limit: i64,
+    /// Convenience flag: true if a chat call right now would clear the
+    /// quota check. False means quota exhausted (Platform) or AI fully
+    /// disabled (Free without BYOK).
+    pub call_allowed: bool,
+}
+
+/// `GET /api/v1/ai-studio/quota`
+///
+/// Read-only quota snapshot. Doesn't increment any meter, doesn't call
+/// the LLM. UIs poll this to render "X of Y tokens remaining" without
+/// having to issue a doomed prompt to discover the cap.
+pub async fn quota(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<QuotaResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let byok = load_byok_config(&state, org_ctx.org_id).await?;
+    let is_paid_plan = matches!(org_ctx.org.plan(), Plan::Pro | Plan::Team);
+    let provider = pick_provider(is_paid_plan, byok);
+    let selection = provider.selection();
+    let q = check_ai_quota(&state, &org_ctx.org, selection).await?;
+
+    Ok(Json(QuotaResponse {
+        provider: match selection {
+            ProviderSelection::Byok => "byok",
+            ProviderSelection::Platform => "platform",
+            ProviderSelection::Disabled => "disabled",
+        },
+        tokens_used_this_period: q.used,
+        tokens_limit: q.limit,
+        call_allowed: q.allowed,
+    }))
+}
+
 // --- shared pipeline --------------------------------------------------------
 
 /// Runs the full provider-routing + quota + LLM-call + metering pipeline

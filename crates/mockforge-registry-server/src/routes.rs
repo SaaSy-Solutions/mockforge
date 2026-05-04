@@ -273,6 +273,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/ai-studio/explain-rule",
             post(handlers::ai_studio::explain_rule),
         )
+        .route(
+            "/api/v1/ai-studio/quota",
+            get(handlers::ai_studio::quota),
+        )
         // Test execution suite routes (cloud-enablement task #4 / Phase 1).
         // Suites are user-authored definitions; runs/events/schedules/artifacts
         // come in follow-up slices once the worker pool exists.
