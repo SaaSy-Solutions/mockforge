@@ -128,10 +128,10 @@ pub async fn trigger_run(
     .map_err(ApiError::Database)?;
 
     // 5. Push onto the Redis queue so mockforge-test-runner picks it up.
-    // Failure to enqueue logs a warning but doesn't fail the request —
-    // the row still exists and a future runner reconnect / retrigger
-    // can consume it. That matches our other "Redis is optional" paths.
-    let payload = serde_json::Value::Object(serde_json::Map::new());
+    // We pass the suite's config straight through as the payload — the
+    // executor reads kind-specific knobs from there (synthetic_steps,
+    // target URL, etc.) so the user's authored config actually drives
+    // the run instead of every job hitting executor defaults.
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
         crate::run_queue::EnqueuedJob {
@@ -139,7 +139,7 @@ pub async fn trigger_run(
             org_id: run.org_id,
             source_id: suite.id,
             kind: &suite.kind,
-            payload,
+            payload: suite.config.clone(),
         },
     )
     .await

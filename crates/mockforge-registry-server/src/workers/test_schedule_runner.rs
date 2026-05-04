@@ -155,6 +155,15 @@ async fn trigger_scheduled_run(
     )
     .await?;
 
+    // Mirror the manual-trigger path: pass the suite's config through
+    // verbatim, just stamped with the schedule_id so the runner-side
+    // log lines can correlate. Avoids the "manual runs use config but
+    // scheduled runs use defaults" footgun.
+    let mut payload = match suite.config.clone() {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    payload.insert("schedule_id".into(), serde_json::json!(sched.id));
     if let Err(e) = enqueue(
         redis,
         EnqueuedJob {
@@ -162,7 +171,7 @@ async fn trigger_scheduled_run(
             org_id: run.org_id,
             source_id: suite.id,
             kind: &suite.kind,
-            payload: serde_json::json!({ "schedule_id": sched.id }),
+            payload: serde_json::Value::Object(payload),
         },
     )
     .await

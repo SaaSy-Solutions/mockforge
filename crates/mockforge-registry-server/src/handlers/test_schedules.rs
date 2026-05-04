@@ -15,10 +15,11 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use cron::Schedule;
 use mockforge_registry_core::models::{CloudWorkspace, TestSchedule, TestSuite};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -39,18 +40,48 @@ fn default_tz() -> String {
     "UTC".to_string()
 }
 
+/// Schedule + computed next-fire timestamp. Wraps the bare `TestSchedule`
+/// row so the UI can render "next run at ..." without parsing cron
+/// client-side.
+#[derive(Debug, Serialize)]
+pub struct ScheduleWithNextFire {
+    #[serde(flatten)]
+    pub schedule: TestSchedule,
+    /// Next fire time in UTC, or null if the cron expression has no
+    /// future fire (cron::Schedule::upcoming exhausted) or the row
+    /// can't be evaluated (parse error — should never happen since
+    /// create() validates).
+    pub next_fire_at: Option<DateTime<Utc>>,
+}
+
+fn compute_next_fire(schedule: &TestSchedule) -> Option<DateTime<Utc>> {
+    if !schedule.enabled {
+        return None;
+    }
+    let tz: Tz = schedule.timezone.parse().ok()?;
+    let cron = Schedule::from_str(&schedule.cron).ok()?;
+    cron.upcoming(tz).next().map(|dt| dt.with_timezone(&Utc))
+}
+
 /// `GET /api/v1/test-suites/{suite_id}/schedules`
 pub async fn list_for_suite(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(suite_id): Path<Uuid>,
     headers: HeaderMap,
-) -> ApiResult<Json<Vec<TestSchedule>>> {
+) -> ApiResult<Json<Vec<ScheduleWithNextFire>>> {
     let _suite = load_authorized_suite(&state, user_id, &headers, suite_id).await?;
     let rows = TestSchedule::list_by_suite(state.db.pool(), suite_id)
         .await
         .map_err(ApiError::Database)?;
-    Ok(Json(rows))
+    let with_next = rows
+        .into_iter()
+        .map(|s| ScheduleWithNextFire {
+            next_fire_at: compute_next_fire(&s),
+            schedule: s,
+        })
+        .collect();
+    Ok(Json(with_next))
 }
 
 /// `POST /api/v1/test-suites/{suite_id}/schedules`
