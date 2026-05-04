@@ -6562,14 +6562,14 @@ dependencies = [
 
 [[package]]
 name = "json-patch"
-version = "4.1.0"
+version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f300e415e2134745ef75f04562dd0145405c2f7fd92065db029ac4b16b57fe90"
+checksum = "7421438de105a0827e44fadd05377727847d717c80ce29a229f85fd04c427b72"
 dependencies = [
  "jsonptr 0.7.1",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -7744,7 +7744,7 @@ dependencies = [
  "hex",
  "hmac",
  "indexmap 2.14.0",
- "json-patch 4.1.0",
+ "json-patch 4.2.0",
  "jsonpath",
  "jsonptr 0.7.1",
  "jsonschema",
@@ -8029,7 +8029,7 @@ dependencies = [
  "http 1.4.0",
  "hyper 1.8.1",
  "itertools 0.14.0",
- "json-patch 4.1.0",
+ "json-patch 4.2.0",
  "jsonpath",
  "jsonwebtoken",
  "mime_guess",
@@ -8957,7 +8957,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "html-escape",
- "json-patch 4.1.0",
+ "json-patch 4.2.0",
  "jsonptr 0.7.1",
  "jsonwebtoken",
  "mime_guess",
