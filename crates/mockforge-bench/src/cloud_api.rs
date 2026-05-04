@@ -1,5 +1,5 @@
-//! Cloud-friendly entry points for invoking bench and conformance runs
-//! programmatically.
+//! Cloud-friendly entry points for invoking bench, conformance, OWASP,
+//! security-payload, WAFBench, and CRUD-flow runs programmatically.
 //!
 //! The CLI in `command.rs` is the primary user-facing surface, but it assumes
 //! the caller can supply paths on disk and is OK with stdout reporting. Cloud
@@ -282,6 +282,387 @@ pub async fn run_conformance(inputs: CloudConformanceInputs) -> Result<CloudRunA
     read_artifacts(&output_dir)
 }
 
+/// Inputs for [`run_owasp`] — OWASP API Security Top 10 testing.
+///
+/// Built-in `categories` cover OWASP API1–API10 and run k6-driven; supplying
+/// `admin_paths` is recommended for the BOLA / privilege-escalation checks
+/// (they default to a small built-in list otherwise).
+#[derive(Debug, Clone)]
+pub struct CloudOwaspInputs {
+    pub spec_bytes: Vec<u8>,
+    pub spec_format: SpecFormat,
+    pub target_url: String,
+    pub base_path: Option<String>,
+    /// Comma-separated list of OWASP category short names (e.g.
+    /// `"api1,api3,api7"`). Empty = all categories.
+    pub categories: Option<String>,
+    /// Header name to use for auth checks. Defaults to `"Authorization"`.
+    pub auth_header: String,
+    /// Valid token used as the baseline for auth-bypass checks. Without it,
+    /// auth-related findings are limited.
+    pub auth_token: Option<String>,
+    /// Inline list of admin / privileged paths (one per line in the OWASP
+    /// admin-paths file format — comments with `#` are allowed). When empty,
+    /// the OWASP generator's built-in default list is used.
+    pub admin_paths: Vec<String>,
+    /// Comma-separated field names known to be resource IDs (e.g.
+    /// `"id,user_id,order_id"`).
+    pub id_fields: Option<String>,
+    /// `"json"` (default) or `"sarif"`.
+    pub report_format: String,
+    /// Iterations per VU. Defaults to 1.
+    pub iterations: u32,
+    pub vus: u32,
+    pub skip_tls_verify: bool,
+    /// `Key:Value,Key2:Value2` header string.
+    pub headers: Option<String>,
+}
+
+impl Default for CloudOwaspInputs {
+    fn default() -> Self {
+        Self {
+            spec_bytes: Vec::new(),
+            spec_format: SpecFormat::Auto,
+            target_url: String::new(),
+            base_path: None,
+            categories: None,
+            auth_header: "Authorization".to_string(),
+            auth_token: None,
+            admin_paths: Vec::new(),
+            id_fields: None,
+            report_format: "json".to_string(),
+            iterations: 1,
+            vus: 10,
+            skip_tls_verify: false,
+            headers: None,
+        }
+    }
+}
+
+/// Inputs for [`run_security`] — payload-injection security testing layered on
+/// a standard k6 bench run.
+///
+/// Built-in payload categories (SQL injection, XSS, command injection, path
+/// traversal, etc.) are baked into the binary. Supplying a custom payloads
+/// file is intentionally not supported in cloud mode — submit overrides via
+/// `categories` instead.
+#[derive(Debug, Clone)]
+pub struct CloudSecurityInputs {
+    pub spec_bytes: Vec<u8>,
+    pub spec_format: SpecFormat,
+    pub target_url: String,
+    pub base_path: Option<String>,
+    pub duration: String,
+    pub vus: u32,
+    pub scenario: String,
+    /// Comma-separated category names (e.g. `"sql,xss,cmd"`). Empty = all.
+    pub categories: Option<String>,
+    /// Comma-separated field names to inject into (e.g. `"username,query"`).
+    pub target_fields: Option<String>,
+    pub auth: Option<String>,
+    pub headers: Option<String>,
+    pub skip_tls_verify: bool,
+}
+
+impl Default for CloudSecurityInputs {
+    fn default() -> Self {
+        Self {
+            spec_bytes: Vec::new(),
+            spec_format: SpecFormat::Auto,
+            target_url: String::new(),
+            base_path: None,
+            duration: "30s".to_string(),
+            vus: 10,
+            scenario: "constant".to_string(),
+            categories: None,
+            target_fields: None,
+            auth: None,
+            headers: None,
+            skip_tls_verify: false,
+        }
+    }
+}
+
+/// Inputs for [`run_wafbench`] — Microsoft WAFBench-style coverage tests using
+/// the OWASP Core Rule Set attack patterns.
+///
+/// `rules_dir` must be a directory or glob pattern reachable on the host
+/// running the bench. In production this is the bundled CRS install path
+/// (e.g. `/usr/share/mockforge/wafbench/`); leaving it empty is an error.
+#[derive(Debug, Clone)]
+pub struct CloudWafBenchInputs {
+    pub spec_bytes: Vec<u8>,
+    pub spec_format: SpecFormat,
+    pub target_url: String,
+    pub base_path: Option<String>,
+    pub duration: String,
+    pub vus: u32,
+    pub scenario: String,
+    /// Filesystem path or glob pattern to WAFBench rule YAMLs.
+    pub rules_dir: String,
+    /// When true, exhaustively cycle through every payload instead of random
+    /// sampling. Use for coverage runs; expect long durations.
+    pub cycle_all: bool,
+    pub auth: Option<String>,
+    pub headers: Option<String>,
+    pub skip_tls_verify: bool,
+}
+
+impl Default for CloudWafBenchInputs {
+    fn default() -> Self {
+        Self {
+            spec_bytes: Vec::new(),
+            spec_format: SpecFormat::Auto,
+            target_url: String::new(),
+            base_path: None,
+            duration: "30s".to_string(),
+            vus: 10,
+            scenario: "constant".to_string(),
+            rules_dir: String::new(),
+            cycle_all: false,
+            auth: None,
+            headers: None,
+            skip_tls_verify: false,
+        }
+    }
+}
+
+/// Inputs for [`run_crud_flow`] — CRUD chain testing (Create → Read → Update →
+/// Delete sequences with cross-step ID extraction).
+///
+/// When `flow_config_yaml` is `None`, flows are auto-detected from the spec.
+/// When provided, the YAML follows the schema understood by `CrudFlowConfig`.
+#[derive(Debug, Clone)]
+pub struct CloudCrudFlowInputs {
+    pub spec_bytes: Vec<u8>,
+    pub spec_format: SpecFormat,
+    pub target_url: String,
+    pub base_path: Option<String>,
+    pub duration: String,
+    pub vus: u32,
+    pub scenario: String,
+    /// Inline YAML defining custom flows. When `None`, flows are auto-detected
+    /// from the OpenAPI spec.
+    pub flow_config_yaml: Option<String>,
+    /// Comma-separated response fields to extract for cross-step references
+    /// (e.g. `"id,user_id"`).
+    pub extract_fields: Option<String>,
+    pub auth: Option<String>,
+    pub headers: Option<String>,
+    pub skip_tls_verify: bool,
+}
+
+impl Default for CloudCrudFlowInputs {
+    fn default() -> Self {
+        Self {
+            spec_bytes: Vec::new(),
+            spec_format: SpecFormat::Auto,
+            target_url: String::new(),
+            base_path: None,
+            duration: "30s".to_string(),
+            vus: 10,
+            scenario: "constant".to_string(),
+            flow_config_yaml: None,
+            extract_fields: None,
+            auth: None,
+            headers: None,
+            skip_tls_verify: false,
+        }
+    }
+}
+
+/// Run an OWASP API Security Top 10 test.
+///
+/// Requires k6 on `$PATH`.
+pub async fn run_owasp(inputs: CloudOwaspInputs) -> Result<CloudRunArtifacts> {
+    if inputs.target_url.trim().is_empty() {
+        return Err(BenchError::Other("target_url is required".to_string()));
+    }
+    if inputs.spec_bytes.is_empty() {
+        return Err(BenchError::Other("spec_bytes is required for OWASP runs".to_string()));
+    }
+    if !K6Executor::is_k6_installed() {
+        return Err(BenchError::K6NotFound);
+    }
+
+    let workdir = TempDir::new()
+        .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
+    let spec_path = write_spec(workdir.path(), &inputs.spec_bytes, inputs.spec_format)?;
+    let output_dir = workdir.path().join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| BenchError::Other(format!("Failed to create output dir: {}", e)))?;
+
+    let admin_paths_path = if !inputs.admin_paths.is_empty() {
+        let p = workdir.path().join("admin-paths.txt");
+        std::fs::write(&p, inputs.admin_paths.join("\n"))
+            .map_err(|e| BenchError::Other(format!("Failed to write admin paths file: {}", e)))?;
+        Some(p)
+    } else {
+        None
+    };
+
+    let report_path = output_dir.join("owasp-report.json");
+    let cmd = BenchCommand {
+        spec: vec![spec_path],
+        target: inputs.target_url,
+        base_path: inputs.base_path,
+        vus: inputs.vus,
+        skip_tls_verify: inputs.skip_tls_verify,
+        headers: inputs.headers,
+        owasp_api_top10: true,
+        owasp_categories: inputs.categories,
+        owasp_auth_header: inputs.auth_header,
+        owasp_auth_token: inputs.auth_token,
+        owasp_admin_paths: admin_paths_path,
+        owasp_id_fields: inputs.id_fields,
+        owasp_report: Some(report_path),
+        owasp_report_format: inputs.report_format,
+        owasp_iterations: inputs.iterations,
+        ..default_bench_command(&output_dir)
+    };
+
+    cmd.execute().await?;
+    read_artifacts(&output_dir)
+}
+
+/// Run a payload-injection security test layered on a standard k6 bench.
+///
+/// Requires k6 on `$PATH`.
+pub async fn run_security(inputs: CloudSecurityInputs) -> Result<CloudRunArtifacts> {
+    if inputs.target_url.trim().is_empty() {
+        return Err(BenchError::Other("target_url is required".to_string()));
+    }
+    if inputs.spec_bytes.is_empty() {
+        return Err(BenchError::Other("spec_bytes is required for security runs".to_string()));
+    }
+    if !K6Executor::is_k6_installed() {
+        return Err(BenchError::K6NotFound);
+    }
+
+    let workdir = TempDir::new()
+        .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
+    let spec_path = write_spec(workdir.path(), &inputs.spec_bytes, inputs.spec_format)?;
+    let output_dir = workdir.path().join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| BenchError::Other(format!("Failed to create output dir: {}", e)))?;
+
+    let cmd = BenchCommand {
+        spec: vec![spec_path],
+        target: inputs.target_url,
+        base_path: inputs.base_path,
+        duration: inputs.duration,
+        vus: inputs.vus,
+        scenario: inputs.scenario,
+        auth: inputs.auth,
+        headers: inputs.headers,
+        skip_tls_verify: inputs.skip_tls_verify,
+        security_test: true,
+        security_categories: inputs.categories,
+        security_target_fields: inputs.target_fields,
+        ..default_bench_command(&output_dir)
+    };
+
+    cmd.execute().await?;
+    read_artifacts(&output_dir)
+}
+
+/// Run a WAFBench (OWASP CRS) coverage test.
+///
+/// Requires k6 on `$PATH` and the WAFBench rules accessible at
+/// [`CloudWafBenchInputs::rules_dir`] on the bench host.
+pub async fn run_wafbench(inputs: CloudWafBenchInputs) -> Result<CloudRunArtifacts> {
+    if inputs.target_url.trim().is_empty() {
+        return Err(BenchError::Other("target_url is required".to_string()));
+    }
+    if inputs.spec_bytes.is_empty() {
+        return Err(BenchError::Other("spec_bytes is required for WAFBench runs".to_string()));
+    }
+    if inputs.rules_dir.trim().is_empty() {
+        return Err(BenchError::Other(
+            "rules_dir is required for WAFBench runs (point at the bundled CRS install)"
+                .to_string(),
+        ));
+    }
+    if !K6Executor::is_k6_installed() {
+        return Err(BenchError::K6NotFound);
+    }
+
+    let workdir = TempDir::new()
+        .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
+    let spec_path = write_spec(workdir.path(), &inputs.spec_bytes, inputs.spec_format)?;
+    let output_dir = workdir.path().join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| BenchError::Other(format!("Failed to create output dir: {}", e)))?;
+
+    let cmd = BenchCommand {
+        spec: vec![spec_path],
+        target: inputs.target_url,
+        base_path: inputs.base_path,
+        duration: inputs.duration,
+        vus: inputs.vus,
+        scenario: inputs.scenario,
+        auth: inputs.auth,
+        headers: inputs.headers,
+        skip_tls_verify: inputs.skip_tls_verify,
+        wafbench_dir: Some(inputs.rules_dir),
+        wafbench_cycle_all: inputs.cycle_all,
+        ..default_bench_command(&output_dir)
+    };
+
+    cmd.execute().await?;
+    read_artifacts(&output_dir)
+}
+
+/// Run a CRUD flow test against [`CloudCrudFlowInputs::target_url`].
+///
+/// Requires k6 on `$PATH`.
+pub async fn run_crud_flow(inputs: CloudCrudFlowInputs) -> Result<CloudRunArtifacts> {
+    if inputs.target_url.trim().is_empty() {
+        return Err(BenchError::Other("target_url is required".to_string()));
+    }
+    if inputs.spec_bytes.is_empty() {
+        return Err(BenchError::Other("spec_bytes is required for CRUD flow runs".to_string()));
+    }
+    if !K6Executor::is_k6_installed() {
+        return Err(BenchError::K6NotFound);
+    }
+
+    let workdir = TempDir::new()
+        .map_err(|e| BenchError::Other(format!("Failed to create tempdir: {}", e)))?;
+    let spec_path = write_spec(workdir.path(), &inputs.spec_bytes, inputs.spec_format)?;
+    let output_dir = workdir.path().join("output");
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| BenchError::Other(format!("Failed to create output dir: {}", e)))?;
+
+    let flow_config_path = if let Some(yaml) = &inputs.flow_config_yaml {
+        let p = workdir.path().join("flow-config.yaml");
+        std::fs::write(&p, yaml)
+            .map_err(|e| BenchError::Other(format!("Failed to write flow config: {}", e)))?;
+        Some(p)
+    } else {
+        None
+    };
+
+    let cmd = BenchCommand {
+        spec: vec![spec_path],
+        target: inputs.target_url,
+        base_path: inputs.base_path,
+        duration: inputs.duration,
+        vus: inputs.vus,
+        scenario: inputs.scenario,
+        auth: inputs.auth,
+        headers: inputs.headers,
+        skip_tls_verify: inputs.skip_tls_verify,
+        crud_flow: true,
+        flow_config: flow_config_path,
+        extract_fields: inputs.extract_fields,
+        ..default_bench_command(&output_dir)
+    };
+
+    cmd.execute().await?;
+    read_artifacts(&output_dir)
+}
+
 /// Build a [`BenchCommand`] populated with sensible defaults for a single-spec
 /// run targeting the given output directory.
 ///
@@ -522,6 +903,52 @@ mod tests {
     async fn run_conformance_rejects_empty_target() {
         let inputs = CloudConformanceInputs::default();
         let err = run_conformance(inputs).await.unwrap_err();
+        assert!(matches!(err, BenchError::Other(_)));
+    }
+
+    #[tokio::test]
+    async fn run_owasp_rejects_missing_inputs() {
+        let no_target = run_owasp(CloudOwaspInputs {
+            spec_bytes: br#"{"openapi":"3.0.0"}"#.to_vec(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(no_target, BenchError::Other(_)));
+
+        let no_spec = run_owasp(CloudOwaspInputs {
+            target_url: "https://example.com".to_string(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        assert!(matches!(no_spec, BenchError::Other(_)));
+    }
+
+    #[tokio::test]
+    async fn run_security_rejects_missing_inputs() {
+        let err = run_security(CloudSecurityInputs::default()).await.unwrap_err();
+        assert!(matches!(err, BenchError::Other(_)));
+    }
+
+    #[tokio::test]
+    async fn run_wafbench_rejects_missing_rules_dir() {
+        let err = run_wafbench(CloudWafBenchInputs {
+            spec_bytes: br#"{"openapi":"3.0.0"}"#.to_vec(),
+            target_url: "https://example.com".to_string(),
+            ..Default::default()
+        })
+        .await
+        .unwrap_err();
+        let BenchError::Other(msg) = err else {
+            panic!("expected BenchError::Other");
+        };
+        assert!(msg.contains("rules_dir"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn run_crud_flow_rejects_missing_inputs() {
+        let err = run_crud_flow(CloudCrudFlowInputs::default()).await.unwrap_err();
         assert!(matches!(err, BenchError::Other(_)));
     }
 }
