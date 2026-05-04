@@ -9104,6 +9104,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures",
+ "mockforge-bench",
  "redis 0.25.4",
  "reqwest 0.12.28",
  "serde",
