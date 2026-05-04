@@ -27,7 +27,7 @@ jsonpath = "0.1"
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-fastrand = "2.0"
+fastrand = "2.4"
 async-trait = { workspace = true }
 thiserror = "2.0"
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }

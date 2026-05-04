@@ -49,7 +49,7 @@ uuid = { workspace = true }
 reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
-once_cell = "1.19"
+once_cell = "1.21"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
@@ -71,7 +71,7 @@ bcrypt = "0.15"
 tokio-util = { version = "0.7", features = ["time"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "migrate"], optional = true }
 blake3 = { version = "0.3", optional = true }
-json-patch = "4.0.0"
+json-patch = "4.2.0"
 jsonptr = "0.7.1"
 
 # Shared registry core (used by the OSS single-tenant admin store).
