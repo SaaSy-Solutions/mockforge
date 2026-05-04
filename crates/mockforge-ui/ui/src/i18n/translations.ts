@@ -111,6 +111,7 @@ const en: Dictionary = {
   'tab.cloudFlows': 'Cloud Flows',
   'tab.cloudContract': 'Cloud Contract',
   'tab.cloudRecorder': 'Cloud Recorder',
+  'tab.cloudProxy': 'Cloud Proxy',
   'tab.cloudShowcaseAdmin': 'Showcase Admin',
 
   'nav.localOnly.badge': 'Local',

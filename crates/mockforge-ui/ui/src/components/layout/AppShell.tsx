@@ -164,6 +164,7 @@ const navSections = [
       { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
       { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
+      { id: 'cloud-proxy', labelKey: 'tab.cloudProxy', icon: Radio },
       { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
     ]
   },
