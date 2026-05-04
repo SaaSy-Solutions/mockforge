@@ -42,6 +42,31 @@ const parseToken = (token: string): { user: User | null; expiresAt: number | nul
 // Token refresh interval management
 let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
+/**
+ * Hydrate cloud-mode-only fields (role, is_verified, email, created_at) from
+ * `/api/v1/users/me`. The login response and JWT only carry user_id+username,
+ * so without this admin users would be misclassified as `role: 'user'` and
+ * RoleGuard would deny them admin features.
+ */
+async function hydrateUserFromServer(base: User): Promise<User> {
+  if (!authApi.isCloud()) return base;
+  try {
+    const profile = await authApi.getMe();
+    return {
+      ...base,
+      id: profile.user_id,
+      username: profile.username,
+      email: profile.email || base.email,
+      role: profile.is_admin ? 'admin' : (base.role === 'viewer' ? 'viewer' : 'user'),
+      is_verified: profile.is_verified,
+      created_at: profile.created_at,
+    };
+  } catch (error) {
+    logger.warn('Failed to hydrate user profile from server', error);
+    return base;
+  }
+}
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
@@ -58,6 +83,7 @@ export const useAuthStore = create<AuthStore>()(
           // Call real authentication API
           const response = await authApi.login(username, password);
 
+          // Persist tokens immediately so the hydrate call carries Authorization.
           set({
             user: response.user,
             token: response.token,
@@ -65,6 +91,13 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true,
             isLoading: false,
           });
+
+          // Cloud login response and JWT lack role/is_verified/email; hydrate
+          // them from /users/me so admins resolve to role='admin'.
+          const hydrated = await hydrateUserFromServer(response.user);
+          if (hydrated !== response.user) {
+            set({ user: hydrated });
+          }
 
           // Start automatic token refresh
           get().startTokenRefresh();
@@ -156,6 +189,14 @@ export const useAuthStore = create<AuthStore>()(
               isAuthenticated: true,
               isLoading: false,
             });
+
+            // Refresh role/is_verified from server in cloud mode — persisted
+            // user state is stale across role changes (admin promotions, email
+            // verification) since the JWT carries no role claim.
+            const hydrated = await hydrateUserFromServer(user);
+            if (hydrated !== user) {
+              set({ user: hydrated });
+            }
 
             // Start token refresh if not already started
             get().startTokenRefresh();

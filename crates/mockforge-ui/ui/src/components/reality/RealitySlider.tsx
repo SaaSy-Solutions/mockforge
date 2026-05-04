@@ -32,8 +32,8 @@ const REALITY_LEVELS = [
     description: 'Simple, instant responses with no chaos',
     icon: Shield,
     color: 'text-gray-500',
-    bgColor: 'bg-gray-100 dark:bg-gray-800',
-    borderColor: 'border-gray-300 dark:border-gray-700',
+    bgColor: 'bg-muted',
+    borderColor: 'border-border',
     features: ['No chaos', '0ms latency', 'No AI'],
   },
   {
@@ -41,9 +41,9 @@ const REALITY_LEVELS = [
     name: 'Light Simulation',
     description: 'Minimal latency, basic intelligence',
     icon: Activity,
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-    borderColor: 'border-blue-300 dark:border-blue-700',
+    color: 'text-info-500',
+    bgColor: 'bg-info-50 dark:bg-info-900/20',
+    borderColor: 'border-info-300 dark:border-info-700',
     features: ['No chaos', '10-50ms latency', 'Basic AI'],
   },
   {
@@ -51,9 +51,9 @@ const REALITY_LEVELS = [
     name: 'Moderate Realism',
     description: 'Some chaos, moderate latency, full intelligence',
     icon: Gauge,
-    color: 'text-green-500',
-    bgColor: 'bg-green-50 dark:bg-green-900/20',
-    borderColor: 'border-green-300 dark:border-green-700',
+    color: 'text-success-500',
+    bgColor: 'bg-success-50 dark:bg-success-900/20',
+    borderColor: 'border-success-300 dark:border-success-700',
     features: ['5% errors, 10% delays', '50-200ms latency', 'Full AI'],
   },
   {
@@ -71,9 +71,9 @@ const REALITY_LEVELS = [
     name: 'Production Chaos',
     description: 'Maximum chaos, production-like latency, full features',
     icon: Zap,
-    color: 'text-red-500',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
-    borderColor: 'border-red-300 dark:border-red-700',
+    color: 'text-danger-500',
+    bgColor: 'bg-danger-50 dark:bg-danger-900/20',
+    borderColor: 'border-danger-300 dark:border-danger-700',
     features: ['15% errors, 30% delays', '200-2000ms latency', 'Full AI + Mutations'],
   },
 ] as const;
@@ -181,7 +181,7 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
   if (isLoading && !realityData) {
     return (
       <Card className={cn('p-6 animate-pulse', className)}>
-        <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-20 bg-muted rounded-lg" />
       </Card>
     );
   }
@@ -191,7 +191,7 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
       <div className={cn('flex items-center gap-3', className)}>
         <div className="flex items-center gap-2">
           <Icon className={cn('h-5 w-5', levelConfig.color)} />
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <span className="text-sm font-medium text-foreground">
             Level {currentLevel}
           </span>
         </div>
@@ -231,10 +231,10 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
             <Icon className="h-6 w-6" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-foreground">
               Reality Slider
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               {levelConfig.name}
             </p>
           </div>
@@ -250,10 +250,10 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
       {/* Main Slider */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label className="text-sm font-medium text-foreground">
             Realism Level
           </label>
-          <span className="text-lg font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+          <span className="text-lg font-bold text-foreground tabular-nums">
             {localLevel} / 5
           </span>
         </div>
@@ -297,14 +297,14 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
                     'flex flex-col items-center gap-1.5 p-2 rounded-lg transition-all duration-200',
                     'hover:bg-white/50 dark:hover:bg-gray-800/50',
                     'disabled:opacity-50 disabled:cursor-not-allowed',
-                    isActive && 'bg-white dark:bg-gray-800 shadow-sm',
+                    isActive && 'bg-card shadow-sm',
                     isHovered && !isActive && 'bg-white/30 dark:bg-gray-800/30'
                   )}
                 >
                   <LevelIcon
                     className={cn(
                       'h-5 w-5 transition-all duration-200',
-                      isActive ? level.color : 'text-gray-400 dark:text-gray-500',
+                      isActive ? level.color : 'text-muted-foreground',
                       isHovered && !isActive && 'scale-110'
                     )}
                   />
@@ -312,8 +312,8 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
                     className={cn(
                       'text-xs font-medium transition-all duration-200',
                       isActive
-                        ? 'text-gray-900 dark:text-gray-100'
-                        : 'text-gray-500 dark:text-gray-400'
+                        ? 'text-foreground'
+                        : 'text-muted-foreground'
                     )}
                   >
                     {level.value}
@@ -327,13 +327,13 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
 
       {/* Current Configuration Display */}
       {realityData && (
-        <div className="mt-6 p-4 rounded-lg bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+        <div className="mt-6 p-4 rounded-lg bg-card/50 dark:bg-gray-800/50 border border-border">
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 Chaos
               </p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <p className="text-sm font-semibold text-foreground">
                 {realityData.chaos.enabled ? (
                   <>
                     {Math.round(realityData.chaos.error_rate * 100)}% errors
@@ -346,10 +346,10 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 Latency
               </p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <p className="text-sm font-semibold text-foreground">
                 {realityData.latency.base_ms}ms
                 {realityData.latency.jitter_ms > 0 && (
                   <> ±{realityData.latency.jitter_ms}ms</>
@@ -357,14 +357,14 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
               </p>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 MockAI
               </p>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <p className="text-sm font-semibold text-foreground">
                 {realityData.mockai.enabled ? (
-                  <span className="text-green-600 dark:text-green-400">Enabled</span>
+                  <span className="text-success-600 dark:text-success-400">Enabled</span>
                 ) : (
-                  <span className="text-gray-500">Disabled</span>
+                  <span className="text-muted-foreground">Disabled</span>
                 )}
               </p>
             </div>
@@ -374,8 +374,8 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
 
       {/* Loading State */}
       {setLevelMutation.isPending && (
-        <div className="mt-4 flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
+        <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
           <span>Applying reality level...</span>
         </div>
       )}

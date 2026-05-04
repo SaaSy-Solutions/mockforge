@@ -133,7 +133,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   if (isLoading) {
     return (
       <Card className="p-6 animate-pulse">
-        <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        <div className="h-20 bg-muted rounded-lg" />
       </Card>
     );
   }
@@ -218,10 +218,10 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
             <Clock className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold text-foreground">
               Time Travel
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               {isEnabled ? 'Virtual time active' : 'Using real time'}
             </p>
           </div>
@@ -237,19 +237,19 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
       </div>
 
       {/* Time Display */}
-      <div className="mb-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+      <div className="mb-4 p-4 rounded-lg bg-muted/50 border border-border">
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
               {isEnabled ? 'Virtual Time' : 'Real Time'}
             </p>
-            <p className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">
+            <p className="text-xl font-bold text-foreground tabular-nums">
               {formatTime(virtualTime || status?.real_time)}
             </p>
           </div>
           {isEnabled && scaleFactor !== 1.0 && (
             <div className="text-right">
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 Speed
               </p>
               <p className="text-lg font-semibold text-brand-600 dark:text-brand-400">
@@ -262,14 +262,14 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
 
       {/* Lifecycle State Changes */}
       {isEnabled && (
-        <div className="mb-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 animate-fade-in">
+        <div className="mb-4 p-3 rounded-lg bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800 animate-fade-in">
           <div className="flex items-center gap-2 mb-2">
-            <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <p className="text-xs font-medium text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+            <User className="h-4 w-4 text-info-600 dark:text-info-400" />
+            <p className="text-xs font-medium text-info-700 dark:text-info-300 uppercase tracking-wide">
               Lifecycle Updates
             </p>
           </div>
-          <p className="text-xs text-blue-600 dark:text-blue-400">
+          <p className="text-xs text-info-600 dark:text-info-400">
             Persona lifecycle states are automatically updated when virtual time advances.
             Check the persona configuration to see current lifecycle states.
           </p>
@@ -294,7 +294,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
               onClick={handleDisable}
               disabled={disableMutation.isPending}
               variant="outline"
-              className="flex-1 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 border-border hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Pause className="h-4 w-4 mr-2" />
               Disable
@@ -307,7 +307,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
                 disabled={resetMutation.isPending}
                 variant="outline"
                 size="icon"
-                className="border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                className="border-border hover:bg-accent hover:text-accent-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <RotateCcw className="h-4 w-4" />
               </Button>
@@ -325,7 +325,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
                   disabled={isAdvancing || advanceMutation.isPending}
                   variant="outline"
                   size="sm"
-                  className="border-gray-300 dark:border-gray-600 hover:bg-brand-50 hover:border-brand-300 dark:hover:bg-brand-900/20 dark:hover:border-brand-600 transition-all duration-200 hover:scale-[1.05] active:scale-[0.95]"
+                  className="border-border hover:bg-brand-50 hover:border-brand-300 dark:hover:bg-brand-900/20 dark:hover:border-brand-600 transition-all duration-200 hover:scale-[1.05] active:scale-[0.95]"
                 >
                   <FastForward className="h-3 w-3 mr-1" />
                   {option.label}
@@ -337,11 +337,11 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
 
         {/* Advanced Controls Toggle */}
         {isEnabled && (
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+          <div className="pt-2 border-t border-border">
             <Button
               variant="ghost"
               size="sm"
-              className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
+              className="w-full text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
               onClick={() => setShowAdvanced(!showAdvanced)}
             >
               <Settings className="h-4 w-4 mr-2" />
@@ -352,14 +352,14 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
 
         {/* Advanced Controls */}
         {isEnabled && showAdvanced && (
-          <div className="pt-4 space-y-4 animate-fade-in border-t border-gray-200 dark:border-gray-700">
+          <div className="pt-4 space-y-4 animate-fade-in border-t border-border">
             {/* Time Slider */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className="text-sm font-medium text-foreground">
                   Time Travel Slider
                 </label>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   ±30 days from real time
                 </span>
               </div>
@@ -373,7 +373,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
                 showValue={false}
                 disabled={setTimeMutation.isPending}
               />
-              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
                 <span>Past</span>
                 <span>Real Time</span>
                 <span>Future</span>
@@ -382,7 +382,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
 
             {/* Date/Time Picker */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 <Calendar className="h-3 w-3 inline mr-1" />
                 Set Specific Time
               </label>
@@ -425,7 +425,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
+                className="w-full text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 transition-colors duration-200"
                 onClick={() => {
                   navigate('/time-travel');
                 }}

@@ -72,11 +72,11 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <GitBranch className="h-5 w-5 text-gray-400" />
+          <GitBranch className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Persona CI Hits</h3>
         </div>
         <div className="h-64 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading CI hit data...</div>
+          <div className="animate-pulse text-muted-foreground">Loading CI hit data...</div>
         </div>
       </Card>
     );
@@ -86,10 +86,10 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <GitBranch className="h-5 w-5 text-gray-400" />
+          <GitBranch className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Persona CI Hits</h3>
         </div>
-        <div className="h-64 flex items-center justify-center text-gray-400">
+        <div className="h-64 flex items-center justify-center text-muted-foreground">
           {error ? `Error: ${error.message}` : 'No CI hit data available'}
         </div>
       </Card>
@@ -104,10 +104,10 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <GitBranch className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <GitBranch className="h-5 w-5 text-info-600 dark:text-info-400" />
           <h3 className="text-lg font-semibold">Persona CI Hits</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           {aggregatedData.length} personas hit by CI
         </div>
       </div>
@@ -116,14 +116,14 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
         {aggregatedData.map((persona, index) => (
           <div
             key={persona.persona_id}
-            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            className="p-4 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground/50 transition-colors"
           >
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                <div className="text-sm font-semibold text-foreground truncate">
                   {persona.persona_id}
                 </div>
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Activity className="h-3 w-3" />
                     <span>{persona.total_hits.toLocaleString()} total hits</span>
@@ -135,7 +135,7 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 mt-2">
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
               <Clock className="h-3 w-3" />
               <span>Last hit: {formatDate(persona.last_hit)}</span>
             </div>
@@ -144,7 +144,7 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
       </div>
 
       {aggregatedData.length === 0 && (
-        <div className="text-center py-8 text-gray-400">
+        <div className="text-center py-8 text-muted-foreground">
           No personas have been hit by CI runs yet
         </div>
       )}

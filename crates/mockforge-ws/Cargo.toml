@@ -45,7 +45,7 @@ futures-util = "0.3"
 tokio-tungstenite = { version = "0.28", features=["rustls-tls-native-roots"] }
 axum = { version = "0.8" }
 opentelemetry_sdk = "0.22"
-tempfile = "3.14"
+tempfile = "3.27"
 
 [features]
 default = []

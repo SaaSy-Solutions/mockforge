@@ -148,7 +148,7 @@ export function GraphQLIntrospection() {
     return (
       <div key={field.name} className="ml-4 mb-2 p-2 bg-muted/30 rounded">
         <div className="flex items-start gap-2">
-          <code className="text-sm font-semibold text-blue-400">{field.name}</code>
+          <code className="text-sm font-semibold text-info-400">{field.name}</code>
           <span className="text-sm text-muted-foreground">
             : {renderFieldType(field.type)}
           </span>
@@ -161,7 +161,7 @@ export function GraphQLIntrospection() {
             <div className="text-xs font-semibold text-muted-foreground mb-1">Arguments:</div>
             {field.args.map((arg: { name?: string; type?: unknown; description?: string }, idx: number) => (
               <div key={idx} className="text-xs ml-2">
-                <code className="text-blue-300">{arg.name}</code>
+                <code className="text-info-300">{arg.name}</code>
                 <span className="text-muted-foreground">: {renderFieldType(arg.type)}</span>
                 {arg.description && (
                   <span className="text-muted-foreground ml-2">- {arg.description}</span>
@@ -272,7 +272,7 @@ export function GraphQLIntrospection() {
         {queries.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Badge variant="outline" className="bg-green-500/10 text-green-600">
+              <Badge variant="outline" className="bg-success-500/10 text-success-600">
                 Query
               </Badge>
               Operations
@@ -291,7 +291,7 @@ export function GraphQLIntrospection() {
         {mutations.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-600">
+              <Badge variant="outline" className="bg-info-500/10 text-info-600">
                 Mutation
               </Badge>
               Operations

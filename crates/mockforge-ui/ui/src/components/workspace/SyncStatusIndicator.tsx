@@ -22,15 +22,15 @@ export function SyncStatusIndicator({
   const getStatusIcon = () => {
     switch (status.status.toLowerCase()) {
       case 'syncing':
-        return <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />;
+        return <RefreshCw className="h-4 w-4 animate-spin text-info-500" />;
       case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-success-500" />;
       case 'error':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
+        return <AlertCircle className="h-4 w-4 text-danger-500" />;
       case 'idle':
-        return <Clock className="h-4 w-4 text-gray-500" />;
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
       default:
-        return <Clock className="h-4 w-4 text-gray-500" />;
+        return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -91,14 +91,14 @@ export function SyncStatusIndicator({
             </Badge>
             {status.target_directory && (
               <Tooltip content={`Syncing to: ${status.target_directory}`}>
-                <code className="text-xs text-gray-600 dark:text-gray-400 truncate max-w-32">
+                <code className="text-xs text-muted-foreground truncate max-w-32">
                   {status.target_directory.split('/').pop()}
                 </code>
               </Tooltip>
             )}
           </div>
           {status.last_sync && (
-            <span className="text-xs text-gray-600 dark:text-gray-400">
+            <span className="text-xs text-muted-foreground">
               Last sync: {formatLastSync(status.last_sync)}
             </span>
           )}
@@ -108,8 +108,8 @@ export function SyncStatusIndicator({
       <div className="flex items-center gap-1 ml-auto">
         {status.enabled && status.sync_direction === 'Bidirectional' && status.realtime_monitoring && (
           <Tooltip content="Real-time monitoring active">
-            <div className="flex items-center gap-1 text-xs text-green-600">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <div className="flex items-center gap-1 text-xs text-success-600">
+              <div className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
               Live
             </div>
           </Tooltip>

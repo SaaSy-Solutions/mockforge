@@ -75,24 +75,24 @@ export function ResponsePanel() {
 
   // Get status color
   const getStatusColor = (status: number) => {
-    if (status >= 200 && status < 300) return 'bg-green-500';
-    if (status >= 300 && status < 400) return 'bg-blue-500';
-    if (status >= 400 && status < 500) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (status >= 200 && status < 300) return 'bg-success-500';
+    if (status >= 300 && status < 400) return 'bg-info-500';
+    if (status >= 400 && status < 500) return 'bg-warning-500';
+    return 'bg-danger-500';
   };
 
   // Simple JSON tree renderer
   const renderJsonTree = (obj: unknown, depth = 0): React.ReactNode => {
     if (obj === null) {
-      return <span className="text-gray-500">null</span>;
+      return <span className="text-muted-foreground">null</span>;
     }
 
     if (typeof obj === 'string') {
-      return <span className="text-green-600">"{obj}"</span>;
+      return <span className="text-success-600">"{obj}"</span>;
     }
 
     if (typeof obj === 'number') {
-      return <span className="text-blue-600">{obj}</span>;
+      return <span className="text-info-600">{obj}</span>;
     }
 
     if (typeof obj === 'boolean') {
@@ -101,13 +101,13 @@ export function ResponsePanel() {
 
     if (Array.isArray(obj)) {
       if (obj.length === 0) {
-        return <span className="text-gray-400">[]</span>;
+        return <span className="text-muted-foreground">[]</span>;
       }
       return (
         <div className="ml-4">
           {obj.map((item, index) => (
             <div key={index} className="flex">
-              <span className="text-gray-400 mr-2">[{index}]:</span>
+              <span className="text-muted-foreground mr-2">[{index}]:</span>
               <div className="flex-1">{renderJsonTree(item, depth + 1)}</div>
             </div>
           ))}
@@ -118,13 +118,13 @@ export function ResponsePanel() {
     if (typeof obj === 'object') {
       const entries = Object.entries(obj);
       if (entries.length === 0) {
-        return <span className="text-gray-400">{'{}'}</span>;
+        return <span className="text-muted-foreground">{'{}'}</span>;
       }
       return (
         <div className="ml-4">
           {entries.map(([key, value]) => (
             <div key={key} className="flex">
-              <span className="text-blue-400 mr-2">"{key}":</span>
+              <span className="text-info-400 mr-2">"{key}":</span>
               <div className="flex-1">{renderJsonTree(value, depth + 1)}</div>
             </div>
           ))}
@@ -195,7 +195,7 @@ export function ResponsePanel() {
             </div>
             <Button variant="ghost" size="icon" onClick={handleCopy}>
               {copied ? (
-                <Check className="h-4 w-4 text-green-600" />
+                <Check className="h-4 w-4 text-success-600" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}

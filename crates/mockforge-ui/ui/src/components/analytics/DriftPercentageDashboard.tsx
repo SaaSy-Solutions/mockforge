@@ -56,11 +56,11 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingDown className="h-5 w-5 text-gray-400" />
+          <TrendingDown className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Drift Percentage</h3>
         </div>
         <div className="h-64 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading drift metrics...</div>
+          <div className="animate-pulse text-muted-foreground">Loading drift metrics...</div>
         </div>
       </Card>
     );
@@ -70,10 +70,10 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <TrendingDown className="h-5 w-5 text-gray-400" />
+          <TrendingDown className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Drift Percentage</h3>
         </div>
-        <div className="h-64 flex items-center justify-center text-gray-400">
+        <div className="h-64 flex items-center justify-center text-muted-foreground">
           {error ? `Error: ${error.message}` : 'No drift data available'}
         </div>
       </Card>
@@ -85,20 +85,20 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
   };
 
   const getDriftColor = (percentage: number) => {
-    if (percentage < 5) return 'text-green-600 dark:text-green-400';
-    if (percentage < 15) return 'text-yellow-600 dark:text-yellow-400';
+    if (percentage < 5) return 'text-success-600 dark:text-success-400';
+    if (percentage < 15) return 'text-warning-600 dark:text-warning-400';
     if (percentage < 30) return 'text-orange-600 dark:text-orange-400';
-    return 'text-red-600 dark:text-red-400';
+    return 'text-danger-600 dark:text-danger-400';
   };
 
   const getDriftIcon = (percentage: number) => {
     if (percentage < 5) {
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      return <CheckCircle2 className="h-5 w-5 text-success-500" />;
     }
     if (percentage < 15) {
-      return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+      return <AlertCircle className="h-5 w-5 text-warning-500" />;
     }
-    return <TrendingDown className="h-5 w-5 text-red-500" />;
+    return <TrendingDown className="h-5 w-5 text-danger-500" />;
   };
 
   const getDriftStatus = (percentage: number) => {
@@ -112,10 +112,10 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <TrendingDown className="h-5 w-5 text-danger-600 dark:text-danger-400" />
           <h3 className="text-lg font-semibold">Drift Percentage</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           Last updated: {formatDate(latestData.measured_at)}
         </div>
       </div>
@@ -125,7 +125,7 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             {getDriftIcon(latestData.drift_percentage)}
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <span className="text-sm font-medium text-foreground">
               Current Drift
             </span>
           </div>
@@ -133,24 +133,24 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
             {latestData.drift_percentage.toFixed(1)}%
           </div>
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        <div className="text-xs text-muted-foreground mb-4">
           Status: <span className="font-semibold">{getDriftStatus(latestData.drift_percentage)}</span>
         </div>
-        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+        <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
           <div
             className={`h-full transition-all duration-500 ${
               latestData.drift_percentage < 5
-                ? 'bg-green-500'
+                ? 'bg-success-500'
                 : latestData.drift_percentage < 15
-                  ? 'bg-yellow-500'
+                  ? 'bg-warning-500'
                   : latestData.drift_percentage < 30
                     ? 'bg-orange-500'
-                    : 'bg-red-500'
+                    : 'bg-danger-500'
             }`}
             style={{ width: `${Math.min(latestData.drift_percentage, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+        <div className="flex justify-between text-xs text-muted-foreground mt-1">
           <span>{latestData.drifting_mocks.toLocaleString()} drifting</span>
           <span>{latestData.total_mocks.toLocaleString()} total mocks</span>
         </div>
@@ -158,25 +158,25 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
 
       {/* Aggregate Stats */}
       {aggregateStats && aggregateStats.workspaceCount > 1 && (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg mb-6">
-          <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+        <div className="p-4 bg-muted/50 rounded-lg mb-6">
+          <div className="text-sm font-semibold text-foreground mb-2">
             Aggregate Statistics ({aggregateStats.workspaceCount} workspaces)
           </div>
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Total Mocks</div>
-              <div className="text-lg font-bold text-gray-900 dark:text-white">
+              <div className="text-muted-foreground">Total Mocks</div>
+              <div className="text-lg font-bold text-foreground">
                 {aggregateStats.totalMocks.toLocaleString()}
               </div>
             </div>
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Drifting</div>
-              <div className="text-lg font-bold text-red-600 dark:text-red-400">
+              <div className="text-muted-foreground">Drifting</div>
+              <div className="text-lg font-bold text-danger-600 dark:text-danger-400">
                 {aggregateStats.totalDrifting.toLocaleString()}
               </div>
             </div>
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Avg Drift</div>
+              <div className="text-muted-foreground">Avg Drift</div>
               <div className={`text-lg font-bold ${getDriftColor(aggregateStats.avgDriftPercentage)}`}>
                 {aggregateStats.avgDriftPercentage.toFixed(1)}%
               </div>
@@ -188,23 +188,23 @@ export const DriftPercentageDashboard: React.FC<DriftPercentageDashboardProps> =
       {/* Historical Trend (if multiple data points) */}
       {data && data.length > 1 && (
         <div className="mt-6">
-          <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+          <div className="text-sm font-semibold text-foreground mb-3">
             Recent Trend
           </div>
           <div className="space-y-2">
             {data.slice(0, 5).map((item, index) => (
               <div
                 key={item.id || index}
-                className="flex items-center justify-between p-2 border border-gray-200 dark:border-gray-700 rounded"
+                className="flex items-center justify-between p-2 border border-border rounded"
               >
-                <div className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   {formatDate(item.measured_at)}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className={`text-sm font-semibold ${getDriftColor(item.drift_percentage)}`}>
                     {item.drift_percentage.toFixed(1)}%
                   </div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     ({item.drifting_mocks}/{item.total_mocks})
                   </div>
                 </div>

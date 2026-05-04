@@ -7,16 +7,18 @@
 import React, { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  NodeTypes,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  NodeTypes,
+  Connection,
 } from '@xyflow/react';
 import type { WorldStateNode, WorldStateEdge } from '../../hooks/useWorldState';
 import { WorldStateNodeComponent } from './WorldStateNode';

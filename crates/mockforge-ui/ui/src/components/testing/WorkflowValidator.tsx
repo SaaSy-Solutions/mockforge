@@ -467,9 +467,9 @@ export function WorkflowValidator() {
   const getStatusColor = (status: TestResult['status']) => {
     switch (status) {
       case 'pending': return 'text-muted-foreground';
-      case 'running': return 'text-blue-600';
-      case 'passed': return 'text-green-600';
-      case 'failed': return 'text-red-600';
+      case 'running': return 'text-info-600';
+      case 'passed': return 'text-success-600';
+      case 'failed': return 'text-danger-600';
     }
   };
 
@@ -498,11 +498,11 @@ export function WorkflowValidator() {
       {testResults.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="text-center p-4 border rounded-lg">
-            <div className="text-2xl font-bold text-green-600">{passedTests}</div>
+            <div className="text-2xl font-bold text-success-600">{passedTests}</div>
             <div className="text-sm text-muted-foreground">Passed</div>
           </div>
           <div className="text-center p-4 border rounded-lg">
-            <div className="text-2xl font-bold text-red-600">{failedTests}</div>
+            <div className="text-2xl font-bold text-danger-600">{failedTests}</div>
             <div className="text-sm text-muted-foreground">Failed</div>
           </div>
           <div className="text-center p-4 border rounded-lg">
@@ -529,7 +529,7 @@ export function WorkflowValidator() {
             </div>
 
             {test.error && (
-              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
+              <div className="mt-2 p-3 bg-danger-50 border border-danger-200 rounded text-danger-700 text-sm">
                 <strong>Error:</strong> {test.error}
               </div>
             )}

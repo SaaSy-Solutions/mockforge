@@ -112,7 +112,7 @@ export function PluginsPage() {
 
       <div className="flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search plugins by name or description..."
             value={searchQuery}
@@ -164,8 +164,8 @@ export function PluginsPage() {
           {isLoading ? (
             <Card>
               <div className="p-8 text-center">
-                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600">Loading plugins...</p>
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <p className="text-muted-foreground">Loading plugins...</p>
               </div>
             </Card>
           ) : (
@@ -186,7 +186,7 @@ export function PluginsPage() {
           <Card>
             <div className="p-6">
               <EmptyState
-                icon={<Puzzle className="w-12 h-12 text-gray-400" />}
+                icon={<Puzzle className="w-12 h-12 text-muted-foreground" />}
                 title={t('page.plugins.marketplaceTitle')}
                 description={t('page.plugins.marketplaceBody')}
                 action={

@@ -261,11 +261,11 @@ describe('ResponseHistory', () => {
 
     await waitFor(() => {
       // 200 should have CheckCircle icon
-      const successIcons = document.querySelectorAll('.text-green-500');
+      const successIcons = document.querySelectorAll('.text-success-500');
       expect(successIcons.length).toBeGreaterThan(0);
 
       // 500 should have XCircle icon
-      const errorIcons = document.querySelectorAll('.text-red-500');
+      const errorIcons = document.querySelectorAll('.text-danger-500');
       expect(errorIcons.length).toBeGreaterThan(0);
     });
   });

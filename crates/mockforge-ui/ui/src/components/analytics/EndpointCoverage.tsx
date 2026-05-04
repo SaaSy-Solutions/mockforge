@@ -64,11 +64,11 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Target className="h-5 w-5 text-gray-400" />
+          <Target className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Endpoint Coverage</h3>
         </div>
         <div className="h-64 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading coverage data...</div>
+          <div className="animate-pulse text-muted-foreground">Loading coverage data...</div>
         </div>
       </Card>
     );
@@ -78,10 +78,10 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
     return (
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Target className="h-5 w-5 text-gray-400" />
+          <Target className="h-5 w-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold">Endpoint Coverage</h3>
         </div>
-        <div className="h-64 flex items-center justify-center text-gray-400">
+        <div className="h-64 flex items-center justify-center text-muted-foreground">
           {error ? `Error: ${error.message}` : 'No coverage data available'}
         </div>
       </Card>
@@ -96,21 +96,21 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
 
   const getCoverageColor = (coverage?: number | null) => {
     if (coverage === null || coverage === undefined) return 'text-gray-400';
-    if (coverage >= 90) return 'text-green-600 dark:text-green-400';
-    if (coverage >= 70) return 'text-blue-600 dark:text-blue-400';
-    if (coverage >= 50) return 'text-yellow-600 dark:text-yellow-400';
+    if (coverage >= 90) return 'text-success-600 dark:text-success-400';
+    if (coverage >= 70) return 'text-info-600 dark:text-info-400';
+    if (coverage >= 50) return 'text-warning-600 dark:text-warning-400';
     if (coverage > 0) return 'text-orange-600 dark:text-orange-400';
-    return 'text-red-600 dark:text-red-400';
+    return 'text-danger-600 dark:text-danger-400';
   };
 
   const getCoverageIcon = (coverage?: number | null) => {
     if (coverage === null || coverage === undefined || coverage === 0) {
-      return <AlertCircle className="h-4 w-4 text-red-500" />;
+      return <AlertCircle className="h-4 w-4 text-danger-500" />;
     }
     if (coverage >= 70) {
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+      return <CheckCircle2 className="h-4 w-4 text-success-500" />;
     }
-    return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+    return <AlertCircle className="h-4 w-4 text-warning-500" />;
   };
 
   return (
@@ -120,42 +120,42 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
           <Target className="h-5 w-5 text-purple-600 dark:text-purple-400" />
           <h3 className="text-lg font-semibold">Endpoint Coverage</h3>
         </div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-sm text-muted-foreground">
           {totalEndpoints} endpoints tracked
         </div>
       </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-          <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+        <div className="p-3 bg-success-50 dark:bg-success-900/20 rounded-lg">
+          <div className="text-2xl font-bold text-success-600 dark:text-success-400">
             {categorizedData.excellent.length}
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">Excellent (≥90%)</div>
+          <div className="text-xs text-muted-foreground">Excellent (≥90%)</div>
         </div>
-        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+        <div className="p-3 bg-info-50 dark:bg-info-900/20 rounded-lg">
+          <div className="text-2xl font-bold text-info-600 dark:text-info-400">
             {categorizedData.good.length}
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">Good (70-89%)</div>
+          <div className="text-xs text-muted-foreground">Good (70-89%)</div>
         </div>
-        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+        <div className="p-3 bg-warning-50 dark:bg-warning-900/20 rounded-lg">
+          <div className="text-2xl font-bold text-warning-600 dark:text-warning-400">
             {categorizedData.fair.length}
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">Fair (50-69%)</div>
+          <div className="text-xs text-muted-foreground">Fair (50-69%)</div>
         </div>
         <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
           <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
             {categorizedData.poor.length}
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">Poor (&lt;50%)</div>
+          <div className="text-xs text-muted-foreground">Poor (&lt;50%)</div>
         </div>
-        <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+        <div className="p-3 bg-danger-50 dark:bg-danger-900/20 rounded-lg">
+          <div className="text-2xl font-bold text-danger-600 dark:text-danger-400">
             {categorizedData.untested.length}
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400">Untested</div>
+          <div className="text-xs text-muted-foreground">Untested</div>
         </div>
       </div>
 
@@ -168,17 +168,17 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
           return (
             <div
               key={endpoint.id || index}
-              className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              className="p-3 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground/50 transition-colors"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     {getCoverageIcon(coverage)}
-                    <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    <div className="text-sm font-medium text-foreground truncate">
                       {method} {endpoint.endpoint}
                     </div>
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     {endpoint.protocol} • {endpoint.test_count} tests
                   </div>
                 </div>
@@ -189,7 +189,7 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
                 </div>
               </div>
               {endpoint.last_tested_at && (
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   Last tested: {formatDate(endpoint.last_tested_at)}
                 </div>
               )}
@@ -199,7 +199,7 @@ export const EndpointCoverage: React.FC<EndpointCoverageProps> = ({
       </div>
 
       {totalEndpoints === 0 && (
-        <div className="text-center py-8 text-gray-400">
+        <div className="text-center py-8 text-muted-foreground">
           No endpoint coverage data available
         </div>
       )}

@@ -45,6 +45,7 @@ import {
   Filler,
 } from 'chart.js';
 import { Line, Pie } from 'react-chartjs-2';
+import { getChartPalette } from '../utils/chartTheme';
 
 ChartJS.register(
   CategoryScale,
@@ -206,7 +207,9 @@ const TestExecutionDashboard: React.FC = () => {
     exec.workflow_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const COLORS = ['#4caf50', '#f44336', '#2196f3'];
+  // Pull live brand colors so the chart matches the active palette + dark mode.
+  const palette = getChartPalette();
+  const STATUS_COLORS = [palette.success, palette.danger, palette.info];
 
   const lineChartData = metrics
     ? {
@@ -215,8 +218,8 @@ const TestExecutionDashboard: React.FC = () => {
           {
             label: 'Executions',
             data: metrics.executions_by_day.map((d) => d.count),
-            borderColor: '#2196f3',
-            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+            borderColor: palette.primary,
+            backgroundColor: palette.primaryAlpha(0.12),
             tension: 0.4,
             fill: false,
           },
@@ -227,25 +230,10 @@ const TestExecutionDashboard: React.FC = () => {
   const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: true,
-      },
-    },
+    plugins: { legend: { display: true } },
     scales: {
-      x: {
-        grid: {
-          display: true,
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-      },
-      y: {
-        grid: {
-          display: true,
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        beginAtZero: true,
-      },
+      x: { grid: { display: true, color: palette.border } },
+      y: { grid: { display: true, color: palette.border }, beginAtZero: true },
     },
   };
 
@@ -255,7 +243,7 @@ const TestExecutionDashboard: React.FC = () => {
         datasets: [
           {
             data: metrics.executions_by_status.map((d) => d.value),
-            backgroundColor: COLORS.slice(0, metrics.executions_by_status.length),
+            backgroundColor: STATUS_COLORS.slice(0, metrics.executions_by_status.length),
           },
         ],
       }

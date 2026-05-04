@@ -24,7 +24,7 @@ export const SystemMetricsCard: React.FC<SystemMetricsCardProps> = ({ data, isLo
         <h3 className="text-lg font-semibold mb-4">System Health</h3>
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-6 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div key={i} className="h-6 bg-muted rounded"></div>
           ))}
         </div>
       </Card>
@@ -35,17 +35,17 @@ export const SystemMetricsCard: React.FC<SystemMetricsCardProps> = ({ data, isLo
     {
       label: 'Memory Usage',
       value: `${Math.round(data.memory_usage_mb)} MB`,
-      color: 'text-blue-600 dark:text-blue-400',
+      color: 'text-info-600 dark:text-info-400',
     },
     {
       label: 'CPU Usage',
       value: `${data.cpu_usage_percent.toFixed(1)}%`,
       color:
         data.cpu_usage_percent < 50
-          ? 'text-green-600 dark:text-green-400'
+          ? 'text-success-600 dark:text-success-400'
           : data.cpu_usage_percent < 80
-          ? 'text-yellow-600 dark:text-yellow-400'
-          : 'text-red-600 dark:text-red-400',
+          ? 'text-warning-600 dark:text-warning-400'
+          : 'text-danger-600 dark:text-danger-400',
     },
     {
       label: 'Thread Count',
@@ -55,7 +55,7 @@ export const SystemMetricsCard: React.FC<SystemMetricsCardProps> = ({ data, isLo
     {
       label: 'Uptime',
       value: formatUptime(data.uptime_seconds),
-      color: 'text-gray-600 dark:text-gray-400',
+      color: 'text-muted-foreground',
     },
   ];
 
@@ -64,8 +64,8 @@ export const SystemMetricsCard: React.FC<SystemMetricsCardProps> = ({ data, isLo
       <h3 className="text-lg font-semibold mb-4">System Health</h3>
       <div className="grid grid-cols-2 gap-4">
         {metrics.map((metric) => (
-          <div key={metric.label} className="border-b border-gray-100 dark:border-gray-800 pb-2">
-            <div className="text-sm text-gray-600 dark:text-gray-400">{metric.label}</div>
+          <div key={metric.label} className="border-b border-border pb-2">
+            <div className="text-sm text-muted-foreground">{metric.label}</div>
             <div className={`text-2xl font-semibold ${metric.color}`}>{metric.value}</div>
           </div>
         ))}

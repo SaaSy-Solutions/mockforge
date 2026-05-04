@@ -104,7 +104,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
     <Modal open={true} onOpenChange={onClose} className="max-w-2xl">
       <div className="p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Upload className="w-6 h-6 text-blue-500" />
+          <Upload className="w-6 h-6 text-info-500" />
           <h2 className="text-xl font-bold">Install Plugin</h2>
         </div>
 
@@ -129,7 +129,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
                 value={filePath}
                 onChange={(e) => setFilePath(e.target.value)}
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Path to a directory containing plugin.yaml and WebAssembly file
               </p>
             </div>
@@ -144,7 +144,7 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 URL to a plugin archive (.zip, .tar.gz) or Git repository
               </p>
             </div>
@@ -159,9 +159,9 @@ export function InstallPluginModal({ onClose }: InstallPluginModalProps) {
         )}
 
         {success && (
-          <Alert variant="default" className="mt-4 border-green-200 bg-green-50">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <div className="text-green-800">{success}</div>
+          <Alert variant="default" className="mt-4 border-success-200 bg-success-50">
+            <CheckCircle className="h-4 w-4 text-success-600" />
+            <div className="text-success-700">{success}</div>
           </Alert>
         )}
 

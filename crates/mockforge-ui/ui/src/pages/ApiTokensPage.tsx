@@ -353,20 +353,20 @@ export function ApiTokensPage() {
       {/* Rotation Reminder Banner */}
       {rotationStatus && rotationStatus.tokens_needing_rotation.length > 0 && (
         <div
-          className="rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4"
+          className="rounded-lg border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-900/20 p-4"
           role="status"
           aria-live="polite"
         >
           <div className="flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 mt-0.5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+            <AlertTriangle className="w-5 h-5 mt-0.5 text-warning-600 dark:text-warning-400 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+              <p className="text-sm font-medium text-warning-900 dark:text-warning-100">
                 {rotationStatus.tokens_needing_rotation.length === 1
                   ? '1 token is older than '
                   : `${rotationStatus.tokens_needing_rotation.length} tokens are older than `}
                 {rotationStatus.rotation_threshold_days} days and should be rotated.
               </p>
-              <p className="text-sm text-yellow-800 dark:text-yellow-200 mt-1">
+              <p className="text-sm text-warning-700 dark:text-warning-200 mt-1">
                 Rotating long-lived tokens reduces the blast radius of leaked credentials.
               </p>
             </div>
@@ -401,10 +401,10 @@ export function ApiTokensPage() {
                   {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </Button>
               </div>
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+              <div className="bg-warning-50 dark:bg-warning-900/20 border border-warning-200 dark:border-warning-800 rounded-lg p-3">
                 <div className="flex items-start">
-                  <AlertTriangle className="w-4 h-4 mr-2 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <AlertTriangle className="w-4 h-4 mr-2 text-warning-600 dark:text-warning-400 mt-0.5" />
+                  <p className="text-sm text-warning-700 dark:text-warning-200">
                     Make sure to copy this token. It will not be shown again.
                   </p>
                 </div>

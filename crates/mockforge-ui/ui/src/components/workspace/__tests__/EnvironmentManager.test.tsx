@@ -199,7 +199,7 @@ describe('EnvironmentManager', () => {
   it('shows active indicator on active environment', () => {
     render(<EnvironmentManager workspaceId="ws-1" />, { wrapper: createWrapper() });
 
-    const activeIndicators = document.querySelectorAll('.bg-blue-500.rounded-full');
+    const activeIndicators = document.querySelectorAll('.bg-info-500.rounded-full');
     expect(activeIndicators.length).toBe(1);
   });
 

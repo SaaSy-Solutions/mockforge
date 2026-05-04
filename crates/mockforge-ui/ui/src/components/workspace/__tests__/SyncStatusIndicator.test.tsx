@@ -155,7 +155,7 @@ describe('SyncStatusIndicator', () => {
   it('displays correct badge variant for status', () => {
     const { rerender } = render(<SyncStatusIndicator status={{ ...baseStatus, status: 'syncing' }} />);
     let badge = screen.getByText('Syncing...').closest('.inline-flex');
-    expect(badge).toHaveClass('bg-blue-100');
+    expect(badge).toHaveClass('bg-info-100');
 
     rerender(<SyncStatusIndicator status={{ ...baseStatus, status: 'success' }} />);
     badge = screen.getByText('Synced').closest('.inline-flex');

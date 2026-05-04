@@ -8,11 +8,8 @@ name: JCS Canonicalization Fuzz
 # at publish time, so a silent canonicalization drift would ship before
 # anyone noticed.
 
+# Cron disabled — runner queue contention; manual workflow_dispatch still works.
 on:
-  schedule:
-    # 03:00 UTC — offset from the generic `fuzz.yml` run at 02:00 so
-    # they don't contend for the shared runner pool.
-    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       cases:

@@ -19,7 +19,7 @@ export interface UnsavedChangesIndicatorProps {
 
 /**
  * Visual indicator for unsaved changes in forms
- * 
+ *
  * @example
  * ```tsx
  * <UnsavedChangesIndicator
@@ -64,8 +64,8 @@ export function UnsavedChangesIndicator({
       className={cn(
         'flex items-center gap-2 text-sm',
         hasUnsavedChanges && 'text-amber-600 dark:text-amber-400',
-        isSaving && 'text-blue-600 dark:text-blue-400',
-        !hasUnsavedChanges && !isSaving && 'text-green-600 dark:text-green-400',
+        isSaving && 'text-info-600 dark:text-info-400',
+        !hasUnsavedChanges && !isSaving && 'text-success-600 dark:text-success-400',
         className
       )}
     >
