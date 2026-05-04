@@ -4,6 +4,7 @@
 //! using OpenAPI specifications to generate realistic traffic patterns.
 
 pub mod chunked_bench;
+pub mod cloud_api;
 pub mod command;
 pub mod conformance;
 pub mod crud_flow;
@@ -27,6 +28,10 @@ pub mod spec_parser;
 pub mod target_parser;
 pub mod wafbench;
 
+pub use cloud_api::{
+    run_bench, run_conformance, CloudBenchInputs, CloudConformanceInputs, CloudRunArtifacts,
+    SpecFormat,
+};
 pub use command::BenchCommand;
 pub use crud_flow::{CrudFlow, CrudFlowConfig, CrudFlowDetector, FlowStep};
 pub use data_driven::{
