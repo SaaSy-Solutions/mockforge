@@ -22,13 +22,14 @@ use axum::{
     Json,
 };
 use mockforge_registry_core::models::flow::CreateFlow;
+use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{CloudWorkspace, Flow, FlowVersion},
+    models::{CloudWorkspace, Flow, FlowVersion, TestRun},
     AppState,
 };
 
@@ -198,6 +199,88 @@ pub async fn save_flow_version(
         .await
         .map_err(ApiError::Database)?;
     Ok(Json(version))
+}
+
+/// `POST /api/v1/flows/{id}/runs`
+///
+/// Triggers a flow execution. Reuses the #4 test_runs lifecycle with
+/// `kind` = the flow's own kind (scenario / orchestration / state_machine
+/// / chain), so it shares the runner pool, concurrency cap, and
+/// runner_seconds metering with regular test runs.
+pub async fn trigger_run(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<TestRun>> {
+    let flow = load_authorized_flow(&state, user_id, &headers, id).await?;
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), flow.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+
+    let org = mockforge_registry_core::models::Organization::find_by_id(
+        state.db.pool(),
+        workspace.org_id,
+    )
+    .await
+    .map_err(|_| ApiError::Internal(anyhow::anyhow!("DB error loading org")))?
+    .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
+    let limits = crate::handlers::usage::effective_limits(&state, &org).await?;
+    let max_concurrent = limits.get("max_concurrent_runs").and_then(|v| v.as_i64()).unwrap_or(0);
+    if max_concurrent == 0 {
+        return Err(ApiError::ResourceLimitExceeded(
+            "Test execution / flow runs are not enabled on this plan".into(),
+        ));
+    }
+    if max_concurrent > 0 {
+        let inflight = TestRun::count_inflight(state.db.pool(), workspace.org_id)
+            .await
+            .map_err(ApiError::Database)?;
+        if inflight.total() >= max_concurrent {
+            return Err(ApiError::ResourceLimitExceeded(format!(
+                "Concurrent run limit reached ({}/{}).",
+                inflight.total(),
+                max_concurrent,
+            )));
+        }
+    }
+
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: flow.id,
+            org_id: workspace.org_id,
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    // Push payload includes the flow's current_version_id so the
+    // runner-side FlowExecutor knows which config to load.
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: flow.id,
+            kind: &flow.kind,
+            payload: serde_json::json!({
+                "flow_kind": flow.kind,
+                "flow_name": flow.name,
+                "current_version_id": flow.current_version_id,
+            }),
+        },
+    )
+    .await
+    {
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue flow run");
+    }
+
+    Ok(Json(run))
 }
 
 /// `GET /api/v1/flows/{id}/versions` — full version history, newest first.

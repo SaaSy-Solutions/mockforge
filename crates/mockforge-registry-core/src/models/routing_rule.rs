@@ -139,9 +139,8 @@ impl RoutingRule {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
-    #![cfg(feature = "postgres")]
     use super::*;
     use chrono::Utc;
 

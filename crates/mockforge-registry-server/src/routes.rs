@@ -370,6 +370,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
                 .post(handlers::flows::save_flow_version),
         )
         .route(
+            "/api/v1/flows/{id}/runs",
+            post(handlers::flows::trigger_run),
+        )
+        .route(
             "/api/v1/flow-versions/{version_id}",
             get(handlers::flows::get_flow_version),
         )
@@ -411,6 +415,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route(
             "/api/v1/chaos-campaigns/{id}/reports",
             get(handlers::chaos::list_campaign_reports),
+        )
+        .route(
+            "/api/v1/chaos-campaigns/{id}/runs",
+            post(handlers::chaos::trigger_run),
         )
         .route(
             "/api/v1/workspaces/{workspace_id}/resilience-patterns",
