@@ -42,6 +42,12 @@ serde_yaml = "0.9"
 # Redis queue (matches the registry-server's choice).
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 
+# Cloud-friendly bench/conformance/OWASP entry points (see
+# mockforge-bench::cloud_api). Adds k6 + handlebars + openapi parser to
+# the runner image; in production the Dockerfile must also install the
+# k6 binary on $PATH.
+mockforge-bench = { path = "../mockforge-bench" }
+
 # tracing-subscriber is only used by the binary entry point; pulling it
 # into normal deps so the binary builds without juggling features.
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

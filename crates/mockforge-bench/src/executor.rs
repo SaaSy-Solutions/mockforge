@@ -335,7 +335,7 @@ impl Default for K6Executor {
 }
 
 /// k6 test results
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct K6Results {
     pub total_requests: u64,
     pub failed_requests: u64,
