@@ -158,6 +158,7 @@ const navSections = [
     titleKey: 'nav.chaosResilience',
     items: [
       { id: 'chaos', labelKey: 'tab.chaosEngineering', icon: Zap },
+      { id: 'cloud-chaos', labelKey: 'tab.cloudChaos', icon: Zap },
       { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
       { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
@@ -255,6 +256,8 @@ const cloudNavItemIds = new Set([
   'cloud-test-runs',
   // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
   'cloud-traces',
+  // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
+  'cloud-chaos',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',

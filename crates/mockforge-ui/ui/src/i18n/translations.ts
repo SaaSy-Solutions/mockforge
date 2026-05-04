@@ -107,6 +107,7 @@ const en: Dictionary = {
   'tab.cloudIncidents': 'Cloud Incidents',
   'tab.cloudTestRuns': 'Cloud Test Runs',
   'tab.cloudTraces': 'Cloud Traces',
+  'tab.cloudChaos': 'Cloud Chaos',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requires a local MockForge instance',

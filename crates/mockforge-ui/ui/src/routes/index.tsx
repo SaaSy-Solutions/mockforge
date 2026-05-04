@@ -90,6 +90,9 @@ const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m
 // Cloud traces (#2) — cross-deployment OTLP search
 const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => ({ default: m.CloudTracesPage })));
 
+// Cloud chaos (#7) — campaign authoring + run history
+const CloudChaosPage = lazy(() => import('../pages/CloudChaosPage').then(m => ({ default: m.CloudChaosPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -219,6 +222,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
   { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
   { path: '/cloud-traces', element: <CloudTracesPage /> },
+  { path: '/cloud-chaos', element: <CloudChaosPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
   { path: '/registry-login', element: <RegistryLoginPage /> },
