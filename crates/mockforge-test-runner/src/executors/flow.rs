@@ -74,6 +74,26 @@ impl Executor for FlowExecutor {
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
         let started = Instant::now();
+
+        // Chain kind with real `links` config gets the real HTTP-driven
+        // chain executor. All other flow kinds (and chains with empty
+        // links) fall through to the synthetic-pass path below.
+        if self.kind == "chain" {
+            let chain_config = job
+                .payload
+                .get("config")
+                .filter(|c| {
+                    c.get("links")
+                        .and_then(|v| v.as_array())
+                        .map(|a| !a.is_empty())
+                        .unwrap_or(false)
+                })
+                .cloned();
+            if let Some(config) = chain_config {
+                return crate::executors::chain::run_chain(job, callbacks, started, &config).await;
+            }
+        }
+
         callbacks.run_started(job.run_id).await?;
 
         let real_node_names = Self::extract_node_names(&job.payload);
