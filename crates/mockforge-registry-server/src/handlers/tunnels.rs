@@ -205,9 +205,16 @@ pub async fn delete_tunnel(
 
 /// `POST /api/v1/tunnels/{id}/verify-custom-domain`
 ///
-/// Stub for now — DNS proof verification (CNAME → t.mockforge.dev)
-/// happens in a follow-up slice. This endpoint exists so the UI flow
-/// is wired even if it currently always fails.
+/// Looks up `_mockforge-verify.<custom_domain>` TXT records and checks
+/// for one whose value equals the deterministic proof token derived
+/// from `(org_id, tunnel.id)`. On match, marks the tunnel verified and
+/// returns the updated row; on miss, returns a 400 with the expected
+/// token + records found so the UI can render an actionable error.
+///
+/// The proof token is `sha256(org_id_bytes || tunnel_id_bytes)` hex —
+/// stable across attempts (so users don't need to update their DNS
+/// between tries) and unguessable without the registry's row data
+/// (so a third party can't claim someone else's domain by luck).
 pub async fn verify_custom_domain(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -215,15 +222,136 @@ pub async fn verify_custom_domain(
     headers: HeaderMap,
 ) -> ApiResult<Json<TunnelReservation>> {
     let tunnel = load_authorized_tunnel(&state, user_id, &headers, id).await?;
-    if tunnel.custom_domain.is_none() {
-        return Err(ApiError::InvalidRequest("Tunnel has no custom domain to verify".into()));
+    let domain = tunnel
+        .custom_domain
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Tunnel has no custom domain to verify".into()))?;
+
+    let expected = expected_verification_token(tunnel.org_id, tunnel.id);
+    let lookup_name = format!("_mockforge-verify.{domain}");
+
+    let records = lookup_txt_records(&lookup_name).await.map_err(|e| {
+        ApiError::InvalidRequest(format!(
+            "DNS lookup for {lookup_name} failed: {e}. Add a TXT record with value '{expected}' \
+             and try again."
+        ))
+    })?;
+
+    if !records.iter().any(|r| r == &expected) {
+        return Err(ApiError::InvalidRequest(format!(
+            "TXT record at {lookup_name} did not contain the expected proof token. \
+             Expected '{expected}', found {records:?}. \
+             Add the proof TXT record to your DNS provider and try again — \
+             changes can take a few minutes to propagate."
+        )));
     }
-    // TODO: actual DNS lookup + CNAME validation in follow-up slice.
-    // For now this returns 501-style error so the UI knows verification
-    // isn't ready yet.
-    Err(ApiError::InvalidRequest(
-        "Custom domain verification is not yet implemented".into(),
-    ))
+
+    let updated = TunnelReservation::mark_custom_domain_verified(state.db.pool(), tunnel.id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
+    Ok(Json(updated))
+}
+
+/// `GET /api/v1/tunnels/{id}/custom-domain-proof`
+///
+/// Returns the TXT record name + value the user needs to add to their
+/// DNS zone for verification to succeed. Token is the same one the
+/// POST verify endpoint compares against — derived from (org, tunnel).
+#[derive(Debug, serde::Serialize)]
+pub struct CustomDomainProofResponse {
+    /// e.g. `_mockforge-verify.api.example.com`
+    pub txt_record_name: String,
+    /// Hex sha256 token to put in the TXT record value.
+    pub txt_record_value: String,
+    /// Convenience pre-formatted line operators can paste into a zone
+    /// file (`<name> 300 IN TXT "<value>"`).
+    pub zone_file_line: String,
+}
+
+pub async fn get_custom_domain_proof(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<CustomDomainProofResponse>> {
+    let tunnel = load_authorized_tunnel(&state, user_id, &headers, id).await?;
+    let domain = tunnel
+        .custom_domain
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Tunnel has no custom domain set".into()))?;
+    let token = expected_verification_token(tunnel.org_id, tunnel.id);
+    let record_name = format!("_mockforge-verify.{domain}");
+    let zone_line = format!(r#"{record_name} 300 IN TXT "{token}""#);
+    Ok(Json(CustomDomainProofResponse {
+        txt_record_name: record_name,
+        txt_record_value: token,
+        zone_file_line: zone_line,
+    }))
+}
+
+/// Deterministic per-(org, tunnel) verification token. Hex sha256 so
+/// it's printable, copy-pasteable, and stable. Re-deriving it gives
+/// the same value, so users don't need to refresh DNS between attempts.
+fn expected_verification_token(org_id: Uuid, tunnel_id: Uuid) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(b"mockforge-verify-v1");
+    h.update(org_id.as_bytes());
+    h.update(tunnel_id.as_bytes());
+    let digest = h.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+/// Resolve TXT records for `name` using the system DNS resolver. Each
+/// returned String is one TXT record's combined data, joined across the
+/// chunked-string segments DNS uses internally so the user-visible
+/// value is the single string they expect to put in their zone file.
+async fn lookup_txt_records(name: &str) -> Result<Vec<String>, String> {
+    use hickory_resolver::config::{ResolverConfig, CLOUDFLARE};
+    use hickory_resolver::net::runtime::TokioRuntimeProvider;
+    use hickory_resolver::proto::rr::RecordType;
+    use hickory_resolver::TokioResolver;
+
+    // System config picks up /etc/resolv.conf in production. Falls back
+    // to Cloudflare 1.1.1.1 if that's unreadable so tests + dev boxes
+    // don't have to fake a resolver.
+    let builder = match TokioResolver::builder_tokio() {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::debug!(error = %e, "system resolv.conf unreadable; falling back to Cloudflare");
+            TokioResolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&CLOUDFLARE),
+                TokioRuntimeProvider::default(),
+            )
+        }
+    };
+    let resolver = builder.build().map_err(|e| format!("resolver build failed: {e}"))?;
+
+    let response = resolver.lookup(name, RecordType::TXT).await.map_err(|e| format!("{e}"))?;
+    let mut out = Vec::new();
+    use hickory_resolver::proto::rr::RData;
+    for record in response.answers() {
+        let RData::TXT(ref txt) = record.data else {
+            continue;
+        };
+        let mut joined = String::new();
+        for chunk in txt.txt_data.iter() {
+            match std::str::from_utf8(chunk) {
+                Ok(s) => joined.push_str(s),
+                Err(_) => continue, // non-UTF8 TXT — skip silently
+            }
+        }
+        if !joined.is_empty() {
+            out.push(joined);
+        }
+    }
+    Ok(out)
 }
 
 /// Verify caller belongs to `org_id` and return the OrgContext.

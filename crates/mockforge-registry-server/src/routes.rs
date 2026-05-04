@@ -343,6 +343,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/tunnels/{id}/verify-custom-domain",
             post(handlers::tunnels::verify_custom_domain),
         )
+        .route(
+            "/api/v1/tunnels/{id}/custom-domain-proof",
+            get(handlers::tunnels::get_custom_domain_proof),
+        )
         // Showcase + Learning Hub auth-required actions (cloud-enablement #12).
         .route(
             "/api/v1/showcase/entries/{id}/like-toggle",
