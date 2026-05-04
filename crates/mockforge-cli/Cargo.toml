@@ -66,7 +66,7 @@ base64 = { workspace = true }
 axum = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true, features = ["multipart"] }
-tempfile = "3.8"
+tempfile = "3.27"
 rumqttc = { version = "0.25", optional = true }
 hex = { workspace = true }
 zip = "2.2"
@@ -151,4 +151,4 @@ vue = []
 [dev-dependencies]
 assert_cmd = "2.2"
 predicates = "3.0"
-tempfile = "3.8"
+tempfile = "3.27"
