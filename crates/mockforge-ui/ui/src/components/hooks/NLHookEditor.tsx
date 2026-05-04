@@ -9,6 +9,8 @@ import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
 import { logger } from '@/utils/logger';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { aiStudioApi } from '../../services/api/aiStudio';
+import { isCloudMode } from '../../utils/cloudMode';
 
 interface NLHookEditorProps {
   onHookGenerated?: (hook: HookResult) => void;
@@ -37,23 +39,36 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
     setResult(null);
 
     try {
-      const response = await fetch('/api/v2/voice/transpile-hook', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ description }),
-      });
+      let data: any;
+      if (isCloudMode()) {
+        // Cloud handler returns { hook_source, content, ...meta }. Map
+        // the JS source onto hookYaml so the existing rendering code
+        // (which prefers YAML preview) just shows the JS instead.
+        const cloudResp = await aiStudioApi.voiceTranspileHook({ description });
+        data = {
+          hook_yaml: cloudResp.hook_source,
+          hook_json: undefined,
+          error: undefined,
+        };
+      } else {
+        const response = await fetch('/api/v2/voice/transpile-hook', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        }
+
+        const responseData = await response.json();
+
+        // Handle ApiResponse wrapper
+        data = responseData.data || responseData;
       }
-
-      const responseData = await response.json();
-
-      // Handle ApiResponse wrapper
-      const data = responseData.data || responseData;
 
       const hookResult: HookResult = {
         description,

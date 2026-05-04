@@ -16,6 +16,9 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { apiService } from '../services/api';
+import { aiStudioApi } from '../services/api/aiStudio';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
   PageHeader,
   Section,
@@ -55,6 +58,7 @@ export function MockAIRulesPage() {
   const [ruleTypeFilter, setRuleTypeFilter] = useState<string>('all');
   const [minConfidence, setMinConfidence] = useState<number>(0);
   const [showFlow, setShowFlow] = useState(false);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
 
   const fetchExplanations = useCallback(async () => {
     setLoading(true);
@@ -74,6 +78,42 @@ export function MockAIRulesPage() {
         filters.min_confidence = minConfidence;
       }
 
+      // Cloud mode: workspace-scoped via aiStudioApi. Without an active
+      // workspace, show an empty state instead of erroring.
+      if (isCloudMode()) {
+        if (!activeWorkspace?.id) {
+          setExplanations([]);
+          setFilteredExplanations([]);
+          return;
+        }
+        const cloudResponse = await aiStudioApi.listRuleExplanations(
+          activeWorkspace.id,
+          filters,
+        );
+        // Map cloud row shape (source_examples / pattern_matches as JSON
+        // values) onto the page's expected RuleExplanation shape.
+        const mapped = (cloudResponse.explanations ?? []).map((row) => ({
+          rule_id: row.rule_id,
+          rule_type: row.rule_type,
+          confidence: row.confidence,
+          source_examples: Array.isArray(row.source_examples)
+            ? (row.source_examples as string[])
+            : [],
+          reasoning: row.reasoning,
+          pattern_matches: Array.isArray(row.pattern_matches)
+            ? (row.pattern_matches as Array<{
+                pattern: string;
+                match_count: number;
+                example_ids: string[];
+              }>)
+            : [],
+          generated_at: row.generated_at,
+        }));
+        setExplanations(mapped);
+        setFilteredExplanations(mapped);
+        return;
+      }
+
       const response = await apiService.listRuleExplanations(filters);
       setExplanations(response?.explanations || []);
       setFilteredExplanations(response?.explanations || []);
@@ -88,7 +128,7 @@ export function MockAIRulesPage() {
     } finally {
       setLoading(false);
     }
-  }, [ruleTypeFilter, minConfidence]);
+  }, [ruleTypeFilter, minConfidence, activeWorkspace?.id]);
 
   useEffect(() => {
     fetchExplanations();

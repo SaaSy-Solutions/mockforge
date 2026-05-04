@@ -9,6 +9,9 @@ import { Card } from '../ui/Card';
 import { cn } from '../../utils/cn';
 import { logger } from '@/utils/logger';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { aiStudioApi } from '../../services/api/aiStudio';
+import { isCloudMode } from '../../utils/cloudMode';
+import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 
 interface WorkspaceScenarioCreatorProps {
   onScenarioCreated?: (scenario: WorkspaceScenarioResult) => void;
@@ -45,6 +48,7 @@ export function WorkspaceScenarioCreator({
   const [activeTab, setActiveTab] = useState<'overview' | 'openapi' | 'chaos' | 'fixtures'>(
     'overview'
   );
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
 
   const processDescription = async () => {
     if (!description.trim() || isProcessing) return;
@@ -54,23 +58,58 @@ export function WorkspaceScenarioCreator({
     setResult(null);
 
     try {
-      const response = await fetch('/api/v2/voice/create-workspace-scenario', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ description }),
-      });
+      let data: any;
+      if (isCloudMode()) {
+        // Cloud handler returns { scenario, content, ...meta }; the
+        // scenario shape is the LLM's best-effort {name, description,
+        // steps[]} JSON, which the renderer below tolerates as long as
+        // we provide a workspace_id alongside.
+        const cloudResp = await aiStudioApi.voiceCreateWorkspaceScenario({
+          description,
+          workspace_context: activeWorkspace
+            ? `${activeWorkspace.name} (${activeWorkspace.id})`
+            : undefined,
+        });
+        const cloudScenario =
+          cloudResp.scenario && typeof cloudResp.scenario === 'object'
+            ? (cloudResp.scenario as Record<string, unknown>)
+            : null;
+        data = {
+          scenario: cloudScenario
+            ? {
+                workspace_id: activeWorkspace?.id ?? '',
+                name: (cloudScenario.name as string) ?? 'Generated scenario',
+                description: (cloudScenario.description as string) ?? description,
+                fixtures: {},
+                config_summary: {
+                  endpoint_count: 0,
+                  model_count: 0,
+                  chaos_characteristic_count: 0,
+                  initial_data_counts: {},
+                },
+              }
+            : undefined,
+          error: cloudScenario ? undefined : 'Model output was not parseable JSON',
+        };
+      } else {
+        const response = await fetch('/api/v2/voice/create-workspace-scenario', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description }),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(apiErrorMessage(response, errorData, `HTTP ${response.status}`));
+        }
+
+        const responseData = await response.json();
+
+        // Handle ApiResponse wrapper
+        data = responseData.data || responseData;
       }
-
-      const responseData = await response.json();
-
-      // Handle ApiResponse wrapper
-      const data = responseData.data || responseData;
 
       const scenarioResult: WorkspaceScenarioResult = {
         description,

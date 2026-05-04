@@ -20,6 +20,7 @@ pub mod hosted_mocks;
 pub mod incidents;
 pub mod internal_test_runs;
 pub mod legal;
+pub mod mockai;
 pub mod notification_channels;
 pub mod oauth;
 pub mod observability;
