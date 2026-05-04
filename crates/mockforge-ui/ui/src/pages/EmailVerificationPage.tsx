@@ -87,8 +87,8 @@ export function EmailVerificationPage() {
       {phase === 'success' && (
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-              <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success-100 dark:bg-success-900/30">
+              <CheckCircle2 className="h-8 w-8 text-success-600 dark:text-success-400" />
             </div>
             <h2 className="mb-2 text-2xl font-bold">Email verified</h2>
             <p className="mb-6 text-muted-foreground">
@@ -104,8 +104,8 @@ export function EmailVerificationPage() {
       {phase === 'failed' && (
         <Card>
           <CardHeader className="text-center">
-            <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-              <XCircle className="h-8 w-8 text-red-600 dark:text-red-400" />
+            <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-danger-100 dark:bg-danger-900/30">
+              <XCircle className="h-8 w-8 text-danger-600 dark:text-danger-400" />
             </div>
             <CardTitle>Verification link invalid</CardTitle>
             <CardDescription>
@@ -140,15 +140,15 @@ export function EmailVerificationPage() {
           </CardHeader>
           <CardContent>
             {resendSent && (
-              <Alert className="mb-4 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
-                <span className="text-green-800 dark:text-green-200">
+              <Alert className="mb-4 bg-success-50 dark:bg-success-900/20 border-success-200 dark:border-success-800">
+                <span className="text-success-700 dark:text-success-200">
                   Verification email sent. Check your inbox (and spam folder).
                 </span>
               </Alert>
             )}
             {error && (
-              <Alert className="mb-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
-                <span className="text-red-800 dark:text-red-200">{error}</span>
+              <Alert className="mb-4 bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
+                <span className="text-danger-700 dark:text-danger-200">{error}</span>
               </Alert>
             )}
             <form onSubmit={handleResend} className="space-y-4">

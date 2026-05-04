@@ -89,12 +89,12 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
         {onCancel && (
           <button
             onClick={onCancel}
-            className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-3xl font-bold text-foreground">
           {pipeline ? 'Edit Pipeline' : 'Create Pipeline'}
         </h1>
       </div>
@@ -103,7 +103,7 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
         <Card className="p-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-sm font-medium text-foreground mb-1">
                 Pipeline Name
               </label>
               <input
@@ -111,7 +111,7 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
               />
             </div>
 
@@ -123,7 +123,7 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
                 onChange={(e) => setEnabled(e.target.checked)}
                 className="w-4 h-4"
               />
-              <label htmlFor="enabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="enabled" className="text-sm font-medium text-foreground">
                 Enabled
               </label>
             </div>
@@ -131,27 +131,27 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Triggers (JSON)
           </h3>
           <textarea
             value={triggersJson}
             onChange={(e) => setTriggersJson(e.target.value)}
             rows={10}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-sm"
+            className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono text-sm"
             placeholder='[{"event_type": "schema_changed", "filters": {}}]'
           />
         </Card>
 
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-foreground mb-4">
             Steps (JSON)
           </h3>
           <textarea
             value={stepsJson}
             onChange={(e) => setStepsJson(e.target.value)}
             rows={15}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white font-mono text-sm"
+            className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground font-mono text-sm"
             placeholder='[{"name": "regenerate_sdk", "type": "regenerate_sdk", "config": {"languages": ["typescript", "rust"]}}]'
           />
         </Card>
@@ -161,14 +161,14 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              className="px-4 py-2 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors"
             >
               Cancel
             </button>
           )}
           <button
             type="submit"
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             <Save className="h-4 w-4" />
             Save Pipeline

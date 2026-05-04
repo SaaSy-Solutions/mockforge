@@ -111,7 +111,7 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
                 {previewRoutes.map((r, idx) => (
                   <div key={`${r.method ?? 'ANY'}-${r.path}-${idx}`} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md border border-border bg-bg-primary">
                     {r.method && <Badge variant="brand" className="uppercase">{r.method}</Badge>}
-                    <span className="font-mono text-xs text-gray-600 dark:text-gray-400 max-w-[240px] truncate" title={r.path}>{r.path}</span>
+                    <span className="font-mono text-xs text-muted-foreground max-w-[240px] truncate" title={r.path}>{r.path}</span>
                   </div>
                 ))}
               </div>
@@ -136,7 +136,7 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
       </div>
 
       {mutationError && (
-        <div className="flex items-start justify-between gap-3 rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700 dark:text-red-300">
+        <div className="flex items-start justify-between gap-3 rounded-md border border-destructive/30 bg-danger-500/5 p-3 text-sm text-danger-700 dark:text-danger-300">
           <span role="alert">{mutationError}</span>
           <button
             type="button"
@@ -209,9 +209,9 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
           <div className="fixed inset-0 bg-bg-overlay" onClick={() => setShowAllMatches(false)} />
           <div className="fixed inset-x-0 top-16 mx-auto w-full max-w-3xl bg-bg-primary border border-border rounded-xl shadow-xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Matching Routes ({filteredRoutes.length})</h3>
+              <h3 className="text-lg font-semibold text-foreground">Matching Routes ({filteredRoutes.length})</h3>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 dark:text-gray-400">Page {page} / {totalPages}</span>
+                <span className="text-xs text-muted-foreground">Page {page} / {totalPages}</span>
                 <Button size="sm" variant="ghost" onClick={() => setShowAllMatches(false)}>Close</Button>
               </div>
             </div>
@@ -220,9 +220,9 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
                 {paged.map((r, idx) => (
                   <li key={`${r.method ?? 'ANY'}-${r.path}-${idx}`} className="px-6 py-3 flex items-center gap-3">
                     {r.method && <Badge variant="brand" className="uppercase">{r.method}</Badge>}
-                    <span className="font-mono text-sm text-gray-900 dark:text-gray-100 truncate" title={r.path}>{r.path}</span>
+                    <span className="font-mono text-sm text-foreground truncate" title={r.path}>{r.path}</span>
                     {r.tags && r.tags.length > 0 && (
-                      <span className="ml-auto text-xs text-gray-600 dark:text-gray-400">{r.tags.join(', ')}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">{r.tags.join(', ')}</span>
                     )}
                   </li>
                 ))}
@@ -230,7 +230,7 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
             </div>
             <div className="flex items-center justify-between px-6 py-3 border-t border-border bg-bg-secondary/30">
               <Button size="sm" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-              <div className="text-xs text-gray-600 dark:text-gray-400">Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, filteredRoutes.length)} of {filteredRoutes.length}</div>
+              <div className="text-xs text-muted-foreground">Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, filteredRoutes.length)} of {filteredRoutes.length}</div>
               <Button size="sm" variant="outline" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
             </div>
           </div>

@@ -25,7 +25,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
- clap = { version = "4.0", features = ["derive"] }
+ clap = { version = "4.6", features = ["derive"] }
  handlebars = "6.0"
  uuid = { version = "1.23", features = ["v4"] }
  mime_guess = { workspace = true }

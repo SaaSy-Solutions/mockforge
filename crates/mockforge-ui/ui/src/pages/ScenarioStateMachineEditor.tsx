@@ -7,18 +7,20 @@ import { logger } from '@/utils/logger';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
-  Node,
-  Edge,
   Background,
   Controls,
   MiniMap,
-  Connection,
   addEdge,
   useNodesState,
   useEdgesState,
+  MarkerType,
+} from '@xyflow/react';
+import type {
+  Node,
+  Edge,
+  Connection,
   NodeTypes,
   ReactFlowInstance,
-  MarkerType,
 } from '@xyflow/react';
 import { Loader2, Save, Download, Upload, Undo2, Redo2, Play, Square, Plus, Trash2, Database, Layers } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
@@ -493,7 +495,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   return (
     <div className={`flex flex-col h-[calc(100vh-120px)] ${className}`}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between p-4 border-b bg-white dark:bg-gray-800">
+      <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center gap-2">
           <Button onClick={handleAddNode} size="sm" variant="outline">
             <Plus className="h-4 w-4 mr-2" />
@@ -508,7 +510,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
+          <div className="w-px h-6 bg-muted mx-2" />
           <Button
             onClick={undo}
             size="sm"
@@ -527,7 +529,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
           >
             <Redo2 className="h-4 w-4" />
           </Button>
-          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2" />
+          <div className="w-px h-6 bg-muted mx-2" />
           <Button onClick={saveStateMachine} size="sm" variant="default">
             <Save className="h-4 w-4 mr-2" />
             Save
@@ -603,7 +605,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
               edgeTypes={edgeTypes}
               fitView
               attributionPosition="bottom-left"
-              className="bg-gray-50 dark:bg-gray-900"
+              className="bg-muted"
             >
               <Background />
               <Controls />
@@ -706,8 +708,8 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
 
       {/* Error display */}
       {error && (
-        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md mx-4 mb-4">
-          <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
+        <div className="mt-4 p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-md mx-4 mb-4">
+          <p className="text-danger-700 dark:text-danger-200 text-sm">{error}</p>
         </div>
       )}
     </div>

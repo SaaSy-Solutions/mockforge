@@ -123,8 +123,8 @@ export const typography = {
 
   // Code
   code: {
-    inline: 'font-mono text-sm px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800',
-    block: 'font-mono text-sm p-4 rounded-lg bg-gray-100 dark:bg-gray-800 overflow-x-auto',
+    inline: 'font-mono text-sm px-1.5 py-0.5 rounded-md bg-muted',
+    block: 'font-mono text-sm p-4 rounded-lg bg-muted overflow-x-auto',
   },
 };
 

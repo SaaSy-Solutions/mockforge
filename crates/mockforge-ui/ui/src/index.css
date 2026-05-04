@@ -83,6 +83,29 @@
   --color-info-500: hsl(var(--info-500));
   --color-info-600: hsl(var(--info-600));
   --color-info-900: hsl(var(--info-900));
+
+  /* Typography */
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Animations — declared as utilities so `animate-fade-in`, `animate-fade-in-up`
+     resolve in Tailwind v4 without a JS config. */
+  --animate-fade-in: fade-in 200ms ease-out;
+  --animate-fade-in-up: fade-in-up 0.3s ease-out forwards;
+  --animate-fade-in-scale: fade-in-scale 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in-scale {
+    0% { opacity: 0; transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+  }
 }
 
 /* Modern design tokens via CSS variables */
@@ -455,4 +478,22 @@
 .high-contrast *:focus-visible {
   outline: 3px solid hsl(var(--ring));
   outline-offset: 2px;
+}
+
+/* Grid items emitted by the MUI shim. The shim sets `--gs-xs/sm/md/lg/xl`
+   as inline custom properties; this CSS reads the appropriate one per
+   breakpoint, falling through to xs when no override exists — same
+   behaviour as MUI's responsive Grid. */
+.mui-grid-item { grid-column: var(--gs-xs, auto); }
+@media (min-width: 640px) {
+  .mui-grid-item { grid-column: var(--gs-sm, var(--gs-xs, auto)); }
+}
+@media (min-width: 768px) {
+  .mui-grid-item { grid-column: var(--gs-md, var(--gs-sm, var(--gs-xs, auto))); }
+}
+@media (min-width: 1024px) {
+  .mui-grid-item { grid-column: var(--gs-lg, var(--gs-md, var(--gs-sm, var(--gs-xs, auto)))); }
+}
+@media (min-width: 1280px) {
+  .mui-grid-item { grid-column: var(--gs-xl, var(--gs-lg, var(--gs-md, var(--gs-sm, var(--gs-xs, auto))))); }
 }

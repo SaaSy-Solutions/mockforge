@@ -51,17 +51,17 @@ export function Toast({
   };
 
   const colors: Record<ToastType, string> = {
-    success: 'bg-green-50 border-green-200 text-green-800 dark:bg-green-950 dark:border-green-800 dark:text-green-200',
-    error: 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950 dark:border-red-800 dark:text-red-200',
-    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-800 dark:text-yellow-200',
-    info: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200',
+    success: 'bg-success-50 border-success-200 text-success-700 dark:bg-success-900/30 dark:border-success-800 dark:text-success-300',
+    error: 'bg-danger-50 border-danger-200 text-danger-700 dark:bg-danger-900/30 dark:border-danger-800 dark:text-danger-300',
+    warning: 'bg-warning-50 border-warning-200 text-warning-700 dark:bg-warning-900/30 dark:border-warning-800 dark:text-warning-300',
+    info: 'bg-info-50 border-info-200 text-info-700 dark:bg-info-900/30 dark:border-info-800 dark:text-info-300',
   };
 
   const iconColors: Record<ToastType, string> = {
-    success: 'text-green-500',
-    error: 'text-red-500',
-    warning: 'text-yellow-500',
-    info: 'text-blue-500',
+    success: 'text-success-500',
+    error: 'text-danger-500',
+    warning: 'text-warning-500',
+    info: 'text-info-500',
   };
 
   const Icon = icons[type];
@@ -85,7 +85,7 @@ export function Toast({
       </div>
       <button
         onClick={handleClose}
-        className="flex-shrink-0 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        className="flex-shrink-0 p-1 rounded hover:bg-black/10 dark:hover:bg-card/10 transition-colors"
         aria-label="Close notification"
       >
         <X className="h-4 w-4" />

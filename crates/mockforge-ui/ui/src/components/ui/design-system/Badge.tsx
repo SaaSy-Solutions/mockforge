@@ -15,13 +15,13 @@ export function ModernBadge({
   className
 }: BadgeProps) {
   const variants = {
-    default: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
-    success: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-    warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-    error: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
-    info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
-    outline: 'border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300',
-    destructive: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+    default: 'bg-muted text-foreground',
+    success: 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400',
+    warning: 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400',
+    error: 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400',
+    info: 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-400',
+    outline: 'border border-border text-foreground',
+    destructive: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
   };
 
   const sizes = {
@@ -42,5 +42,4 @@ export function ModernBadge({
   );
 }
 
-// Alias for backward compat
 export const Badge = ModernBadge;

@@ -88,10 +88,10 @@ export function RealityPresetManager({ className }: RealityPresetManagerProps) {
   return (
     <Card className={cn('p-6', className)}>
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Reality Presets
         </CardTitle>
-        <CardDescription className="text-sm text-gray-600 dark:text-gray-400">
+        <CardDescription className="text-sm text-muted-foreground">
           Save and load reality level configurations for different testing scenarios
         </CardDescription>
       </CardHeader>
@@ -182,7 +182,7 @@ export function RealityPresetManager({ className }: RealityPresetManagerProps) {
               <div className="space-y-4 py-4">
                 {presetsLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
                   </div>
                 ) : presets && presets.length > 0 ? (
                   <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -197,29 +197,29 @@ export function RealityPresetManager({ className }: RealityPresetManagerProps) {
                         disabled={importMutation.isPending}
                         className={cn(
                           'w-full text-left p-3 rounded-lg border transition-all duration-200',
-                          'hover:bg-gray-50 dark:hover:bg-gray-800',
+                          'hover:bg-accent hover:text-accent-foreground',
                           'hover:border-gray-300 dark:hover:border-gray-600',
                           'disabled:opacity-50 disabled:cursor-not-allowed',
                           selectedPresetPath === preset.path
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
+                            ? 'border-info bg-info-50 dark:bg-info-900/20'
+                            : 'border-border'
                         )}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-foreground">
                               {preset.name}
                             </span>
                           </div>
                           {selectedPresetPath === preset.path && importMutation.isPending && (
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
                           )}
                           {selectedPresetPath === preset.path && !importMutation.isPending && (
-                            <Check className="h-4 w-4 text-green-500" />
+                            <Check className="h-4 w-4 text-success-500" />
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {preset.path}
                         </p>
                       </button>
@@ -249,26 +249,26 @@ export function RealityPresetManager({ className }: RealityPresetManagerProps) {
         {/* Presets List */}
         {presetsLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
           </div>
         ) : presets && presets.length > 0 ? (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <h4 className="text-sm font-medium text-foreground mb-2">
               Available Presets ({presets.length})
             </h4>
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {presets.map((preset) => (
                 <div
                   key={preset.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+                  className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/50"
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                      <p className="text-sm font-medium text-foreground truncate">
                         {preset.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      <p className="text-xs text-muted-foreground truncate">
                         {preset.path}
                       </p>
                     </div>
@@ -295,8 +295,8 @@ export function RealityPresetManager({ className }: RealityPresetManagerProps) {
 
         {/* Loading State */}
         {(importMutation.isPending || exportMutation.isPending) && (
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400 py-2">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-border border-t-gray-600 dark:border-gray-600 dark:border-t-gray-300" />
             <span>
               {importMutation.isPending ? 'Importing preset...' : 'Exporting preset...'}
             </span>

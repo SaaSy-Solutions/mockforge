@@ -73,22 +73,22 @@ export function TracesPage() {
     return (
       <div key={span.span_id}>
         <div
-          className="flex items-center py-2 px-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg cursor-pointer"
+          className="flex items-center py-2 px-3 hover:bg-accent hover:text-accent-foreground rounded-lg cursor-pointer"
           style={{ paddingLeft: `${level * 1.5 + 0.75}rem` }}
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               {span.status === 'ok' ? (
-                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                <CheckCircle className="h-4 w-4 text-success-500 flex-shrink-0" />
               ) : (
-                <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <XCircle className="h-4 w-4 text-danger-500 flex-shrink-0" />
               )}
-              <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
+              <span className="font-medium text-foreground truncate">
                 {span.name}
               </span>
               <ModernBadge size="sm" variant="default">{span.kind}</ModernBadge>
             </div>
-            <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
               <span className="font-mono">{span.span_id.substring(0, 8)}</span>
               <span>{span.duration_ms.toFixed(2)}ms</span>
             </div>
@@ -125,7 +125,7 @@ export function TracesPage() {
           actions={
             <button
               onClick={fetchTraces}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
             >
               Retry
             </button>
@@ -143,7 +143,7 @@ export function TracesPage() {
         actions={
           <button
             onClick={fetchTraces}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
           >
             Refresh
           </button>
@@ -152,13 +152,13 @@ export function TracesPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
         <input
           type="text"
           placeholder="Search traces by ID or service name..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+          className="w-full pl-10 pr-4 py-2 border border-border rounded-lg bg-card text-foreground"
         />
       </div>
 
@@ -168,8 +168,8 @@ export function TracesPage() {
           <ModernCard>
             {filteredTraces.length === 0 ? (
               <div className="text-center py-8">
-                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">
                   No traces found. Ensure OpenTelemetry tracing is enabled.
                 </p>
               </div>
@@ -181,19 +181,19 @@ export function TracesPage() {
                     onClick={() => setSelectedTrace(trace)}
                     className={`p-4 rounded-lg cursor-pointer border ${
                       selectedTrace?.trace_id === trace.trace_id
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        ? 'border-info bg-info-50 dark:bg-info-900/20'
+                        : 'border-border hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-mono text-sm text-gray-900 dark:text-gray-100">
+                      <span className="font-mono text-sm text-foreground">
                         {trace.trace_id.substring(0, 16)}...
                       </span>
                       <ModernBadge variant={trace.status === 'ok' ? 'success' : 'error'} size="sm">
                         {trace.status}
                       </ModernBadge>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span>{trace.service_name}</span>
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
@@ -213,7 +213,7 @@ export function TracesPage() {
           <ModernCard>
             {!selectedTrace ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 dark:text-gray-400">
+                <p className="text-muted-foreground">
                   Select a trace to view details
                 </p>
               </div>
@@ -222,27 +222,27 @@ export function TracesPage() {
                 {/* Trace Info */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Trace ID</span>
+                    <span className="text-sm text-muted-foreground">Trace ID</span>
                     <span className="font-mono text-sm">{selectedTrace.trace_id}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Duration</span>
+                    <span className="text-sm text-muted-foreground">Duration</span>
                     <span className="font-mono text-sm">{selectedTrace.duration_ms.toFixed(2)}ms</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Service</span>
+                    <span className="text-sm text-muted-foreground">Service</span>
                     <span className="font-mono text-sm">{selectedTrace.service_name}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500 dark:text-gray-400">Status</span>
+                    <span className="text-sm text-muted-foreground">Status</span>
                     <ModernBadge variant={selectedTrace.status === 'ok' ? 'success' : 'error'}>
                       {selectedTrace.status}
                     </ModernBadge>
                   </div>
                 </div>
 
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Span Tree</h4>
+                <div className="border-t border-border pt-4">
+                  <h4 className="font-semibold text-foreground mb-4">Span Tree</h4>
                   <div className="space-y-1 max-h-[400px] overflow-y-auto">
                     {selectedTrace.spans
                       .filter(span => !span.parent_span_id)

@@ -22,9 +22,9 @@ export function ModernCard({
   ...props
 }: CardProps) {
   const variants = {
-    default: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm',
-    elevated: 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-lg',
-    outlined: 'bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700',
+    default: 'bg-card text-card-foreground border border-border shadow-sm',
+    elevated: 'bg-card text-card-foreground border border-border shadow-lg',
+    outlined: 'bg-card text-card-foreground border-2 border-border',
   };
 
   const paddings = {
@@ -48,13 +48,13 @@ export function ModernCard({
         <div className="flex items-center justify-between p-6 pb-0 mb-6">
           <div className="flex items-center gap-3 min-w-0">
             {icon && (
-              <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex-shrink-0">
+              <div className="p-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 flex-shrink-0">
                 {icon}
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">{title}</h3>}
-              {subtitle && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
+              {title && <h3 className="font-semibold text-foreground truncate">{title}</h3>}
+              {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
             </div>
           </div>
           {action && <div className="flex-shrink-0">{action}</div>}
@@ -67,7 +67,6 @@ export function ModernCard({
   );
 }
 
-// Alias for backward compat
 export const Card = ModernCard;
 
 interface MetricCardProps {
@@ -91,20 +90,20 @@ export function MetricCard({
   className
 }: MetricCardProps) {
   const trendColors = {
-    up: 'text-green-600 dark:text-green-400',
-    down: 'text-red-600 dark:text-red-400',
-    neutral: 'text-gray-600 dark:text-gray-400',
+    up: 'text-success-600 dark:text-success-400',
+    down: 'text-danger-600 dark:text-danger-400',
+    neutral: 'text-muted-foreground',
   };
 
   return (
     <ModernCard className={className}>
       <div className="flex items-center justify-between">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 truncate">
+          <p className="text-sm font-medium text-muted-foreground truncate">
             {title}
           </p>
           <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            <p className="text-3xl font-bold text-foreground">
               {typeof value === 'number' ? value.toLocaleString() : value}
             </p>
             {trend && (
@@ -117,13 +116,13 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               {subtitle}
             </p>
           )}
         </div>
         {icon && (
-          <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 spring-hover">
+          <div className="p-3 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 spring-hover">
             {icon}
           </div>
         )}

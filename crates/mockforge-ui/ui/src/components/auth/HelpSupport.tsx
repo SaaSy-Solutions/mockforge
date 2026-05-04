@@ -67,13 +67,13 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-card">
         <DialogHeader className="space-y-2">
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
+          <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <HelpCircle className="h-5 w-5" />
             Help & Support
           </DialogTitle>
-          <DialogDescription className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+          <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
             Learn how to use MockForge effectively
           </DialogDescription>
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -81,16 +81,16 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
 
         <TabsProvider value={activeTab} onValueChange={setActiveTab}>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 bg-gray-100 dark:bg-gray-800">
-              <TabsTrigger value="quickstart" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+            <TabsList className="grid w-full grid-cols-3 bg-muted">
+              <TabsTrigger value="quickstart" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Rocket className="h-4 w-4" />
                 <span className="hidden sm:inline">Quick Start</span>
               </TabsTrigger>
-              <TabsTrigger value="shortcuts" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="shortcuts" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <Keyboard className="h-4 w-4" />
                 <span className="hidden sm:inline">Shortcuts</span>
               </TabsTrigger>
-              <TabsTrigger value="faq" className="flex items-center gap-2 text-gray-700 dark:text-gray-300 data-[state=active]:text-gray-900 dark:data-[state=active]:text-gray-100 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700">
+              <TabsTrigger value="faq" className="flex items-center gap-2 text-foreground data-[state=active]:text-foreground data-[state=active]:bg-card">
                 <MessageCircle className="h-4 w-4" />
                 <span className="hidden sm:inline">FAQ</span>
               </TabsTrigger>
@@ -99,10 +99,10 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
             <TabsContent value="quickstart" className="space-y-4 mt-4">
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  <h3 className="text-lg font-semibold text-foreground mb-3">
                     Welcome to MockForge!
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     MockForge is a powerful API mocking and testing platform. Here's how to get started:
                   </p>
                 </div>
@@ -113,8 +113,8 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                       1
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">Create a Workspace</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <h4 className="font-medium text-foreground mb-1">Create a Workspace</h4>
+                      <p className="text-sm text-muted-foreground">
                         Start by creating a workspace to organize your mocks. Navigate to Workspaces and click "New Workspace".
                       </p>
                     </div>
@@ -125,8 +125,8 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                       2
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">Import or Create Fixtures</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <h4 className="font-medium text-foreground mb-1">Import or Create Fixtures</h4>
+                      <p className="text-sm text-muted-foreground">
                         Import fixtures from OpenAPI/Swagger specs or create them manually in the Fixtures page.
                       </p>
                     </div>
@@ -137,8 +137,8 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                       3
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">Configure Services</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <h4 className="font-medium text-foreground mb-1">Configure Services</h4>
+                      <p className="text-sm text-muted-foreground">
                         Set up your mock services with specific routes, responses, and behaviors in the Services page.
                       </p>
                     </div>
@@ -149,8 +149,8 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                       4
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-1">Monitor & Test</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <h4 className="font-medium text-foreground mb-1">Monitor & Test</h4>
+                      <p className="text-sm text-muted-foreground">
                         Use the Logs and Metrics pages to monitor requests and the Testing page to validate your mocks.
                       </p>
                     </div>
@@ -162,10 +162,10 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
             <TabsContent value="shortcuts" className="space-y-4 mt-4">
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  <h3 className="text-lg font-semibold text-foreground mb-3">
                     Keyboard Shortcuts
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     Use these shortcuts to navigate faster:
                   </p>
                 </div>
@@ -174,20 +174,20 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                   {shortcuts.map((shortcut, index) => (
                     <div
                       key={index}
-                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                      className="flex items-center justify-between p-3 bg-muted rounded-lg"
                     >
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="text-sm text-muted-foreground">
                         {shortcut.description}
                       </span>
-                      <kbd className="px-3 py-1 text-sm font-mono bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-sm text-gray-900 dark:text-gray-100">
+                      <kbd className="px-3 py-1 text-sm font-mono bg-card dark:bg-gray-700 border border-border rounded shadow-sm text-foreground">
                         {shortcut.keys}
                       </kbd>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <p className="text-sm text-blue-800 dark:text-blue-200">
+                <div className="mt-6 p-4 bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800 rounded-lg">
+                  <p className="text-sm text-info-700 dark:text-info-200">
                     💡 Tip: You can enable/disable keyboard shortcuts in Preferences
                   </p>
                 </div>
@@ -197,7 +197,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
             <TabsContent value="faq" className="space-y-4 mt-4">
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                  <h3 className="text-lg font-semibold text-foreground mb-3">
                     Frequently Asked Questions
                   </h3>
                 </div>
@@ -206,12 +206,12 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
                   {faqs.map((faq, index) => (
                     <div
                       key={index}
-                      className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                      className="p-4 bg-muted rounded-lg"
                     >
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+                      <h4 className="font-medium text-foreground mb-2">
                         {faq.question}
                       </h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         {faq.answer}
                       </p>
                     </div>
@@ -222,12 +222,12 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
           </Tabs>
         </TabsProvider>
 
-        <DialogFooter className="flex items-center justify-between border-t border-gray-200 dark:border-gray-700 pt-4 mt-4 flex-wrap gap-y-2">
+        <DialogFooter className="flex items-center justify-between border-t border-border pt-4 mt-4 flex-wrap gap-y-2">
           <div className="flex items-center gap-4 text-sm flex-wrap">
             <Link
               to="/faq"
               onClick={() => onOpenChange(false)}
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               <MessageCircle className="h-4 w-4" />
               Full FAQ
@@ -235,7 +235,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
             <Link
               to="/support"
               onClick={() => onOpenChange(false)}
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               <HelpCircle className="h-4 w-4" />
               Contact support
@@ -243,14 +243,14 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
             <Link
               to="/terms"
               onClick={() => onOpenChange(false)}
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               Terms
             </Link>
             <Link
               to="/privacy"
               onClick={() => onOpenChange(false)}
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               Privacy
             </Link>
@@ -258,7 +258,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
               href="https://github.com/SaaSy-Solutions/mockforge"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               <ExternalLink className="h-4 w-4" />
               GitHub
@@ -267,7 +267,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
               href="https://docs.mockforge.dev/api/admin-ui-rest.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+              className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               <Book className="h-4 w-4" />
               API Docs

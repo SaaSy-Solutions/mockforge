@@ -2028,6 +2028,17 @@ pub async fn handle_serve(
         println!("✅ Chaos middleware integrated - latency recording enabled");
     }
 
+    // Layer the HTTP metrics middleware as the outermost wrapper so every
+    // response — including chaos-mutated ones — bumps the rate-counter
+    // snapshot the dashboard's TPS / RPS200 sampler reads from. Without
+    // this layer those gauges stay flat at 0 even under heavy traffic
+    // (issue #79: `record_response` was wired but never on the request
+    // path).
+    {
+        use axum::middleware::from_fn;
+        http_app = http_app.layer(from_fn(mockforge_http::collect_http_metrics));
+    }
+
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
     println!(

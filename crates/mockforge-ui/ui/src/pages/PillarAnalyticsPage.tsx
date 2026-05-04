@@ -18,10 +18,10 @@ export const PillarAnalyticsPage: React.FC = () => {
       {/* Workspace selector if needed */}
       {!selectedWorkspaceId && (
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-lg font-semibold text-foreground mb-4">
             Select Workspace
           </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Please select a workspace to view pillar analytics, or view organization-wide metrics.
           </p>
         </Card>

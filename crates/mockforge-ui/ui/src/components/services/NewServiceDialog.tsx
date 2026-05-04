@@ -125,7 +125,7 @@ export function NewServiceDialog({ open, onOpenChange }: NewServiceDialogProps) 
             </select>
           </div>
           {error && (
-            <p role="alert" className="text-sm text-red-500">
+            <p role="alert" className="text-sm text-danger-500">
               {error}
             </p>
           )}

@@ -94,17 +94,17 @@ export function MetricsDashboard() {
           <div className="text-xs text-muted-foreground">Total Requests</div>
         </div>
         <div className="rounded-lg border bg-card p-4 text-center">
-          <div className={`text-2xl font-bold ${stats.overallErrorRate < 0.05 ? 'text-green-600' : stats.overallErrorRate < 0.1 ? 'text-yellow-600' : 'text-red-600'}`}>
+          <div className={`text-2xl font-bold ${stats.overallErrorRate < 0.05 ? 'text-success-600' : stats.overallErrorRate < 0.1 ? 'text-warning-600' : 'text-danger-600'}`}>
             {(stats.overallErrorRate * 100).toFixed(2)}%
           </div>
           <div className="text-xs text-muted-foreground">Error Rate</div>
         </div>
         <div className="rounded-lg border bg-card p-4 text-center">
-          <div className="text-2xl font-bold text-green-600">{stats.avgP50}ms</div>
+          <div className="text-2xl font-bold text-success-600">{stats.avgP50}ms</div>
           <div className="text-xs text-muted-foreground">Avg P50</div>
         </div>
         <div className="rounded-lg border bg-card p-4 text-center">
-          <div className="text-2xl font-bold text-yellow-600">{stats.avgP95}ms</div>
+          <div className="text-2xl font-bold text-warning-600">{stats.avgP95}ms</div>
           <div className="text-xs text-muted-foreground">Avg P95</div>
         </div>
         <div className="rounded-lg border bg-card p-4 text-center">
@@ -143,15 +143,15 @@ export function MetricsDashboard() {
             return (
               <div key={metric.service} className="flex items-center justify-between p-3 border rounded">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${overallStatus ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className={`w-3 h-3 rounded-full ${overallStatus ? 'bg-success-500' : 'bg-danger-500'}`} />
                   <span className="font-medium">{metric.service}</span>
                 </div>
                 <div className="flex items-center space-x-6 text-sm">
-                  <div className={`flex items-center space-x-1 ${p95Status ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`flex items-center space-x-1 ${p95Status ? 'text-success-600' : 'text-danger-600'}`}>
                     <span>P95: {metric.p95 || 0}ms</span>
                     <span>{p95Status ? '✓' : '✗'}</span>
                   </div>
-                  <div className={`flex items-center space-x-1 ${errorRateStatus ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`flex items-center space-x-1 ${errorRateStatus ? 'text-success-600' : 'text-danger-600'}`}>
                     <span>Error Rate: {failureMetric ? ((failureMetric.error_rate || 0) * 100).toFixed(2) : '0.00'}%</span>
                     <span>{errorRateStatus ? '✓' : '✗'}</span>
                   </div>
@@ -164,12 +164,12 @@ export function MetricsDashboard() {
 
       {/* Alert Indicators */}
       {stats.overallErrorRate > 0.1 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="rounded-lg border border-danger-200 bg-danger-50 p-4">
           <div className="flex items-center space-x-2">
-            <div className="text-red-600">⚠️</div>
+            <div className="text-danger-600">⚠️</div>
             <div>
-              <div className="font-semibold text-red-800">High Error Rate Alert</div>
-              <div className="text-sm text-red-700">
+              <div className="font-semibold text-danger-700">High Error Rate Alert</div>
+              <div className="text-sm text-danger-700">
                 Overall error rate is {(stats.overallErrorRate * 100).toFixed(2)}%, which exceeds the 10% threshold.
               </div>
             </div>
@@ -178,12 +178,12 @@ export function MetricsDashboard() {
       )}
 
       {stats.avgP95 > 1000 && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+        <div className="rounded-lg border border-warning-200 bg-warning-50 p-4">
           <div className="flex items-center space-x-2">
-            <div className="text-yellow-600">⚠️</div>
+            <div className="text-warning-600">⚠️</div>
             <div>
-              <div className="font-semibold text-yellow-800">High Latency Alert</div>
-              <div className="text-sm text-yellow-700">
+              <div className="font-semibold text-warning-700">High Latency Alert</div>
+              <div className="text-sm text-warning-700">
                 Average P95 latency is {stats.avgP95}ms, which may impact user experience.
               </div>
             </div>

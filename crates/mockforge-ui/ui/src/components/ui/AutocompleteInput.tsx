@@ -169,34 +169,34 @@ export function AutocompleteInput({
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto"
+          className="absolute z-50 w-full mt-1 bg-card border border-border rounded-md shadow-lg max-h-60 overflow-y-auto"
         >
           {suggestions.map((suggestion, index) => (
             <div
               key={`${suggestion.kind}-${suggestion.text}`}
               className={`px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0 ${
                 index === selectedIndex
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                  ? 'bg-info-50 dark:bg-info-900/20 text-info-700 dark:text-info-300'
                   : 'hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
               onClick={() => handleSuggestionSelect(suggestion)}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                  <span className="font-medium text-foreground">
                     {suggestion.text}
                   </span>
                   <span className={`text-xs px-2 py-1 rounded ${
                     suggestion.kind === 'variable'
-                      ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300'
-                      : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      ? 'bg-success-100 dark:bg-success-900/20 text-success-700 dark:text-success-300'
+                      : 'bg-info-100 dark:bg-info-900/20 text-info-700 dark:text-info-300'
                   }`}>
                     {suggestion.kind}
                   </span>
                 </div>
               </div>
               {suggestion.documentation && (
-                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <div className="text-sm text-muted-foreground mt-1">
                   {suggestion.documentation}
                 </div>
               )}
@@ -208,12 +208,12 @@ export function AutocompleteInput({
       {/* Loading indicator */}
       {autocomplete.isPending && showSuggestions && (
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-info-600"></div>
         </div>
       )}
 
       {/* Hint for Ctrl+Space */}
-      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
         Ctrl+Space
       </div>
     </div>

@@ -25,10 +25,10 @@ export function LogDetails({ log, onClose }: LogDetailsProps) {
   };
 
   const getStatusColor = (statusCode: number) => {
-    if (statusCode >= 200 && statusCode < 300) return 'text-green-600';
-    if (statusCode >= 300 && statusCode < 400) return 'text-blue-600';
-    if (statusCode >= 400 && statusCode < 500) return 'text-yellow-600';
-    if (statusCode >= 500) return 'text-red-600';
+    if (statusCode >= 200 && statusCode < 300) return 'text-success-600';
+    if (statusCode >= 300 && statusCode < 400) return 'text-info-600';
+    if (statusCode >= 400 && statusCode < 500) return 'text-warning-600';
+    if (statusCode >= 500) return 'text-danger-600';
     return 'text-gray-600';
   };
 

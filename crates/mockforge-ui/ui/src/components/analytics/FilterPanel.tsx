@@ -45,12 +45,12 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
       <div className="flex items-center justify-between">
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+          className="flex items-center gap-2 text-foreground hover:text-foreground"
         >
           <Filter className="h-4 w-4" />
           <span className="font-medium">Filters</span>
           {hasActiveFilters && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+            <span className="px-2 py-0.5 text-xs rounded-full bg-info-100 dark:bg-info-900 text-info-700 dark:text-info-300">
               Active
             </span>
           )}
@@ -59,7 +59,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
         {hasActiveFilters && (
           <button
             onClick={handleReset}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground dark:text-muted-foreground dark:hover:text-gray-200"
           >
             <X className="h-3 w-3" />
             Reset
@@ -71,7 +71,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Time range */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Time Range
             </label>
             <select
@@ -79,7 +79,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
               onChange={(e) =>
                 onChange({ ...filter, duration: parseInt(e.target.value) })
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground"
             >
               {timeRanges.map((range) => (
                 <option key={range.value} value={range.value}>
@@ -91,7 +91,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
 
           {/* Granularity */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Granularity
             </label>
             <select
@@ -102,7 +102,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
                   granularity: e.target.value as 'minute' | 'hour' | 'day',
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground"
             >
               {granularities.map((g) => (
                 <option key={g} value={g}>
@@ -114,7 +114,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
 
           {/* Protocol filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Protocol
             </label>
             <select
@@ -125,7 +125,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
                   protocol: e.target.value || undefined,
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground"
             >
               <option value="">All Protocols</option>
               <option value="HTTP">HTTP</option>
@@ -143,7 +143,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
 
           {/* Endpoint filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Endpoint
             </label>
             <input
@@ -156,13 +156,13 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
                 })
               }
               placeholder="/api/users"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground placeholder-gray-400"
             />
           </div>
 
           {/* Method filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Method
             </label>
             <select
@@ -173,7 +173,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
                   method: e.target.value || undefined,
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground"
             >
               <option value="">All Methods</option>
               <option value="GET">GET</option>
@@ -186,7 +186,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
 
           {/* Environment filter */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Environment
             </label>
             <select
@@ -197,7 +197,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({ filter, onChange }) =>
                   environment: e.target.value || undefined,
                 })
               }
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground"
             >
               <option value="">All Environments</option>
               <option value="dev">Development</option>

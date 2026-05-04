@@ -18,11 +18,11 @@ export function Badge({
     success: 'bg-success/15 text-success',
     warning: 'bg-warning/15 text-warning',
     danger: 'bg-danger/15 text-danger',
-    destructive: 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400',
+    destructive: 'bg-danger-100 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400',
     error: 'bg-danger/15 text-danger',
     brand: 'bg-brand/15 text-brand',
-    info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
-    outline: 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300',
+    info: 'bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-400',
+    outline: 'border border-border text-foreground',
   };
 
   return (

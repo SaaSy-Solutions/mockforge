@@ -677,8 +677,8 @@ export function ConfigPage() {
           subtitle={t('page.config.subtitle')}
         />
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-lg text-gray-600 dark:text-gray-400">Loading configuration...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
+          <span className="ml-3 text-lg text-muted-foreground">Loading configuration...</span>
         </div>
       </div>
     );
@@ -743,8 +743,8 @@ export function ConfigPage() {
                     onClick={() => setActiveSection(section.id as typeof activeSection)}
                     className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-colors ${
                       activeSection === section.id
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-700 dark:text-gray-300'
+                        ? 'bg-info-50 dark:bg-info-900/20 text-info-700 dark:text-info-300'
+                        : 'hover:bg-accent hover:text-accent-foreground/50 text-foreground'
                     }`}
                   >
                     <Icon className="h-5 w-5" />
@@ -766,14 +766,14 @@ export function ConfigPage() {
               <div className="space-y-6">
                 <RealitySlider />
                 <RealityPresetManager />
-                <div className="mt-4 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                  <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                <div className="mt-4 p-4 rounded-lg bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800">
+                  <h4 className="text-sm font-semibold text-info-900 dark:text-info-100 mb-2">
                     Keyboard Shortcuts
                   </h4>
-                  <div className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+1-5</kbd> Set reality level</div>
-                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+R</kbd> Reset to default (Level 3)</div>
-                    <div><kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700">Ctrl+Shift+P</kbd> Open preset manager</div>
+                  <div className="text-xs text-info-700 dark:text-info-200 space-y-1">
+                    <div><kbd className="px-1.5 py-0.5 bg-card rounded border border-info-300 dark:border-info-700">Ctrl+Shift+1-5</kbd> Set reality level</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-card rounded border border-info-300 dark:border-info-700">Ctrl+Shift+R</kbd> Reset to default (Level 3)</div>
+                    <div><kbd className="px-1.5 py-0.5 bg-card rounded border border-info-300 dark:border-info-700">Ctrl+Shift+P</kbd> Open preset manager</div>
                   </div>
                 </div>
               </div>
@@ -785,12 +785,12 @@ export function ConfigPage() {
               <ModernCard>
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2">
                       Server Configuration
                     </label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs text-muted-foreground mb-1">
                           HTTP Port
                         </label>
                         <Input
@@ -805,7 +805,7 @@ export function ConfigPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs text-muted-foreground mb-1">
                           WebSocket Port
                         </label>
                         <Input
@@ -820,7 +820,7 @@ export function ConfigPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs text-muted-foreground mb-1">
                           gRPC Port
                         </label>
                         <Input
@@ -835,7 +835,7 @@ export function ConfigPage() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                        <label className="block text-xs text-muted-foreground mb-1">
                           Admin Port
                         </label>
                         <Input
@@ -854,12 +854,12 @@ export function ConfigPage() {
 
                   {/* AI Mode Configuration */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2">
                       AI Mode
                     </label>
                     <div className="space-y-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      <div className="p-4 bg-muted rounded-lg border border-border">
+                        <p className="text-sm text-muted-foreground mb-4">
                           Control how AI-generated artifacts are used at runtime. In <strong>Generate Once Freeze</strong> mode,
                           AI is only used to produce config/templates, and runtime mocks use frozen artifacts (no LLM calls).
                           In <strong>Live</strong> mode, AI is used dynamically at runtime for each request.
@@ -883,8 +883,8 @@ export function ConfigPage() {
                           </SelectContent>
                         </Select>
                         {formData.general.ai_mode === 'generate_once_freeze' && (
-                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
-                            <p className="text-xs text-blue-800 dark:text-blue-200">
+                          <div className="mt-3 p-3 bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800 rounded">
+                            <p className="text-xs text-info-700 dark:text-info-200">
                               <strong>Note:</strong> In this mode, AI-generated scenarios and personas will use frozen artifacts.
                               Make sure to freeze your AI-generated artifacts before using them in this mode.
                             </p>
@@ -895,15 +895,15 @@ export function ConfigPage() {
                   </div>
 
                   {formData.restartInProgress && (
-                    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg mb-4">
-                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                      <span className="text-sm text-blue-700 dark:text-blue-300">
+                    <div className="flex items-center gap-2 p-3 bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800 rounded-lg mb-4">
+                      <RefreshCw className="w-4 h-4 animate-spin text-info-600" />
+                      <span className="text-sm text-info-700 dark:text-info-300">
                         Server restart in progress... Configuration will be applied shortly.
                       </span>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('general')} disabled={formData.restartInProgress}>
                       Reset
                     </Button>
@@ -941,10 +941,10 @@ export function ConfigPage() {
                        { key: 'amqp', label: 'AMQP', description: 'Advanced message queuing' },
                        { key: 'tcp', label: 'TCP', description: 'Raw TCP socket mocking' },
                      ].map((protocol) => (
-                       <div key={protocol.key} className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                       <div key={protocol.key} className="flex items-center justify-between p-4 border border-border rounded-lg">
                          <div>
-                           <div className="font-medium text-gray-900 dark:text-gray-100">{protocol.label}</div>
-                           <div className="text-sm text-gray-500 dark:text-gray-400">{protocol.description}</div>
+                           <div className="font-medium text-foreground">{protocol.label}</div>
+                           <div className="text-sm text-muted-foreground">{protocol.description}</div>
                          </div>
                          <label className="relative inline-flex items-center cursor-pointer">
                            <input
@@ -959,7 +959,7 @@ export function ConfigPage() {
                                }
                              }))}
                            />
-                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                          </label>
                        </div>
                      ))}
@@ -975,7 +975,7 @@ export function ConfigPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Base Latency (ms)
                       </label>
                       <Input
@@ -987,13 +987,13 @@ export function ConfigPage() {
                           latency: { ...prev.latency, base_ms: parseInt(e.target.value) || 0 }
                         }))}
                       />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Minimum response time for all requests
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Jitter (ms)
                       </label>
                       <Input
@@ -1005,17 +1005,17 @@ export function ConfigPage() {
                           latency: { ...prev.latency, jitter_ms: parseInt(e.target.value) || 0 }
                         }))}
                       />
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Random delay variation (± jitter)
                       </p>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  <div className="pt-4 border-t border-border">
+                    <h3 className="text-sm font-medium text-foreground mb-1">
                       Per-Tag Overrides
                     </h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    <p className="text-xs text-muted-foreground mb-3">
                       Override the base latency for specific route tags. Uses the global base_ms unless a matching tag is found.
                     </p>
                     <div className="space-y-2">
@@ -1053,7 +1053,7 @@ export function ConfigPage() {
                               }));
                             }}
                           />
-                          <span className="text-xs text-gray-500 dark:text-gray-400">ms</span>
+                          <span className="text-xs text-muted-foreground">ms</span>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1095,7 +1095,7 @@ export function ConfigPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('latency')}>
                       Reset
                     </Button>
@@ -1114,10 +1114,10 @@ export function ConfigPage() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <h3 className="text-sm font-medium text-foreground">
                         Enable Fault Injection
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Simulate network failures and server errors
                       </p>
                     </div>
@@ -1131,14 +1131,14 @@ export function ConfigPage() {
                           faults: { ...prev.faults, enabled: e.target.checked }
                         }))}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                     </label>
                   </div>
 
                   {formData.faults.enabled && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                           Failure Rate (%)
                         </label>
                         <Input
@@ -1155,7 +1155,7 @@ export function ConfigPage() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                           Error Status Codes
                         </label>
                       <div className="flex flex-wrap gap-2">
@@ -1187,7 +1187,7 @@ export function ConfigPage() {
                     </>
                   )}
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('faults')}>
                       Reset
                     </Button>
@@ -1207,10 +1207,10 @@ export function ConfigPage() {
                   {/* Overall Traffic Shaping Toggle */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <h3 className="text-sm font-medium text-foreground">
                         Enable Traffic Shaping
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Simulate real network conditions with bandwidth control and connectivity issues
                       </p>
                     </div>
@@ -1224,27 +1224,27 @@ export function ConfigPage() {
                           trafficShaping: { ...prev.trafficShaping, enabled: e.target.checked }
                         }))}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                     </label>
                   </div>
 
                   {formData.trafficShaping.enabled && (
                     <>
                       {/* Bandwidth Control Section */}
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                      <div className="border-t border-border pt-6">
                         <div className="flex items-center gap-3 mb-4">
-                          <Wifi className="h-5 w-5 text-blue-600" />
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                          <Wifi className="h-5 w-5 text-info-600" />
+                          <h3 className="text-lg font-medium text-foreground">
                             Bandwidth Control
                           </h3>
                         </div>
 
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <h4 className="text-sm font-medium text-foreground">
                               Enable Bandwidth Throttling
                             </h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className="text-sm text-muted-foreground">
                               Limit data transfer rates using token bucket algorithm
                             </p>
                           </div>
@@ -1261,14 +1261,14 @@ export function ConfigPage() {
                                 }
                               }))}
                             />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                           </label>
                         </div>
 
                         {formData.trafficShaping.bandwidth.enabled && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Max Bandwidth (bytes/sec)
                               </label>
                               <Input
@@ -1287,13 +1287,13 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Maximum data transfer rate (1 MB/s = 1,048,576 bytes)
                               </p>
                             </div>
 
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Burst Capacity (bytes)
                               </label>
                               <Input
@@ -1312,7 +1312,7 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Token bucket capacity for burst traffic (10 MB = 10,485,760 bytes)
                               </p>
                             </div>
@@ -1321,20 +1321,20 @@ export function ConfigPage() {
                       </div>
 
                       {/* Burst Loss Section */}
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                      <div className="border-t border-border pt-6">
                         <div className="flex items-center gap-3 mb-4">
                           <WifiOff className="h-5 w-5 text-orange-600" />
-                          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                          <h3 className="text-lg font-medium text-foreground">
                             Burst Loss Simulation
                           </h3>
                         </div>
 
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <h4 className="text-sm font-medium text-foreground">
                               Enable Burst Loss
                             </h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className="text-sm text-muted-foreground">
                               Simulate intermittent connectivity issues and packet loss
                             </p>
                           </div>
@@ -1351,14 +1351,14 @@ export function ConfigPage() {
                                 }
                               }))}
                             />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                           </label>
                         </div>
 
                         {formData.trafficShaping.burstLoss.enabled && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Burst Probability (%)
                               </label>
                               <Input
@@ -1379,13 +1379,13 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Probability of entering a loss burst (0-100%)
                               </p>
                             </div>
 
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Burst Duration (ms)
                               </label>
                               <Input
@@ -1404,13 +1404,13 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Duration of loss bursts in milliseconds
                               </p>
                             </div>
 
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Loss Rate During Burst (%)
                               </label>
                               <Input
@@ -1431,13 +1431,13 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Packet loss rate during burst periods (0-100%)
                               </p>
                             </div>
 
                             <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                              <label className="block text-sm font-medium text-foreground mb-2">
                                 Recovery Time (ms)
                               </label>
                               <Input
@@ -1456,7 +1456,7 @@ export function ConfigPage() {
                                   }
                                 }))}
                               />
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 Recovery period between bursts in milliseconds
                               </p>
                             </div>
@@ -1466,7 +1466,7 @@ export function ConfigPage() {
                     </>
                   )}
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('traffic-shaping')}>
                       Reset
                     </Button>
@@ -1485,10 +1485,10 @@ export function ConfigPage() {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <h3 className="text-sm font-medium text-foreground">
                         Enable Proxy Mode
                       </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-muted-foreground">
                         Forward requests to upstream services
                       </p>
                     </div>
@@ -1502,14 +1502,14 @@ export function ConfigPage() {
                           proxy: { ...prev.proxy, enabled: e.target.checked }
                         }))}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-card after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
                     </label>
                   </div>
 
                   {formData.proxy.enabled && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                           Upstream URL
                         </label>
                         <Input
@@ -1522,19 +1522,19 @@ export function ConfigPage() {
                           }))}
                           className={
                             formData.proxy.upstream_url && !isValidUrl(formData.proxy.upstream_url)
-                              ? 'border-red-500 dark:border-red-500'
+                              ? 'border-destructive dark:border-destructive'
                               : ''
                           }
                         />
                         {formData.proxy.upstream_url && !isValidUrl(formData.proxy.upstream_url) && (
-                          <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          <p className="text-xs text-danger-600 dark:text-danger-400 mt-1">
                             Must be a valid HTTP or HTTPS URL
                           </p>
                         )}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                           Timeout (seconds)
                         </label>
                         <Input
@@ -1552,7 +1552,7 @@ export function ConfigPage() {
                     </>
                   )}
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('proxy')}>
                       Reset
                     </Button>
@@ -1570,7 +1570,7 @@ export function ConfigPage() {
               <ModernCard>
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-foreground mb-2">
                       Validation Mode
                     </label>
                     <select
@@ -1579,7 +1579,7 @@ export function ConfigPage() {
                         ...prev,
                         validation: { ...prev.validation, mode: e.target.value as 'enforce' | 'warn' | 'off' }
                       }))}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                     >
                       <option value="enforce">Enforce (Strict)</option>
                       <option value="warn">Warn Only</option>
@@ -1590,10 +1590,10 @@ export function ConfigPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <h3 className="text-sm font-medium text-foreground">
                           Aggregate Errors
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-sm text-muted-foreground">
                           Collect all validation errors before responding
                         </p>
                       </div>
@@ -1604,16 +1604,16 @@ export function ConfigPage() {
                           ...prev,
                           validation: { ...prev.validation, aggregate_errors: e.target.checked }
                         }))}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-info-600 bg-muted border-border rounded focus:ring-blue-500"
                       />
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <h3 className="text-sm font-medium text-foreground">
                           Validate Responses
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-sm text-muted-foreground">
                           Check response format and content
                         </p>
                       </div>
@@ -1624,16 +1624,16 @@ export function ConfigPage() {
                           ...prev,
                           validation: { ...prev.validation, validate_responses: e.target.checked }
                         }))}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-info-600 bg-muted border-border rounded focus:ring-blue-500"
                       />
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  <div className="pt-4 border-t border-border">
+                    <h3 className="text-sm font-medium text-foreground mb-1">
                       Per-Route Overrides
                     </h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    <p className="text-xs text-muted-foreground mb-3">
                       Override the validation mode for specific routes (e.g. <code>GET /users/{`{id}`}</code>). Use the global mode by default; add an entry only when a route should differ.
                     </p>
                     <div className="space-y-2">
@@ -1666,7 +1666,7 @@ export function ConfigPage() {
                                 }
                               }));
                             }}
-                            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                            className="px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                           >
                             <option value="enforce">enforce</option>
                             <option value="warn">warn</option>
@@ -1714,7 +1714,7 @@ export function ConfigPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between pt-4 border-t border-border">
                     <Button variant="outline" onClick={() => handleReset('validation')}>
                       Reset
                     </Button>
@@ -1739,16 +1739,16 @@ export function ConfigPage() {
               {/* Template Testing Section */}
               <div className="mt-8">
                 <ModernCard>
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                  <h3 className="text-lg font-medium text-foreground mb-4">
                     Template Testing
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     Test variable substitution in templates. Type {'{{'} to see available variables.
                   </p>
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Template Input (with autocomplete)
                       </label>
                       <AutocompleteInput
@@ -1757,20 +1757,20 @@ export function ConfigPage() {
                         placeholder="Type {{ to see available variables..."
                         workspaceId={workspaceId}
                         context="template_test"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-foreground mb-2">
                         Expected Output
                       </label>
-                      <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg font-mono text-sm text-gray-600 dark:text-gray-400">
+                      <div className="p-3 bg-muted rounded-lg font-mono text-sm text-muted-foreground">
                         {formData.templateTest || 'Template output will appear here...'}
                       </div>
                     </div>
 
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs text-muted-foreground">
                       💡 Tip: Use Ctrl+Space anywhere in a text input to manually trigger autocomplete
                     </div>
                   </div>

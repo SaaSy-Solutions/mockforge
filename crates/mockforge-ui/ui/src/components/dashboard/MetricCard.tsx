@@ -27,10 +27,10 @@ export function MetricCard({
     <Card className={cn('group', className)}>
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">{title}</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">{title}</p>
           <div className="flex items-baseline gap-2 mb-3">
-            <p className="text-3xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{value}</p>
-            {subtitle && <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{subtitle}</p>}
+            <p className="text-3xl font-semibold text-foreground tabular-nums">{value}</p>
+            {subtitle && <p className="text-sm font-medium text-muted-foreground">{subtitle}</p>}
           </div>
           {trendValue && trend && (
             <div className="flex items-center gap-2">
@@ -40,7 +40,7 @@ export function MetricCard({
                   <span className="text-xs font-semibold">{trendValue}</span>
                 </div>
               ) : trend === 'down' ? (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-red-700 dark:text-red-500-400">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-danger-700 dark:text-danger-500-400">
                   <ArrowDown className="h-3 w-3" />
                   <span className="text-xs font-semibold">{trendValue}</span>
                 </div>
@@ -49,7 +49,7 @@ export function MetricCard({
                   <span className="text-xs font-semibold">{trendValue}</span>
                 </div>
               )}
-              <span className="text-xs text-gray-600 dark:text-gray-400">vs last hour</span>
+              <span className="text-xs text-muted-foreground">vs last hour</span>
             </div>
           )}
         </div>

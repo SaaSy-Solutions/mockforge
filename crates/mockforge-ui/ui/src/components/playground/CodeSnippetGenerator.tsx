@@ -177,7 +177,7 @@ export function CodeSnippetGenerator() {
                       onClick={() => handleCopy(lang, snippets[lang])}
                     >
                       {copiedLanguage === lang ? (
-                        <Check className="h-4 w-4 text-green-600" />
+                        <Check className="h-4 w-4 text-success-600" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}

@@ -7,6 +7,7 @@
 
 import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -50,6 +51,7 @@ export function LatencyGraph({
 }: LatencyGraphProps) {
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError } = useChaosLatencyMetrics();
   const { data: statsData, isLoading: statsLoading } = useChaosLatencyStats();
+  const palette = getChartPalette();
 
   // Transform data for Chart.js format
   const chartData = useMemo(() => {
@@ -85,8 +87,8 @@ export function LatencyGraph({
         {
           label: 'Request Latency',
           data: latencyValues,
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: palette.primary,
+          backgroundColor: palette.primaryAlpha(0.12),
           borderWidth: 2,
           fill: true,
           tension: 0.4,
@@ -95,7 +97,7 @@ export function LatencyGraph({
         },
       ],
     };
-  }, [metricsData, maxDataPoints]);
+  }, [metricsData, maxDataPoints, palette]);
 
   const chartOptions = {
     responsive: true,
@@ -142,7 +144,7 @@ export function LatencyGraph({
         <div className="flex items-center justify-center" style={{ height: `${height}px` }}>
           <div className="text-center space-y-4">
             <Spinner size="lg" />
-            <p className="text-gray-600 dark:text-gray-400">Loading latency data...</p>
+            <p className="text-muted-foreground">Loading latency data...</p>
           </div>
         </div>
       </ModernCard>
@@ -154,7 +156,7 @@ export function LatencyGraph({
       <ModernCard>
         <div className="flex items-center justify-center" style={{ height: `${height}px` }}>
           <div className="text-center">
-            <p className="text-red-600 dark:text-red-400">Failed to load latency data</p>
+            <p className="text-danger-600 dark:text-danger-400">Failed to load latency data</p>
           </div>
         </div>
       </ModernCard>
@@ -166,8 +168,8 @@ export function LatencyGraph({
       <ModernCard>
         <div className="flex items-center justify-center" style={{ height: `${height}px` }}>
           <div className="text-center space-y-2">
-            <p className="text-gray-600 dark:text-gray-400">No latency data available</p>
-            <p className="text-sm text-gray-500 dark:text-gray-500">
+            <p className="text-muted-foreground">No latency data available</p>
+            <p className="text-sm text-muted-foreground">
               Enable latency injection to see real-time metrics
             </p>
           </div>
@@ -183,38 +185,38 @@ export function LatencyGraph({
         {showStats && statsData && !statsLoading && (
           <div className="flex items-center gap-6 text-sm">
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 dark:text-gray-400">Min:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">Min:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.min_ms}ms
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 dark:text-gray-400">Avg:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">Avg:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.avg_ms.toFixed(1)}ms
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 dark:text-gray-400">Max:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">Max:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.max_ms}ms
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 dark:text-gray-400">P95:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">P95:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.p95_ms}ms
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-gray-500 dark:text-gray-400">P99:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">P99:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.p99_ms}ms
               </span>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              <span className="text-gray-500 dark:text-gray-400">Samples:</span>
-              <span className="font-semibold text-gray-900 dark:text-gray-100">
+              <span className="text-muted-foreground">Samples:</span>
+              <span className="font-semibold text-foreground">
                 {statsData.count}
               </span>
             </div>

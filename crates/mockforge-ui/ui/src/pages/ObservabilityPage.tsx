@@ -157,7 +157,7 @@ export function ObservabilityPage() {
         <ModernCard>
           {alerts.filter(a => !a.resolved_at).length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400">No active alerts</p>
+              <p className="text-muted-foreground">No active alerts</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -183,13 +183,13 @@ export function ObservabilityPage() {
           <div className="space-y-4">
             {recentMetrics.length === 0 ? (
               <div className="text-center py-8">
-                <p className="text-gray-500 dark:text-gray-400">Waiting for metrics...</p>
+                <p className="text-muted-foreground">Waiting for metrics...</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <tr className="border-b border-border">
                       <th className="text-left py-3 px-4">Time</th>
                       <th className="text-right py-3 px-4">Events</th>
                       <th className="text-right py-3 px-4">Latency (ms)</th>
@@ -199,7 +199,7 @@ export function ObservabilityPage() {
                   </thead>
                   <tbody>
                     {recentMetrics.slice(-10).reverse().map((bucket, idx) => (
-                      <tr key={idx} className="border-b border-gray-100 dark:border-gray-800">
+                      <tr key={idx} className="border-b border-border">
                         <td className="py-3 px-4 font-mono text-sm">
                           {new Date(bucket.timestamp).toLocaleTimeString()}
                         </td>

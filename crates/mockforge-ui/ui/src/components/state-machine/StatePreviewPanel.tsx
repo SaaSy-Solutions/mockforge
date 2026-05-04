@@ -130,11 +130,11 @@ export function StatePreviewPanel({ resourceType, onClose }: StatePreviewPanelPr
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="text-center py-4 text-sm text-gray-500">Loading...</div>
+          <div className="text-center py-4 text-sm text-muted-foreground">Loading...</div>
         ) : error ? (
-          <div className="text-center py-4 text-sm text-red-500">{error}</div>
+          <div className="text-center py-4 text-sm text-danger-500">{error}</div>
         ) : instances.length === 0 ? (
-          <div className="text-center py-4 text-sm text-gray-500">
+          <div className="text-center py-4 text-sm text-muted-foreground">
             No active instances
           </div>
         ) : (
@@ -142,7 +142,7 @@ export function StatePreviewPanel({ resourceType, onClose }: StatePreviewPanelPr
             {instances.map((instance) => (
               <div
                 key={instance.resource_id}
-                className="p-3 border rounded-lg bg-gray-50 dark:bg-gray-800"
+                className="p-3 border rounded-lg bg-muted"
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-medium text-sm">{instance.resource_id}</div>
@@ -150,13 +150,13 @@ export function StatePreviewPanel({ resourceType, onClose }: StatePreviewPanelPr
                     {instance.current_state}
                   </Badge>
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   History: {instance.history_count} transitions
                 </div>
                 {Object.keys(instance.state_data).length > 0 && (
                   <div className="mt-2 text-xs">
                     <div className="font-medium mb-1">State Data:</div>
-                    <pre className="bg-gray-100 dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto">
+                    <pre className="bg-muted dark:bg-gray-900 p-2 rounded text-xs overflow-x-auto">
                       {JSON.stringify(instance.state_data, null, 2)}
                     </pre>
                   </div>

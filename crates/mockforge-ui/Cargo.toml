@@ -71,7 +71,7 @@ bcrypt = "0.15"
 tokio-util = { version = "0.7", features = ["time"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "any", "chrono", "uuid", "migrate"], optional = true }
 blake3 = { version = "0.3", optional = true }
-json-patch = "4.0.0"
+json-patch = "4.2.0"
 jsonptr = "0.7.1"
 
 # Shared registry core (used by the OSS single-tenant admin store).

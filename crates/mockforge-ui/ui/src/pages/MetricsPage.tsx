@@ -20,30 +20,30 @@ function SimpleBarChart({ data, title }: { data: Array<{ label: string; value: n
   if (data.length === 0 || maxValue === 0) {
     return (
       <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
+        <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">No data available</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
       <div className="space-y-3">
         {data.map((item, index) => (
           <div key={index} className="flex items-center gap-4">
-            <div className="w-24 text-sm text-gray-600 dark:text-gray-400 truncate">
+            <div className="w-24 text-sm text-muted-foreground truncate">
               {item.label}
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                <div className="flex-1 bg-muted rounded-full h-3">
                   <div
                     className={`h-3 rounded-full transition-all duration-500 ${item.color}`}
                     style={{ width: `${(item.value / maxValue) * 100}%` }}
                   />
                 </div>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 min-w-[3rem] text-right">
+                <span className="text-sm font-medium text-foreground min-w-[3rem] text-right">
                   {item.value}
                 </span>
               </div>
@@ -65,12 +65,12 @@ function SimpleLineChart({ data, title }: { data: Array<{ timestamp: string; val
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
       <div className="h-32 flex items-end gap-1">
         {data.map((point, index) => (
           <div
             key={index}
-            className="flex-1 bg-blue-500 rounded-t-sm transition-all duration-300"
+            className="flex-1 bg-info-500 rounded-t-sm transition-all duration-300"
             style={{
               height: `${((point.value - min) / range) * 100}%`,
               minHeight: '4px'
@@ -79,7 +79,7 @@ function SimpleLineChart({ data, title }: { data: Array<{ timestamp: string; val
           />
         ))}
       </div>
-      <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex justify-between text-xs text-muted-foreground">
         <span>{new Date(data[0]?.timestamp).toLocaleTimeString()}</span>
         <span>{new Date(data[data.length - 1]?.timestamp).toLocaleTimeString()}</span>
       </div>
@@ -104,13 +104,13 @@ export function MetricsPage() {
     const endpointData = Object.entries(metrics.requests_by_endpoint || {}).map(([endpoint, count]) => ({
       label: endpoint.split(' ')[1] || endpoint, // Extract path from "METHOD /path"
       value: toNumber(count),
-      color: 'bg-blue-500'
+      color: 'bg-info-500'
     }));
 
     const responseTimeData = [
-      { label: 'P50', value: toNumber(metrics.response_time_percentiles?.['p50']), color: 'bg-green-500' },
-      { label: 'P95', value: toNumber(metrics.response_time_percentiles?.['p95']), color: 'bg-yellow-500' },
-      { label: 'P99', value: toNumber(metrics.response_time_percentiles?.['p99']), color: 'bg-red-500' },
+      { label: 'P50', value: toNumber(metrics.response_time_percentiles?.['p50']), color: 'bg-success-500' },
+      { label: 'P95', value: toNumber(metrics.response_time_percentiles?.['p95']), color: 'bg-warning-500' },
+      { label: 'P99', value: toNumber(metrics.response_time_percentiles?.['p99']), color: 'bg-danger-500' },
     ];
 
     const errorRateData = Object.entries(metrics.error_rate_by_endpoint || {}).map(([endpoint, rate]) => {
@@ -118,7 +118,7 @@ export function MetricsPage() {
       return {
         label: endpoint.split(' ')[1] || endpoint,
         value: Math.round(errorRate * 100),
-        color: errorRate > 0.1 ? 'bg-red-500' : errorRate > 0.05 ? 'bg-yellow-500' : 'bg-green-500'
+        color: errorRate > 0.1 ? 'bg-danger-500' : errorRate > 0.05 ? 'bg-warning-500' : 'bg-success-500'
       };
     });
 
@@ -347,11 +347,11 @@ export function MetricsPage() {
             <table className="w-full">
               <caption className="sr-only">Endpoint performance metrics showing requests, error rates, and health status</caption>
               <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th scope="col" className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Endpoint</th>
-                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Requests</th>
-                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Error Rate</th>
-                  <th scope="col" className="text-right py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">Status</th>
+                <tr className="border-b border-border">
+                  <th scope="col" className="text-left py-3 px-4 font-semibold text-foreground">Endpoint</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-foreground">Requests</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-foreground">Error Rate</th>
+                  <th scope="col" className="text-right py-3 px-4 font-semibold text-foreground">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -359,11 +359,11 @@ export function MetricsPage() {
                   const errorRate = toNumber(metrics.error_rate_by_endpoint?.[endpoint]);
                   const requests = toNumber(requestCount);
                   return (
-                    <tr key={endpoint} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="py-3 px-4 font-mono text-sm text-gray-900 dark:text-gray-100">
+                    <tr key={endpoint} className="border-b border-border hover:bg-accent hover:text-accent-foreground/50">
+                      <td className="py-3 px-4 font-mono text-sm text-foreground">
                         {endpoint}
                       </td>
-                      <td className="py-3 px-4 text-right text-gray-900 dark:text-gray-100">
+                      <td className="py-3 px-4 text-right text-foreground">
                         {requests.toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right">

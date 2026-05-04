@@ -46,7 +46,7 @@ const FormMessage = React.forwardRef<HTMLParagraphElement, FormMessageProps>(
         className={cn(
           "text-sm mt-1.5",
           error
-            ? "text-red-600 dark:text-red-400"
+            ? "text-danger-600 dark:text-danger-400"
             : "text-muted-foreground",
           className
         )}

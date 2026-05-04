@@ -181,7 +181,7 @@ export function ProxyInspector() {
       accessor: 'pattern',
       cell: (rule) => (
         <div className="flex items-center gap-2">
-          <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+          <code className="text-xs bg-muted px-2 py-1 rounded">
             {rule.pattern}
           </code>
         </div>
@@ -205,7 +205,7 @@ export function ProxyInspector() {
       cell: (rule) => (
         <div className="flex flex-col gap-1">
           {rule.body_transforms.map((transform, idx) => (
-            <div key={idx} className="text-xs text-gray-600 dark:text-gray-400">
+            <div key={idx} className="text-xs text-muted-foreground">
               <code className="text-xs">{transform.path}</code>
               <ArrowRight className="inline mx-1 h-3 w-3" />
               <span className="text-xs">{transform.replace.substring(0, 30)}...</span>
@@ -220,9 +220,9 @@ export function ProxyInspector() {
       cell: (rule) => (
         <div className="flex items-center gap-2">
           {rule.enabled ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-success-600" />
           ) : (
-            <XCircle className="h-4 w-4 text-gray-400" />
+            <XCircle className="h-4 w-4 text-muted-foreground" />
           )}
           <span className="text-xs">{rule.enabled ? 'Enabled' : 'Disabled'}</span>
         </div>
@@ -245,7 +245,7 @@ export function ProxyInspector() {
             variant="ghost"
             size="sm"
             onClick={() => handleDeleteRule(rule.id)}
-            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+            className="h-8 w-8 p-0 text-danger-600 hover:text-danger-700"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -259,10 +259,10 @@ export function ProxyInspector() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          <h2 className="text-2xl font-bold text-foreground">
             Proxy Inspector
           </h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Inspect and replace requests/responses from browser proxy mode
           </p>
         </div>
@@ -282,7 +282,7 @@ export function ProxyInspector() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-border">
         <nav className="flex space-x-8">
           <button
             onClick={() => setActiveTab('rules')}
@@ -327,7 +327,7 @@ export function ProxyInspector() {
           <Card>
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
               <div className="flex flex-1 gap-2 items-center">
-                <Filter className="h-4 w-4 text-gray-400" />
+                <Filter className="h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search patterns or transforms..."
                   value={searchPattern}
@@ -337,7 +337,7 @@ export function ProxyInspector() {
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value as 'all' | 'request' | 'response')}
-                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
+                  className="px-3 py-2 border border-border rounded-md bg-card text-sm"
                 >
                   <option value="all">All Types</option>
                   <option value="request">Request Rules</option>
@@ -356,11 +356,11 @@ export function ProxyInspector() {
             {rulesLoading ? (
               <SkeletonTable columns={5} rows={5} />
             ) : rulesError ? (
-              <div className="p-8 text-center text-red-600">
+              <div className="p-8 text-center text-danger-600">
                 Failed to load proxy rules. {canRetry && <Button onClick={retry}>Retry</Button>}
               </div>
             ) : filteredRules.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-muted-foreground">
                 {!rulesData?.rules?.length
                   ? 'No proxy replacement rules configured. Create one to get started.'
                   : 'No rules match your filters.'}
@@ -401,18 +401,18 @@ export function ProxyInspector() {
             <div className="space-y-4">
               {inspectLoading ? (
                 <div className="p-8 text-center">
-                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm text-gray-500">Loading intercepted traffic...</p>
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Loading intercepted traffic...</p>
                 </div>
               ) : inspectError ? (
-                <div className="p-8 text-center text-red-600">
+                <div className="p-8 text-center text-danger-600">
                   Failed to load intercepted traffic. {canRetry && <Button onClick={retry}>Retry</Button>}
                 </div>
               ) : inspectData?.message ? (
                 <div className="p-8 text-center">
-                  <Code className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-600 dark:text-gray-400">{inspectData.message}</p>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <Code className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">{inspectData.message}</p>
+                  <p className="text-sm text-muted-foreground mt-2">
                     Request/response inspection will be available in a future version.
                   </p>
                 </div>
@@ -421,21 +421,21 @@ export function ProxyInspector() {
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Intercepted Requests</h3>
                     {!inspectData?.requests?.length ? (
-                      <p className="text-sm text-gray-500">No requests intercepted yet.</p>
+                      <p className="text-sm text-muted-foreground">No requests intercepted yet.</p>
                     ) : (
                       <div className="space-y-2">
                         {inspectData.requests.map((req) => (
                           <div
                             key={req.id}
-                            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                            className="p-4 border border-border rounded-lg"
                           >
                             <div className="flex items-center gap-2 mb-2">
                               <Badge variant="info">{req.method}</Badge>
                               <code className="text-sm">{req.url}</code>
-                              <span className="text-xs text-gray-500">{req.timestamp}</span>
+                              <span className="text-xs text-muted-foreground">{req.timestamp}</span>
                             </div>
                             {req.body && (
-                              <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded mt-2 overflow-x-auto">
+                              <pre className="text-xs bg-muted p-2 rounded mt-2 overflow-x-auto">
                                 {req.body}
                               </pre>
                             )}
@@ -447,13 +447,13 @@ export function ProxyInspector() {
                   <div>
                     <h3 className="text-lg font-semibold mb-2">Intercepted Responses</h3>
                     {!inspectData?.responses?.length ? (
-                      <p className="text-sm text-gray-500">No responses intercepted yet.</p>
+                      <p className="text-sm text-muted-foreground">No responses intercepted yet.</p>
                     ) : (
                       <div className="space-y-2">
                         {inspectData.responses.map((res) => (
                           <div
                             key={res.id}
-                            className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                            className="p-4 border border-border rounded-lg"
                           >
                             <div className="flex items-center gap-2 mb-2">
                               <Badge
@@ -467,10 +467,10 @@ export function ProxyInspector() {
                               >
                                 {res.status_code}
                               </Badge>
-                              <span className="text-xs text-gray-500">{res.timestamp}</span>
+                              <span className="text-xs text-muted-foreground">{res.timestamp}</span>
                             </div>
                             {res.body && (
-                              <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-2 rounded mt-2 overflow-x-auto">
+                              <pre className="text-xs bg-muted p-2 rounded mt-2 overflow-x-auto">
                                 {res.body}
                               </pre>
                             )}
@@ -554,7 +554,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
                 placeholder="/api/users/*"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Supports wildcards (e.g., /api/users/*)
               </p>
             </div>
@@ -567,7 +567,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
                 onChange={(e) =>
                   setFormData({ ...formData, type: e.target.value as 'request' | 'response' })
                 }
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+                className="w-full px-3 py-2 border border-border rounded-md bg-card"
               >
                 <option value="request">Request</option>
                 <option value="response">Response</option>
@@ -597,7 +597,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
               <label className="block text-sm font-medium mb-2">Body Transformations</label>
               <div className="space-y-3">
                 {formData.body_transforms.map((transform, index) => (
-                  <div key={index} className="p-3 border border-gray-200 dark:border-gray-700 rounded-lg space-y-2">
+                  <div key={index} className="p-3 border border-border rounded-lg space-y-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium">Transform {index + 1}</span>
                       {formData.body_transforms.length > 1 && (
@@ -628,7 +628,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
                         placeholder="{{uuid}}"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Supports templates: {'{{'}uuid{'}}'}, {'{{'}faker.email{'}}'}, etc.
                       </p>
                     </div>
@@ -639,7 +639,7 @@ function ProxyRuleForm({ rule, onSave, onCancel }: ProxyRuleFormProps) {
                         onChange={(e) =>
                           updateTransform(index, 'operation', e.target.value)
                         }
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
+                        className="w-full px-3 py-2 border border-border rounded-md bg-card text-sm"
                       >
                         <option value="replace">Replace</option>
                         <option value="add">Add</option>

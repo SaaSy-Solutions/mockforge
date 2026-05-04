@@ -162,9 +162,9 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
       case 'insomnia':
         return <Globe className="h-8 w-8 text-purple-500" />;
       case 'curl':
-        return <Code className="h-8 w-8 text-green-500" />;
+        return <Code className="h-8 w-8 text-success-500" />;
       default:
-        return <Upload className="h-8 w-8 text-gray-500" />;
+        return <Upload className="h-8 w-8 text-muted-foreground" />;
     }
   };
 
@@ -199,7 +199,7 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
       className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
         isDragOver
           ? 'border-primary bg-primary/5'
-          : 'border-gray-300 dark:border-gray-600 hover:border-primary/50'
+          : 'border-border hover:border-primary/50'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -208,10 +208,10 @@ function FileUpload({ onFileSelect, format }: FileUploadProps) {
       <div className="flex flex-col items-center space-y-4">
         {getFormatIcon()}
         <div>
-          <p className="text-lg font-medium text-gray-900 dark:text-gray-100">
+          <p className="text-lg font-medium text-foreground">
             {selectedFile ? `Selected: ${selectedFile}` : `Drop ${getFormatName()} here`}
           </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             or click to browse files
           </p>
         </div>
@@ -245,7 +245,7 @@ function RoutePreview({ routes, onToggleRoute, selectedRoutes }: RoutePreviewPro
   if (routes.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-600 dark:text-gray-400">No routes found to preview</p>
+        <p className="text-muted-foreground">No routes found to preview</p>
       </div>
     );
   }
@@ -302,13 +302,13 @@ function RoutePreview({ routes, onToggleRoute, selectedRoutes }: RoutePreviewPro
                   }>
                     {route.method}
                   </Badge>
-                  <code className="text-sm bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                  <code className="text-sm bg-muted px-2 py-1 rounded">
                     {route.path}
                   </code>
                 </div>
 
                 {route.response && (
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-sm text-muted-foreground">
                     Response: {route.response.status} {
                       route.response.status >= 200 && route.response.status < 300 ? '✅' :
                       route.response.status >= 400 ? '❌' : '⚠️'
@@ -319,10 +319,10 @@ function RoutePreview({ routes, onToggleRoute, selectedRoutes }: RoutePreviewPro
                 {route.body && (
                   <div className="mt-2">
                     <details className="text-sm">
-                      <summary className="cursor-pointer text-gray-600 dark:text-gray-400">
+                      <summary className="cursor-pointer text-muted-foreground">
                         Request Body ({route.body.length} chars)
                       </summary>
-                      <pre className="mt-2 bg-gray-100 dark:bg-gray-800 p-2 rounded text-xs overflow-x-auto">
+                      <pre className="mt-2 bg-muted p-2 rounded text-xs overflow-x-auto">
                         {route.body}
                       </pre>
                     </details>
@@ -353,9 +353,9 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
       case 'insomnia':
         return <Globe className="h-4 w-4 text-purple-500" />;
       case 'curl':
-        return <Code className="h-4 w-4 text-green-500" />;
+        return <Code className="h-4 w-4 text-success-500" />;
       default:
-        return <File className="h-4 w-4 text-gray-500" />;
+        return <File className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
@@ -363,7 +363,7 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
     return (
       <div className="text-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">Loading import history...</p>
+        <p className="mt-2 text-muted-foreground">Loading import history...</p>
       </div>
     );
   }
@@ -416,9 +416,9 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
               <div className="flex items-start space-x-3 flex-1">
                 <div className="mt-1">
                   {entry.success ? (
-                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    <CheckCircle className="h-5 w-5 text-success-500" />
                   ) : (
-                    <XCircle className="h-5 w-5 text-red-500" />
+                    <XCircle className="h-5 w-5 text-danger-500" />
                   )}
                 </div>
 
@@ -431,7 +431,7 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
                     </Badge>
                   </div>
 
-                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-2">
                     <File className="h-3 w-3" />
                     <span className="truncate">{entry.filename}</span>
                     <Clock className="h-3 w-3 ml-2" />
@@ -444,26 +444,26 @@ function ImportHistory({ onHistoryEntryClick }: { onHistoryEntryClick?: (entry: 
                       <span>Variables: {entry.variables_count}</span>
                     )}
                     {(entry.warnings_count ?? 0) > 0 && (
-                      <span className="text-yellow-600 dark:text-yellow-400">
+                      <span className="text-warning-600 dark:text-warning-400">
                         Warnings: {entry.warnings_count}
                       </span>
                     )}
                   </div>
 
                   {entry.environment && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <div className="text-sm text-muted-foreground mt-1">
                       Environment: {entry.environment}
                     </div>
                   )}
 
                   {entry.base_url && (
-                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    <div className="text-sm text-muted-foreground mt-1">
                       Base URL: {entry.base_url}
                     </div>
                   )}
 
                   {entry.error_message && (
-                    <div className="text-sm text-red-600 dark:text-red-400 mt-2 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+                    <div className="text-sm text-danger-600 dark:text-danger-400 mt-2 bg-danger-50 dark:bg-danger-900/20 p-2 rounded">
                       Error: {entry.error_message}
                     </div>
                   )}
@@ -660,7 +660,7 @@ export function ImportPage() {
                       value={environment}
                       onChange={(e) => setEnvironment(e.target.value)}
                       placeholder="e.g., dev, staging, prod"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+                      className="w-full px-3 py-2 border border-border rounded-md bg-card"
                     />
                   </div>
                 )}
@@ -673,7 +673,7 @@ export function ImportPage() {
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
                     placeholder="e.g., https://api.example.com"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800"
+                    className="w-full px-3 py-2 border border-border rounded-md bg-card"
                   />
                 </div>
               </div>
@@ -751,7 +751,7 @@ export function ImportPage() {
               </Button>
 
               {selectedRoutes.size > 0 && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {selectedRoutes.size} of {previewResult?.routes?.length || 0} routes selected
                 </p>
               )}

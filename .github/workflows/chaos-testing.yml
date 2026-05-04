@@ -1,9 +1,7 @@
 name: Chaos Testing
 
+# Cron disabled — runner queue contention; manual workflow_dispatch still works.
 on:
-  schedule:
-    # Run chaos tests weekly on Saturday at 4 AM UTC
-    - cron: '0 4 * * 6'
   workflow_dispatch:
     inputs:
       scenario:
@@ -77,7 +75,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mockforge-binary
           path: bin
@@ -139,7 +137,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mockforge-binary
           path: bin
@@ -197,7 +195,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mockforge-binary
           path: bin
@@ -251,7 +249,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mockforge-binary
           path: bin
@@ -329,7 +327,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: mockforge-binary
           path: bin
