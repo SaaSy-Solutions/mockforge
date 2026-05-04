@@ -52,8 +52,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  Rate Limiting: {}", config.rate_limit.enabled);
     info!("  Audit Logging: {}", config.audit_logging_enabled);
 
-    // Initialize storage
-    let store_wrapper = {
+    // Initialize storage. The base store is in-memory or SQLite per
+    // config; when REGISTRY_URL is set we wrap it in
+    // RegistryTunnelStore so subdomain claims are validated against
+    // the cloud registry's tunnel_reservations table on cache miss.
+    let inner_store: Arc<dyn TunnelStoreTrait> = {
         #[cfg(feature = "sqlx")]
         {
             if !config.use_in_memory_storage {
@@ -62,16 +65,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let persistent_store = PersistentTunnelStore::new(&db_path).await.map_err(|e| {
                     anyhow::anyhow!("Failed to initialize persistent storage: {}", e)
                 })?;
-                TunnelStoreWrapper::new(Arc::new(persistent_store))
+                Arc::new(persistent_store) as Arc<dyn TunnelStoreTrait>
             } else {
-                let in_memory_store = TunnelStore::new();
-                TunnelStoreWrapper::new(Arc::new(in_memory_store))
+                Arc::new(TunnelStore::new()) as Arc<dyn TunnelStoreTrait>
             }
         }
         #[cfg(not(feature = "sqlx"))]
         {
-            let in_memory_store = TunnelStore::new();
-            TunnelStoreWrapper::new(Arc::new(in_memory_store))
+            Arc::new(TunnelStore::new()) as Arc<dyn TunnelStoreTrait>
+        }
+    };
+
+    let store_wrapper = {
+        #[cfg(feature = "cloud-validation")]
+        {
+            if let Ok(registry_url) = std::env::var("REGISTRY_URL") {
+                let token = std::env::var("MOCKFORGE_INTERNAL_API_TOKEN").map_err(|_| {
+                    anyhow::anyhow!(
+                        "MOCKFORGE_INTERNAL_API_TOKEN required when REGISTRY_URL is set"
+                    )
+                })?;
+                info!("Cloud validation enabled — subdomains validated against {}", registry_url);
+                let cloud_store = mockforge_tunnel::cloud_validation::RegistryTunnelStore::new(
+                    inner_store.clone(),
+                    registry_url,
+                    token,
+                );
+                TunnelStoreWrapper::new(Arc::new(cloud_store))
+            } else {
+                TunnelStoreWrapper::new(inner_store)
+            }
+        }
+        #[cfg(not(feature = "cloud-validation"))]
+        {
+            TunnelStoreWrapper::new(inner_store)
         }
     };
 

@@ -33,23 +33,24 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, warn};
 
-/// Wraps any inner `TunnelStoreTrait` and validates new subdomains
-/// against the cloud registry's `tunnel_reservations` table.
+/// Wraps any inner `TunnelStoreTrait` (as an `Arc<dyn ...>`) and
+/// validates new subdomains against the cloud registry's
+/// `tunnel_reservations` table.
 ///
 /// Lookups that hit the inner store (warm cache) skip the registry
 /// entirely. Misses fall through to the registry; a 200 response
 /// materializes the entry into the inner store for the cache TTL.
-pub struct RegistryTunnelStore<S: TunnelStoreTrait> {
-    inner: S,
+pub struct RegistryTunnelStore {
+    inner: Arc<dyn TunnelStoreTrait>,
     registry_url: String,
     token: String,
     http: reqwest::Client,
 }
 
-impl<S: TunnelStoreTrait> RegistryTunnelStore<S> {
+impl RegistryTunnelStore {
     /// Construct from an inner store + the registry's base URL +
     /// the shared internal-API bearer token.
-    pub fn new(inner: S, registry_url: String, token: String) -> Self {
+    pub fn new(inner: Arc<dyn TunnelStoreTrait>, registry_url: String, token: String) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .user_agent("mockforge-tunnel-relay/1.0")
@@ -61,16 +62,6 @@ impl<S: TunnelStoreTrait> RegistryTunnelStore<S> {
             token,
             http,
         }
-    }
-
-    /// Box this store so it can be used as `Arc<dyn TunnelStoreTrait>`.
-    /// Avoids the caller having to spell out the type parameter at the
-    /// trait-object site.
-    pub fn into_arc(self) -> Arc<dyn TunnelStoreTrait>
-    where
-        S: 'static,
-    {
-        Arc::new(self)
     }
 
     /// Ask the registry whether a subdomain is reserved + active.
@@ -97,7 +88,7 @@ impl<S: TunnelStoreTrait> RegistryTunnelStore<S> {
 }
 
 #[async_trait]
-impl<S: TunnelStoreTrait + 'static> TunnelStoreTrait for RegistryTunnelStore<S> {
+impl TunnelStoreTrait for RegistryTunnelStore {
     async fn create_tunnel(&self, config: &TunnelConfig) -> Result<TunnelStatus> {
         // Pre-flight: if the config requests a specific subdomain, the
         // registry has to know about it first. Anonymous random

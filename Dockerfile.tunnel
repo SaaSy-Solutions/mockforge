@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1.6
+#
+# Cloud tunnel relay image. Builds the existing `tunnel-server` binary
+# from `crates/mockforge-tunnel` with the `cloud-validation` feature on
+# so it consults the registry's tunnel_reservations table for subdomain
+# claims.
+#
+# Wire from Fly with secrets:
+#   REGISTRY_URL=http://mockforge-registry.internal:8080
+#   MOCKFORGE_INTERNAL_API_TOKEN=<shared with the registry app>
+#
+# See docs/cloud/CLOUD_TUNNEL_RELAY_DEPLOYMENT.md for the full
+# deployment story.
+
+FROM rust:1.83-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+# Build only the tunnel-server binary with cloud-validation enabled.
+# Other workspace crates aren't needed for the relay.
+RUN cargo build --release \
+    -p mockforge-tunnel \
+    --features cloud-validation \
+    --bin tunnel-server
+
+# Runtime image: minimal Debian slim with the binary + CA certs for
+# outbound TLS to the registry.
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/tunnel-server /usr/local/bin/tunnel-server
+
+# Default port matches the existing tunnel-server config (override via
+# PORT env var if the Fly machine wants a different one).
+ENV PORT=8080 \
+    BIND_ADDRESS=0.0.0.0 \
+    USE_IN_MEMORY_STORAGE=true \
+    RUST_LOG=info
+
+EXPOSE 8080
+
+CMD ["/usr/local/bin/tunnel-server"]
