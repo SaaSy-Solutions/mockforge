@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -116,7 +116,7 @@ jobs:
       - name: Open PR with new regression seeds
         id: open_pr
         if: failure() && steps.seeds.outputs.has_seeds == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # `GITHUB_TOKEN` is the default; listed explicitly so it is
           # clear we are intentionally using the job-scoped token and
