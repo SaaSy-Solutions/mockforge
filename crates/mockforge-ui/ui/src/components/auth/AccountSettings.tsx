@@ -12,7 +12,8 @@ import {
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi, type TwoFactorSetup } from '../../services/authApi';
-import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2 } from 'lucide-react';
+import { apiErrorMessage } from '@/utils/errorHandling';
+import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2, AlertCircle } from 'lucide-react';
 
 interface AccountSettingsProps {
     open: boolean;
@@ -51,6 +52,13 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifBanner, setNotifBanner] = useState<Banner>(null);
 
+    // Email verification state — `is_verified` comes from /api/v1/users/me;
+    // resending hits /api/v1/auth/verify-email/resend.
+    const [isVerified, setIsVerified] = useState(true);
+    const [verifyEmailAddress, setVerifyEmailAddress] = useState('');
+    const [verifyResending, setVerifyResending] = useState(false);
+    const [verifyBanner, setVerifyBanner] = useState<Banner>(null);
+
     // GDPR state
     const [gdprBanner, setGdprBanner] = useState<Banner>(null);
     const [exporting, setExporting] = useState(false);
@@ -79,6 +87,8 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setShowDeleteForm(false);
         setDeleteConfirm('');
         setDeleteReason('');
+        setVerifyBanner(null);
+        setVerifyEmailAddress('');
 
         authApi
             .getMe()
@@ -87,6 +97,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                 setTwoFactorEnabled(profile.two_factor_enabled);
                 setEmailNotifications(profile.email_notifications);
                 setSecurityAlerts(profile.security_alerts);
+                setIsVerified(profile.is_verified);
             })
             .catch((err) => {
                 if (cancelled) return;
@@ -301,6 +312,43 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         }
     };
 
+    const handleResendVerification = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setVerifyResending(true);
+        setVerifyBanner(null);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const body = verifyEmailAddress.trim()
+                ? { email: verifyEmailAddress.trim() }
+                : {};
+            const response = await fetch('/api/v1/auth/verify-email/resend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    apiErrorMessage(response, errorData, 'Failed to resend verification email'),
+                );
+            }
+            setVerifyBanner({
+                kind: 'success',
+                message: 'Verification email sent. Check your inbox (and spam folder).',
+            });
+        } catch (err) {
+            setVerifyBanner({
+                kind: 'error',
+                message: err instanceof Error ? err.message : 'Failed to resend verification email',
+            });
+        } finally {
+            setVerifyResending(false);
+        }
+    };
+
     const handleSaveNotifications = async (
         patch: { email_notifications?: boolean; security_alerts?: boolean },
     ) => {
@@ -336,6 +384,38 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                 </DialogHeader>
 
                 <div className="space-y-8">
+                    {/* Email verification banner — only when unverified. */}
+                    {!isVerified && (
+                        <div className="space-y-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+                            <div className="flex items-start gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                <AlertCircle className="h-4 w-4 mt-0.5" />
+                                <span>Verify your email</span>
+                            </div>
+                            <p className="text-xs text-amber-800 dark:text-amber-300">
+                                Some features require a confirmed email address.
+                                {user.email ? ` We'll resend the link to ${user.email}.` : ''}
+                            </p>
+                            {verifyBanner && <Banner banner={verifyBanner} />}
+                            <form onSubmit={handleResendVerification} className="space-y-2">
+                                {!user.email && (
+                                    <LabeledInput
+                                        id="resendEmail"
+                                        label="Email address"
+                                        type="email"
+                                        value={verifyEmailAddress}
+                                        onChange={setVerifyEmailAddress}
+                                        placeholder="you@company.com"
+                                    />
+                                )}
+                                <div className="flex justify-end">
+                                    <Button type="submit" disabled={verifyResending} variant="outline">
+                                        {verifyResending ? 'Sending…' : 'Resend verification email'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
                     {/* Password section */}
                     <form onSubmit={handlePasswordSubmit} className="space-y-3">
                         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">

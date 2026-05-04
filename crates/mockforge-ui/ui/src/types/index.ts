@@ -7,6 +7,10 @@ export interface User {
   email: string;
   role: 'admin' | 'user' | 'viewer';
   preferences?: UserPreferences;
+  /** Cloud-only: hydrated from /api/v1/users/me; absent in local admin mode. */
+  is_verified?: boolean;
+  /** Cloud-only: account creation timestamp from /api/v1/users/me. */
+  created_at?: string;
 }
 
 export interface AuthState {
