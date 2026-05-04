@@ -30,8 +30,9 @@ use async_trait::async_trait;
 use std::time::Instant;
 
 use mockforge_bench::cloud_api::{
-    self, CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudOwaspInputs,
-    CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
+    self, CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudDataDrivenInputs,
+    CloudOwaspInputs, CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, DataFormat,
+    SpecFormat,
 };
 
 use crate::callbacks::RegistryCallbacks;
@@ -111,6 +112,11 @@ impl Executor for TestExecutor {
                 "crud_flow" => {
                     if let Some(spec) = extract_spec_bytes(&job.payload) {
                         return run_cloud_crud_flow(job, callbacks, started, spec).await;
+                    }
+                }
+                "data_driven" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_data_driven(job, callbacks, started, spec).await;
                     }
                 }
                 _ => {}
@@ -811,6 +817,183 @@ async fn run_cloud_crud_flow(
         }
         Err(e) => {
             finish_cloud_error(job.run_id, callbacks, started, "crud_flow", &target_url, 2, e).await
+        }
+    }
+}
+
+/// Maximum size of a data-driven payload the runner will pull from
+/// object storage. 64 MB is generous for CSV/JSON test vectors and
+/// well below the runner's memory budget; bigger files should be
+/// split or pre-processed.
+const DATA_DRIVEN_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Fetch a CSV/JSON test-data file via HTTP. Used by the data-driven
+/// kind to pull the test-vector payload from Tigris (or any other
+/// presigned-URL-capable storage) before invoking
+/// [`cloud_api::run_data_driven`].
+async fn fetch_data_bytes(
+    url: &str,
+) -> std::result::Result<Vec<u8>, mockforge_bench::error::BenchError> {
+    use mockforge_bench::error::BenchError;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .user_agent("mockforge-test-runner/1.0")
+        .build()
+        .map_err(|e| BenchError::Other(format!("Failed to build HTTP client: {}", e)))?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| BenchError::Other(format!("Failed to GET data_url: {}", e)))?;
+    if !response.status().is_success() {
+        return Err(BenchError::Other(format!("data_url returned HTTP {}", response.status())));
+    }
+    if let Some(len) = response.content_length() {
+        if len > DATA_DRIVEN_MAX_BYTES {
+            return Err(BenchError::Other(format!(
+                "data_url too large ({} bytes; max {})",
+                len, DATA_DRIVEN_MAX_BYTES
+            )));
+        }
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| BenchError::Other(format!("Failed to read data_url body: {}", e)))?;
+    if bytes.len() as u64 > DATA_DRIVEN_MAX_BYTES {
+        return Err(BenchError::Other(format!(
+            "data_url body too large ({} bytes; max {})",
+            bytes.len(),
+            DATA_DRIVEN_MAX_BYTES
+        )));
+    }
+    Ok(bytes.to_vec())
+}
+
+fn extract_data_format(payload: &serde_json::Value) -> DataFormat {
+    match payload.get("data_format").and_then(|v| v.as_str()).unwrap_or("auto") {
+        "csv" => DataFormat::Csv,
+        "json" => DataFormat::Json,
+        _ => DataFormat::Auto,
+    }
+}
+
+/// Drive a data-driven k6 run via `cloud_api::run_data_driven`.
+///
+/// Reads `data_url` from the payload (typically a Tigris presigned GET
+/// URL), fetches the CSV/JSON body, and dispatches. Inline-bytes mode
+/// is intentionally not supported here — large test-vector files belong
+/// in object storage, not Postgres JSONB.
+async fn run_cloud_data_driven(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "data_driven",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true data_driven job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    let Some(data_url) = extract_string(&job.payload, "data_url") else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "data_driven",
+            &target_url,
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "data_driven job missing data_url (Tigris presigned GET)".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud data-driven against {target_url} (fetching test vectors from {data_url})"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let data_bytes = match fetch_data_bytes(&data_url).await {
+        Ok(b) => b,
+        Err(e) => {
+            return finish_cloud_error(
+                job.run_id,
+                callbacks,
+                started,
+                "data_driven",
+                &target_url,
+                2,
+                e,
+            )
+            .await;
+        }
+    };
+
+    let inputs = CloudDataDrivenInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        data_bytes,
+        data_format: extract_data_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        duration: extract_string(&job.payload, "duration").unwrap_or_else(|| "30s".to_string()),
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        scenario: extract_string(&job.payload, "scenario")
+            .unwrap_or_else(|| "constant".to_string()),
+        distribution: extract_string(&job.payload, "data_distribution")
+            .unwrap_or_else(|| "unique-per-vu".to_string()),
+        mappings: extract_string(&job.payload, "data_mappings"),
+        per_uri_control: job
+            .payload
+            .get("per_uri_control")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        auth: extract_string(&job.payload, "auth"),
+        headers: extract_string(&job.payload, "headers"),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    };
+
+    match cloud_api::run_data_driven(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(
+                job.run_id,
+                callbacks,
+                started,
+                "data_driven",
+                &target_url,
+                artifacts,
+                3,
+            )
+            .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "data_driven", &target_url, 3, e)
+                .await
         }
     }
 }
