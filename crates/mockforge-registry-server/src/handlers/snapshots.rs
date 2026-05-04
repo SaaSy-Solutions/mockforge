@@ -400,6 +400,145 @@ fn diff_resource(from: &serde_json::Value, to: &serde_json::Value, key: &str) ->
     }
 }
 
+/// `POST /api/v1/snapshots/{id}/restore`
+///
+/// Best-effort restore from a snapshot manifest. Writes mock_environments
+/// and chaos_campaigns from the manifest into the snapshot's workspace.
+/// Existing rows with the same name are skipped (idempotent on repeat
+/// runs); rows in the workspace but not in the manifest are left in
+/// place — restore is additive, not destructive.
+///
+/// Services + fixtures + flows are NOT restored automatically; their
+/// FK chains and version history make a safe automated restore
+/// non-trivial. The diff endpoint already shows what's missing so an
+/// operator can copy those out manually if needed.
+pub async fn restore_snapshot(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    use mockforge_registry_core::models::chaos::CreateChaosCampaign;
+    use mockforge_registry_core::models::mock_environment::{MockEnvironment, MockEnvironmentName};
+    use mockforge_registry_core::models::ChaosCampaign;
+
+    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let manifest = snapshot
+        .manifest
+        .clone()
+        .ok_or_else(|| ApiError::InvalidRequest("Snapshot has no manifest to restore".into()))?;
+
+    let pool = state.db.pool();
+    let workspace_id = snapshot.workspace_id;
+    let mut envs_created = 0u32;
+    let mut envs_skipped = 0u32;
+    let mut chaos_created = 0u32;
+    let mut chaos_skipped = 0u32;
+    let mut errors: Vec<serde_json::Value> = Vec::new();
+
+    // Mock environments — keyed on name, restoring is just creating
+    // when the name is free. We skip when one already exists.
+    if let Some(envs) = manifest.get("environments").and_then(|v| v.as_array()) {
+        for env in envs {
+            let name_str = env.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let parsed = match MockEnvironmentName::from_str(name_str) {
+                Some(n) => n,
+                None => {
+                    errors.push(serde_json::json!({
+                        "kind": "environment",
+                        "name": name_str,
+                        "error": "invalid name (must be dev|test|prod)",
+                    }));
+                    continue;
+                }
+            };
+            match MockEnvironment::find_by_workspace_and_name(pool, workspace_id, parsed).await {
+                Ok(Some(_)) => {
+                    envs_skipped += 1;
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    errors.push(serde_json::json!({
+                        "kind": "environment",
+                        "name": name_str,
+                        "error": format!("lookup failed: {e}"),
+                    }));
+                    continue;
+                }
+            }
+            let reality = env.get("reality_config").cloned();
+            let chaos = env.get("chaos_config").cloned();
+            let drift = env.get("drift_budget_config").cloned();
+            match MockEnvironment::create(pool, workspace_id, parsed, reality, chaos, drift).await {
+                Ok(_) => envs_created += 1,
+                Err(e) => errors.push(serde_json::json!({
+                    "kind": "environment",
+                    "name": name_str,
+                    "error": format!("create failed: {e}"),
+                })),
+            }
+        }
+    }
+
+    // Chaos campaigns — keyed on name within workspace. Same merge rule.
+    if let Some(camps) = manifest.get("chaos_campaigns").and_then(|v| v.as_array()) {
+        let existing = ChaosCampaign::list_by_workspace(pool, workspace_id)
+            .await
+            .map_err(ApiError::Database)?;
+        let existing_names: std::collections::HashSet<String> =
+            existing.into_iter().map(|c| c.name).collect();
+
+        for c in camps {
+            let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if name.is_empty() {
+                continue;
+            }
+            if existing_names.contains(name) {
+                chaos_skipped += 1;
+                continue;
+            }
+            let target_kind = c.get("target_kind").and_then(|v| v.as_str()).unwrap_or("external");
+            let target_ref = c.get("target_ref").and_then(|v| v.as_str()).unwrap_or("");
+            let cfg = c.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let safety = c.get("safety_config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let description = c.get("description").and_then(|v| v.as_str());
+            match ChaosCampaign::create(
+                pool,
+                CreateChaosCampaign {
+                    workspace_id,
+                    name,
+                    description,
+                    target_kind,
+                    target_ref,
+                    config: &cfg,
+                    safety_config: &safety,
+                    created_by: Some(user_id),
+                },
+            )
+            .await
+            {
+                Ok(_) => chaos_created += 1,
+                Err(e) => errors.push(serde_json::json!({
+                    "kind": "chaos_campaign",
+                    "name": name,
+                    "error": format!("create failed: {e}"),
+                })),
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "snapshot_id": snapshot.id,
+        "workspace_id": workspace_id,
+        "environments": { "created": envs_created, "skipped_existing": envs_skipped },
+        "chaos_campaigns": { "created": chaos_created, "skipped_existing": chaos_skipped },
+        "errors": errors,
+        "note": "services, fixtures, and flows are not auto-restored; \
+                 review the diff endpoint and recreate them manually.",
+    })))
+}
+
 /// `DELETE /api/v1/snapshots/{id}`
 ///
 /// Removes the row. Re-syncs the `usage_counters.snapshot_bytes_stored`
