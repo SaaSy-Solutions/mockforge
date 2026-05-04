@@ -548,6 +548,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
                 .post(handlers::incidents::raise_incident_external),
         )
         .route(
+            "/api/v1/organizations/{org_id}/incidents/stats",
+            get(handlers::incidents::get_stats),
+        )
+        .route(
             "/api/v1/incidents/{id}",
             get(handlers::incidents::get_incident),
         )

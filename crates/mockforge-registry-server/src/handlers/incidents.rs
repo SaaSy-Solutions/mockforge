@@ -217,6 +217,116 @@ fn is_valid_severity(s: &str) -> bool {
     matches!(s, "critical" | "high" | "medium" | "low")
 }
 
+/// `GET /api/v1/organizations/{org_id}/incidents/stats`
+///
+/// Counts + rolling-30-day MTTR for the dashboard. One query per
+/// dimension (status × severity) to keep the SQL straightforward and
+/// the response shape stable as we add severities later.
+#[derive(Debug, serde::Serialize)]
+pub struct IncidentStats {
+    pub open: SeverityBreakdown,
+    pub resolved_30d: SeverityBreakdown,
+    /// Mean-time-to-resolve in seconds, computed over the last 30
+    /// days of resolved incidents. Null when there are no resolved
+    /// incidents in that window.
+    pub mttr_seconds_30d: Option<i64>,
+    /// Number of dispatch attempts in the last 24h (success + failure
+    /// — see incident_events.event_type = 'notification_sent').
+    pub notification_attempts_24h: i64,
+}
+
+#[derive(Debug, Default, serde::Serialize)]
+pub struct SeverityBreakdown {
+    pub total: i64,
+    pub critical: i64,
+    pub high: i64,
+    pub medium: i64,
+    pub low: i64,
+}
+
+pub async fn get_stats(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(org_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<IncidentStats>> {
+    let ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    if ctx.org_id != org_id {
+        return Err(ApiError::InvalidRequest("Cannot read stats for a different org".into()));
+    }
+    let pool = state.db.pool();
+
+    let open_rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT severity, COUNT(*) FROM incidents \
+         WHERE org_id = $1 AND status = 'open' GROUP BY severity",
+    )
+    .bind(org_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    let open = breakdown_from_rows(&open_rows);
+
+    let resolved_rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT severity, COUNT(*) FROM incidents \
+         WHERE org_id = $1 AND status = 'resolved' \
+           AND resolved_at >= NOW() - INTERVAL '30 days' GROUP BY severity",
+    )
+    .bind(org_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    let resolved_30d = breakdown_from_rows(&resolved_rows);
+
+    let mttr: Option<f64> = sqlx::query_scalar(
+        "SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))) \
+         FROM incidents \
+         WHERE org_id = $1 AND status = 'resolved' \
+           AND resolved_at IS NOT NULL \
+           AND resolved_at >= NOW() - INTERVAL '30 days'",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await
+    .map_err(ApiError::Database)?;
+    let mttr_seconds_30d = mttr.map(|s| s as i64);
+
+    let attempts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM incident_events e \
+            JOIN incidents i ON i.id = e.incident_id \
+          WHERE i.org_id = $1 \
+            AND e.event_type = 'notification_sent' \
+            AND e.created_at >= NOW() - INTERVAL '24 hours'",
+    )
+    .bind(org_id)
+    .fetch_one(pool)
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(IncidentStats {
+        open,
+        resolved_30d,
+        mttr_seconds_30d,
+        notification_attempts_24h: attempts,
+    }))
+}
+
+fn breakdown_from_rows(rows: &[(String, i64)]) -> SeverityBreakdown {
+    let mut b = SeverityBreakdown::default();
+    for (sev, n) in rows {
+        b.total += n;
+        match sev.as_str() {
+            "critical" => b.critical = *n,
+            "high" => b.high = *n,
+            "medium" => b.medium = *n,
+            "low" => b.low = *n,
+            _ => {}
+        }
+    }
+    b
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
