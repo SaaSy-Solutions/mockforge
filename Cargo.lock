@@ -8808,6 +8808,7 @@ dependencies = [
  "jsonwebtoken",
  "lettre",
  "mockforge-analytics",
+ "mockforge-bench",
  "mockforge-collab",
  "mockforge-core",
  "mockforge-federation",
