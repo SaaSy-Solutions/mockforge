@@ -199,7 +199,8 @@ const navSections = [
       { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
       { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
       { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
-      { id: 'user-management', labelKey: 'tab.userManagement', icon: Users },
+      // user-management retired (#15) — surface lives inside the
+      // Organization page's Members / Roles / Activity tabs now.
     ]
   },
   {
