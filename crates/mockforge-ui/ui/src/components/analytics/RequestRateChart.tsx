@@ -12,6 +12,7 @@ import {
 } from 'chart.js';
 import type { ChartOptions } from 'chart.js';
 import { Card } from '../ui/Card';
+import { getSeriesPalette } from '../../utils/chartTheme';
 import type { RequestMetrics } from '@/stores/useAnalyticsStore';
 
 // Register Chart.js components
@@ -45,14 +46,8 @@ export const RequestRateChart: React.FC<RequestRateChartProps> = ({ data, isLoad
       return date.toLocaleTimeString();
     });
 
-    // Color palette for different protocols
-    const colors = [
-      { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' }, // blue
-      { border: 'rgb(16, 185, 129)', bg: 'rgba(16, 185, 129, 0.1)' }, // green
-      { border: 'rgb(249, 115, 22)', bg: 'rgba(249, 115, 22, 0.1)' }, // orange
-      { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }, // purple
-      { border: 'rgb(236, 72, 153)', bg: 'rgba(236, 72, 153, 0.1)' }, // pink
-    ];
+    // Brand-token series palette (cycles primary → info → success → warning → danger).
+    const colors = getSeriesPalette();
 
     const datasets = data.series.map((series, index) => ({
       label: series.name,

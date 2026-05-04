@@ -18,6 +18,7 @@ import {
 import { Card } from '../ui/Card';
 import { useLatencyTrends, type AnalyticsFilter } from '@/hooks/useAnalyticsV2';
 import { TrendingUp } from 'lucide-react';
+import { getChartPalette } from '../../utils/chartTheme';
 
 ChartJS.register(
   CategoryScale,
@@ -65,6 +66,7 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
     );
   }
 
+  const palette = getChartPalette();
   const timestamps = data.trends.map((t) =>
     new Date(t.timestamp * 1000).toLocaleTimeString([], {
       hour: '2-digit',
@@ -78,8 +80,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P99',
         data: data.trends.map((t) => t.p99),
-        borderColor: 'rgb(239, 68, 68)',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: palette.danger,
+        backgroundColor: palette.dangerAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -87,8 +89,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P95',
         data: data.trends.map((t) => t.p95),
-        borderColor: 'rgb(245, 158, 11)',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderColor: palette.warning,
+        backgroundColor: palette.warningAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -96,8 +98,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'P50 (Median)',
         data: data.trends.map((t) => t.p50),
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderColor: palette.success,
+        backgroundColor: palette.successAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,
@@ -105,8 +107,8 @@ export const LatencyTrendChart: React.FC<LatencyTrendChartProps> = ({ filter }) 
       {
         label: 'Average',
         data: data.trends.map((t) => t.avg),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: palette.primary,
+        backgroundColor: palette.primaryAlpha(0.1),
         borderWidth: 2,
         pointRadius: 0,
         fill: false,

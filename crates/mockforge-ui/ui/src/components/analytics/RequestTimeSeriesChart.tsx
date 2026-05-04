@@ -7,6 +7,7 @@ import { Line } from 'react-chartjs-2';
 import { Card } from '../ui/Card';
 import { useRequestTimeSeries, type AnalyticsFilter } from '@/hooks/useAnalyticsV2';
 import { Activity } from 'lucide-react';
+import { getSeriesPalette } from '../../utils/chartTheme';
 
 interface RequestTimeSeriesChartProps {
   filter?: AnalyticsFilter;
@@ -52,13 +53,7 @@ export const RequestTimeSeriesChart: React.FC<RequestTimeSeriesChartProps> = ({ 
       })
     ) || [];
 
-  const colors = [
-    { border: 'rgb(59, 130, 246)', bg: 'rgba(59, 130, 246, 0.1)' }, // blue
-    { border: 'rgb(34, 197, 94)', bg: 'rgba(34, 197, 94, 0.1)' }, // green
-    { border: 'rgb(168, 85, 247)', bg: 'rgba(168, 85, 247, 0.1)' }, // purple
-    { border: 'rgb(245, 158, 11)', bg: 'rgba(245, 158, 11, 0.1)' }, // orange
-    { border: 'rgb(236, 72, 153)', bg: 'rgba(236, 72, 153, 0.1)' }, // pink
-  ];
+  const colors = getSeriesPalette();
 
   const chartData = {
     labels: timestamps,

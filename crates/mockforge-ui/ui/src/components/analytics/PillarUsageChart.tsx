@@ -14,6 +14,7 @@ import {
   Title,
 } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import type { PillarUsageMetrics } from '@/hooks/usePillarAnalytics';
 
 ChartJS.register(
@@ -43,6 +44,8 @@ export const PillarUsageChart: React.FC<PillarUsageChartProps> = ({
     );
   }
 
+  const palette = getChartPalette();
+
   // Calculate pillar usage scores (normalized 0-100)
   const pillarScores = {
     reality: data.reality?.blended_reality_percent ?? 0,
@@ -65,18 +68,18 @@ export const PillarUsageChart: React.FC<PillarUsageChartProps> = ({
           pillarScores.ai,
         ],
         backgroundColor: [
-          'rgba(147, 51, 234, 0.8)', // purple
-          'rgba(37, 99, 235, 0.8)',  // blue
-          'rgba(34, 197, 94, 0.8)',  // green
-          'rgba(249, 115, 22, 0.8)', // orange
-          'rgba(236, 72, 153, 0.8)', // pink
+          palette.infoAlpha(0.8),
+          palette.successAlpha(0.8),
+          palette.warningAlpha(0.8),
+          palette.primaryAlpha(0.8),
+          palette.dangerAlpha(0.8),
         ],
         borderColor: [
-          'rgba(147, 51, 234, 1)',
-          'rgba(37, 99, 235, 1)',
-          'rgba(34, 197, 94, 1)',
-          'rgba(249, 115, 22, 1)',
-          'rgba(236, 72, 153, 1)',
+          palette.info,
+          palette.success,
+          palette.warning,
+          palette.primary,
+          palette.danger,
         ],
         borderWidth: 2,
       },

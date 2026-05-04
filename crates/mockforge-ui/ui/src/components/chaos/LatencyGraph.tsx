@@ -7,6 +7,7 @@
 
 import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -50,6 +51,7 @@ export function LatencyGraph({
 }: LatencyGraphProps) {
   const { data: metricsData, isLoading: metricsLoading, isError: metricsError } = useChaosLatencyMetrics();
   const { data: statsData, isLoading: statsLoading } = useChaosLatencyStats();
+  const palette = getChartPalette();
 
   // Transform data for Chart.js format
   const chartData = useMemo(() => {
@@ -85,8 +87,8 @@ export function LatencyGraph({
         {
           label: 'Request Latency',
           data: latencyValues,
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: palette.primary,
+          backgroundColor: palette.primaryAlpha(0.12),
           borderWidth: 2,
           fill: true,
           tension: 0.4,
@@ -95,7 +97,7 @@ export function LatencyGraph({
         },
       ],
     };
-  }, [metricsData, maxDataPoints]);
+  }, [metricsData, maxDataPoints, palette]);
 
   const chartOptions = {
     responsive: true,

@@ -1,6 +1,7 @@
 import { logger } from '@/utils/logger';
 import React, { useMemo } from 'react';
 import { Pie, Bar } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -33,12 +34,13 @@ interface FailureCounterProps {
 export function FailureCounter({ metrics, selectedService, onServiceChange }: FailureCounterProps) {
   const selectedMetric = selectedService ? metrics.find(m => m.service === selectedService) : metrics[0];
 
+  const palette = getChartPalette();
   const getStatusCodeColor = (code: number) => {
-    if (code >= 200 && code < 300) return '#10b981'; // green
-    if (code >= 300 && code < 400) return '#3b82f6'; // blue
-    if (code >= 400 && code < 500) return '#f59e0b'; // yellow
-    if (code >= 500) return '#ef4444'; // red
-    return '#6b7280'; // gray
+    if (code >= 200 && code < 300) return palette.success;
+    if (code >= 300 && code < 400) return palette.info;
+    if (code >= 400 && code < 500) return palette.warning;
+    if (code >= 500) return palette.danger;
+    return palette.mutedForeground;
   };
 
   const formatErrorRate = (rate: number) => {
@@ -54,8 +56,8 @@ export function FailureCounter({ metrics, selectedService, onServiceChange }: Fa
       datasets: [
         {
           data: [selectedMetric.success_count, selectedMetric.failure_count],
-          backgroundColor: ['#10b981', '#ef4444'],
-          borderColor: ['#10b981', '#ef4444'],
+          backgroundColor: [palette.success, palette.danger],
+          borderColor: [palette.success, palette.danger],
           borderWidth: 1,
         },
       ],

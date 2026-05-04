@@ -1,6 +1,7 @@
 import { logger } from '@/utils/logger';
 import React, { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
+import { getChartPalette } from '../../utils/chartTheme';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -32,13 +33,13 @@ export function LatencyHistogram({ metrics, selectedService, onServiceChange }: 
   const selectedMetric = selectedService ? metrics.find(m => m.service === selectedService) : metrics[0];
   const histogramData = selectedMetric?.histogram || [];
 
-  // Color bars based on latency ranges
+  // Color bars based on latency ranges, reading from brand tokens.
+  const palette = getChartPalette();
   const getBarColor = (range: string) => {
     const numValue = parseInt(range.split('-')[0] || '0');
-    if (numValue < 100) return '#10b981'; // green
-    if (numValue < 500) return '#f59e0b'; // yellow
-    if (numValue < 1000) return '#ef4444'; // red
-    return '#dc2626'; // dark red
+    if (numValue < 100) return palette.success;
+    if (numValue < 500) return palette.warning;
+    return palette.danger;
   };
 
   const chartData = useMemo(() => ({
