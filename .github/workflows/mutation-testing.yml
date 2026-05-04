@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Download all mutation results
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: mutation-results-*
           path: results
