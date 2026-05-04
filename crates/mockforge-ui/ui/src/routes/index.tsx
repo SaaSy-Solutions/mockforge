@@ -87,6 +87,9 @@ const CloudIncidentsPage = lazy(() => import('../pages/CloudIncidentsPage').then
 // Cloud test runs (#4) — org-wide history with SSE live stream
 const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m => ({ default: m.CloudTestRunsPage })));
 
+// Cloud recorder proxy (Phase 5) — forwarding sessions + capture browser
+const CloudProxyPage = lazy(() => import('../pages/CloudProxyPage').then(m => ({ default: m.CloudProxyPage })));
+
 // Cloud traces (#2) — cross-deployment OTLP search
 const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => ({ default: m.CloudTracesPage })));
 
@@ -233,6 +236,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-snapshots', element: <CloudSnapshotsPage /> },
   { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
   { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
+  { path: '/cloud-proxy', element: <CloudProxyPage /> },
   { path: '/cloud-traces', element: <CloudTracesPage /> },
   { path: '/cloud-chaos', element: <CloudChaosPage /> },
   { path: '/cloud-flows', element: <CloudFlowsPage /> },
