@@ -1,10 +1,9 @@
 //! Snapshot retention worker (cloud-enablement task #10 / Phase 2).
 //!
 //! Periodically scans `snapshots` for `ready` rows whose `expires_at`
-//! has passed and flips them to `expired`. Blob reclamation (S3 delete)
-//! lives in a follow-up slice — once we have the storage backend wired,
-//! this worker will delete the underlying object before flipping the
-//! row, so the storage cost actually drops.
+//! has passed, flips them to `expired`, and (when the storage backend
+//! is configured) deletes the underlying blob so storage cost actually
+//! drops.
 //!
 //! Tick cadence is intentionally slow (15 min): expirations are
 //! eventually-consistent by design, and a tight loop hammering the DB
@@ -18,10 +17,12 @@ use mockforge_registry_core::models::Snapshot;
 use sqlx::PgPool;
 use tracing::{debug, error, info};
 
+use crate::storage::PluginStorage;
+
 const TICK_INTERVAL: Duration = Duration::from_secs(15 * 60);
 const BATCH_LIMIT: i64 = 100;
 
-pub fn start_snapshot_retention_worker(pool: PgPool) {
+pub fn start_snapshot_retention_worker(pool: PgPool, storage: PluginStorage) {
     info!(
         "snapshot retention worker started — ticking every {}s, batch={}",
         TICK_INTERVAL.as_secs(),
@@ -35,7 +36,7 @@ pub fn start_snapshot_retention_worker(pool: PgPool) {
         interval.tick().await;
         loop {
             interval.tick().await;
-            if let Err(e) = run_tick(&pool).await {
+            if let Err(e) = run_tick(&pool, &storage).await {
                 error!(error = %e, "snapshot retention tick failed");
             }
         }
@@ -44,7 +45,7 @@ pub fn start_snapshot_retention_worker(pool: PgPool) {
 
 /// One tick. Returns the number of snapshots transitioned to expired
 /// (used by tests + for log lines).
-pub async fn run_tick(pool: &PgPool) -> sqlx::Result<u32> {
+pub async fn run_tick(pool: &PgPool, storage: &PluginStorage) -> sqlx::Result<u32> {
     let expired = Snapshot::mark_expired_batch(pool, BATCH_LIMIT).await?;
     if expired.is_empty() {
         debug!("snapshot retention tick: nothing to expire");
@@ -52,10 +53,31 @@ pub async fn run_tick(pool: &PgPool) -> sqlx::Result<u32> {
     }
     let count = expired.len();
     info!(count, "snapshot retention: marked snapshots expired");
-    // TODO(retention-blob-reclaim): once a storage backend lands here,
-    // walk `expired` and call backend.delete(&snapshot.storage_url) for
-    // each. Failure to reclaim should not roll back the row flip — a
-    // separate "orphaned blob" sweep can clean those up later.
+
+    // Reclaim the blob for any snapshot whose storage_url is the
+    // backend's path (i.e. not the inline-manifest:// sentinel).
+    // Failure to reclaim does NOT roll back the row flip — orphaned
+    // blobs can be swept by a separate periodic process if needed.
+    let mut reclaimed = 0u32;
+    for snapshot in &expired {
+        let url = snapshot.storage_url.as_deref().unwrap_or("");
+        if url.starts_with("inline-manifest://") {
+            continue;
+        }
+        match storage.delete_snapshot_blob(snapshot.workspace_id, snapshot.id).await {
+            Ok(_) => reclaimed += 1,
+            Err(e) => {
+                tracing::warn!(
+                    snapshot_id = %snapshot.id,
+                    error = %e,
+                    "snapshot blob delete failed; row stayed expired",
+                );
+            }
+        }
+    }
+    if reclaimed > 0 {
+        info!(reclaimed, "snapshot retention: blobs reclaimed");
+    }
     Ok(count as u32)
 }
 

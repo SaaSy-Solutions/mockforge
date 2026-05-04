@@ -403,6 +403,89 @@ impl PluginStorage {
             }
         }
     }
+
+    /// Upload a workspace snapshot manifest blob (#10). Snapshots
+    /// inline their manifest in `snapshots.manifest` for small
+    /// workspaces; for larger ones the registry serializes the JSON
+    /// once + uploads here, then stores the returned URL in
+    /// `snapshots.storage_url`.
+    ///
+    /// Key format: `snapshots/{workspace_id}/{snapshot_id}.json` —
+    /// keyed by workspace so a stray scan stays within tenant
+    /// boundaries (the snapshots row is workspace-scoped on the DB
+    /// side too, no org_id column).
+    pub async fn upload_snapshot_blob(
+        &self,
+        workspace_id: uuid::Uuid,
+        snapshot_id: uuid::Uuid,
+        data: Vec<u8>,
+    ) -> Result<String> {
+        let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
+        match &self.backend {
+            StorageBackend::S3 { client, bucket } => {
+                client
+                    .put_object()
+                    .bucket(bucket)
+                    .key(&key)
+                    .body(data.into())
+                    .content_type("application/json")
+                    .send()
+                    .await
+                    .context("snapshot upload to S3 failed")?;
+                Ok(Self::s3_url(bucket, &key))
+            }
+            StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
+        }
+    }
+
+    /// Read back a snapshot manifest blob the registry previously
+    /// uploaded. Returns the raw bytes — caller deserializes.
+    pub async fn read_snapshot_blob(
+        &self,
+        workspace_id: uuid::Uuid,
+        snapshot_id: uuid::Uuid,
+    ) -> Result<Vec<u8>> {
+        let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
+        match &self.backend {
+            StorageBackend::S3 { client, bucket } => {
+                let resp = client
+                    .get_object()
+                    .bucket(bucket)
+                    .key(&key)
+                    .send()
+                    .await
+                    .context("snapshot read from S3 failed")?;
+                let bytes =
+                    resp.body.collect().await.context("snapshot S3 body read failed")?.into_bytes();
+                Ok(bytes.to_vec())
+            }
+            StorageBackend::Local { base_dir } => Self::local_read(base_dir, &key).await,
+        }
+    }
+
+    /// Delete a snapshot's blob (called from snapshot retention
+    /// worker once the row is marked `expired`). Idempotent — missing
+    /// keys are not an error.
+    pub async fn delete_snapshot_blob(
+        &self,
+        workspace_id: uuid::Uuid,
+        snapshot_id: uuid::Uuid,
+    ) -> Result<()> {
+        let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
+        match &self.backend {
+            StorageBackend::S3 { client, bucket } => {
+                client
+                    .delete_object()
+                    .bucket(bucket)
+                    .key(&key)
+                    .send()
+                    .await
+                    .context("snapshot delete from S3 failed")?;
+                Ok(())
+            }
+            StorageBackend::Local { base_dir } => Self::local_delete(base_dir, &key).await,
+        }
+    }
 }
 
 #[cfg(test)]

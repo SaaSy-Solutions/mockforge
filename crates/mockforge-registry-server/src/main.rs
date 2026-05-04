@@ -184,7 +184,10 @@ async fn main() -> Result<()> {
         state.redis.clone(),
     );
     workers::incident_dispatcher::start_incident_dispatcher_worker(db.pool().clone());
-    workers::snapshot_retention::start_snapshot_retention_worker(db.pool().clone());
+    workers::snapshot_retention::start_snapshot_retention_worker(
+        db.pool().clone(),
+        state.storage.clone(),
+    );
 
     // Start deployment orchestrator for hosted mocks
     let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();

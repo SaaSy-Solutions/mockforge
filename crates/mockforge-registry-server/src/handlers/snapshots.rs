@@ -136,12 +136,17 @@ pub async fn capture_snapshot(
     .await
     .map_err(ApiError::Database)?;
 
-    // Capture the workspace state synchronously. For now the manifest
-    // *is* the snapshot — we don't yet have S3/blob storage, so the
-    // JSON lands inline in snapshots.manifest. Sub-second on a typical
-    // workspace, so the request stays interactive without a background
-    // worker round-trip. When blob storage lands, the manifest stays as
-    // the index and bulky byte-level data moves out via storage_url.
+    // Capture the workspace state synchronously. Sub-second on a
+    // typical workspace, so the request stays interactive without a
+    // background worker round-trip.
+    //
+    // Manifests under INLINE_THRESHOLD bytes ride along in
+    // snapshots.manifest as before. Larger manifests get uploaded to
+    // the storage backend (S3 or local fallback) and the row carries
+    // a real storage_url; the inline manifest column keeps a small
+    // summary stub so the UI's quick-look still has something without
+    // a follow-up fetch.
+    const INLINE_THRESHOLD: i64 = 256 * 1024; // 256 KB
     let (manifest, size_bytes) = match build_workspace_manifest(state.db.pool(), workspace_id).await
     {
         Ok((m, s)) => (m, s),
@@ -153,9 +158,39 @@ pub async fn capture_snapshot(
         }
     };
 
-    let storage_url = format!("inline-manifest://snapshot/{}", snapshot.id);
-    match Snapshot::mark_ready(state.db.pool(), snapshot.id, &storage_url, size_bytes, &manifest)
-        .await
+    let (storage_url, stored_manifest) = if size_bytes > INLINE_THRESHOLD {
+        // Upload the full blob; keep a small summary on the row so
+        // listings + diffs that don't need the full payload stay fast.
+        let bytes = serde_json::to_vec(&manifest).unwrap_or_default();
+        match state.storage.upload_snapshot_blob(workspace_id, snapshot.id, bytes).await {
+            Ok(url) => {
+                let summary = manifest
+                    .get("counts")
+                    .cloned()
+                    .map(|c| serde_json::json!({ "counts": c, "external": true }))
+                    .unwrap_or_else(|| serde_json::json!({ "external": true }));
+                (url, summary)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    snapshot_id = %snapshot.id,
+                    error = %e,
+                    "snapshot blob upload failed; falling back to inline manifest",
+                );
+                (format!("inline-manifest://snapshot/{}", snapshot.id), manifest)
+            }
+        }
+    } else {
+        (format!("inline-manifest://snapshot/{}", snapshot.id), manifest)
+    };
+    match Snapshot::mark_ready(
+        state.db.pool(),
+        snapshot.id,
+        &storage_url,
+        size_bytes,
+        &stored_manifest,
+    )
+    .await
     {
         Ok(Some(ready)) => {
             // Storage metering is a gauge (set_snapshot_bytes) not a
@@ -323,7 +358,7 @@ pub async fn diff_snapshot(
     headers: HeaderMap,
 ) -> ApiResult<Json<SnapshotDiff>> {
     let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
-    let snapshot_manifest = snapshot.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+    let snapshot_manifest = resolve_manifest(&state, &snapshot).await;
 
     let against_str = query.against.as_deref().unwrap_or("current");
     let (against_kind, against_id, against_manifest) = if against_str == "current" {
@@ -341,7 +376,7 @@ pub async fn diff_snapshot(
                 "Cannot diff snapshots across different workspaces".into(),
             ));
         }
-        let m = other.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+        let m = resolve_manifest(&state, &other).await;
         ("snapshot".to_string(), Some(other_id), m)
     };
 
@@ -355,6 +390,48 @@ pub async fn diff_snapshot(
         environments: diff_resource(&snapshot_manifest, &against_manifest, "environments"),
         chaos_campaigns: diff_resource(&snapshot_manifest, &against_manifest, "chaos_campaigns"),
     }))
+}
+
+/// Resolve a snapshot's manifest. Falls back through three sources:
+/// 1. The inline `snapshots.manifest` column (small workspaces or pre-S3 rows).
+/// 2. The blob at `storage_url` if it points at the storage backend
+///    (newer rows where manifest exceeded INLINE_THRESHOLD).
+/// 3. Empty object if neither path produces JSON.
+async fn resolve_manifest(state: &AppState, snapshot: &Snapshot) -> serde_json::Value {
+    let inline = snapshot.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+
+    // If inline carries the full manifest (no `external: true` marker)
+    // we can use it as-is. The capture handler stamps that marker on
+    // rows whose manifest was uploaded out-of-line.
+    let is_external = inline.get("external").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !is_external {
+        return inline;
+    }
+
+    // External: fetch the blob via the storage backend. Fall back to
+    // the inline summary when the fetch fails so the diff/restore
+    // path still produces something rather than 500ing.
+    match state.storage.read_snapshot_blob(snapshot.workspace_id, snapshot.id).await {
+        Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    snapshot_id = %snapshot.id,
+                    error = %e,
+                    "snapshot blob is not valid JSON; falling back to inline summary",
+                );
+                inline
+            }
+        },
+        Err(e) => {
+            tracing::warn!(
+                snapshot_id = %snapshot.id,
+                error = %e,
+                "snapshot blob read failed; falling back to inline summary",
+            );
+            inline
+        }
+    }
 }
 
 /// Diff one resource family between two manifests by `id`. Resources
@@ -423,10 +500,10 @@ pub async fn restore_snapshot(
     use mockforge_registry_core::models::ChaosCampaign;
 
     let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
-    let manifest = snapshot
-        .manifest
-        .clone()
-        .ok_or_else(|| ApiError::InvalidRequest("Snapshot has no manifest to restore".into()))?;
+    let manifest = resolve_manifest(&state, &snapshot).await;
+    if manifest.as_object().map(|o| o.is_empty()).unwrap_or(true) {
+        return Err(ApiError::InvalidRequest("Snapshot has no manifest to restore".into()));
+    }
 
     let pool = state.db.pool();
     let workspace_id = snapshot.workspace_id;
