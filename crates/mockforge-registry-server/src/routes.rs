@@ -372,6 +372,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::snapshots::get_snapshot)
                 .delete(handlers::snapshots::delete_snapshot),
         )
+        .route(
+            "/api/v1/snapshots/{id}/diff",
+            get(handlers::snapshots::diff_snapshot),
+        )
         // Flow routes (cloud-enablement task #9 / Phase 1).
         // Unified resource for scenario/orchestration/state_machine/chain
         // editor surfaces. Run trigger reuses #4 test_runs (kind=...).

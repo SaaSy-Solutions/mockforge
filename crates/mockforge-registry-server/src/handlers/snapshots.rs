@@ -277,6 +277,129 @@ pub async fn get_snapshot(
     Ok(Json(snapshot))
 }
 
+/// `GET /api/v1/snapshots/{id}/diff?against=current`
+///
+/// Compares the snapshot's manifest against either the workspace's
+/// current state (`against=current`, default) or another snapshot
+/// (`against=<other_snapshot_id>`). Returns per-resource counts of
+/// added/removed/changed plus the actual diff lists so the UI can
+/// render a side-by-side review before the user commits to a restore.
+#[derive(Debug, Deserialize)]
+pub struct DiffQuery {
+    #[serde(default)]
+    pub against: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ResourceDiff {
+    pub added: Vec<serde_json::Value>,
+    pub removed: Vec<serde_json::Value>,
+    pub changed: Vec<DiffPair>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct DiffPair {
+    pub from: serde_json::Value,
+    pub to: serde_json::Value,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct SnapshotDiff {
+    pub snapshot_id: Uuid,
+    pub against_kind: String,
+    pub against_snapshot_id: Option<Uuid>,
+    pub services: ResourceDiff,
+    pub fixtures: ResourceDiff,
+    pub flows: ResourceDiff,
+    pub environments: ResourceDiff,
+    pub chaos_campaigns: ResourceDiff,
+}
+
+pub async fn diff_snapshot(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    Query(query): Query<DiffQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Json<SnapshotDiff>> {
+    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let snapshot_manifest = snapshot.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+
+    let against_str = query.against.as_deref().unwrap_or("current");
+    let (against_kind, against_id, against_manifest) = if against_str == "current" {
+        let (m, _) = build_workspace_manifest(state.db.pool(), snapshot.workspace_id)
+            .await
+            .map_err(ApiError::Database)?;
+        ("current".to_string(), None, m)
+    } else {
+        let other_id = Uuid::parse_str(against_str).map_err(|_| {
+            ApiError::InvalidRequest("'against' must be 'current' or a snapshot UUID".into())
+        })?;
+        let other = load_authorized_snapshot(&state, user_id, &headers, other_id).await?;
+        if other.workspace_id != snapshot.workspace_id {
+            return Err(ApiError::InvalidRequest(
+                "Cannot diff snapshots across different workspaces".into(),
+            ));
+        }
+        let m = other.manifest.clone().unwrap_or_else(|| serde_json::json!({}));
+        ("snapshot".to_string(), Some(other_id), m)
+    };
+
+    Ok(Json(SnapshotDiff {
+        snapshot_id: snapshot.id,
+        against_kind,
+        against_snapshot_id: against_id,
+        services: diff_resource(&snapshot_manifest, &against_manifest, "services"),
+        fixtures: diff_resource(&snapshot_manifest, &against_manifest, "fixtures"),
+        flows: diff_resource(&snapshot_manifest, &against_manifest, "flows"),
+        environments: diff_resource(&snapshot_manifest, &against_manifest, "environments"),
+        chaos_campaigns: diff_resource(&snapshot_manifest, &against_manifest, "chaos_campaigns"),
+    }))
+}
+
+/// Diff one resource family between two manifests by `id`. Resources
+/// in `from` but not `to` are "removed"; resources in `to` but not
+/// `from` are "added"; same id with different content is "changed".
+fn diff_resource(from: &serde_json::Value, to: &serde_json::Value, key: &str) -> ResourceDiff {
+    let from_list = from.get(key).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let to_list = to.get(key).and_then(|v| v.as_array()).cloned().unwrap_or_default();
+
+    let from_by_id: std::collections::HashMap<String, serde_json::Value> = from_list
+        .iter()
+        .filter_map(|v| v.get("id").and_then(|i| i.as_str()).map(|s| (s.to_string(), v.clone())))
+        .collect();
+    let to_by_id: std::collections::HashMap<String, serde_json::Value> = to_list
+        .iter()
+        .filter_map(|v| v.get("id").and_then(|i| i.as_str()).map(|s| (s.to_string(), v.clone())))
+        .collect();
+
+    let mut added = Vec::new();
+    let mut removed = Vec::new();
+    let mut changed = Vec::new();
+
+    for (id, v) in &from_by_id {
+        match to_by_id.get(id) {
+            None => removed.push(v.clone()),
+            Some(other) if other != v => changed.push(DiffPair {
+                from: v.clone(),
+                to: other.clone(),
+            }),
+            Some(_) => {} // identical
+        }
+    }
+    for (id, v) in &to_by_id {
+        if !from_by_id.contains_key(id) {
+            added.push(v.clone());
+        }
+    }
+
+    ResourceDiff {
+        added,
+        removed,
+        changed,
+    }
+}
+
 /// `DELETE /api/v1/snapshots/{id}`
 ///
 /// Removes the row. Re-syncs the `usage_counters.snapshot_bytes_stored`
