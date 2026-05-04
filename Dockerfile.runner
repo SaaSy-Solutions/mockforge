@@ -1,0 +1,96 @@
+# Multi-stage Docker build for the MockForge cloud test-runner worker.
+#
+# This image runs `mockforge-test-runner` — the separate process that
+# pulls test_runs jobs off Redis and dispatches per-kind executors.
+# The runtime stage installs k6 (required for the cloud_api bench /
+# OWASP / security / WAFBench / CRUD-flow paths) and bundles the
+# Microsoft WAFBench CRS rule YAMLs at /usr/share/mockforge/wafbench/
+# so wafbench runs work without the operator pre-uploading rules.
+
+# Stage 1: Build
+FROM rust:1.91-slim AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    build-essential \
+    g++ \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+
+# Trim workspace members not needed for the runner build (these
+# directories aren't copied into the Docker context). Kept in sync
+# with Dockerfile.registry's trimming.
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/plugins\/response-graphql"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"examples\/test-integration"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
+
+COPY crates/ ./crates/
+COPY proto/ ./proto/
+
+# mockforge-ui's build.rs needs the ui dist tree even when nothing
+# in this image actually serves it — cheaper to provide placeholder
+# files than to feature-gate the dep tree.
+RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
+    echo '<!DOCTYPE html><html><body></body></html>' > crates/mockforge-ui/ui/dist/index.html && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.css && \
+    echo '' > crates/mockforge-ui/ui/dist/assets/index.js && \
+    echo '{}' > crates/mockforge-ui/ui/dist/pwa-manifest.json && \
+    echo '' > crates/mockforge-ui/ui/dist/sw.js
+
+RUN cargo build --release --bin mockforge-test-runner
+
+# Stage 2: Runtime
+FROM debian:trixie-slim
+
+# Base dependencies + k6 from grafana's apt repo. k6 binary lands on
+# $PATH at /usr/bin/k6.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+        libssl3 \
+    && curl -fsSL https://dl.k6.io/key.gpg | gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+        > /etc/apt/sources.list.d/k6.list \
+    && apt-get update && apt-get install -y --no-install-recommends k6 \
+    && apt-get purge -y gnupg \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bundle Microsoft WAFBench CRS rule YAMLs at the path
+# `mockforge-bench::wafbench` defaults to. Pinned to a specific tag
+# would be more reproducible but the upstream project's tagging is
+# inconsistent — pulling main is acceptable for now since we don't
+# ship a fixed CRS version in the cloud_api contract.
+RUN mkdir -p /usr/share/mockforge/wafbench && \
+    curl -fsSL https://github.com/microsoft/WAFBench/archive/refs/heads/main.tar.gz \
+        | tar -xz -C /tmp && \
+    find /tmp/WAFBench-main -name '*.yaml' -exec cp {} /usr/share/mockforge/wafbench/ \; && \
+    rm -rf /tmp/WAFBench-main
+
+RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/mockforge-test-runner /usr/local/bin/mockforge-test-runner
+
+USER mockforge
+
+ENV RUST_LOG=mockforge_test_runner=info,mockforge_bench=info
+
+# Verify k6 is reachable at container start so deploys fail loudly if
+# the apt install regressed instead of the runner reporting K6NotFound
+# on every cloud_api job.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=5s --retries=3 \
+    CMD k6 version >/dev/null 2>&1 || exit 1
+
+CMD ["/usr/local/bin/mockforge-test-runner"]
