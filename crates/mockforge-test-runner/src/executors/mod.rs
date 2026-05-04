@@ -14,6 +14,7 @@
 //! - `flow`           — #9 scenario / orchestration / state_machine / chain
 //! - `replay`         — #6 replay
 
+pub mod chain;
 pub mod chaos;
 pub mod clone_train;
 pub mod contract;

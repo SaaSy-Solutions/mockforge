@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { apiService } from '../services/api';
+import { cloudFlowsApi, type Flow, type FlowVersion } from '../services/api/cloudFlows';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import type { ChainSummary, ChainDefinition } from '../types/chains';
 
 interface ChainsPageProps {
@@ -30,14 +33,41 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
   const [selectedChain, setSelectedChain] = useState<ChainSummary | null>(null);
   const [executionResult, setExecutionResult] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
 
   useEffect(() => {
     fetchChains();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id]);
+
+  // In cloud mode a chain is a Flow with kind='chain'. We map it onto
+  // the existing ChainSummary shape so the rest of the page stays put.
+  const flowToChainSummary = (flow: Flow, links: number): ChainSummary => ({
+    id: flow.id,
+    name: flow.name,
+    description: flow.description ?? undefined,
+    tags: [],
+    enabled: true,
+    linkCount: links,
+  });
 
   const fetchChains = async () => {
     try {
       setLoading(true);
+      if (isCloudMode()) {
+        if (!activeWorkspace?.id) {
+          setChains([]);
+          setError(null);
+          return;
+        }
+        const flows = await cloudFlowsApi.listForWorkspace(activeWorkspace.id, 'chain');
+        // Best-effort link count from the latest version's config; the
+        // list endpoint doesn't include it so we leave it at 0 here and
+        // resolve it on view if needed.
+        setChains(flows.map((f) => flowToChainSummary(f, 0)));
+        setError(null);
+        return;
+      }
       const response = await apiService.listChains();
       setChains(response?.chains || []);
       setError(null);
@@ -59,7 +89,11 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
 
     try {
       setDeletingId(chainToDelete.id);
-      await apiService.deleteChain(chainToDelete.id);
+      if (isCloudMode()) {
+        await cloudFlowsApi.delete(chainToDelete.id);
+      } else {
+        await apiService.deleteChain(chainToDelete.id);
+      }
       setChains(chains.filter(chain => chain.id !== chainToDelete.id));
       setDeleteDialogOpen(false);
       setChainToDelete(null);
@@ -84,6 +118,30 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
     setChainDetails(null);
 
     try {
+      if (isCloudMode()) {
+        // Cloud chain details = the flow row + its current FlowVersion
+        // config. Re-shape into ChainDefinition so the existing detail
+        // dialog renders unchanged.
+        const flow = await cloudFlowsApi.get(chain.id);
+        const versions: FlowVersion[] = await cloudFlowsApi.listVersions(chain.id);
+        const current = versions.find((v) => v.id === flow.current_version_id) ?? versions[0];
+        const cfg = (current?.config ?? {}) as Record<string, unknown>;
+        setChainDetails({
+          id: flow.id,
+          name: flow.name,
+          description: flow.description ?? undefined,
+          config: (cfg.config as ChainDefinition['config']) ?? {
+            enabled: true,
+            maxChainLength: 10,
+            globalTimeoutSecs: 60,
+            enableParallelExecution: false,
+          },
+          links: (cfg.links as ChainDefinition['links']) ?? [],
+          variables: (cfg.variables as ChainDefinition['variables']) ?? {},
+          tags: (cfg.tags as string[]) ?? [],
+        });
+        return;
+      }
       const details = await apiService.getChain(chain.id);
       setChainDetails(details);
     } catch (err) {
@@ -100,6 +158,27 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
     setExecutionResult(null);
 
     try {
+      if (isCloudMode()) {
+        // Cloud trigger queues a test_run; live progress events arrive
+        // over cloudTestRunsApi.streamRunEvents. For this page we just
+        // surface the queued status — users can drill into Cloud Test
+        // Runs for the full SSE timeline.
+        const run = await cloudFlowsApi.triggerRun(chain.id);
+        setExecutionResult(
+          JSON.stringify(
+            {
+              run_id: run.id,
+              status: run.status,
+              kind: run.kind,
+              note:
+                'Run enqueued. Live progress events stream through Cloud Test Runs (SSE).',
+            },
+            null,
+            2,
+          ),
+        );
+        return;
+      }
       const result = await apiService.executeChain(chain.id);
       setExecutionResult(JSON.stringify(result, null, 2));
     } catch (err) {
@@ -558,7 +637,11 @@ interface ChainCreationFormProps {
 }
 
 const ChainCreationForm: React.FC<ChainCreationFormProps> = ({ onClose, onSuccess }) => {
-  const [yamlDefinition, setYamlDefinition] = useState(getDefaultYaml());
+  const cloud = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [yamlDefinition, setYamlDefinition] = useState(
+    cloud ? getDefaultJson() : getDefaultYaml(),
+  );
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -566,6 +649,44 @@ const ChainCreationForm: React.FC<ChainCreationFormProps> = ({ onClose, onSucces
     try {
       setCreating(true);
       setError(null);
+
+      if (cloud) {
+        if (!activeWorkspace?.id) {
+          setError('No active workspace selected.');
+          return;
+        }
+        // Cloud-mode chains expect a JSON body with name + initial_config.
+        // We parse what the user pasted into the textarea — JSON is the
+        // only supported form in cloud (YAML→JSON conversion would need
+        // a parser dep; not worth it for one page).
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(yamlDefinition);
+        } catch (parseErr) {
+          setError(
+            'Cloud chains require JSON input. Paste a chain definition as a JSON object.',
+          );
+          return;
+        }
+        const name =
+          (parsed.name as string) ?? `chain-${Math.random().toString(36).slice(2, 8)}`;
+        const description = (parsed.description as string) ?? '';
+        const flow = await cloudFlowsApi.create(activeWorkspace.id, {
+          kind: 'chain',
+          name,
+          description,
+          initial_config: parsed,
+        });
+        onSuccess({
+          id: flow.id,
+          name: flow.name,
+          description: flow.description ?? '',
+          tags: [],
+          enabled: true,
+          linkCount: Array.isArray(parsed.links) ? (parsed.links as unknown[]).length : 0,
+        });
+        return;
+      }
 
       const response = await apiService.createChain(yamlDefinition);
 
@@ -642,6 +763,37 @@ const ChainCreationForm: React.FC<ChainCreationFormProps> = ({ onClose, onSucces
     </div>
   );
 };
+
+// Cloud-mode default — JSON because the cloud handler stores config as
+// a JSON object directly (no YAML parser on the client side).
+function getDefaultJson(): string {
+  const example = {
+    name: 'My Request Chain',
+    description: 'A simple request chain',
+    config: {
+      enabled: true,
+      maxChainLength: 10,
+      globalTimeoutSecs: 60,
+      enableParallelExecution: false,
+    },
+    links: [
+      {
+        request: {
+          id: 'step1',
+          method: 'GET',
+          url: 'https://api.example.com/data',
+          headers: { 'Content-Type': 'application/json' },
+        },
+        extract: {},
+        storeAs: 'step1_response',
+        dependsOn: [],
+      },
+    ],
+    variables: { base_url: 'https://api.example.com' },
+    tags: ['example'],
+  };
+  return JSON.stringify(example, null, 2);
+}
 
 function getDefaultYaml(): string {
   return `# Chain Definition

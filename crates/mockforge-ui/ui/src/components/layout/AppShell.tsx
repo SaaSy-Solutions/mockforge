@@ -265,6 +265,9 @@ const cloudNavItemIds = new Set([
   // Cloud flows — versioned scenario / state-machine / orchestration /
   // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
   'cloud-flows',
+  // Chains share the flows resource (kind='chain') and are executed by
+  // the ChainExecutor in mockforge-test-runner (#354).
+  'chains',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
@@ -377,11 +380,11 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-border shadow-2xl animate-slide-in-left">
-            <div className="flex items-center justify-between p-6 border-b border-border bg-card">
+          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-gray-200 dark:border-gray-800 shadow-2xl animate-slide-in-left">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
               <div className="flex items-center gap-3">
                 <Logo variant="icon" size="md" />
-                <span className="text-xl font-bold text-foreground">{t('app.brand')}</span>
+                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
               </div>
               <Button
                 variant="secondary"
@@ -456,7 +459,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             <div className="flex items-center gap-3 px-4 py-4 border-b border-border flex-shrink-0">
               <Logo variant="icon" size="md" />
               {!sidebarCollapsed && (
-                <span className="font-semibold text-foreground">{t('app.brand')}</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
               )}
               <Button
                 variant="ghost"
@@ -538,9 +541,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-muted-foreground">{t('app.home')}</span>
-                <span className="text-muted-foreground">/</span>
-                <span className="text-sm font-medium text-foreground truncate capitalize">
+                <span className="text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
+                <span className="text-gray-600 dark:text-gray-400">/</span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">
                   {t(allNavItems.find(n => n.id === activeTab)?.labelKey ?? '', activeTab)}
                 </span>
               </div>
@@ -585,7 +588,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                       }
                     }}
                   />
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground border border-border rounded px-1 py-0.5 bg-bg-primary">
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
                     {isMac ? '⌘K' : 'Ctrl K'}
                   </span>
                 </div>
