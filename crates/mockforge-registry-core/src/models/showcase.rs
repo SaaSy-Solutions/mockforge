@@ -109,6 +109,17 @@ impl ShowcaseEntry {
             .await
     }
 
+    /// Admin: list every entry regardless of published status. Used by
+    /// the admin authoring UI so submissions are visible before publish.
+    pub async fn list_all(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM showcase_entries ORDER BY created_at DESC LIMIT $1",
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    }
+
     /// Admin authoring: flip is_published. Idempotent — repeated calls
     /// with the same value just bump updated_at.
     pub async fn set_published(

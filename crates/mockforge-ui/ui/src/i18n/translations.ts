@@ -111,6 +111,7 @@ const en: Dictionary = {
   'tab.cloudFlows': 'Cloud Flows',
   'tab.cloudContract': 'Cloud Contract',
   'tab.cloudRecorder': 'Cloud Recorder',
+  'tab.cloudShowcaseAdmin': 'Showcase Admin',
 
   'nav.localOnly.badge': 'Local',
   'nav.localOnly.tooltip': 'Requires a local MockForge instance',

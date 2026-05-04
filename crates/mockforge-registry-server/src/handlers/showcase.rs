@@ -185,6 +185,22 @@ pub async fn complete_learning_lesson(
 
 // --- admin authoring (#12 Phase 2) -----------------------------------------
 
+/// `GET /api/v1/admin/showcase/entries`
+///
+/// Admin listing — returns every entry regardless of published status,
+/// newest first. The public list_showcase_entries route only returns
+/// published rows; admins need to see drafts and submissions awaiting
+/// review.
+pub async fn admin_list_showcase_entries(
+    State(state): State<AppState>,
+    AuthUser(_user_id): AuthUser,
+) -> ApiResult<Json<Vec<ShowcaseEntry>>> {
+    let entries = ShowcaseEntry::list_all(state.db.pool(), MAX_LIMIT)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(Json(entries))
+}
+
 /// `POST /api/v1/admin/showcase/entries`
 ///
 /// Submit a showcase entry. Lands in is_published=false; an admin

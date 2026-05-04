@@ -189,6 +189,7 @@ const navSections = [
     titleKey: 'nav.community',
     items: [
       { id: 'showcase', labelKey: 'tab.showcase', icon: Star },
+      { id: 'cloud-showcase-admin', labelKey: 'tab.cloudShowcaseAdmin', icon: Star },
       { id: 'learning-hub', labelKey: 'tab.learningHub', icon: BookOpen },
     ]
   },
@@ -268,6 +269,9 @@ const cloudNavItemIds = new Set([
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
   'cloud-recorder',
+  // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
+  // adminUpdate / adminDelete.
+  'cloud-showcase-admin',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',

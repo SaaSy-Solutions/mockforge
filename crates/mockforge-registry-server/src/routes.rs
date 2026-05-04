@@ -357,7 +357,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // role-check lands; for now any authenticated user can submit.
         .route(
             "/api/v1/admin/showcase/entries",
-            post(handlers::showcase::admin_create_showcase_entry),
+            get(handlers::showcase::admin_list_showcase_entries)
+                .post(handlers::showcase::admin_create_showcase_entry),
         )
         .route(
             "/api/v1/admin/showcase/entries/{id}",
