@@ -105,6 +105,12 @@ describe('ConfigPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    // Force local (self-hosted) mode for these tests — the global test setup
+    // sets VITE_API_BASE_URL, which would otherwise put ConfigPage in cloud
+    // mode and hide the local-only sections (General, Latency, Faults, etc.)
+    // that these tests exercise. See cloud-mode test below for the inverse.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
     mockUseApi.useConfig.mockReturnValue({ data: mockUseApi.defaultConfig, isLoading: false });
     mockUseApi.useValidation.mockReturnValue({ data: mockUseApi.defaultValidation, isLoading: false });
     mockUseApi.useServerInfo.mockReturnValue({ data: mockUseApi.defaultServerInfo, isLoading: false });
@@ -408,5 +414,84 @@ describe('ConfigPage', () => {
     fireEvent.click(screen.getByText('Environment'));
 
     expect(screen.getAllByText('Template Testing').length).toBeGreaterThan(0);
+  });
+});
+
+describe('ConfigPage (cloud mode)', () => {
+  const createWrapper = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>{children}</I18nProvider>
+      </QueryClientProvider>
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.mockforge.dev');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', 'cloud');
+
+    // Cloud mode skips these queries via the new `enabled` option, so the
+    // hooks return the standard "disabled-query" shape.
+    mockUseApi.useConfig.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseApi.useValidation.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseApi.useServerInfo.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseApi.useUpdateLatency.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateFaults.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateProxy.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateProtocols.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateAiMode.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useUpdateValidation.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useRestartServers.mockReturnValue({ mutateAsync: vi.fn() });
+    mockUseApi.useRestartStatus.mockReturnValue({ data: { restarting: false } });
+    mockUseApi.useRealityLevel.mockReturnValue({ data: mockUseApi.defaultReality, isLoading: false });
+    mockUseApi.useSetRealityLevel.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    mockUseApi.useRealityPresets.mockReturnValue({ data: [], isLoading: false });
+    mockUseApi.useImportRealityPreset.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    mockUseApi.useExportRealityPreset.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    mockUseApi.useAutocomplete.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue([]), isPending: false });
+  });
+
+  it('renders without crashing when local-only data is missing', () => {
+    // Regression test: previously, undefined `validation.overrides` fed into
+    // Object.entries() and crashed the page on app.mockforge.dev/config.
+    expect(() => render(<ConfigPage />, { wrapper: createWrapper() })).not.toThrow();
+  });
+
+  it('shows only cloud-applicable sections', () => {
+    render(<ConfigPage />, { wrapper: createWrapper() });
+
+    // Section descriptions are unique to the nav buttons, so they're a
+    // reliable selector — section labels like "Latency" can collide with
+    // similarly-named labels inside the Reality slider content.
+    expect(screen.getByText('Unified realism control')).toBeInTheDocument();
+    expect(screen.getByText('Environment variables')).toBeInTheDocument();
+
+    expect(screen.queryByText('Basic MockForge settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Response delay and timing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Error simulation and failure modes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Request/response validation')).not.toBeInTheDocument();
+    expect(screen.queryByText('Upstream proxy configuration')).not.toBeInTheDocument();
+    expect(screen.queryByText('Protocol enable/disable settings')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bandwidth control and network simulation')).not.toBeInTheDocument();
+  });
+
+  it('hides global Save All / Reset All toolbar', () => {
+    render(<ConfigPage />, { wrapper: createWrapper() });
+
+    expect(screen.queryByText('Save All Changes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reset All')).not.toBeInTheDocument();
+  });
+
+  it('skips local-only API calls', () => {
+    render(<ConfigPage />, { wrapper: createWrapper() });
+
+    expect(mockUseApi.useConfig).toHaveBeenCalledWith({ enabled: false });
+    expect(mockUseApi.useValidation).toHaveBeenCalledWith({ enabled: false });
+    expect(mockUseApi.useServerInfo).toHaveBeenCalledWith({ enabled: false });
   });
 });

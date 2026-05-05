@@ -5,11 +5,12 @@ import { queryKeys } from './queryKeys';
 /**
  * Validation hooks
  */
-export function useValidation() {
+export function useValidation(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.validation,
     queryFn: validationApi.getValidation,
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   });
 }
 

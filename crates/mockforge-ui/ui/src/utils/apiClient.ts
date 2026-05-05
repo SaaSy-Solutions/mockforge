@@ -26,16 +26,6 @@ function createCloudStubResponse(url: string): Response {
     }}), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
-  // Config — needed by Config page components
-  if (path === '/__mockforge/config') {
-    return new Response(JSON.stringify({ success: true, data: {
-      latency: { enabled: false, base_ms: 0, jitter_ms: 0, tag_overrides: {} },
-      faults: { enabled: false, failure_rate: 0, status_codes: [] },
-      proxy: { enabled: false, upstream_url: null, timeout_seconds: 30 },
-      validation: { mode: 'disabled', aggregate_errors: false, validate_responses: false, overrides: {} },
-    }}), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }
-
   // Time travel — needed by TimeTravelWidget
   if (path.startsWith('/__mockforge/time-travel')) {
     return new Response(JSON.stringify({ success: true, data: {

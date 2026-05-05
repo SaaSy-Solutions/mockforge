@@ -31,6 +31,7 @@ import { useRealityShortcuts } from '../hooks/useRealityShortcuts';
 import { authenticatedFetch } from '../utils/apiClient';
 import { serverApi } from '../services/api';
 import { useI18n } from '../i18n/I18nProvider';
+import { isCloudMode } from '../utils/cloudMode';
 
 function extractPort(address?: string): string {
   if (!address) return '';
@@ -55,7 +56,8 @@ function isValidPort(port: number): boolean {
 
 export function ConfigPage() {
   const { t } = useI18n();
-  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols' | 'reality'>('general');
+  const isCloud = isCloudMode();
+  const [activeSection, setActiveSection] = useState<'general' | 'latency' | 'faults' | 'traffic-shaping' | 'proxy' | 'validation' | 'environment' | 'protocols' | 'reality'>(isCloud ? 'reality' : 'general');
   const { activeWorkspace } = useWorkspaceStore();
   const workspaceId = activeWorkspace?.id || 'default-workspace';
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -78,9 +80,13 @@ export function ConfigPage() {
     },
   });
 
-  const { data: config, isLoading: configLoading } = useConfig();
-  const { data: validation, isLoading: validationLoading } = useValidation();
-  const { data: serverInfo, isLoading: serverInfoLoading } = useServerInfo();
+  // In cloud mode the local-server endpoints (/__mockforge/config, /validation,
+  // /server-info) don't exist on the registry — these settings only apply to a
+  // self-hosted MockForge instance. Skip the calls entirely and render only the
+  // workspace-scoped sections (Reality, Environment).
+  const { data: config, isLoading: configLoading } = useConfig({ enabled: !isCloud });
+  const { data: validation, isLoading: validationLoading } = useValidation({ enabled: !isCloud });
+  const { data: serverInfo, isLoading: serverInfoLoading } = useServerInfo({ enabled: !isCloud });
 
   // Mutations
   const updateLatency = useUpdateLatency();
@@ -684,17 +690,18 @@ export function ConfigPage() {
     );
   }
 
-  const sections = [
-    { id: 'reality', label: 'Reality Slider', icon: Zap, description: 'Unified realism control' },
-    { id: 'general', label: 'General', icon: Settings, description: 'Basic MockForge settings' },
-    { id: 'protocols', label: 'Protocols', icon: Server, description: 'Protocol enable/disable settings' },
-    { id: 'latency', label: 'Latency', icon: Zap, description: 'Response delay and timing' },
-    { id: 'faults', label: 'Fault Injection', icon: Shield, description: 'Error simulation and failure modes' },
-    { id: 'traffic-shaping', label: 'Traffic Shaping', icon: Wifi, description: 'Bandwidth control and network simulation' },
-    { id: 'proxy', label: 'Proxy', icon: Server, description: 'Upstream proxy configuration' },
-    { id: 'validation', label: 'Validation', icon: Database, description: 'Request/response validation' },
-    { id: 'environment', label: 'Environment', icon: Settings, description: 'Environment variables' },
+  const allSections = [
+    { id: 'reality', label: 'Reality Slider', icon: Zap, description: 'Unified realism control', cloudAvailable: true },
+    { id: 'general', label: 'General', icon: Settings, description: 'Basic MockForge settings', cloudAvailable: false },
+    { id: 'protocols', label: 'Protocols', icon: Server, description: 'Protocol enable/disable settings', cloudAvailable: false },
+    { id: 'latency', label: 'Latency', icon: Zap, description: 'Response delay and timing', cloudAvailable: false },
+    { id: 'faults', label: 'Fault Injection', icon: Shield, description: 'Error simulation and failure modes', cloudAvailable: false },
+    { id: 'traffic-shaping', label: 'Traffic Shaping', icon: Wifi, description: 'Bandwidth control and network simulation', cloudAvailable: false },
+    { id: 'proxy', label: 'Proxy', icon: Server, description: 'Upstream proxy configuration', cloudAvailable: false },
+    { id: 'validation', label: 'Validation', icon: Database, description: 'Request/response validation', cloudAvailable: false },
+    { id: 'environment', label: 'Environment', icon: Settings, description: 'Environment variables', cloudAvailable: true },
   ];
+  const sections = isCloud ? allSections.filter(s => s.cloudAvailable) : allSections;
 
   return (
     <div className="space-y-8">
@@ -708,24 +715,28 @@ export function ConfigPage() {
         action={
           <div className="flex items-center gap-3">
             <RealityIndicator />
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={handleResetAll}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Reset All
-            </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="flex items-center gap-2"
-              onClick={handleSaveAll}
-            >
-              <Save className="h-4 w-4" />
-              Save All Changes
-            </Button>
+            {!isCloud && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={handleResetAll}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reset All
+                </Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={handleSaveAll}
+                >
+                  <Save className="h-4 w-4" />
+                  Save All Changes
+                </Button>
+              </>
+            )}
           </div>
         }
       />
