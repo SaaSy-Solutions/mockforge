@@ -19,6 +19,7 @@ use axum::{
     Json,
 };
 use futures_util::stream::{self, Stream};
+use mockforge_bench::ssrf::{validate_target_url, Policy as SsrfPolicy};
 use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use serde::Deserialize;
 use std::convert::Infallible;
@@ -111,7 +112,19 @@ pub async fn trigger_run(
         ));
     }
 
-    // 4. Insert the test_runs row.
+    // 4. SSRF guard. When the suite config carries a `target_url`,
+    // validate it before we even create the test_run row. This is the
+    // primary enforcement point — by the time the worker picks the job
+    // up, an attacker pointing us at internal infrastructure has
+    // already burned a runner slot and a queue write. The runner-side
+    // guard in mockforge_bench::cloud_api is defense-in-depth.
+    if let Some(target_url) = extract_target_url(&suite.config) {
+        validate_target_url(&target_url, ssrf_policy())
+            .await
+            .map_err(|e| ApiError::InvalidRequest(format!("target_url rejected: {}", e)))?;
+    }
+
+    // 5. Insert the test_runs row.
     let run = TestRun::enqueue(
         state.db.pool(),
         EnqueueTestRun {
@@ -127,7 +140,7 @@ pub async fn trigger_run(
     .await
     .map_err(ApiError::Database)?;
 
-    // 5. Push onto the Redis queue so mockforge-test-runner picks it up.
+    // 6. Push onto the Redis queue so mockforge-test-runner picks it up.
     // We pass the suite's config straight through as the payload — the
     // executor reads kind-specific knobs from there (synthetic_steps,
     // target URL, etc.) so the user's authored config actually drives
@@ -428,9 +441,34 @@ fn is_valid_trigger_source(s: &str) -> bool {
     matches!(s, "manual" | "schedule" | "ci" | "webhook")
 }
 
+/// Pull a `target_url` string out of a suite config JSON. Returns
+/// `None` when the field is absent, blank, or not a string — caller
+/// treats that as "no SSRF check needed", which is correct for kinds
+/// like `unit` that don't make outbound requests.
+fn extract_target_url(config: &serde_json::Value) -> Option<String> {
+    let raw = config.get("target_url")?.as_str()?.trim();
+    if raw.is_empty() {
+        None
+    } else {
+        Some(raw.to_string())
+    }
+}
+
+/// Resolve the SSRF policy for trigger-time validation. Mirrors the
+/// runner-side env-var contract in `mockforge_bench::cloud_api`:
+/// `MOCKFORGE_SSRF_ALLOW_LOOPBACK=1` opts into [`SsrfPolicy::for_test`]
+/// for non-prod deployments. Production must NOT set this.
+fn ssrf_policy() -> SsrfPolicy {
+    match std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").as_deref() {
+        Ok("1") | Ok("true") => SsrfPolicy::for_test(),
+        _ => SsrfPolicy::strict(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn trigger_source_accepts_canonical_values() {
@@ -445,5 +483,52 @@ mod tests {
         assert!(!is_valid_trigger_source("MANUAL"));
         assert!(!is_valid_trigger_source(""));
         assert!(!is_valid_trigger_source("api"));
+    }
+
+    #[test]
+    fn extract_target_url_pulls_string() {
+        assert_eq!(
+            extract_target_url(&json!({"target_url": "https://api.example.com"})),
+            Some("https://api.example.com".to_string())
+        );
+        assert_eq!(
+            extract_target_url(&json!({"target_url": "  https://x.com  "})),
+            Some("https://x.com".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_target_url_none_when_missing_blank_or_wrong_type() {
+        assert!(extract_target_url(&json!({})).is_none());
+        assert!(extract_target_url(&json!({"target_url": ""})).is_none());
+        assert!(extract_target_url(&json!({"target_url": "   "})).is_none());
+        assert!(extract_target_url(&json!({"target_url": 42})).is_none());
+        assert!(extract_target_url(&json!({"other": "https://x.com"})).is_none());
+    }
+
+    #[tokio::test]
+    async fn ssrf_policy_blocks_loopback_target_in_strict_mode() {
+        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
+        let policy = ssrf_policy();
+        let err = validate_target_url("http://127.0.0.1/", policy).await.unwrap_err();
+        assert!(err.to_string().contains("loopback"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn ssrf_policy_blocks_metadata_ip() {
+        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
+        let policy = ssrf_policy();
+        let err = validate_target_url("http://169.254.169.254/latest/meta-data/", policy)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("link-local"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn ssrf_policy_loose_allows_loopback() {
+        std::env::set_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK", "1");
+        let policy = ssrf_policy();
+        validate_target_url("http://127.0.0.1:8080/", policy).await.unwrap();
+        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
     }
 }

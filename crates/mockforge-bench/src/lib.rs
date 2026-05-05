@@ -4,6 +4,7 @@
 //! using OpenAPI specifications to generate realistic traffic patterns.
 
 pub mod chunked_bench;
+pub mod cloud_api;
 pub mod command;
 pub mod conformance;
 pub mod crud_flow;
@@ -24,9 +25,15 @@ pub mod scenarios;
 pub mod security_payloads;
 pub mod spec_dependencies;
 pub mod spec_parser;
+pub mod ssrf;
 pub mod target_parser;
 pub mod wafbench;
 
+pub use cloud_api::{
+    run_bench, run_conformance, run_crud_flow, run_owasp, run_security, run_wafbench,
+    CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudOwaspInputs,
+    CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
+};
 pub use command::BenchCommand;
 pub use crud_flow::{CrudFlow, CrudFlowConfig, CrudFlowDetector, FlowStep};
 pub use data_driven::{
@@ -43,6 +50,7 @@ pub use security_payloads::{SecurityCategory, SecurityPayloads, SecurityTestConf
 pub use spec_dependencies::{
     DependencyDetector, ExtractedValues, SpecDependency, SpecDependencyConfig, SpecGroup,
 };
+pub use ssrf::{validate_target_url, Policy as SsrfPolicy, SsrfError};
 pub use target_parser::{parse_targets_file, TargetConfig};
 pub use wafbench::{WafBenchLoader, WafBenchStats, WafBenchTestCase};
 

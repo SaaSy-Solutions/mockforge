@@ -75,10 +75,12 @@ atty = "0.2"
 # JSON Schema validation for native conformance executor
 jsonschema = { workspace = true }
 
+# Temp directories for cloud_api run isolation
+tempfile = "3.27"
+
 [dev-dependencies]
 mockito = "1.5"
 proptest = "1.11"
-tempfile = "3.27"
 
 [features]
 default = []

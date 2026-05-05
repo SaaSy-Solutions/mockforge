@@ -29,6 +29,11 @@
 use async_trait::async_trait;
 use std::time::Instant;
 
+use mockforge_bench::cloud_api::{
+    self, CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudOwaspInputs,
+    CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
+};
+
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
@@ -69,6 +74,48 @@ impl Executor for TestExecutor {
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
+
+        // Cloud-API path: when the payload opts in via `use_cloud_api: true`
+        // and supplies an OpenAPI spec, dispatch to the
+        // mockforge_bench::cloud_api wrappers — same logic as the local
+        // `mockforge-cli bench` command, just driven from the cloud worker
+        // against an external target. Requires the k6 binary on $PATH (the
+        // runner Dockerfile installs it). When the payload doesn't opt in,
+        // bench/owasp fall through to the lighter-weight reqwest paths
+        // below and conformance falls through to synthetic mode.
+        if uses_cloud_api(&job.payload) {
+            match self.kind {
+                "conformance" => {
+                    return run_cloud_conformance(job, callbacks, started).await;
+                }
+                "bench" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_bench(job, callbacks, started, spec).await;
+                    }
+                }
+                "owasp" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_owasp(job, callbacks, started, spec).await;
+                    }
+                }
+                "security" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_security(job, callbacks, started, spec).await;
+                    }
+                }
+                "wafbench" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_wafbench(job, callbacks, started, spec).await;
+                    }
+                }
+                "crud_flow" => {
+                    if let Some(spec) = extract_spec_bytes(&job.payload) {
+                        return run_cloud_crud_flow(job, callbacks, started, spec).await;
+                    }
+                }
+                _ => {}
+            }
+        }
 
         // OWASP kind has a real path when payload.target_url is set —
         // scan response headers for the standard security-header set.
@@ -186,6 +233,608 @@ impl Executor for TestExecutor {
                 "wall_ms": elapsed.as_millis() as u64,
             })),
         })
+    }
+}
+
+/// Whether the queued payload opts into the [`mockforge_bench::cloud_api`]
+/// path. Defaults to `false` so callers that haven't migrated keep the
+/// existing reqwest-based behavior.
+fn uses_cloud_api(payload: &serde_json::Value) -> bool {
+    payload.get("use_cloud_api").and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// Pull the OpenAPI spec out of the payload as bytes. Looks at
+/// `payload.spec` first (a UTF-8 JSON or YAML document inline) — most
+/// callers will use this. Returns `None` when no usable spec is supplied
+/// so the caller can decide whether to error or fall back.
+fn extract_spec_bytes(payload: &serde_json::Value) -> Option<Vec<u8>> {
+    let raw = payload.get("spec")?.as_str()?;
+    if raw.trim().is_empty() {
+        return None;
+    }
+    Some(raw.as_bytes().to_vec())
+}
+
+fn extract_spec_format(payload: &serde_json::Value) -> SpecFormat {
+    match payload.get("spec_format").and_then(|v| v.as_str()).unwrap_or("auto") {
+        "json" => SpecFormat::Json,
+        "yaml" | "yml" => SpecFormat::Yaml,
+        _ => SpecFormat::Auto,
+    }
+}
+
+fn extract_target_url(payload: &serde_json::Value) -> Option<String> {
+    payload
+        .get("target_url")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+fn extract_string(payload: &serde_json::Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+fn extract_string_vec(payload: &serde_json::Value, key: &str) -> Vec<String> {
+    payload
+        .get(key)
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Map a [`CloudRunArtifacts`] result to a `JobOutcome` and emit summary
+/// events. Status is `Passed` when no `summary.json` was produced (e.g.
+/// conformance native executor) or when k6 reported an error rate below 1%.
+async fn finish_cloud_run(
+    job_run_id: uuid::Uuid,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    kind: &'static str,
+    target_url: &str,
+    artifacts: CloudRunArtifacts,
+    next_seq: u32,
+) -> Result<JobOutcome> {
+    // Emit a metric event with the structured summary so the SSE stream
+    // shows the run results live without consumers having to fetch
+    // artifacts.
+    let summary_json = artifacts
+        .k6_results
+        .as_ref()
+        .map(|r| {
+            serde_json::json!({
+                "name": format!("{kind}_summary"),
+                "total_requests": r.total_requests,
+                "failed_requests": r.failed_requests,
+                "error_rate_pct": r.error_rate(),
+                "rps": r.rps,
+                "p95_ms": r.p95_duration_ms,
+                "p99_ms": r.p99_duration_ms,
+                "vus_max": r.vus_max,
+            })
+        })
+        .unwrap_or_else(|| {
+            serde_json::json!({
+                "name": format!("{kind}_summary"),
+                "artifacts": artifacts.files.keys().collect::<Vec<_>>(),
+            })
+        });
+
+    callbacks.run_event(job_run_id, next_seq, "metric", summary_json).await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    let status = match artifacts.k6_results.as_ref() {
+        Some(r) if r.error_rate() >= 1.0 => JobStatus::Failed,
+        _ => JobStatus::Passed,
+    };
+    Ok(JobOutcome {
+        status,
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "cloud_api",
+            "kind": kind,
+            "target_url": target_url,
+            "artifact_files": artifacts.files.keys().collect::<Vec<_>>(),
+            "k6_results": artifacts.k6_results,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
+}
+
+/// Map a `cloud_api` error to an `Errored` outcome with the failure
+/// message captured as a `step_fail` event.
+async fn finish_cloud_error(
+    job_run_id: uuid::Uuid,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    kind: &'static str,
+    target_url: &str,
+    next_seq: u32,
+    err: mockforge_bench::error::BenchError,
+) -> Result<JobOutcome> {
+    callbacks
+        .run_event(
+            job_run_id,
+            next_seq,
+            "step_fail",
+            serde_json::json!({
+                "step": 1,
+                "name": format!("cloud_api_{kind}"),
+                "error": err.to_string(),
+            }),
+        )
+        .await?;
+    let elapsed = started.elapsed();
+    Ok(JobOutcome {
+        status: JobStatus::Errored,
+        runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+        summary: Some(serde_json::json!({
+            "executor_phase": "cloud_api",
+            "kind": kind,
+            "target_url": target_url,
+            "error": err.to_string(),
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
+}
+
+/// Drive a k6 load test via `cloud_api::run_bench`.
+async fn run_cloud_bench(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "bench",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true bench job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud bench against {target_url}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudBenchInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        duration: extract_string(&job.payload, "duration").unwrap_or_else(|| "30s".to_string()),
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        scenario: extract_string(&job.payload, "scenario")
+            .unwrap_or_else(|| "constant".to_string()),
+        operations: extract_string(&job.payload, "operations"),
+        exclude_operations: extract_string(&job.payload, "exclude_operations"),
+        auth: extract_string(&job.payload, "auth"),
+        headers: extract_string(&job.payload, "headers"),
+        threshold_percentile: extract_string(&job.payload, "threshold_percentile")
+            .unwrap_or_else(|| "p(95)".to_string()),
+        threshold_ms: job.payload.get("threshold_ms").and_then(|v| v.as_u64()).unwrap_or(1000),
+        max_error_rate: job.payload.get("max_error_rate").and_then(|v| v.as_f64()).unwrap_or(0.01),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        chunked_request_bodies: false,
+    };
+
+    match cloud_api::run_bench(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(job.run_id, callbacks, started, "bench", &target_url, artifacts, 2)
+                .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "bench", &target_url, 2, e).await
+        }
+    }
+}
+
+/// Drive an OWASP API Top 10 run via `cloud_api::run_owasp`.
+async fn run_cloud_owasp(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "owasp",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true owasp job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud OWASP scan against {target_url}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudOwaspInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        categories: extract_string(&job.payload, "owasp_categories"),
+        auth_header: extract_string(&job.payload, "owasp_auth_header")
+            .unwrap_or_else(|| "Authorization".to_string()),
+        auth_token: extract_string(&job.payload, "owasp_auth_token"),
+        admin_paths: extract_string_vec(&job.payload, "owasp_admin_paths"),
+        id_fields: extract_string(&job.payload, "owasp_id_fields"),
+        report_format: extract_string(&job.payload, "owasp_report_format")
+            .unwrap_or_else(|| "json".to_string()),
+        iterations: job
+            .payload
+            .get("owasp_iterations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1)
+            .clamp(1, 100) as u32,
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        headers: extract_string(&job.payload, "headers"),
+    };
+
+    match cloud_api::run_owasp(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(job.run_id, callbacks, started, "owasp", &target_url, artifacts, 2)
+                .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "owasp", &target_url, 2, e).await
+        }
+    }
+}
+
+/// Drive an OpenAPI 3.0.0 conformance run via `cloud_api::run_conformance`.
+///
+/// Unlike bench/owasp, the spec is optional — the native conformance
+/// executor's reference-check mode runs without one. So this path opts
+/// in purely on `kind == "conformance" && use_cloud_api == true`.
+async fn run_cloud_conformance(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "conformance",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true conformance job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud conformance against {target_url}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudConformanceInputs {
+        spec_bytes: extract_spec_bytes(&job.payload),
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        api_key: extract_string(&job.payload, "conformance_api_key"),
+        basic_auth: extract_string(&job.payload, "conformance_basic_auth"),
+        categories: extract_string(&job.payload, "conformance_categories"),
+        headers: extract_string_vec(&job.payload, "conformance_headers"),
+        all_operations: job
+            .payload
+            .get("conformance_all_operations")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        request_delay_ms: job
+            .payload
+            .get("conformance_delay_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        use_k6: job.payload.get("use_k6").and_then(|v| v.as_bool()).unwrap_or(false),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        report_format: extract_string(&job.payload, "conformance_report_format")
+            .unwrap_or_else(|| "json".to_string()),
+        export_requests: job
+            .payload
+            .get("export_requests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        validate_requests: job
+            .payload
+            .get("validate_requests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    };
+
+    match cloud_api::run_conformance(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(
+                job.run_id,
+                callbacks,
+                started,
+                "conformance",
+                &target_url,
+                artifacts,
+                2,
+            )
+            .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "conformance", &target_url, 2, e)
+                .await
+        }
+    }
+}
+
+/// Drive a payload-injection security run via `cloud_api::run_security`.
+async fn run_cloud_security(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "security",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true security job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud security scan against {target_url}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudSecurityInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        duration: extract_string(&job.payload, "duration").unwrap_or_else(|| "30s".to_string()),
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        scenario: extract_string(&job.payload, "scenario")
+            .unwrap_or_else(|| "constant".to_string()),
+        categories: extract_string(&job.payload, "security_categories"),
+        target_fields: extract_string(&job.payload, "security_target_fields"),
+        auth: extract_string(&job.payload, "auth"),
+        headers: extract_string(&job.payload, "headers"),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    };
+
+    match cloud_api::run_security(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(job.run_id, callbacks, started, "security", &target_url, artifacts, 2)
+                .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "security", &target_url, 2, e).await
+        }
+    }
+}
+
+/// Drive a WAFBench coverage run via `cloud_api::run_wafbench`.
+///
+/// `payload.wafbench_rules_dir` must point to a path or glob accessible
+/// to the runner. In production this is the bundled CRS install at
+/// `/usr/share/mockforge/wafbench/` (see the runner Dockerfile).
+async fn run_cloud_wafbench(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "wafbench",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true wafbench job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    let rules_dir = extract_string(&job.payload, "wafbench_rules_dir")
+        .unwrap_or_else(|| "/usr/share/mockforge/wafbench/*.yaml".to_string());
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud WAFBench against {target_url} using {rules_dir}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudWafBenchInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        duration: extract_string(&job.payload, "duration").unwrap_or_else(|| "30s".to_string()),
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        scenario: extract_string(&job.payload, "scenario")
+            .unwrap_or_else(|| "constant".to_string()),
+        rules_dir,
+        cycle_all: job.payload.get("wafbench_cycle_all").and_then(|v| v.as_bool()).unwrap_or(false),
+        auth: extract_string(&job.payload, "auth"),
+        headers: extract_string(&job.payload, "headers"),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    };
+
+    match cloud_api::run_wafbench(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(job.run_id, callbacks, started, "wafbench", &target_url, artifacts, 2)
+                .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "wafbench", &target_url, 2, e).await
+        }
+    }
+}
+
+/// Drive a CRUD-flow chain run via `cloud_api::run_crud_flow`.
+async fn run_cloud_crud_flow(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    spec_bytes: Vec<u8>,
+) -> Result<JobOutcome> {
+    let Some(target_url) = extract_target_url(&job.payload) else {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "crud_flow",
+            "",
+            1,
+            mockforge_bench::error::BenchError::Other(
+                "use_cloud_api=true crud_flow job missing target_url".to_string(),
+            ),
+        )
+        .await;
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!("Cloud CRUD flow against {target_url}"),
+                "executor_phase": "cloud_api",
+            }),
+        )
+        .await?;
+
+    let inputs = CloudCrudFlowInputs {
+        spec_bytes,
+        spec_format: extract_spec_format(&job.payload),
+        target_url: target_url.clone(),
+        base_path: extract_string(&job.payload, "base_path"),
+        duration: extract_string(&job.payload, "duration").unwrap_or_else(|| "30s".to_string()),
+        vus: job.payload.get("vus").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 1000) as u32,
+        scenario: extract_string(&job.payload, "scenario")
+            .unwrap_or_else(|| "constant".to_string()),
+        flow_config_yaml: extract_string(&job.payload, "flow_config_yaml"),
+        extract_fields: extract_string(&job.payload, "extract_fields"),
+        auth: extract_string(&job.payload, "auth"),
+        headers: extract_string(&job.payload, "headers"),
+        skip_tls_verify: job
+            .payload
+            .get("skip_tls_verify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+    };
+
+    match cloud_api::run_crud_flow(inputs).await {
+        Ok(artifacts) => {
+            finish_cloud_run(job.run_id, callbacks, started, "crud_flow", &target_url, artifacts, 2)
+                .await
+        }
+        Err(e) => {
+            finish_cloud_error(job.run_id, callbacks, started, "crud_flow", &target_url, 2, e).await
+        }
     }
 }
 
@@ -540,5 +1189,63 @@ mod tests {
     #[test]
     fn synthetic_step_ms_default() {
         assert_eq!(TestExecutor::synthetic_step_ms(&json!({})), 100);
+    }
+
+    #[test]
+    fn uses_cloud_api_default_false() {
+        assert!(!uses_cloud_api(&json!({})));
+        assert!(!uses_cloud_api(&json!(null)));
+        assert!(!uses_cloud_api(&json!({"use_cloud_api": false})));
+    }
+
+    #[test]
+    fn uses_cloud_api_explicit_true() {
+        assert!(uses_cloud_api(&json!({"use_cloud_api": true})));
+    }
+
+    #[test]
+    fn extract_spec_bytes_from_string() {
+        let p = json!({"spec": "openapi: 3.0.0\n"});
+        assert_eq!(extract_spec_bytes(&p).unwrap(), b"openapi: 3.0.0\n".to_vec());
+    }
+
+    #[test]
+    fn extract_spec_bytes_returns_none_when_missing_or_blank() {
+        assert!(extract_spec_bytes(&json!({})).is_none());
+        assert!(extract_spec_bytes(&json!({"spec": ""})).is_none());
+        assert!(extract_spec_bytes(&json!({"spec": "   "})).is_none());
+        assert!(extract_spec_bytes(&json!({"spec": 42})).is_none());
+    }
+
+    #[test]
+    fn extract_spec_format_maps_known_strings() {
+        assert!(matches!(extract_spec_format(&json!({"spec_format": "json"})), SpecFormat::Json));
+        assert!(matches!(extract_spec_format(&json!({"spec_format": "yaml"})), SpecFormat::Yaml));
+        assert!(matches!(extract_spec_format(&json!({"spec_format": "yml"})), SpecFormat::Yaml));
+        assert!(matches!(extract_spec_format(&json!({})), SpecFormat::Auto));
+        assert!(matches!(extract_spec_format(&json!({"spec_format": "junk"})), SpecFormat::Auto));
+    }
+
+    #[test]
+    fn extract_target_url_trims_and_skips_blank() {
+        assert_eq!(
+            extract_target_url(&json!({"target_url": "  https://x.com  "})),
+            Some("https://x.com".to_string())
+        );
+        assert!(extract_target_url(&json!({"target_url": ""})).is_none());
+        assert!(extract_target_url(&json!({"target_url": "   "})).is_none());
+        assert!(extract_target_url(&json!({})).is_none());
+    }
+
+    #[test]
+    fn extract_string_vec_picks_strings() {
+        let p = json!({"owasp_admin_paths": ["/admin", "  /root  ", "", 42]});
+        assert_eq!(extract_string_vec(&p, "owasp_admin_paths"), vec!["/admin", "/root"]);
+    }
+
+    #[test]
+    fn extract_string_vec_empty_for_missing() {
+        let v: Vec<String> = extract_string_vec(&json!({}), "anything");
+        assert!(v.is_empty());
     }
 }

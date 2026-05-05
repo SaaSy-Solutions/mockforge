@@ -147,6 +147,10 @@ mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios" }
 mockforge-plugin-registry = { version = "0.3.70", path = "../mockforge-plugin-registry" }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
+# SSRF guard reused at the trigger_run handler — primary enforcement
+# before runs hit the Redis queue. The runner-side guard in
+# mockforge_bench::cloud_api is defense-in-depth.
+mockforge-bench = { path = "../mockforge-bench" }
 
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }
