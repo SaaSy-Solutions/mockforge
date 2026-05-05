@@ -75,6 +75,14 @@ pub enum AuditEventType {
     InvitationCreated,
     InvitationRevoked,
     InvitationAccepted,
+    // Cloud Plugins (Phase 1) — see migration
+    // 20250101000074_cloud_plugin_attachments.sql.
+    PluginAttached,
+    PluginDetached,
+    PluginRevoked,
+    PluginBlocklistHit,
+    OrgTrustRootCreated,
+    OrgTrustRootRevoked,
     // Admin actions
     AdminImpersonation,
 }
@@ -137,6 +145,12 @@ impl AuditEventType {
             "invitation_created" => Some(Self::InvitationCreated),
             "invitation_revoked" => Some(Self::InvitationRevoked),
             "invitation_accepted" => Some(Self::InvitationAccepted),
+            "plugin_attached" => Some(Self::PluginAttached),
+            "plugin_detached" => Some(Self::PluginDetached),
+            "plugin_revoked" => Some(Self::PluginRevoked),
+            "plugin_blocklist_hit" => Some(Self::PluginBlocklistHit),
+            "org_trust_root_created" => Some(Self::OrgTrustRootCreated),
+            "org_trust_root_revoked" => Some(Self::OrgTrustRootRevoked),
             "admin_impersonation" => Some(Self::AdminImpersonation),
             _ => None,
         }
@@ -199,6 +213,12 @@ impl AuditEventType {
             Self::InvitationCreated => "invitation_created",
             Self::InvitationRevoked => "invitation_revoked",
             Self::InvitationAccepted => "invitation_accepted",
+            Self::PluginAttached => "plugin_attached",
+            Self::PluginDetached => "plugin_detached",
+            Self::PluginRevoked => "plugin_revoked",
+            Self::PluginBlocklistHit => "plugin_blocklist_hit",
+            Self::OrgTrustRootCreated => "org_trust_root_created",
+            Self::OrgTrustRootRevoked => "org_trust_root_revoked",
             Self::AdminImpersonation => "admin_impersonation",
         }
     }
