@@ -23,6 +23,8 @@ const en: Dictionary = {
   'search.scope.current': 'Current page',
   'search.scope.logs': 'Logs only',
   'search.scope.services': 'Services only',
+  'workspace.selector.label': 'Active workspace',
+  'workspace.selector.placeholder': 'Select workspace…',
 
   'nav.core': 'Core',
   'nav.servicesData': 'Services & Data',
@@ -154,6 +156,8 @@ const es: Dictionary = {
   'search.scope.current': 'Pagina actual',
   'search.scope.logs': 'Solo registros',
   'search.scope.services': 'Solo servicios',
+  'workspace.selector.label': 'Espacio de trabajo activo',
+  'workspace.selector.placeholder': 'Seleccionar espacio…',
 
   'nav.core': 'Nucleo',
   'nav.servicesData': 'Servicios y Datos',

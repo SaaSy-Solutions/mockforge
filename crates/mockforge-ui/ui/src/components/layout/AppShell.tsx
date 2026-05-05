@@ -11,6 +11,7 @@ import { useLogStore } from '../../stores/useLogStore';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useHelpStore } from '../../stores/useHelpStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
+import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -330,6 +331,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const helpOpen = useHelpStore(state => state.isOpen);
   const openHelp = useHelpStore(state => state.open);
   const setHelpOpen = useHelpStore(state => state.setOpen);
+  const workspaces = useWorkspaceStore(state => state.workspaces);
+  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
+  const setActiveWorkspaceById = useWorkspaceStore(state => state.setActiveWorkspaceById);
   const keyboardShortcutsEnabled = usePreferencesStore(
     state => state.preferences.ui.keyboardShortcuts,
   );
@@ -605,6 +609,29 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
               </div>
               <div className="flex items-center gap-x-4 lg:gap-x-6">
                 <GlobalConnectionStatus className="hidden sm:flex" />
+                {workspaces.length > 0 && (
+                  <select
+                    value={activeWorkspace?.id ?? ''}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (id) void setActiveWorkspaceById(id);
+                    }}
+                    className="hidden sm:block h-9 max-w-[200px] rounded-md border border-border bg-bg-primary px-2 text-xs text-foreground"
+                    aria-label={t('workspace.selector.label')}
+                    title={activeWorkspace?.name ?? t('workspace.selector.placeholder')}
+                  >
+                    {!activeWorkspace && (
+                      <option value="" disabled>
+                        {t('workspace.selector.placeholder')}
+                      </option>
+                    )}
+                    {workspaces.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {supportedLocales.length > 1 && (
                   <select
                     value={locale}
