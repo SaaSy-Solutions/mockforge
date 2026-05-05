@@ -286,6 +286,11 @@ const cloudNavItemIds = new Set([
   // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
   // adminUpdate / adminDelete.
   'cloud-showcase-admin',
+  // Public showcase + learning hub adapt /api/v1/showcase/* and
+  // /api/v1/learning/* into the legacy ShowcaseProject / LearningResource
+  // shapes via cloudCommunityApi (services/api/cloudCommunity.ts).
+  'showcase',
+  'learning-hub',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
