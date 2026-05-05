@@ -258,9 +258,12 @@ pub struct GenerateFromTrafficRequest {
     /// Optional path-prefix filter (e.g. `/api/v1`).
     #[serde(default)]
     pub path_pattern: Option<String>,
-    /// Lower bound on hits-per-(method,path); below this is dropped.
+    /// Minimum confidence score (0.0 to 1.0). Matches the local handler's
+    /// contract and the UI slider. Currently informational on the cloud
+    /// side — we don't compute per-path confidence here, so the value is
+    /// accepted but unused.
     #[serde(default)]
-    pub min_confidence: Option<u32>,
+    pub min_confidence: Option<f64>,
     #[serde(default)]
     pub model: Option<String>,
 }
@@ -302,7 +305,7 @@ pub async fn generate_openapi_from_traffic(
     // hosted mocks. We aggregate up-front so the prompt we send to the LLM
     // is bounded — without this, busy orgs could blow past the token limit.
     let path_filter = request.path_pattern.as_deref().unwrap_or("");
-    let min_hits = request.min_confidence.unwrap_or(1) as i64;
+    let min_hits: i64 = 1;
     let rows: Vec<(String, String, i64, Option<i32>)> = sqlx::query_as(
         r#"
         SELECT r.method,
