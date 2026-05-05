@@ -25,6 +25,7 @@ use mockforge_plugin_core::{
 
 pub mod git;
 pub mod installer;
+pub mod invocation_metrics;
 pub mod loader;
 pub mod metadata;
 pub mod registry;
@@ -38,6 +39,9 @@ pub mod validator;
 /// Re-export commonly used types
 pub use git::*;
 pub use installer::*;
+pub use invocation_metrics::{
+    InvocationMetric, InvocationMetricsBus, InvocationStatus, InvocationTimer,
+};
 pub use loader::*;
 pub use metadata::*;
 pub use registry::*;
