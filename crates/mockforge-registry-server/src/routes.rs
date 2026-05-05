@@ -343,6 +343,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Cloud recorder proxy routes (Phase 5).
         // Auth-gated CRUD over forwarding sessions.
         .route(
+            "/api/v1/cloud-runs/data-driven/upload-url",
+            post(handlers::cloud_runs::data_driven_upload_url),
+        )
+        .route(
             "/api/v1/cloud-runs/recorder-proxy/sessions",
             get(handlers::cloud_proxy::list_sessions)
                 .post(handlers::cloud_proxy::create_session),
