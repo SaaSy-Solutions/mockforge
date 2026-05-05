@@ -16,8 +16,7 @@ pub struct Plugin {
     pub repository: Option<String>,
     pub homepage: Option<String>,
     pub downloads_total: i64,
-    #[sqlx(try_from = "f64")]
-    pub rating_avg: f64,
+    pub rating_avg: rust_decimal::Decimal,
     pub rating_count: i32,
     pub author_id: Uuid,
     pub verified_at: Option<DateTime<Utc>>,

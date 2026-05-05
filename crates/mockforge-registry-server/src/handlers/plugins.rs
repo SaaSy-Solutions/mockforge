@@ -149,7 +149,7 @@ pub async fn search_plugins(
             tags,
             category,
             downloads: plugin.downloads_total as u64,
-            rating: plugin.rating_avg,
+            rating: decimal_to_f64(plugin.rating_avg),
             reviews_count: plugin.rating_count as u32,
             security_score,
             language,
@@ -251,7 +251,7 @@ pub async fn get_plugin(
         tags,
         category,
         downloads: plugin.downloads_total as u64,
-        rating: plugin.rating_avg.to_string().parse().unwrap_or(0.0),
+        rating: decimal_to_f64(plugin.rating_avg),
         reviews_count: plugin.rating_count as u32,
         security_score,
         language,
@@ -639,10 +639,19 @@ fn derive_security_score(plugin: &crate::models::Plugin) -> u8 {
     if plugin.updated_at > ninety_days_ago {
         score += 5;
     }
-    if plugin.rating_avg >= 4.0 && plugin.rating_count >= 5 {
+    if plugin.rating_avg >= rust_decimal::Decimal::new(40, 1) && plugin.rating_count >= 5 {
         score += 5;
     }
     score.clamp(0, 100) as u8
+}
+
+/// NUMERIC plugin ratings come back as `rust_decimal::Decimal` from Postgres
+/// (sqlx's `rust_decimal` feature is enabled). The public marketplace JSON
+/// shape is `f64`, so we lossy-convert at the response boundary rather than
+/// piping `Decimal` through `RegistryEntry`.
+fn decimal_to_f64(d: rust_decimal::Decimal) -> f64 {
+    use rust_decimal::prelude::ToPrimitive;
+    d.to_f64().unwrap_or(0.0)
 }
 
 #[derive(Debug, Serialize)]
