@@ -61,6 +61,7 @@ import { authenticatedFetch } from '../utils/apiClient';
 import { useAuthStore } from '../stores/useAuthStore';
 import { PublishPluginModal } from '../components/marketplace/PublishPluginModal';
 import { MarketplaceTabs } from '../components/marketplace/MarketplaceTabs';
+import { CloudPluginsBetaCta } from '../components/plugins/CloudPluginsBetaCta';
 
 interface Plugin {
   name: string;
@@ -627,6 +628,9 @@ export const PluginRegistryPage: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <MarketplaceTabs />
+
+      {/* Phase 0 demand-validation CTA — only renders in cloud mode. */}
+      <CloudPluginsBetaCta />
 
       {/* Header */}
       <Box
