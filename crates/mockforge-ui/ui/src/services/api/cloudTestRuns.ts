@@ -38,6 +38,31 @@ export interface TriggerRunRequest {
   git_sha?: string;
 }
 
+export interface TestSuite {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  kind: string;
+  config: Record<string, unknown>;
+  target_workspace_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateSuiteRequest {
+  name: string;
+  description?: string;
+  /** One of `unit | integration | conformance | bench | owasp |
+   *  security | wafbench | crud_flow | data_driven | ...`. */
+  kind: string;
+  /** Opaque JSON the executor reads at run time. For cloud_api kinds,
+   *  set `use_cloud_api: true` plus the kind-specific knobs. */
+  config: Record<string, unknown>;
+  target_workspace_id?: string;
+}
+
 export interface TestSchedule {
   id: string;
   suite_id: string;
@@ -121,6 +146,28 @@ class CloudTestRunsApi {
   streamRunEvents(id: string): EventSource {
     this.guard('streamRunEvents');
     return new EventSource(`/api/v1/test-runs/${id}/stream`);
+  }
+
+  // --- suites --------------------------------------------------------------
+
+  /**
+   * Create a test_suite. The suite's `kind` drives which executor the
+   * runner picks; `config` is opaque JSONB the executor reads at run
+   * time (see `mockforge_test_runner::executors`).
+   */
+  async createSuite(
+    workspaceId: string,
+    body: CreateSuiteRequest,
+  ): Promise<TestSuite> {
+    this.guard('createSuite');
+    return fetchJsonWithErrorBody(
+      `/api/v1/workspaces/${workspaceId}/test-suites`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    ) as Promise<TestSuite>;
   }
 
   // --- schedules -----------------------------------------------------------

@@ -112,6 +112,7 @@ const en: Dictionary = {
   'tab.cloudContract': 'Cloud Contract',
   'tab.cloudRecorder': 'Cloud Recorder',
   'tab.cloudProxy': 'Cloud Proxy',
+  'tab.cloudDataDrivenWizard': 'Data-Driven Wizard',
   'tab.cloudShowcaseAdmin': 'Showcase Admin',
 
   'nav.localOnly.badge': 'Local',
