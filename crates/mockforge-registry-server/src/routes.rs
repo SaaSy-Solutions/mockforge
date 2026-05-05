@@ -664,6 +664,17 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             patch(handlers::routing_rules::update_rule)
                 .delete(handlers::routing_rules::delete_rule),
         )
+        // Cloud Plugins beta interest (Phase 0 demand validation).
+        // Tiny pair of endpoints behind the "Request beta access" CTA on
+        // the cloud /plugin-registry page. Per-user, not org-scoped.
+        .route(
+            "/api/v1/cloud-plugins/beta-interest",
+            post(handlers::cloud_plugins::submit_interest),
+        )
+        .route(
+            "/api/v1/cloud-plugins/beta-interest/me",
+            get(handlers::cloud_plugins::get_my_interest),
+        )
         // Usage tracking routes
         .route("/api/v1/usage", get(handlers::usage::get_usage))
         .route("/api/v1/usage/history", get(handlers::usage::get_usage_history))
