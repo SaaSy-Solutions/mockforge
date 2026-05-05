@@ -37,6 +37,11 @@ import {
   Speed as SpeedIcon,
 } from '@mui/icons-material';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { cloudFlowsApi, type Flow as CloudFlow } from '../services/api/cloudFlows';
+import { cloudTestRunsApi } from '../services/api/cloudTestRuns';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { Select, MenuItem } from '@mui/material';
 
 interface ExecutionStep {
   id: string;
@@ -84,9 +89,123 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
     failedSteps: [],
   });
 
-  const { lastMessage, sendMessage, connected: isConnected } = useWebSocket(
-    `/api/chaos/orchestration/${orchestrationId}/ws`
+  // Local-mode WebSocket. The relative URL is stubbed in cloud mode so
+  // the connection is a no-op there; the cloud-mode SSE stream below
+  // takes over.
+  const { lastMessage, sendMessage, connected: isLocalConnected } = useWebSocket(
+    `/api/chaos/orchestration/${orchestrationId}/ws`,
   );
+
+  // Cloud-mode wiring: pick a kind='orchestration' flow from the active
+  // workspace, queue runs through cloudFlowsApi.triggerRun, and tail the
+  // resulting test_runs row via cloudTestRunsApi.streamRunEvents.
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [cloudFlows, setCloudFlows] = useState<CloudFlow[]>([]);
+  const [selectedCloudFlowId, setSelectedCloudFlowId] = useState<string | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
+
+  useEffect(() => {
+    if (!isCloudMode() || !activeWorkspace?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const flows = await cloudFlowsApi.listForWorkspace(
+          activeWorkspace.id,
+          'orchestration',
+        );
+        if (cancelled) return;
+        setCloudFlows(flows);
+        if (flows.length > 0 && !selectedCloudFlowId) {
+          setSelectedCloudFlowId(flows[0].id);
+          setExecutionState((prev) => ({ ...prev, name: flows[0].name }));
+        }
+      } catch (err) {
+        console.error('Failed to list cloud orchestrations', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id]);
+
+  // Open SSE for the active run; close it when the run id changes.
+  useEffect(() => {
+    if (!isCloudMode() || !activeRunId) return;
+    const es = cloudTestRunsApi.streamRunEvents(activeRunId);
+    setSseConnected(false);
+    es.onopen = () => setSseConnected(true);
+    es.onerror = () => setSseConnected(false);
+
+    // Step lifecycle events. The cloud test_run_events use snake_case
+    // event_type values; map them onto the existing ExecutionStep shape.
+    const handleStep = (status: ExecutionStep['status']) => (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const stepId: string = payload.step_id ?? payload.id ?? '';
+        if (!stepId) return;
+        setExecutionState((prev) => {
+          const existing = prev.steps.find((s) => s.id === stepId);
+          const step: ExecutionStep = {
+            id: stepId,
+            name: payload.name ?? existing?.name ?? stepId,
+            status,
+            startTime: payload.started_at
+              ? new Date(payload.started_at)
+              : existing?.startTime,
+            endTime: payload.finished_at
+              ? new Date(payload.finished_at)
+              : existing?.endTime,
+            duration: payload.duration_seconds ?? existing?.duration,
+            error: payload.error ?? existing?.error,
+            metrics: payload.metrics ?? existing?.metrics,
+          };
+          const steps = existing
+            ? prev.steps.map((s) => (s.id === stepId ? step : s))
+            : [...prev.steps, step];
+          const failedSteps =
+            status === 'failed' && !prev.failedSteps.includes(stepId)
+              ? [...prev.failedSteps, stepId]
+              : prev.failedSteps;
+          return {
+            ...prev,
+            steps,
+            failedSteps,
+            status: status === 'running' ? 'running' : prev.status,
+          };
+        });
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.addEventListener('step_start', handleStep('running'));
+    es.addEventListener('step_pass', handleStep('completed'));
+    es.addEventListener('step_fail', handleStep('failed'));
+    es.addEventListener('step_skip', handleStep('skipped'));
+
+    es.addEventListener('done', (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        setExecutionState((prev) => ({
+          ...prev,
+          status: payload.status === 'passed' ? 'completed' : 'failed',
+          progress: 1,
+          endTime: new Date(),
+        }));
+      } catch {
+        setExecutionState((prev) => ({ ...prev, status: 'completed', progress: 1 }));
+      }
+      es.close();
+    });
+
+    return () => {
+      es.close();
+    };
+  }, [activeRunId]);
+
+  const isConnected = isCloudMode() ? sseConnected : isLocalConnected;
 
   // Handle WebSocket messages
   useEffect(() => {
@@ -129,13 +248,48 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
 
   const handleControl = useCallback(
     async (action: 'start' | 'stop' | 'pause' | 'resume' | 'skip') => {
+      if (isCloudMode()) {
+        if (action === 'start') {
+          if (!selectedCloudFlowId) return;
+          // Reset visual state so the SSE stream populates a fresh run.
+          setExecutionState((prev) => ({
+            ...prev,
+            status: 'running',
+            startTime: new Date(),
+            endTime: undefined,
+            progress: 0,
+            steps: [],
+            failedSteps: [],
+          }));
+          try {
+            const run = await cloudFlowsApi.triggerRun(selectedCloudFlowId);
+            setActiveRunId(run.id);
+          } catch (err) {
+            console.error('Failed to start cloud orchestration run', err);
+            setExecutionState((prev) => ({ ...prev, status: 'failed' }));
+          }
+          return;
+        }
+        if (action === 'stop' && activeRunId) {
+          try {
+            await cloudTestRunsApi.cancelRun(activeRunId);
+            setExecutionState((prev) => ({ ...prev, status: 'failed' }));
+          } catch (err) {
+            console.error('Failed to cancel cloud run', err);
+          }
+          return;
+        }
+        // Pause / resume / skip aren't supported by the cloud test_runs
+        // lifecycle yet — silently no-op rather than firing local URLs.
+        return;
+      }
       await fetch(`/api/chaos/orchestration/${orchestrationId}/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
     },
-    [orchestrationId]
+    [orchestrationId, selectedCloudFlowId, activeRunId]
   );
 
   const getStepIcon = (status: ExecutionStep['status']) => {
@@ -170,6 +324,53 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
 
   return (
     <Box sx={{ p: 3 }}>
+      {isCloudMode() && (
+        <Card sx={{ mb: 2 }}>
+          <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Orchestration:
+            </Typography>
+            <Select
+              size="small"
+              value={selectedCloudFlowId ?? ''}
+              onChange={(e) => {
+                const id = (e.target.value as string) || null;
+                setSelectedCloudFlowId(id);
+                const flow = cloudFlows.find((f) => f.id === id);
+                if (flow) {
+                  setExecutionState((prev) => ({
+                    ...prev,
+                    name: flow.name,
+                    status: 'idle',
+                    steps: [],
+                    failedSteps: [],
+                    progress: 0,
+                  }));
+                  setActiveRunId(null);
+                }
+              }}
+              displayEmpty
+              sx={{ minWidth: 240 }}
+              disabled={cloudFlows.length === 0}
+            >
+              {cloudFlows.length === 0 ? (
+                <MenuItem value="">No orchestrations in workspace</MenuItem>
+              ) : (
+                cloudFlows.map((f) => (
+                  <MenuItem key={f.id} value={f.id}>
+                    {f.name}
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+            {activeRunId && (
+              <Typography variant="caption" color="text.secondary">
+                Run <strong>{activeRunId}</strong>
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {/* Header */}
       <Card sx={{ mb: 3 }}>
         <CardContent>

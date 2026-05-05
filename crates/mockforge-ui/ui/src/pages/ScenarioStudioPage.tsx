@@ -48,6 +48,9 @@ import { FlowPropertiesPanel } from '@/components/scenario-studio/FlowProperties
 import { FlowExecutor } from '@/components/scenario-studio/FlowExecutor';
 import { useHistory } from '@/hooks/useHistory';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { cloudFlowsApi, type Flow as CloudFlow } from '@/services/api/cloudFlows';
+import { isCloudMode } from '@/utils/cloudMode';
+import { useWorkspaceStore } from '@/stores/useWorkspaceStore';
 
 interface FlowDefinition {
   id: string;
@@ -91,6 +94,59 @@ const nodeTypes: NodeTypes = {
   parallel: ParallelNode,
 };
 
+// Cloud-mode flows store the full scenario payload (flow_type / steps /
+// connections / tags) inside the current FlowVersion.config object. We
+// build a thin sidebar stub from `metadata.flow_type` and lazily inflate
+// the editor state when the user selects a flow.
+function cloudFlowToScenarioStub(flow: CloudFlow): FlowDefinition {
+  const md = (flow.metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: flow.id,
+    name: flow.name,
+    description: flow.description ?? undefined,
+    flow_type:
+      (md.flow_type as FlowDefinition['flow_type']) ?? 'happy_path',
+    steps: [],
+    connections: [],
+    tags: [],
+    created_at: flow.created_at,
+    updated_at: flow.updated_at,
+  };
+}
+
+async function inflateCloudScenarioFlow(
+  flow: CloudFlow,
+): Promise<FlowDefinition> {
+  let cfg: Record<string, unknown> = {};
+  if (flow.current_version_id) {
+    try {
+      const versions = await cloudFlowsApi.listVersions(flow.id);
+      const current =
+        versions.find((v) => v.id === flow.current_version_id) ?? versions[0];
+      cfg = (current?.config ?? {}) as Record<string, unknown>;
+    } catch {
+      // Empty config = empty editor; user can still add steps and save.
+    }
+  }
+  const md = (flow.metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: flow.id,
+    name: flow.name,
+    description: flow.description ?? undefined,
+    flow_type:
+      (cfg.flow_type as FlowDefinition['flow_type']) ??
+      (md.flow_type as FlowDefinition['flow_type']) ??
+      'happy_path',
+    steps: Array.isArray(cfg.steps) ? (cfg.steps as FlowStep[]) : [],
+    connections: Array.isArray(cfg.connections)
+      ? (cfg.connections as FlowConnection[])
+      : [],
+    tags: Array.isArray(cfg.tags) ? (cfg.tags as string[]) : [],
+    created_at: flow.created_at,
+    updated_at: flow.updated_at,
+  };
+}
+
 export function ScenarioStudioPage() {
   const [flows, setFlows] = useState<FlowDefinition[]>([]);
   const [selectedFlow, setSelectedFlow] = useState<FlowDefinition | null>(null);
@@ -114,13 +170,17 @@ export function ScenarioStudioPage() {
     edges: Edge[];
   }>({ nodes: [], edges: [] }, 50);
 
-  // WebSocket for real-time updates
+  // WebSocket for real-time updates (no-op in cloud mode — useWebSocket
+  // already skips relative paths when VITE_API_BASE_URL is set).
   const { lastMessage, sendMessage, connected } = useWebSocket('/__mockforge/ws');
 
-  // Load flows on mount
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+
+  // Load flows on mount and when the active workspace changes (cloud mode).
   useEffect(() => {
     loadFlows();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id]);
 
   // Load selected flow into React Flow
   useEffect(() => {
@@ -156,6 +216,20 @@ export function ScenarioStudioPage() {
   const loadFlows = async () => {
     try {
       setLoading(true);
+      if (isCloudMode()) {
+        if (!activeWorkspace?.id) {
+          setFlows([]);
+          setError(null);
+          return;
+        }
+        const cloudFlows = await cloudFlowsApi.listForWorkspace(
+          activeWorkspace.id,
+          'scenario',
+        );
+        setFlows(cloudFlows.map(cloudFlowToScenarioStub));
+        setError(null);
+        return;
+      }
       const response = await fetch('/api/v1/scenario-studio/flows');
       if (response.ok) {
         const data = await response.json();
@@ -243,6 +317,38 @@ export function ScenarioStudioPage() {
 
   const createFlow = async () => {
     try {
+      if (isCloudMode()) {
+        if (!activeWorkspace?.id) {
+          setError('Select a workspace before creating a scenario flow.');
+          return;
+        }
+        const created = await cloudFlowsApi.create(activeWorkspace.id, {
+          kind: 'scenario',
+          name: newFlowName,
+          initial_config: {
+            flow_type: newFlowType,
+            steps: [],
+            connections: [],
+            tags: [],
+          },
+        });
+        const stub: FlowDefinition = {
+          id: created.id,
+          name: created.name,
+          description: created.description ?? undefined,
+          flow_type: newFlowType,
+          steps: [],
+          connections: [],
+          tags: [],
+          created_at: created.created_at,
+          updated_at: created.updated_at,
+        };
+        setFlows([...flows, stub]);
+        setSelectedFlow(stub);
+        setIsCreating(false);
+        setNewFlowName('');
+        return;
+      }
       const response = await fetch('/api/v1/scenario-studio/flows', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,6 +429,27 @@ export function ScenarioStudioPage() {
         label: edge.label as string,
       }));
 
+      if (isCloudMode()) {
+        await cloudFlowsApi.saveVersion(selectedFlow.id, {
+          config: {
+            flow_type: selectedFlow.flow_type,
+            steps,
+            connections,
+            tags: selectedFlow.tags,
+          },
+          set_current: true,
+        });
+        const updated: FlowDefinition = {
+          ...selectedFlow,
+          steps,
+          connections,
+          updated_at: new Date().toISOString(),
+        };
+        setSelectedFlow(updated);
+        setFlows(flows.map((f) => (f.id === updated.id ? updated : f)));
+        return;
+      }
+
       const response = await fetch(`/api/v1/scenario-studio/flows/${selectedFlow.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -354,6 +481,14 @@ export function ScenarioStudioPage() {
   const deleteFlow = async (flowId: string) => {
     if (!confirm('Are you sure you want to delete this flow?')) return;
     try {
+      if (isCloudMode()) {
+        await cloudFlowsApi.delete(flowId);
+        setFlows(flows.filter((f) => f.id !== flowId));
+        if (selectedFlow?.id === flowId) {
+          setSelectedFlow(null);
+        }
+        return;
+      }
       const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}`, {
         method: 'DELETE',
       });
@@ -551,7 +686,22 @@ export function ScenarioStudioPage() {
                   className={`p-3 border rounded-lg cursor-pointer hover:bg-accent ${
                     selectedFlow?.id === flow.id ? 'bg-accent border-primary' : ''
                   }`}
-                  onClick={() => setSelectedFlow(flow)}
+                  onClick={async () => {
+                    if (isCloudMode()) {
+                      // Sidebar entries are stubs in cloud mode — fetch
+                      // the current FlowVersion config so the editor
+                      // canvas hydrates with real steps/connections.
+                      try {
+                        const cloudFlow = await cloudFlowsApi.get(flow.id);
+                        setSelectedFlow(await inflateCloudScenarioFlow(cloudFlow));
+                      } catch (err) {
+                        console.error('Failed to load cloud flow', err);
+                        setSelectedFlow(flow);
+                      }
+                      return;
+                    }
+                    setSelectedFlow(flow);
+                  }}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0">

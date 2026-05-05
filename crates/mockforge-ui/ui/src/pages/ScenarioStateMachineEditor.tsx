@@ -34,6 +34,9 @@ import { VbrEntitySelector } from '../components/state-machine/VbrEntitySelector
 import { SubScenarioEditor } from '../components/state-machine/SubScenarioEditor';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useHistory } from '../hooks/useHistory';
+import { cloudFlowsApi, type Flow as CloudFlow } from '../services/api/cloudFlows';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 
 // Types for state machine data structures
 interface StateMachineDefinition {
@@ -116,11 +119,24 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
     edges: Edge[];
   }>({ nodes: [], edges: [] }, 50);
 
-  // WebSocket for real-time updates
+  // WebSocket for real-time updates (no-op in cloud mode — useWebSocket
+  // skips relative paths when VITE_API_BASE_URL is set).
   const { lastMessage, sendMessage, connected } = useWebSocket('/__mockforge/ws');
+
+  // Cloud-mode flow picker. In cloud mode the editor scopes to one
+  // cloudFlow (kind='state_machine') at a time; selecting a different
+  // flow rehydrates the canvas from its current FlowVersion.config.
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [cloudFlows, setCloudFlows] = useState<CloudFlow[]>([]);
+  const [selectedCloudFlowId, setSelectedCloudFlowId] = useState<string | null>(null);
 
   // Load state machine on mount or when resourceType changes
   useEffect(() => {
+    if (isCloudMode()) {
+      // Cloud mode is driven by the cloud flow picker effect below; the
+      // resourceType prop is only used by the local API path.
+      return;
+    }
     if (resourceType) {
       loadStateMachine(resourceType);
     } else {
@@ -128,6 +144,139 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
       initializeNewStateMachine();
     }
   }, [resourceType]);
+
+  // Cloud mode: fetch state_machine flows for the active workspace and
+  // auto-select the first one (or initialize a blank canvas if none).
+  useEffect(() => {
+    if (!isCloudMode()) return;
+    let cancelled = false;
+    (async () => {
+      if (!activeWorkspace?.id) {
+        setCloudFlows([]);
+        setSelectedCloudFlowId(null);
+        initializeNewStateMachine();
+        return;
+      }
+      try {
+        setLoading(true);
+        const flows = await cloudFlowsApi.listForWorkspace(
+          activeWorkspace.id,
+          'state_machine',
+        );
+        if (cancelled) return;
+        setCloudFlows(flows);
+        if (flows.length === 0) {
+          setSelectedCloudFlowId(null);
+          initializeNewStateMachine();
+        } else {
+          setSelectedCloudFlowId(flows[0].id);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        logger.error('Failed to list cloud state machine flows', err);
+        setError(err instanceof Error ? err.message : 'Failed to load flows');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspace?.id]);
+
+  // Hydrate the canvas from the selected cloud flow's current
+  // FlowVersion config whenever the selection changes.
+  const loadCloudStateMachine = useCallback(
+    async (flowId: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const flow = await cloudFlowsApi.get(flowId);
+        let cfg: Record<string, unknown> = {};
+        if (flow.current_version_id) {
+          const versions = await cloudFlowsApi.listVersions(flowId);
+          const current =
+            versions.find((v) => v.id === flow.current_version_id) ??
+            versions[0];
+          cfg = (current?.config ?? {}) as Record<string, unknown>;
+        }
+        const sm = (cfg.state_machine ?? {
+          resource_type: flow.name,
+          states: ['initial'],
+          initial_state: 'initial',
+          transitions: [],
+        }) as StateMachineDefinition;
+        const layout =
+          (cfg.visual_layout as StateMachineDefinition['visual_layout']) ??
+          sm.visual_layout;
+        setStateMachine(sm);
+
+        const flowNodes: Node[] = sm.states.map((state, index) => {
+          const layoutNode = layout?.nodes?.find((n) => n.id === state);
+          const position = layoutNode
+            ? { x: layoutNode.position_x, y: layoutNode.position_y }
+            : {
+                x: (index % 5) * 200 + 100,
+                y: Math.floor(index / 5) * 150 + 100,
+              };
+          return {
+            id: state,
+            type: state === sm.initial_state ? 'initial' : 'state',
+            position,
+            data: {
+              label: state,
+              state,
+              isInitial: state === sm.initial_state,
+            },
+            style: {
+              width: layoutNode?.width || 150,
+              height: layoutNode?.height || 60,
+            },
+          };
+        });
+        const flowEdges: Edge[] = sm.transitions.map((transition, index) => {
+          const layoutEdge = layout?.edges?.find(
+            (e) =>
+              e.source === transition.from_state &&
+              e.target === transition.to_state,
+          );
+          return {
+            id: layoutEdge?.id || `edge-${index}`,
+            source: transition.from_state,
+            target: transition.to_state,
+            label: transition.condition_expression || '',
+            type: 'default',
+            animated: layoutEdge?.animated || false,
+            data: {
+              condition: transition.condition_expression,
+              subScenarioRef: transition.sub_scenario_ref,
+              probability: transition.probability,
+            },
+            markerEnd: { type: MarkerType.ArrowClosed },
+          };
+        });
+        setNodes(flowNodes);
+        setEdges(flowEdges);
+        push({ nodes: flowNodes, edges: flowEdges });
+      } catch (err) {
+        logger.error('Failed to load cloud state machine', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to load state machine',
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setNodes, setEdges, push],
+  );
+
+  useEffect(() => {
+    if (!isCloudMode()) return;
+    if (selectedCloudFlowId) {
+      loadCloudStateMachine(selectedCloudFlowId);
+    }
+  }, [selectedCloudFlowId, loadCloudStateMachine]);
 
   // Handle WebSocket messages for real-time updates
   useEffect(() => {
@@ -297,6 +446,25 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
         },
       };
 
+      if (isCloudMode()) {
+        if (!selectedCloudFlowId) {
+          setError(
+            'No cloud state machine selected. Use "New" to create one before saving.',
+          );
+          return;
+        }
+        await cloudFlowsApi.saveVersion(selectedCloudFlowId, {
+          config: {
+            state_machine: updatedStateMachine,
+            visual_layout: updatedStateMachine.visual_layout,
+          },
+          set_current: true,
+        });
+        setStateMachine(updatedStateMachine);
+        logger.info('State machine saved successfully');
+        return;
+      }
+
       if (resourceType) {
         await apiService.updateStateMachine(
           resourceType,
@@ -320,7 +488,58 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
       logger.error('Failed to save state machine', err);
       setError(err instanceof Error ? err.message : 'Failed to save state machine');
     }
-  }, [stateMachine, nodes, edges, resourceType]);
+  }, [stateMachine, nodes, edges, resourceType, selectedCloudFlowId]);
+
+  // Cloud helpers — create / delete a state_machine cloud flow.
+  const handleCreateCloudFlow = useCallback(async () => {
+    if (!activeWorkspace?.id) {
+      setError('Select a workspace before creating a state machine.');
+      return;
+    }
+    try {
+      const name = window.prompt(
+        'Name this state machine',
+        `state-machine-${Math.random().toString(36).slice(2, 8)}`,
+      );
+      if (!name) return;
+      const flow = await cloudFlowsApi.create(activeWorkspace.id, {
+        kind: 'state_machine',
+        name,
+        initial_config: {
+          state_machine: {
+            resource_type: name,
+            states: ['initial'],
+            initial_state: 'initial',
+            transitions: [],
+          },
+        },
+      });
+      setCloudFlows((prev) => [...prev, flow]);
+      setSelectedCloudFlowId(flow.id);
+    } catch (err) {
+      logger.error('Failed to create cloud state machine', err);
+      setError(err instanceof Error ? err.message : 'Failed to create');
+    }
+  }, [activeWorkspace?.id]);
+
+  const handleDeleteCloudFlow = useCallback(async () => {
+    if (!selectedCloudFlowId) return;
+    if (!window.confirm('Delete this state machine? This cannot be undone.')) {
+      return;
+    }
+    try {
+      await cloudFlowsApi.delete(selectedCloudFlowId);
+      setCloudFlows((prev) => prev.filter((f) => f.id !== selectedCloudFlowId));
+      const remaining = cloudFlows.filter((f) => f.id !== selectedCloudFlowId);
+      setSelectedCloudFlowId(remaining[0]?.id ?? null);
+      if (remaining.length === 0) {
+        initializeNewStateMachine();
+      }
+    } catch (err) {
+      logger.error('Failed to delete cloud state machine', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  }, [selectedCloudFlowId, cloudFlows, initializeNewStateMachine]);
 
   // Handle node creation
   const handleAddNode = useCallback(() => {
@@ -497,6 +716,40 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
       {/* Toolbar */}
       <div className="flex items-center justify-between p-4 border-b bg-card">
         <div className="flex items-center gap-2">
+          {isCloudMode() && (
+            <>
+              <select
+                value={selectedCloudFlowId ?? ''}
+                onChange={(e) => setSelectedCloudFlowId(e.target.value || null)}
+                className="px-3 py-2 bg-card border border-border rounded-md text-sm"
+                disabled={cloudFlows.length === 0}
+              >
+                {cloudFlows.length === 0 ? (
+                  <option value="">No state machines yet</option>
+                ) : (
+                  cloudFlows.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))
+                )}
+              </select>
+              <Button onClick={handleCreateCloudFlow} size="sm" variant="outline">
+                <Plus className="h-4 w-4 mr-2" />
+                New
+              </Button>
+              <Button
+                onClick={handleDeleteCloudFlow}
+                size="sm"
+                variant="outline"
+                disabled={!selectedCloudFlowId}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove
+              </Button>
+              <div className="w-px h-6 bg-muted mx-2" />
+            </>
+          )}
           <Button onClick={handleAddNode} size="sm" variant="outline">
             <Plus className="h-4 w-4 mr-2" />
             Add State
