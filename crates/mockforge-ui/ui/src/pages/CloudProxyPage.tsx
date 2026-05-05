@@ -9,7 +9,7 @@
  */
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, RefreshCw, Trash2, Copy, ExternalLink } from 'lucide-react';
+import { Plus, RefreshCw, Trash2, Copy, ExternalLink, X } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
 import {
   cloudProxyApi,
@@ -36,6 +36,7 @@ export const CloudProxyPage: React.FC = () => {
 
 const CloudProxyView: React.FC = () => {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedCapture, setSelectedCapture] = useState<CloudProxyCapture | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [justCreated, setJustCreated] = useState<SessionWithProxyUrl | null>(null);
 
@@ -106,7 +107,10 @@ const CloudProxyView: React.FC = () => {
         </div>
         <div className="col-span-7">
           {selectedSessionId ? (
-            <CaptureBrowser sessionId={selectedSessionId} />
+            <CaptureBrowser
+              sessionId={selectedSessionId}
+              onSelect={setSelectedCapture}
+            />
           ) : (
             <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center text-gray-500 dark:text-gray-400">
               Select a session to view its captures.
@@ -123,6 +127,13 @@ const CloudProxyView: React.FC = () => {
             setShowCreate(false);
             void queryClient.invalidateQueries({ queryKey: ['cloud-proxy', 'sessions'] });
           }}
+        />
+      )}
+
+      {selectedCapture && (
+        <CaptureDetailDialog
+          capture={selectedCapture}
+          onClose={() => setSelectedCapture(null)}
         />
       )}
     </div>
@@ -212,7 +223,12 @@ const SessionList: React.FC<SessionListProps> = ({
   );
 };
 
-const CaptureBrowser: React.FC<{ sessionId: string }> = ({ sessionId }) => {
+interface CaptureBrowserProps {
+  sessionId: string;
+  onSelect: (capture: CloudProxyCapture) => void;
+}
+
+const CaptureBrowser: React.FC<CaptureBrowserProps> = ({ sessionId, onSelect }) => {
   const capturesQuery = useQuery({
     queryKey: ['cloud-proxy', 'captures', sessionId],
     queryFn: () => cloudProxyApi.listCaptures(sessionId, 100),
@@ -244,14 +260,19 @@ const CaptureBrowser: React.FC<{ sessionId: string }> = ({ sessionId }) => {
       </div>
       <ul className="divide-y divide-gray-200 dark:divide-gray-700">
         {captures.map((c) => (
-          <CaptureRow key={c.id} capture={c} />
+          <CaptureRow key={c.id} capture={c} onSelect={onSelect} />
         ))}
       </ul>
     </div>
   );
 };
 
-const CaptureRow: React.FC<{ capture: CloudProxyCapture }> = ({ capture }) => {
+interface CaptureRowProps {
+  capture: CloudProxyCapture;
+  onSelect: (capture: CloudProxyCapture) => void;
+}
+
+const CaptureRow: React.FC<CaptureRowProps> = ({ capture, onSelect }) => {
   const status = capture.response_status;
   const statusClass = !status
     ? 'text-gray-500'
@@ -261,7 +282,10 @@ const CaptureRow: React.FC<{ capture: CloudProxyCapture }> = ({ capture }) => {
         ? 'text-amber-600 dark:text-amber-400'
         : 'text-green-700 dark:text-green-400';
   return (
-    <li className="px-4 py-2 grid grid-cols-12 gap-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+    <li
+      className="px-4 py-2 grid grid-cols-12 gap-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+      onClick={() => onSelect(capture)}
+    >
       <div className="col-span-1 font-mono text-xs">{capture.method}</div>
       <div className="col-span-6 font-mono text-xs text-gray-700 dark:text-gray-300 truncate">
         {capture.path}
@@ -274,6 +298,208 @@ const CaptureRow: React.FC<{ capture: CloudProxyCapture }> = ({ capture }) => {
         {capture.duration_ms.toLocaleString()} ms
       </div>
     </li>
+  );
+};
+
+const CaptureDetailDialog: React.FC<{
+  capture: CloudProxyCapture;
+  onClose: () => void;
+}> = ({ capture, onClose }) => {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-2 p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <code className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {capture.method}
+              </code>
+              <code className="font-mono text-sm text-gray-700 dark:text-gray-300 truncate">
+                {capture.path}
+                {capture.query_string ? `?${capture.query_string}` : ''}
+              </code>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {new Date(capture.occurred_at).toLocaleString()} ·{' '}
+              {capture.duration_ms.toLocaleString()} ms
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+            aria-label="Close detail"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-4 space-y-6 flex-1">
+          {capture.upstream_error && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 text-sm px-3 py-2 rounded">
+              <div className="font-semibold mb-1">Upstream error</div>
+              <code className="font-mono text-xs whitespace-pre-wrap break-all">
+                {capture.upstream_error}
+              </code>
+            </div>
+          )}
+
+          <CaptureSection title="Request">
+            <DetailRow label="Size">
+              {capture.request_size_bytes.toLocaleString()} bytes
+              {capture.request_body_truncated && (
+                <span className="ml-2 text-amber-600 dark:text-amber-400">
+                  (truncated to 1 MB)
+                </span>
+              )}
+            </DetailRow>
+            <DetailRow label="Headers">
+              <HeaderTable raw={capture.request_headers} />
+            </DetailRow>
+            <DetailRow label="Body">
+              <BodyView
+                content={capture.request_body}
+                encoding={capture.request_body_encoding}
+                truncated={capture.request_body_truncated}
+              />
+            </DetailRow>
+          </CaptureSection>
+
+          <CaptureSection title="Response">
+            <DetailRow label="Status">
+              <StatusBadge status={capture.response_status} />
+            </DetailRow>
+            <DetailRow label="Size">
+              {capture.response_size_bytes !== null
+                ? `${capture.response_size_bytes.toLocaleString()} bytes`
+                : '—'}
+              {capture.response_body_truncated && (
+                <span className="ml-2 text-amber-600 dark:text-amber-400">
+                  (truncated to 1 MB)
+                </span>
+              )}
+            </DetailRow>
+            <DetailRow label="Headers">
+              <HeaderTable raw={capture.response_headers} />
+            </DetailRow>
+            <DetailRow label="Body">
+              <BodyView
+                content={capture.response_body}
+                encoding={capture.response_body_encoding}
+                truncated={capture.response_body_truncated}
+              />
+            </DetailRow>
+          </CaptureSection>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CaptureSection: React.FC<{ title: string; children: React.ReactNode }> = ({
+  title,
+  children,
+}) => (
+  <section>
+    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
+    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      {children}
+    </div>
+  </section>
+);
+
+const DetailRow: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => (
+  <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b last:border-b-0 border-gray-200 dark:border-gray-700">
+    <div className="col-span-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+      {label}
+    </div>
+    <div className="col-span-9 text-sm text-gray-900 dark:text-gray-100 min-w-0">
+      {children}
+    </div>
+  </div>
+);
+
+const StatusBadge: React.FC<{ status: number | null }> = ({ status }) => {
+  if (status === null) return <span className="text-gray-500">—</span>;
+  const cls =
+    status >= 500
+      ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+      : status >= 400
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+        : status >= 300
+          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+          : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold ${cls}`}>
+      {status}
+    </span>
+  );
+};
+
+const HeaderTable: React.FC<{ raw: string | null }> = ({ raw }) => {
+  if (!raw) {
+    return <span className="text-xs text-gray-500 dark:text-gray-400">(none)</span>;
+  }
+  let parsed: Record<string, string>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return (
+      <code className="font-mono text-xs whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+        {raw}
+      </code>
+    );
+  }
+  const entries = Object.entries(parsed);
+  if (entries.length === 0) {
+    return <span className="text-xs text-gray-500 dark:text-gray-400">(none)</span>;
+  }
+  return (
+    <dl className="font-mono text-xs space-y-0.5">
+      {entries.map(([name, value]) => (
+        <div key={name} className="grid grid-cols-12 gap-2">
+          <dt className="col-span-4 text-gray-600 dark:text-gray-400 truncate">{name}:</dt>
+          <dd className="col-span-8 text-gray-800 dark:text-gray-200 break-all">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+};
+
+const BodyView: React.FC<{
+  content: string | null;
+  encoding: string | null;
+  truncated: boolean;
+}> = ({ content, encoding, truncated }) => {
+  if (!content) {
+    return <span className="text-xs text-gray-500 dark:text-gray-400">(empty)</span>;
+  }
+  const isBase64 = encoding === 'base64';
+  return (
+    <div>
+      {isBase64 && (
+        <div className="text-xs text-amber-700 dark:text-amber-400 mb-1">
+          Non-UTF-8 body — shown as base64.
+        </div>
+      )}
+      <pre className="font-mono text-xs whitespace-pre-wrap break-all bg-gray-50 dark:bg-gray-800 rounded p-2 max-h-64 overflow-auto text-gray-800 dark:text-gray-200">
+        {content}
+      </pre>
+      {truncated && (
+        <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+          Body was truncated at 1 MB; the full payload was not persisted.
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -10,6 +10,7 @@ pub mod chaos;
 pub mod cloud_dashboard;
 pub mod cloud_fixtures;
 pub mod cloud_proxy;
+pub mod cloud_runs;
 pub mod cloud_services;
 pub mod cloud_workspaces;
 pub mod contract_verification;

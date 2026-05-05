@@ -4,9 +4,11 @@ use anyhow::{Context, Result};
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::{
     config::{Credentials, Region},
+    presigning::PresigningConfig,
     Client as S3Client,
 };
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::config::Config;
 
@@ -486,6 +488,102 @@ impl PluginStorage {
             StorageBackend::Local { base_dir } => Self::local_delete(base_dir, &key).await,
         }
     }
+
+    /// Generate a presigned PUT + GET pair for a data-driven test
+    /// vector upload. Used by the Cloud Runs data-driven trigger flow:
+    /// the UI calls the upload-URL endpoint, gets back a PUT URL the
+    /// browser uploads to directly (skipping the registry as a relay),
+    /// and a longer-lived GET URL the suite config holds onto so the
+    /// runner can fetch the data when the run fires.
+    ///
+    /// `put_ttl` should be short (minutes) — the upload happens
+    /// immediately after the URL is issued. `get_ttl` should comfortably
+    /// outlast the lag between suite-create and run-trigger plus
+    /// expected run duration; default callers use 24h.
+    ///
+    /// Object key shape: `data-driven/{org_id}/{uuid}.{ext}` — keeps
+    /// org-scoped objects partitioned cleanly so per-org listing /
+    /// retention policies stay simple.
+    ///
+    /// Local-storage backend returns an error: presigning has no
+    /// meaning without a public S3-compatible store.
+    pub async fn presign_data_driven_upload(
+        &self,
+        org_id: uuid::Uuid,
+        ext: &str,
+        put_ttl: Duration,
+        get_ttl: Duration,
+    ) -> Result<DataDrivenUploadUrls> {
+        match &self.backend {
+            StorageBackend::S3 { client, bucket } => {
+                let safe_ext = Self::sanitize_extension(ext);
+                let object_key =
+                    format!("data-driven/{}/{}.{}", org_id, uuid::Uuid::new_v4(), safe_ext,);
+
+                let put_cfg =
+                    PresigningConfig::expires_in(put_ttl).context("invalid PUT presign TTL")?;
+                let get_cfg =
+                    PresigningConfig::expires_in(get_ttl).context("invalid GET presign TTL")?;
+
+                let put_req = client
+                    .put_object()
+                    .bucket(bucket)
+                    .key(&object_key)
+                    .presigned(put_cfg)
+                    .await
+                    .context("failed to presign PUT for data-driven upload")?;
+                let get_req = client
+                    .get_object()
+                    .bucket(bucket)
+                    .key(&object_key)
+                    .presigned(get_cfg)
+                    .await
+                    .context("failed to presign GET for data-driven upload")?;
+
+                Ok(DataDrivenUploadUrls {
+                    upload_url: put_req.uri().to_string(),
+                    data_url: get_req.uri().to_string(),
+                    object_key,
+                    upload_expires_in_seconds: put_ttl.as_secs(),
+                    data_expires_in_seconds: get_ttl.as_secs(),
+                })
+            }
+            StorageBackend::Local { .. } => Err(anyhow::anyhow!(
+                "presigned uploads require S3-compatible storage (Tigris); \
+                 PluginStorage is currently in local-filesystem fallback mode"
+            )),
+        }
+    }
+
+    /// Strip everything but ASCII alphanumerics from a file extension
+    /// hint so the object key stays clean. Falls back to `bin` if the
+    /// caller passed something unparsable.
+    fn sanitize_extension(ext: &str) -> String {
+        let cleaned: String = ext
+            .trim_start_matches('.')
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
+        if cleaned.is_empty() {
+            "bin".to_string()
+        } else {
+            cleaned.to_ascii_lowercase()
+        }
+    }
+}
+
+/// Presigned URL pair returned by
+/// [`PluginStorage::presign_data_driven_upload`]. The `upload_url` is
+/// the short-lived PUT target the UI uses to push bytes to Tigris
+/// directly; the `data_url` is the longer-lived GET URL the suite
+/// config persists so the runner can fetch the bytes at run time.
+#[derive(Debug, Clone)]
+pub struct DataDrivenUploadUrls {
+    pub upload_url: String,
+    pub data_url: String,
+    pub object_key: String,
+    pub upload_expires_in_seconds: u64,
+    pub data_expires_in_seconds: u64,
 }
 
 #[cfg(test)]
@@ -667,5 +765,35 @@ mod tests {
 
         storage.delete_plugin(key).await.unwrap();
         assert!(storage.download_plugin(key).await.is_err());
+    }
+
+    #[test]
+    fn sanitize_extension_strips_garbage() {
+        assert_eq!(PluginStorage::sanitize_extension("csv"), "csv");
+        assert_eq!(PluginStorage::sanitize_extension(".CSV"), "csv");
+        assert_eq!(PluginStorage::sanitize_extension("json"), "json");
+        assert_eq!(PluginStorage::sanitize_extension("../etc/passwd"), "etcpasswd");
+        assert_eq!(PluginStorage::sanitize_extension(""), "bin");
+        assert_eq!(PluginStorage::sanitize_extension("..."), "bin");
+        assert_eq!(PluginStorage::sanitize_extension("yaml.bak"), "yamlbak");
+    }
+
+    #[tokio::test]
+    async fn presign_data_driven_local_backend_errors() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = PluginStorage {
+            backend: StorageBackend::Local {
+                base_dir: temp_dir.path().to_path_buf(),
+            },
+        };
+        let result = storage
+            .presign_data_driven_upload(
+                uuid::Uuid::new_v4(),
+                "csv",
+                Duration::from_secs(60),
+                Duration::from_secs(86400),
+            )
+            .await;
+        assert!(result.is_err(), "expected local-backend presign to error");
     }
 }
