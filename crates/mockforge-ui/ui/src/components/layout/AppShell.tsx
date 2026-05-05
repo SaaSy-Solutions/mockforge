@@ -73,6 +73,7 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  Upload,
 } from 'lucide-react';
 import { GlobalConnectionStatus } from './ConnectionStatus';
 import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
@@ -151,6 +152,7 @@ const navSections = [
       { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
       { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
       { id: 'cloud-test-runs', labelKey: 'tab.cloudTestRuns', icon: PlayCircle },
+      { id: 'cloud-data-driven-wizard', labelKey: 'tab.cloudDataDrivenWizard', icon: Upload },
       { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
       { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
       { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },

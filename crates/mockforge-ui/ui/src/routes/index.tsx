@@ -90,6 +90,9 @@ const CloudTestRunsPage = lazy(() => import('../pages/CloudTestRunsPage').then(m
 // Cloud recorder proxy (Phase 5) — forwarding sessions + capture browser
 const CloudProxyPage = lazy(() => import('../pages/CloudProxyPage').then(m => ({ default: m.CloudProxyPage })));
 
+// Data-driven suite wizard — uploads CSV/JSON to Tigris and creates a runnable suite
+const CloudDataDrivenWizardPage = lazy(() => import('../pages/CloudDataDrivenWizardPage').then(m => ({ default: m.CloudDataDrivenWizardPage })));
+
 // Cloud traces (#2) — cross-deployment OTLP search
 const CloudTracesPage = lazy(() => import('../pages/CloudTracesPage').then(m => ({ default: m.CloudTracesPage })));
 
@@ -237,6 +240,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-incidents', element: <CloudIncidentsPage /> },
   { path: '/cloud-test-runs', element: <CloudTestRunsPage /> },
   { path: '/cloud-proxy', element: <CloudProxyPage /> },
+  { path: '/cloud-data-driven-wizard', element: <CloudDataDrivenWizardPage /> },
   { path: '/cloud-traces', element: <CloudTracesPage /> },
   { path: '/cloud-chaos', element: <CloudChaosPage /> },
   { path: '/cloud-flows', element: <CloudFlowsPage /> },
