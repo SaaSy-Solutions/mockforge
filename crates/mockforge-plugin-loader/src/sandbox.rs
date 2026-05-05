@@ -4,6 +4,7 @@
 //! including resource limits, security boundaries, and isolation.
 
 use super::*;
+use crate::invocation_metrics::{InvocationMetricsBus, InvocationTimer};
 use mockforge_plugin_core::{
     PluginCapabilities, PluginContext, PluginHealth, PluginId, PluginMetrics, PluginResult,
     PluginState,
@@ -22,6 +23,10 @@ pub struct PluginSandbox {
     _config: PluginLoaderConfig,
     /// Active sandboxes
     active_sandboxes: RwLock<HashMap<PluginId, SandboxInstance>>,
+    /// Per-invocation metrics bus. One per sandbox; cloned `Arc` is
+    /// stamped onto each `SandboxInstance` so `execute_function` can
+    /// record without round-tripping through the parent.
+    metrics_bus: Arc<InvocationMetricsBus>,
 }
 
 impl PluginSandbox {
@@ -34,7 +39,17 @@ impl PluginSandbox {
             engine,
             _config: config,
             active_sandboxes: RwLock::new(HashMap::new()),
+            metrics_bus: Arc::new(InvocationMetricsBus::new()),
         }
+    }
+
+    /// Get the per-invocation metrics bus. Subscribe to receive a live
+    /// stream of [`InvocationMetric`] events. Suitable for the admin UI
+    /// or an OTLP exporter.
+    ///
+    /// [`InvocationMetric`]: crate::invocation_metrics::InvocationMetric
+    pub fn metrics_bus(&self) -> Arc<InvocationMetricsBus> {
+        self.metrics_bus.clone()
     }
 
     /// Create a plugin instance in the sandbox
@@ -54,10 +69,10 @@ impl PluginSandbox {
 
         // Create sandbox instance
         let sandbox = if let Some(ref engine) = self.engine {
-            SandboxInstance::new(engine, context).await?
+            SandboxInstance::new(engine, context, self.metrics_bus.clone()).await?
         } else {
             // Create a stub sandbox instance when WebAssembly is disabled
-            SandboxInstance::stub_new(context).await?
+            SandboxInstance::stub_new(context, self.metrics_bus.clone()).await?
         };
 
         // Store sandbox instance
@@ -139,7 +154,7 @@ impl PluginSandbox {
 /// Individual sandbox instance
 pub struct SandboxInstance {
     /// Plugin ID
-    _plugin_id: PluginId,
+    plugin_id: PluginId,
     /// WebAssembly module
     _module: Module,
     /// WebAssembly store
@@ -152,11 +167,18 @@ pub struct SandboxInstance {
     health: SandboxHealth,
     /// Execution limits
     limits: ExecutionLimits,
+    /// Bus for emitting per-invocation metrics. Shared with the parent
+    /// `PluginSandbox`.
+    metrics_bus: Arc<InvocationMetricsBus>,
 }
 
 impl SandboxInstance {
     /// Create a new sandbox instance
-    async fn new(engine: &Engine, context: &PluginLoadContext) -> LoaderResult<Self> {
+    async fn new(
+        engine: &Engine,
+        context: &PluginLoadContext,
+        metrics_bus: Arc<InvocationMetricsBus>,
+    ) -> LoaderResult<Self> {
         let plugin_id = &context.plugin_id;
 
         // Load WASM module
@@ -186,18 +208,22 @@ impl SandboxInstance {
         let limits = ExecutionLimits::from_capabilities(&plugin_capabilities);
 
         Ok(Self {
-            _plugin_id: plugin_id.clone(),
+            plugin_id: plugin_id.clone(),
             _module: module,
             store,
             linker,
             resources: SandboxResources::default(),
             health: SandboxHealth::healthy(),
             limits,
+            metrics_bus,
         })
     }
 
     /// Create a stub sandbox instance (when WebAssembly is disabled)
-    async fn stub_new(context: &PluginLoadContext) -> LoaderResult<Self> {
+    async fn stub_new(
+        context: &PluginLoadContext,
+        metrics_bus: Arc<InvocationMetricsBus>,
+    ) -> LoaderResult<Self> {
         let plugin_id = &context.plugin_id;
 
         // Create dummy values for when WebAssembly is disabled
@@ -213,13 +239,14 @@ impl SandboxInstance {
         let limits = ExecutionLimits::from_capabilities(&plugin_capabilities);
 
         Ok(Self {
-            _plugin_id: plugin_id.clone(),
+            plugin_id: plugin_id.clone(),
             _module: module,
             store,
             linker,
             resources: SandboxResources::default(),
             health: SandboxHealth::healthy(),
             limits,
+            metrics_bus,
         })
     }
 
@@ -254,13 +281,29 @@ impl SandboxInstance {
             )));
         }
 
+        // Start the per-invocation metrics timer. Finished on either
+        // success or failure path below; the limit-check early-returns
+        // above happen before this point and don't emit a metric (no
+        // plugin code ran).
+        let timer = InvocationTimer::start(
+            self.metrics_bus.clone(),
+            self.plugin_id.clone(),
+            function_name.to_string(),
+        );
+
         // Prepare function call
         let start_time = std::time::Instant::now();
 
         // Get function from linker
-        let _func = self.linker.get(&mut self.store, "", function_name).ok_or_else(|| {
-            PluginLoaderError::execution(format!("Function '{}' not found", function_name))
-        })?;
+        let func_lookup = self.linker.get(&mut self.store, "", function_name);
+        if func_lookup.is_none() {
+            // Function-not-found: count as a failed invocation in both
+            // the aggregate counters and the per-invocation bus.
+            self.resources.error_count += 1;
+            let err_msg = format!("Function '{}' not found", function_name);
+            timer.finish_failure(err_msg.clone(), self.resources.peak_memory_usage as u64);
+            return Err(PluginLoaderError::execution(err_msg));
+        }
 
         // Execute function (simplified - real implementation would handle WASM calling conventions)
         let result = self.call_wasm_function(function_name, context, input).await;
@@ -274,14 +317,22 @@ impl SandboxInstance {
             self.resources.max_execution_time = execution_time;
         }
 
+        // Snapshot the peak memory at the end of the invocation. Today
+        // this comes from `resources.peak_memory_usage` which is not
+        // wired to the WASM `MemoryTracker` yet — it stays at 0 in
+        // most paths. Cloud Phase 2 wires this through.
+        let peak_memory_bytes = self.resources.peak_memory_usage as u64;
+
         match result {
             Ok(data) => {
                 self.resources.success_count += 1;
+                timer.finish_success(peak_memory_bytes);
                 Ok(PluginResult::success(data, execution_time.as_millis() as u64))
             }
             Err(e) => {
                 self.resources.error_count += 1;
-                Ok(PluginResult::failure(e.to_string(), execution_time.as_millis() as u64))
+                timer.finish_failure(e.clone(), peak_memory_bytes);
+                Ok(PluginResult::failure(e, execution_time.as_millis() as u64))
             }
         }
     }
