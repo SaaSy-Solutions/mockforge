@@ -43,8 +43,12 @@ import {
   NewReleases as NewIcon,
 } from '@mui/icons-material';
 import { communityApi, type ShowcaseProject, type SuccessStory } from '../services/communityApi';
+import { isCloudMode } from '../utils/cloudMode';
 
 export const ShowcasePage: React.FC = () => {
+  // Cloud backend has no success-stories endpoint; hide the tab when running
+  // against the registry so users don't get an empty/never-loading view.
+  const cloudMode = isCloudMode();
   const [projects, setProjects] = useState<ShowcaseProject[]>([]);
   const [stories, setStories] = useState<SuccessStory[]>([]);
   const [selectedProject, setSelectedProject] = useState<ShowcaseProject | null>(null);
@@ -61,9 +65,9 @@ export const ShowcasePage: React.FC = () => {
   // Load data
   useEffect(() => {
     loadProjects();
-    loadStories();
+    if (!cloudMode) loadStories();
     loadCategories();
-  }, [selectedCategory, showFeaturedOnly]);
+  }, [selectedCategory, showFeaturedOnly, cloudMode]);
 
   const loadProjects = async () => {
     setLoading(true);
@@ -144,7 +148,7 @@ export const ShowcasePage: React.FC = () => {
 
       <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 3 }}>
         <Tab label="Featured Projects" />
-        <Tab label="Success Stories" />
+        {!cloudMode && <Tab label="Success Stories" />}
       </Tabs>
 
       {activeTab === 0 && (

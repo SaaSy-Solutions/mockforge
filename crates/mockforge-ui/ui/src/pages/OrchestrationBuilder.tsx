@@ -37,6 +37,10 @@ import {
   Download as DownloadIcon,
   Upload as UploadIcon,
 } from '@mui/icons-material';
+import { cloudFlowsApi, type Flow as CloudFlow } from '../services/api/cloudFlows';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { useEffect } from 'react';
 
 // Type definitions
 interface Variable {
@@ -112,6 +116,74 @@ export const OrchestrationBuilder: React.FC = () => {
   const [selectedStep, setSelectedStep] = useState<Step | null>(null);
   const [propertyPanelOpen, setPropertyPanelOpen] = useState(false);
   const [currentTab, setCurrentTab] = useState(0);
+
+  // Cloud-mode persistence — orchestrations live as cloudFlows with
+  // kind='orchestration'. Each save spawns a new FlowVersion; execute
+  // queues a test_run.
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [cloudFlows, setCloudFlows] = useState<CloudFlow[]>([]);
+  const [selectedCloudFlowId, setSelectedCloudFlowId] = useState<string | null>(null);
+  const [cloudRunInfo, setCloudRunInfo] = useState<{ runId: string; status: string } | null>(null);
+
+  useEffect(() => {
+    if (!isCloudMode()) return;
+    if (!activeWorkspace?.id) {
+      setCloudFlows([]);
+      setSelectedCloudFlowId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const flows = await cloudFlowsApi.listForWorkspace(
+          activeWorkspace.id,
+          'orchestration',
+        );
+        if (cancelled) return;
+        setCloudFlows(flows);
+      } catch (err) {
+        console.error('Failed to list cloud orchestrations', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspace?.id]);
+
+  // Hydrate the editor from a selected cloud flow's current FlowVersion.
+  useEffect(() => {
+    if (!isCloudMode() || !selectedCloudFlowId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const flow = await cloudFlowsApi.get(selectedCloudFlowId);
+        if (!flow.current_version_id) {
+          setOrchestration((prev) => ({ ...prev, name: flow.name }));
+          return;
+        }
+        const versions = await cloudFlowsApi.listVersions(selectedCloudFlowId);
+        const current =
+          versions.find((v) => v.id === flow.current_version_id) ?? versions[0];
+        const cfg = (current?.config ?? {}) as Partial<Orchestration>;
+        if (cancelled) return;
+        setOrchestration({
+          name: cfg.name ?? flow.name,
+          description: cfg.description ?? '',
+          variables: cfg.variables ?? [],
+          hooks: cfg.hooks ?? [],
+          steps: cfg.steps ?? [],
+          conditionalSteps: cfg.conditionalSteps ?? [],
+          assertions: cfg.assertions ?? [],
+          enableReporting: cfg.enableReporting ?? true,
+        });
+      } catch (err) {
+        console.error('Failed to load cloud orchestration', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCloudFlowId]);
 
   // Step management
   const addStep = useCallback(() => {
@@ -220,6 +292,15 @@ export const OrchestrationBuilder: React.FC = () => {
   // Execute orchestration
   const executeOrchestration = useCallback(async () => {
     try {
+      if (isCloudMode()) {
+        if (!selectedCloudFlowId) {
+          alert('Save the orchestration to the cloud workspace before executing.');
+          return;
+        }
+        const run = await cloudFlowsApi.triggerRun(selectedCloudFlowId);
+        setCloudRunInfo({ runId: run.id, status: run.status });
+        return;
+      }
       const response = await fetch('/api/chaos/orchestration/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,13 +314,92 @@ export const OrchestrationBuilder: React.FC = () => {
     } catch (error) {
       alert('Error executing orchestration');
     }
-  }, [orchestration]);
+  }, [orchestration, selectedCloudFlowId]);
+
+  // Cloud save — create a new flow if none selected, otherwise save a
+  // new FlowVersion on the selected flow.
+  const saveOrchestrationCloud = useCallback(async () => {
+    if (!isCloudMode()) return;
+    if (!activeWorkspace?.id) {
+      alert('Select a workspace before saving.');
+      return;
+    }
+    try {
+      if (selectedCloudFlowId) {
+        await cloudFlowsApi.saveVersion(selectedCloudFlowId, {
+          config: orchestration as unknown as Record<string, unknown>,
+          set_current: true,
+        });
+        return;
+      }
+      const flow = await cloudFlowsApi.create(activeWorkspace.id, {
+        kind: 'orchestration',
+        name: orchestration.name || 'Untitled orchestration',
+        description: orchestration.description || undefined,
+        initial_config: orchestration as unknown as Record<string, unknown>,
+      });
+      setCloudFlows((prev) => [...prev, flow]);
+      setSelectedCloudFlowId(flow.id);
+    } catch (err) {
+      console.error('Failed to save cloud orchestration', err);
+      alert('Failed to save orchestration to cloud workspace');
+    }
+  }, [activeWorkspace?.id, orchestration, selectedCloudFlowId]);
+
+  const handleNewCloudOrchestration = useCallback(() => {
+    setSelectedCloudFlowId(null);
+    setOrchestration({
+      name: 'New Orchestration',
+      description: '',
+      variables: [],
+      hooks: [],
+      steps: [],
+      conditionalSteps: [],
+      assertions: [],
+      enableReporting: true,
+    });
+    setCloudRunInfo(null);
+  }, []);
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Toolbar */}
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Grid container spacing={2} alignItems="center">
+          {isCloudMode() && (
+            <>
+              <Grid item>
+                <Select
+                  size="small"
+                  value={selectedCloudFlowId ?? ''}
+                  displayEmpty
+                  onChange={(e) =>
+                    setSelectedCloudFlowId((e.target.value as string) || null)
+                  }
+                  sx={{ minWidth: 200 }}
+                >
+                  <MenuItem value="">
+                    <em>New orchestration</em>
+                  </MenuItem>
+                  {cloudFlows.map((f) => (
+                    <MenuItem key={f.id} value={f.id}>
+                      {f.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </Grid>
+              <Grid item>
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={handleNewCloudOrchestration}
+                  variant="outlined"
+                  size="small"
+                >
+                  New
+                </Button>
+              </Grid>
+            </>
+          )}
           <Grid item xs>
             <TextField
               fullWidth
@@ -261,7 +421,16 @@ export const OrchestrationBuilder: React.FC = () => {
             </Button>
           </Grid>
           <Grid item>
-            <Button startIcon={<SaveIcon />} onClick={() => alert('Save functionality')}>
+            <Button
+              startIcon={<SaveIcon />}
+              onClick={() => {
+                if (isCloudMode()) {
+                  saveOrchestrationCloud();
+                } else {
+                  alert('Save functionality');
+                }
+              }}
+            >
               Save
             </Button>
           </Grid>
@@ -285,6 +454,14 @@ export const OrchestrationBuilder: React.FC = () => {
             </label>
           </Grid>
         </Grid>
+        {cloudRunInfo && (
+          <Box sx={{ mt: 2, p: 1.5, borderRadius: 1, bgcolor: 'info.light' }}>
+            <Typography variant="body2">
+              Run queued <strong>{cloudRunInfo.runId}</strong> ({cloudRunInfo.status}).
+              Live progress streams on the Cloud Test Runs page.
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Grid container sx={{ flexGrow: 1, overflow: 'hidden' }}>

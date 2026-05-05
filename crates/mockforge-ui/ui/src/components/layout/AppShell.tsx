@@ -279,6 +279,29 @@ const cloudNavItemIds = new Set([
   // Chains share the flows resource (kind='chain') and are executed by
   // the ChainExecutor in mockforge-test-runner (#354).
   'chains',
+  // Scenario Studio uses cloudFlowsApi with kind='scenario'. Each flow
+  // version stores the full {flow_type, steps, connections, tags}
+  // payload as the FlowVersion config; runs queue through test_runs.
+  'scenario-studio',
+  // State Machine Editor uses cloudFlowsApi with kind='state_machine'.
+  // The page exposes a workspace-scoped picker; the selected flow's
+  // current FlowVersion.config carries {state_machine, visual_layout}.
+  'state-machine-editor',
+  // Orchestration Builder uses cloudFlowsApi with kind='orchestration'.
+  // The page persists the full Orchestration object (name, description,
+  // variables, hooks, steps, conditionalSteps, assertions,
+  // enableReporting) as the FlowVersion config.
+  'orchestration-builder',
+  // Orchestration Execution viewer streams test_run_events via
+  // cloudTestRunsApi.streamRunEvents for the cloudFlowsApi.triggerRun
+  // result. step_start / step_pass / step_fail / step_skip / done get
+  // mapped onto the existing ExecutionStep visualization.
+  'orchestration-execution',
+  // Fitness Functions: read-only via cloudContractApi.listFitnessFunctions.
+  // Cloud rows have a generic {kind, config} blob — we adapt them into
+  // the local typed shape and hide create/edit/delete (no write paths
+  // on the registry yet).
+  'fitness-functions',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
@@ -286,6 +309,11 @@ const cloudNavItemIds = new Set([
   // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
   // adminUpdate / adminDelete.
   'cloud-showcase-admin',
+  // Public showcase + learning hub adapt /api/v1/showcase/* and
+  // /api/v1/learning/* into the legacy ShowcaseProject / LearningResource
+  // shapes via cloudCommunityApi (services/api/cloudCommunity.ts).
+  'showcase',
+  'learning-hub',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
@@ -300,16 +328,35 @@ const cloudNavItemIds = new Set([
   'support',
 ]);
 
+// Items in this set are HIDDEN entirely in cloud mode because a cloud-*
+// sibling page already supersedes them. Showing both creates sidebar
+// noise without adding value (e.g. ChaosPage vs CloudChaosPage).
+const cloudHiddenNavItemIds = new Set([
+  // Each entry has a cloud sibling that serves the same purpose:
+  'chaos',                  // → cloud-chaos
+  'recorder',               // → cloud-recorder
+  'incidents',              // → cloud-incidents
+  'traces',                 // → cloud-traces
+  'contract-diff',          // → cloud-contract
+  'plugins',                // → plugin-registry (cloud-side plugin discovery)
+  'test-execution',         // → cloud-test-runs (TestExecutionDashboard is mock-data only)
+  'analytics',              // → pillar-analytics (request-traffic analytics is local-only)
+]);
+
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"
 // entries so users can discover the full product surface and understand what
 // requires a local MockForge instance. In self-hosted mode every item is active.
-const effectiveNavSections = navSections.map(section => ({
-  ...section,
-  items: section.items.map(item => ({
-    ...item,
-    localOnly: isCloudMode && !cloudNavItemIds.has(item.id),
-  })),
-}));
+const effectiveNavSections = navSections
+  .map(section => ({
+    ...section,
+    items: section.items
+      .filter(item => !(isCloudMode && cloudHiddenNavItemIds.has(item.id)))
+      .map(item => ({
+        ...item,
+        localOnly: isCloudMode && !cloudNavItemIds.has(item.id),
+      })),
+  }))
+  .filter(section => section.items.length > 0);
 
 // Flattened items for title lookup (includes non-sidebar pages for breadcrumb resolution)
 const allNavItems = [

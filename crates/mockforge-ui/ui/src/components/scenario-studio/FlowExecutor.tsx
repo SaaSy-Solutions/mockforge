@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/Badge';
 import { Play, Square, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
+import { cloudFlowsApi } from '../../services/api/cloudFlows';
+import { isCloudMode } from '../../utils/cloudMode';
 
 interface FlowExecutionStep {
   stepId: string;
@@ -27,13 +29,28 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionSteps, setExecutionSteps] = useState<FlowExecutionStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [cloudRunInfo, setCloudRunInfo] = useState<{
+    runId: string;
+    status: string;
+  } | null>(null);
 
   const executeFlow = async () => {
     setIsExecuting(true);
     setExecutionSteps([]);
     setCurrentStepIndex(-1);
+    setCloudRunInfo(null);
 
     try {
+      if (isCloudMode()) {
+        // Cloud-mode scenario flows queue a test_run and stream live
+        // progress over cloudTestRunsApi.streamRunEvents. This panel
+        // surfaces the queued status; users follow the SSE timeline on
+        // the Cloud Test Runs page.
+        const run = await cloudFlowsApi.triggerRun(flowId);
+        setCloudRunInfo({ runId: run.id, status: run.status });
+        return;
+      }
+
       const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}/execute`, {
         method: 'POST',
         headers: {
@@ -146,7 +163,18 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          {executionSteps.length === 0 && !isExecuting && (
+          {cloudRunInfo && (
+            <div className="p-3 border rounded-lg bg-info-50 dark:bg-info-900/20 text-xs space-y-1">
+              <div className="font-medium">
+                Run queued: <span className="font-mono">{cloudRunInfo.runId}</span>
+              </div>
+              <div className="text-muted-foreground">
+                Status: {cloudRunInfo.status}. Live progress streams on the
+                Cloud Test Runs page.
+              </div>
+            </div>
+          )}
+          {executionSteps.length === 0 && !isExecuting && !cloudRunInfo && (
             <div className="text-center text-muted-foreground py-8">
               Click Execute to run the flow
             </div>

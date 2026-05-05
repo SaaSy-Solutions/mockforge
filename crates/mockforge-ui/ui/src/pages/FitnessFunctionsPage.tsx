@@ -17,8 +17,11 @@ import {
   BarChart3,
   TrendingUp,
 } from 'lucide-react';
-import { driftApi, type FitnessFunction, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident } from '../services/driftApi';
+import { driftApi, type FitnessFunction, type FitnessFunctionType, type FitnessScope, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident } from '../services/driftApi';
 import { useDriftIncidents } from '../hooks/useApi';
+import { cloudContractApi, type FitnessFunction as CloudFitnessFunction } from '../services/api/cloudContract';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
   PageHeader,
   ModernCard,
@@ -92,11 +95,13 @@ function FitnessFunctionRow({
   onEdit,
   onDelete,
   onTest,
+  readOnly = false,
 }: {
   function: FitnessFunction;
   onEdit: (func: FitnessFunction) => void;
   onDelete: (id: string) => void;
   onTest: (id: string) => void;
+  readOnly?: boolean;
 }) {
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
@@ -130,32 +135,34 @@ function FitnessFunctionRow({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onTest(func.id)}
-            >
-              <Play className="w-4 h-4 mr-1" />
-              Test
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onEdit(func)}
-            >
-              <Edit className="w-4 h-4 mr-1" />
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onDelete(func.id)}
-              className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onTest(func.id)}
+              >
+                <Play className="w-4 h-4 mr-1" />
+                Test
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(func)}
+              >
+                <Edit className="w-4 h-4 mr-1" />
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onDelete(func.id)}
+                className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -670,6 +677,33 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
   );
 }
 
+// Adapt the generic cloud FitnessFunction (kind + config blob) into the
+// richer typed shape the local UI expects. Cloud rows are read-only —
+// the registry exposes a list endpoint only — so the mapping is
+// best-effort and only needs to keep the table viewable.
+function adaptCloudFitnessFunction(cf: CloudFitnessFunction): FitnessFunction {
+  const cfg = (cf.config ?? {}) as Record<string, unknown>;
+  const fnType = cfg.function_type as FitnessFunctionType | undefined;
+  const scope = cfg.scope as FitnessScope | undefined;
+  const toEpoch = (iso: string): number => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
+  };
+  return {
+    id: cf.id,
+    name: cf.name,
+    description: cf.description ?? '',
+    function_type:
+      fnType ??
+      ({ type: cf.kind as FitnessFunctionType['type'] } as FitnessFunctionType),
+    config: cfg,
+    scope: scope ?? { type: 'workspace', workspace_id: cf.workspace_id },
+    enabled: cf.enabled,
+    created_at: toEpoch(cf.created_at),
+    updated_at: toEpoch(cf.updated_at),
+  };
+}
+
 export function FitnessFunctionsPage() {
   const queryClient = useQueryClient();
   const [editingFunction, setEditingFunction] = useState<FitnessFunction | null>(null);
@@ -678,11 +712,28 @@ export function FitnessFunctionsPage() {
   const [showTestResults, setShowTestResults] = useState(false);
   const [showSummary, setShowSummary] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const cloudMode = isCloudMode();
 
-  // Fetch fitness functions
+  // Fetch fitness functions. In cloud mode we hit cloudContractApi
+  // (read-only) and adapt rows into the local shape; mutations are
+  // disabled until the registry exposes write endpoints.
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['fitness-functions'],
-    queryFn: () => driftApi.listFitnessFunctions(),
+    queryKey: cloudMode
+      ? ['fitness-functions', 'cloud', activeWorkspace?.id ?? '']
+      : ['fitness-functions'],
+    queryFn: async () => {
+      if (cloudMode) {
+        if (!activeWorkspace?.id) {
+          return { functions: [] as FitnessFunction[] };
+        }
+        const cloudFns = await cloudContractApi.listFitnessFunctions(
+          activeWorkspace.id,
+        );
+        return { functions: cloudFns.map(adaptCloudFitnessFunction) };
+      }
+      return driftApi.listFitnessFunctions();
+    },
   });
 
   // Fetch incidents to aggregate fitness results
@@ -782,6 +833,14 @@ export function FitnessFunctionsPage() {
         icon={<Activity className="w-6 h-6" />}
       />
 
+      {cloudMode && (
+        <Alert variant="info">
+          Cloud workspaces expose fitness functions read-only — create and
+          edit aren&apos;t wired to the registry yet. Use the local CLI or
+          contract verification config to author new functions.
+        </Alert>
+      )}
+
       <div className="flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
           {functions.length} fitness function{functions.length !== 1 ? 's' : ''} registered
@@ -790,10 +849,14 @@ export function FitnessFunctionsPage() {
           <Button variant="outline" onClick={() => setShowSummary(!showSummary)}>
             {showSummary ? 'Hide' : 'Show'} Summary
           </Button>
-          <Button onClick={() => {
-            setEditingFunction(null);
-            setShowForm(true);
-          }}>
+          <Button
+            onClick={() => {
+              setEditingFunction(null);
+              setShowForm(true);
+            }}
+            disabled={cloudMode}
+            title={cloudMode ? 'Create not supported in cloud mode' : undefined}
+          >
             <Plus className="w-4 h-4 mr-2" />
             Create Fitness Function
           </Button>
@@ -826,6 +889,7 @@ export function FitnessFunctionsPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onTest={handleTest}
+                readOnly={cloudMode}
               />
             ))}
           </div>

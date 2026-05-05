@@ -1,8 +1,16 @@
 //! Community portal API service
 //!
-//! Provides API client for showcase, learning resources, and community features
+//! Provides API client for showcase, learning resources, and community features.
+//!
+//! In cloud mode (VITE_MOCKFORGE_MODE=cloud) every method delegates to
+//! `cloudCommunityApi`, which calls `/api/v1/showcase/*` and
+//! `/api/v1/learning/*` and adapts the cloud schema to the legacy shapes
+//! defined in this file. The `/__mockforge/community/*` paths only exist
+//! on the locally embedded admin server.
 
 import { authenticatedFetch } from '../utils/apiClient';
+import { isCloudMode } from '../utils/cloudMode';
+import { cloudCommunityApi } from './api/cloudCommunity';
 
 export interface ShowcaseProject {
   id: string;
@@ -99,6 +107,7 @@ class CommunityApiService {
     limit?: number;
     offset?: number;
   }): Promise<ApiResponse<ShowcaseProject[]>> {
+    if (isCloudMode()) return cloudCommunityApi.getShowcaseProjects(params);
     const queryParams = new URLSearchParams();
     if (params?.category) queryParams.append('category', params.category);
     if (params?.featured !== undefined) queryParams.append('featured', String(params.featured));
@@ -110,10 +119,12 @@ class CommunityApiService {
   }
 
   async getShowcaseProject(id: string): Promise<ApiResponse<ShowcaseProject>> {
+    if (isCloudMode()) return cloudCommunityApi.getShowcaseProject(id);
     return this.fetchJson<ShowcaseProject>(`/__mockforge/community/showcase/projects/${id}`);
   }
 
   async getShowcaseCategories(): Promise<ApiResponse<string[]>> {
+    if (isCloudMode()) return cloudCommunityApi.getShowcaseCategories();
     return this.fetchJson<string[]>(`/__mockforge/community/showcase/categories`);
   }
 
@@ -121,6 +132,7 @@ class CommunityApiService {
     featured?: boolean;
     limit?: number;
   }): Promise<ApiResponse<SuccessStory[]>> {
+    if (isCloudMode()) return cloudCommunityApi.getSuccessStories(params);
     const queryParams = new URLSearchParams();
     if (params?.featured !== undefined) queryParams.append('featured', String(params.featured));
     if (params?.limit) queryParams.append('limit', String(params.limit));
@@ -130,6 +142,7 @@ class CommunityApiService {
   }
 
   async submitShowcaseProject(project: Partial<ShowcaseProject>): Promise<ApiResponse<string>> {
+    if (isCloudMode()) return cloudCommunityApi.submitShowcaseProject(project);
     return this.fetchJson<string>('/__mockforge/community/showcase/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,6 +157,7 @@ class CommunityApiService {
     difficulty?: string;
     limit?: number;
   }): Promise<ApiResponse<LearningResource[]>> {
+    if (isCloudMode()) return cloudCommunityApi.getLearningResources(params);
     const queryParams = new URLSearchParams();
     if (params?.category) queryParams.append('category', params.category);
     if (params?.type) queryParams.append('type', params.type);
@@ -155,10 +169,12 @@ class CommunityApiService {
   }
 
   async getLearningResource(id: string): Promise<ApiResponse<LearningResource>> {
+    if (isCloudMode()) return cloudCommunityApi.getLearningResource(id);
     return this.fetchJson<LearningResource>(`/__mockforge/community/learning/resources/${id}`);
   }
 
   async getLearningCategories(): Promise<ApiResponse<string[]>> {
+    if (isCloudMode()) return cloudCommunityApi.getLearningCategories();
     return this.fetchJson<string[]>(`/__mockforge/community/learning/categories`);
   }
 }
