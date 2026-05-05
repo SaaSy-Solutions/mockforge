@@ -6,11 +6,12 @@ import { useValidation } from './useValidationApi';
 /**
  * Configuration hooks
  */
-export function useConfig() {
+export function useConfig(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.config,
     queryFn: configApi.getConfig,
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -5,11 +5,12 @@ import { queryKeys } from './queryKeys';
 /**
  * Server management hooks
  */
-export function useServerInfo() {
+export function useServerInfo(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.serverInfo,
     queryFn: serverApi.getServerInfo,
     staleTime: 30000,
+    enabled: options?.enabled ?? true,
   });
 }
 
