@@ -27,6 +27,7 @@ pub mod git;
 pub mod installer;
 pub mod invocation_metrics;
 pub mod loader;
+pub mod memory_tracking;
 pub mod metadata;
 pub mod registry;
 pub mod remote;
@@ -43,6 +44,7 @@ pub use invocation_metrics::{
     InvocationMetric, InvocationMetricsBus, InvocationStatus, InvocationTimer,
 };
 pub use loader::*;
+pub use memory_tracking::{MemoryStats, MemoryTracker};
 pub use metadata::*;
 pub use registry::*;
 pub use remote::*;
