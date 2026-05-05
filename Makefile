@@ -363,7 +363,7 @@ deploy-ui: ## Build & deploy admin UI to Cloudflare Pages (production)
 	@cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && $(DEPLOY_UI_ENV) pnpm build
 	@echo "Deploying to Cloudflare Pages (main branch = production)..."
 	@cd crates/mockforge-ui/ui && CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
-		pnpm dlx wrangler@latest pages deploy dist \
+		pnpm dlx wrangler@4.85.0 pages deploy dist \
 			--project-name=mockforge-admin-ui \
 			--branch=main \
 			--commit-dirty=true
@@ -373,7 +373,7 @@ deploy-ui-preview: ## Build & deploy admin UI as a preview (uses current git bra
 		echo "Deploying preview on branch: $$BRANCH (cloud mode)"; \
 		cd crates/mockforge-ui/ui && pnpm install --frozen-lockfile && $(DEPLOY_UI_ENV) pnpm build && \
 		CLOUDFLARE_ACCOUNT_ID=0d3a86eae0519c72f1bf7b96b38fea94 \
-			pnpm dlx wrangler@latest pages deploy dist \
+			pnpm dlx wrangler@4.85.0 pages deploy dist \
 				--project-name=mockforge-admin-ui \
 				--branch="$$BRANCH" \
 				--commit-dirty=true
