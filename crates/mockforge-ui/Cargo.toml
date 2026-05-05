@@ -49,7 +49,7 @@ uuid = { workspace = true }
 reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
-once_cell = "1.19"
+once_cell = "1.21"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
