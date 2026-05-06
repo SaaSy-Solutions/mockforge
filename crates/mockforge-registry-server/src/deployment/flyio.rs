@@ -56,6 +56,102 @@ pub struct FlyioMachineConfig {
     pub env: HashMap<String, String>,
     pub services: Vec<FlyioService>,
     pub checks: Option<HashMap<String, FlyioCheck>>,
+    /// VM resource sizing. `None` means accept Fly's API default
+    /// (currently `shared-cpu-1x:256MB`); existing deployments and
+    /// non-plugin-enabled machines stay on that default. Cloud
+    /// plugins requires explicit sizing — see
+    /// `docs/plugins/security/cloud-runtime-sidecar-spike.md` for
+    /// the measured-on-Fly numbers and tier table.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guest: Option<FlyioGuest>,
+}
+
+/// VM sizing block sent to Fly Machines API as `config.guest`.
+/// Mirrors the API's expected JSON shape:
+/// <https://fly.io/docs/machines/api/machines-resource/#machine-config-object-properties>
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlyioGuest {
+    /// `"shared"` or `"performance"`.
+    pub cpu_kind: String,
+    pub cpus: u32,
+    pub memory_mb: u32,
+}
+
+impl FlyioGuest {
+    /// `shared-cpu-1x:256MB` — Fly's default for the registry today.
+    /// Used when no plugins are attached so existing hosted-mocks
+    /// keep their current footprint.
+    pub fn shared_256() -> Self {
+        Self {
+            cpu_kind: "shared".into(),
+            cpus: 1,
+            memory_mb: 256,
+        }
+    }
+
+    /// `shared-cpu-1x:512MB` — Pro tier with cloud plugins. Real-Fly
+    /// measurement on the spike showed mockforge + sidecar idle at
+    /// ~166 MB / 256 MB (65%), with only 71 MB headroom; bumping to
+    /// 512 MB gives 316 MB headroom — comfortable for ≤5 plugins
+    /// at typical sizes.
+    pub fn shared_512() -> Self {
+        Self {
+            cpu_kind: "shared".into(),
+            cpus: 1,
+            memory_mb: 512,
+        }
+    }
+
+    /// `shared-cpu-1x:1024MB` — Team tier with cloud plugins
+    /// (≤25 plugins per mock).
+    pub fn shared_1024() -> Self {
+        Self {
+            cpu_kind: "shared".into(),
+            cpus: 1,
+            memory_mb: 1024,
+        }
+    }
+
+    /// `shared-cpu-2x:2048MB` — Enterprise tier with metered
+    /// pass-through. Two cores so heavy plugin workloads don't
+    /// starve mockforge's request path.
+    pub fn shared_2x_2048() -> Self {
+        Self {
+            cpu_kind: "shared".into(),
+            cpus: 2,
+            memory_mb: 2048,
+        }
+    }
+
+    /// Pick the right Fly machine size for a hosted-mock deployment
+    /// based on org plan + whether cloud plugins are attached.
+    ///
+    /// Without plugins, every tier stays on the existing 256 MB
+    /// default — no behavior change for legacy deployments.
+    ///
+    /// With plugins, the floor bumps according to the
+    /// real-microVM measurements in
+    /// `docs/plugins/security/cloud-runtime-sidecar-spike.md`:
+    /// idle on 256 MB sits at ~166 MB / 65% utilization with only
+    /// ~71 MB headroom. That's not enough for the plugin runtime to
+    /// grow into without OOM-killing mockforge. 512 MB gives 316 MB
+    /// headroom which fits ≤5 plugins comfortably; Team's larger
+    /// plugin count needs 1024 MB.
+    pub fn for_hosted_mock(plan: &str, plugins_enabled: bool) -> Self {
+        if !plugins_enabled {
+            return Self::shared_256();
+        }
+        match plan.to_lowercase().as_str() {
+            "free" => Self::shared_256(), // Plugins not available on Free.
+            "pro" => Self::shared_512(),
+            "team" => Self::shared_1024(),
+            // Unknown / future plans (e.g. "enterprise") get the
+            // largest currently-available shape. The handler should
+            // refuse plugin attachment for unknown plans before
+            // ever reaching this; defaulting big is fail-safe.
+            _ => Self::shared_2x_2048(),
+        }
+    }
 }
 
 /// Registry authentication for pulling private Docker images
@@ -508,5 +604,94 @@ impl FlyioClient {
             response.json().await.context("Failed to parse Fly.io machines response")?;
 
         Ok(machines)
+    }
+}
+
+#[cfg(test)]
+mod guest_tests {
+    use super::*;
+
+    #[test]
+    fn for_hosted_mock_no_plugins_uses_legacy_256() {
+        // Existing hosted-mocks without cloud plugins must keep
+        // their current 256 MB footprint — no surprise pricing
+        // bumps for legacy deployments.
+        for plan in ["free", "pro", "team", "enterprise", "weird-future-plan"] {
+            let g = FlyioGuest::for_hosted_mock(plan, false);
+            assert_eq!(g.memory_mb, 256, "plan {} without plugins must stay at 256MB", plan);
+            assert_eq!(g.cpu_kind, "shared");
+            assert_eq!(g.cpus, 1);
+        }
+    }
+
+    #[test]
+    fn for_hosted_mock_pro_with_plugins_bumps_to_512() {
+        let g = FlyioGuest::for_hosted_mock("pro", true);
+        assert_eq!(g.memory_mb, 512);
+        assert_eq!(g.cpus, 1);
+    }
+
+    #[test]
+    fn for_hosted_mock_team_with_plugins_bumps_to_1024() {
+        let g = FlyioGuest::for_hosted_mock("team", true);
+        assert_eq!(g.memory_mb, 1024);
+        assert_eq!(g.cpus, 1);
+    }
+
+    #[test]
+    fn for_hosted_mock_free_with_plugins_stays_256() {
+        // Plugins aren't available on Free — handler rejects before
+        // we get here — but if we do, don't accidentally upsize
+        // a Free org's machine.
+        let g = FlyioGuest::for_hosted_mock("free", true);
+        assert_eq!(g.memory_mb, 256);
+    }
+
+    #[test]
+    fn for_hosted_mock_unknown_plan_with_plugins_fails_safe_high() {
+        // Unknown plans (e.g. future "enterprise") get the largest
+        // shape rather than under-provisioning.
+        let g = FlyioGuest::for_hosted_mock("enterprise", true);
+        assert_eq!(g.memory_mb, 2048);
+        assert_eq!(g.cpus, 2);
+    }
+
+    #[test]
+    fn for_hosted_mock_plan_string_is_case_insensitive() {
+        let g = FlyioGuest::for_hosted_mock("PRO", true);
+        assert_eq!(g.memory_mb, 512);
+        let g = FlyioGuest::for_hosted_mock("Team", true);
+        assert_eq!(g.memory_mb, 1024);
+    }
+
+    #[test]
+    fn machine_config_serialization_omits_guest_when_none() {
+        // Existing call sites that pass `guest: None` (or use the
+        // legacy struct without the field via Default) must produce
+        // JSON without a `guest` key — so Fly's API default kicks in.
+        let cfg = FlyioMachineConfig {
+            image: "img".into(),
+            env: HashMap::new(),
+            services: vec![],
+            checks: None,
+            guest: None,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("guest"), "guest=None must be omitted, got {}", json);
+    }
+
+    #[test]
+    fn machine_config_serializes_guest_when_set() {
+        let cfg = FlyioMachineConfig {
+            image: "img".into(),
+            env: HashMap::new(),
+            services: vec![],
+            checks: None,
+            guest: Some(FlyioGuest::shared_512()),
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"guest\""));
+        assert!(json.contains("\"memory_mb\":512"));
+        assert!(json.contains("\"cpu_kind\":\"shared\""));
     }
 }

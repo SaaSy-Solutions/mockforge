@@ -147,8 +147,80 @@ The orchestrator picks the right `guest` based on `org.plan` + whether the deplo
 - **An actual Fly deploy.** The Fly microVM adds ~30 MB of kernel + init + DNS resolver overhead on top of the cgroup count. Adjusted estimate: idle ≈ 99 MB on a real Fly machine, still 39% of 256 MB. Comfortable, but the on-Fly number is one cycle off real. A 5-minute Fly deploy with this spike's image would close that gap; treat it as the next operational check before Phase 2 build, not as an open question.
 - **Egress proxy as a third process.** RFC §5.1 proposes a small HTTP forward-proxy as a *third* process for egress allowlist enforcement. Adding it to this measurement is a follow-up; expect ~5-10 MB overhead.
 
+## Addendum: real Fly microVM measurement (2026-05-06)
+
+Closing the "did NOT validate" gap above by deploying the spike image to an actual Fly machine (`mockforge-cp-spike` in `iad`, since destroyed) and re-measuring. **The local docker numbers were too optimistic; 256 MB is *not* sufficient for plugin-enabled deployments.**
+
+### Measurements
+
+```
+$ flyctl ssh console --app mockforge-cp-spike --command 'ps -eo pid,rss,comm --sort=-rss; cat /sys/fs/cgroup/memory.current'
+
+  PID   RSS COMMAND
+  657 61804 python3        ← plugin-host stub
+  644 52424 mockforge      ← main mockforge
+  636 20448 hallpass       ← Fly's SSH/RPC daemon
+    1  6444 init           ← Fly's microVM init
+  667  1816 sh
+  643  1728 entrypoint-spik
+  635  1452 tini
+
+cgroup memory: 174153728 bytes  (166 MB)
+MemTotal:      212236 kB        (Fly reserves ~44 MB on a 256 MB tier for kernel)
+MemAvailable:   72492 kB        (only 71 MB free)
+```
+
+After scaling the same machine to `shared-cpu-1x:512MB`:
+
+```
+cgroup memory: 202166272 bytes  (193 MB / 512 MB = 38%)
+MemAvailable: 323664 kB         (316 MB free)
+```
+
+### What changed vs. local docker
+
+| Tier | Local docker (cgroup) | Real Fly (cgroup) | Δ |
+|---|---:|---:|---:|
+| 256 MB | 69 MB / 27% | 166 MB / 65% | **+97 MB** |
+| 512 MB | (not measured) | 193 MB / 38% | — |
+
+The +97 MB delta is **larger than the +30 MB** I'd estimated. Sources:
+- `init` (Fly microVM PID 1, before our tini): ~6 MB
+- `hallpass` (Fly's exec/SSH daemon): ~20 MB
+- Kernel reserve: 256 MB tier reports `MemTotal: 212 MB`, so ~44 MB is reserved before user space sees it
+- Cgroup accounting differences between docker and Fly's microVM
+
+### Revised tier table
+
+The original headroom analysis assumed local-docker numbers; here are the corrected per-Fly-tier numbers:
+
+| Tier | Idle cgroup | Headroom | Fits ≤5 plugins (Pro)? | Fits ≤25 plugins (Team)? |
+|---|---:|---:|---|---|
+| `shared-cpu-1x:256MB` | 166 MB / 65% | 71 MB | tight; small plugins only | no |
+| `shared-cpu-1x:512MB` | 193 MB / 38% | 316 MB | yes, comfortably | yes, with care |
+| `shared-cpu-1x:1024MB` | (extrapolated ~205 MB / 20%) | ~800 MB | yes | yes, comfortably |
+
+### Revised recommendation
+
+**Pro tier with cloud plugins requires `shared-cpu-1x:512MB` (not 256MB).** The original "Pro stays on 256MB" note from the docker-only measurement was incorrect — the on-Fly headroom isn't enough for plugin runtime growth without OOM-killing mockforge.
+
+| Plan | Plugins enabled? | Floor |
+|---|---|---|
+| Free | (plugins not available) | `shared-cpu-1x:256MB` |
+| Pro | no | `shared-cpu-1x:256MB` |
+| Pro | yes | `shared-cpu-1x:512MB` |
+| Team | yes | `shared-cpu-1x:1024MB` |
+| Future Enterprise | yes | `shared-cpu-2x:2048MB` |
+
+The pricing implication is real: a Pro-tier customer who attaches plugins is on a more expensive Fly machine. Budget that into the cloud-plugins pricing table from the build-vs-buy spike.
+
+### Action taken
+
+`FlyioGuest::for_hosted_mock(plan, plugins_enabled)` ships in this PR with these numbers as defaults. Existing hosted-mocks (no plugins) keep `guest: None` → Fly's API default, so this is non-disruptive.
+
 ## Decision log
 
 | Date | Decision | By |
 | ---- | -------- | -- |
-| 2026-05-05 | Sidecar architecture validated for `shared-cpu-1x:256MB`. Pro tier proceeds with current floor; Team tier needs `512MB`; `FlyioMachineConfig` needs a `guest` field. | Ray Clanan |
+| 2026-05-05 | Sidecar architecture validated for `shared-cpu-1x:256MB` (local docker). Pro tier proceeds with current floor; Team tier needs `512MB`; `FlyioMachineConfig` needs a `guest` field. | Ray Clanan |
+| 2026-05-06 | Real Fly deploy revised the floor: Pro w/ plugins needs `512MB`, Team w/ plugins needs `1024MB`. `FlyioGuest::for_hosted_mock` codifies this. | Ray Clanan |

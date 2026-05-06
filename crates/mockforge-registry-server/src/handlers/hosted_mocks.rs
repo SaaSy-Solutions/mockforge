@@ -752,6 +752,11 @@ pub async fn redeploy_deployment(
                     env,
                     services,
                     checks: Some(checks),
+                    // None = accept Fly's API default
+                    // (shared-cpu-1x:256MB) — same as other call
+                    // sites. Plugin-enabled redeploys will set this
+                    // via FlyioGuest::for_hosted_mock in Phase 2.
+                    guest: None,
                 };
 
                 // Build registry auth
