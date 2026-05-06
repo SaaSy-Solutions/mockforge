@@ -1,0 +1,24 @@
+# Cloud Plugins sidecar spike (Phase 1, Task #3).
+#
+# Validates the multi-process container shape proposed in
+# `cloud-trust-permissions-rfc.md` §5.1 and `cloud-runtime-build-vs-buy-spike.md`:
+# main `mockforge` + plugin-host sidecar in one Fly machine.
+#
+# The sidecar in this spike is a Python stub that allocates ~50 MB
+# (representative of a wasmtime runtime with a handful of plugin
+# stores loaded) and listens on a Unix socket — exactly the topology
+# we're validating. Real Phase 2 plugin-host will be a Rust binary;
+# 50 MB is a conservative high estimate of its idle footprint.
+
+FROM ghcr.io/saasy-solutions/mockforge:latest
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tini procps python3-minimal \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint-spike.sh /usr/local/bin/entrypoint-spike.sh
+COPY plugin_host_stub.py /usr/local/bin/plugin_host_stub.py
+RUN chmod +x /usr/local/bin/entrypoint-spike.sh /usr/local/bin/plugin_host_stub.py
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint-spike.sh"]
