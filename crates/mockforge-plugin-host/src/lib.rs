@@ -37,12 +37,14 @@
 pub mod blocklist;
 pub mod handlers;
 pub mod host;
+pub mod metering;
 pub mod protocol;
 pub mod server;
 pub mod signing;
 
 pub use blocklist::{run_poll_loop, Blocklist, BlocklistConfig, BlocklistEntry, PollError};
 pub use host::{Host, HostActor, HostError};
+pub use metering::{run_exporter, ExportedMetric, ExporterConfig};
 pub use protocol::{Request, Response};
 pub use server::{run_server, ServerConfig};
 pub use signing::{

@@ -107,13 +107,21 @@ impl Host {
         loader_config: PluginLoaderConfig,
         verifier: SignatureVerifier,
         blocklist: Blocklist,
-    ) -> (Self, HostActor) {
+    ) -> (Self, HostActor, std::sync::Arc<mockforge_plugin_loader::InvocationMetricsBus>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let started_at = Arc::new(Instant::now());
 
-        let actor: HostActor = Box::pin(actor_loop(loader_config, verifier, blocklist, cmd_rx));
+        // Construct the sandbox eagerly so we can hand the bus
+        // back to the caller — the cloud metric exporter
+        // subscribes to it from `main.rs` before the actor starts
+        // accepting commands. Actor takes ownership of the
+        // sandbox via the `actor_loop` future.
+        let sandbox = PluginSandbox::new(loader_config);
+        let metrics_bus = sandbox.metrics_bus();
 
-        (Self { started_at, cmd_tx }, actor)
+        let actor: HostActor = Box::pin(actor_loop(sandbox, verifier, blocklist, cmd_rx));
+
+        (Self { started_at, cmd_tx }, actor, metrics_bus)
     }
 
     /// Process uptime in whole seconds.
@@ -232,12 +240,11 @@ enum Command {
 /// lifetime of the host process. Returns when the channel closes
 /// (all `Host` handles dropped) or the runtime shuts down.
 async fn actor_loop(
-    loader_config: PluginLoaderConfig,
+    sandbox: PluginSandbox,
     verifier: SignatureVerifier,
     blocklist: Blocklist,
     mut cmd_rx: mpsc::Receiver<Command>,
 ) {
-    let sandbox = PluginSandbox::new(loader_config);
     let mut plugins: HashMap<String, PluginEntry> = HashMap::new();
     tracing::info!(
         mode = ?verifier.mode(),
@@ -621,7 +628,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor) =
+            let (host, actor, _bus) =
                 Host::new(loader_config(), verifier, crate::blocklist::Blocklist::new());
             tokio::select! {
                 result = body(host) => result,
@@ -724,7 +731,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Required,
             );
-            let (host, actor) =
+            let (host, actor, _bus) =
                 Host::new(loader_config(), verifier, crate::blocklist::Blocklist::new());
             tokio::select! {
                 result = body(host) => result,
@@ -790,7 +797,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor) = Host::new(loader_config(), verifier, blocklist);
+            let (host, actor, _bus) = Host::new(loader_config(), verifier, blocklist);
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),

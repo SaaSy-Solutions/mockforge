@@ -129,7 +129,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor) = Host::new(
+            let (host, actor, _bus) = Host::new(
                 PluginLoaderConfig {
                     allow_unsigned: true,
                     skip_wasm_validation: true,

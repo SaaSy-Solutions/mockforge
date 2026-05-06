@@ -22,8 +22,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use mockforge_plugin_host::{
-    run_poll_loop, run_server, Blocklist, BlocklistConfig, Host, ServerConfig, SignatureMode,
-    SignatureVerifier, TrustStore,
+    run_exporter, run_poll_loop, run_server, Blocklist, BlocklistConfig, ExporterConfig, Host,
+    ServerConfig, SignatureMode, SignatureVerifier, TrustStore,
 };
 use mockforge_plugin_loader::PluginLoaderConfig;
 
@@ -42,6 +42,7 @@ fn main() -> Result<()> {
     let verifier = SignatureVerifier::new(trust_store, signature_mode);
     let blocklist = Blocklist::new();
     let blocklist_config = env_blocklist_config();
+    let exporter_config = env_exporter_config();
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -49,6 +50,7 @@ fn main() -> Result<()> {
         signature_mode = ?signature_mode,
         trusted_keys = verifier.trusted_key_count(),
         blocklist_url = blocklist_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
+        exporter_url = exporter_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         "mockforge-plugin-host starting"
     );
 
@@ -61,7 +63,8 @@ fn main() -> Result<()> {
         .context("building Tokio current-thread runtime")?;
 
     rt.block_on(async move {
-        let (host, actor) = Host::new(PluginLoaderConfig::default(), verifier, blocklist.clone());
+        let (host, actor, metrics_bus) =
+            Host::new(PluginLoaderConfig::default(), verifier, blocklist.clone());
 
         // The blocklist poller is Send (just an HTTP client) so it
         // could in principle be tokio::spawn'd, but driving it
@@ -74,11 +77,16 @@ fn main() -> Result<()> {
                 None => Box::pin(std::future::pending()),
             };
 
-        // Drive actor + server + poller + shutdown_signal
-        // concurrently. The actor owns the !Send sandbox; the
-        // server fans connections out via tokio::spawn but those
-        // tasks only carry the (Send) `Host` handle — never the
-        // sandbox itself.
+        // Same pattern for the metric exporter — Send + 'static
+        // (just a reqwest client + a broadcast Receiver) but kept
+        // inline for lifecycle uniformity. `(*metrics_bus).clone()`
+        // gives the exporter its own subscription handle.
+        let exporter_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match exporter_config {
+                Some(cfg) => Box::pin(run_exporter(cfg, (*metrics_bus).clone())),
+                None => Box::pin(std::future::pending()),
+            };
+
         tokio::select! {
             _ = actor => {
                 tracing::error!("plugin-host actor exited unexpectedly");
@@ -92,12 +100,40 @@ fn main() -> Result<()> {
                 tracing::error!("blocklist poller exited unexpectedly");
                 Err(anyhow::anyhow!("blocklist poller exited"))
             }
+            _ = exporter_future => {
+                tracing::error!("metric exporter exited unexpectedly");
+                Err(anyhow::anyhow!("metric exporter exited"))
+            }
             _ = shutdown_signal() => {
                 tracing::info!("plugin-host received shutdown signal — exiting");
                 Ok(())
             }
         }
     })
+}
+
+/// Build an [`ExporterConfig`] from env vars, or `None` if no
+/// `MOCKFORGE_PLUGIN_HOST_METRICS_URL` is set. Same shape as the
+/// blocklist config (URL + optional bearer + optional interval).
+fn env_exporter_config() -> Option<ExporterConfig> {
+    let url = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_URL").ok()?;
+    let mut cfg = ExporterConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_FLUSH_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.flush_interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(qsize) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_QUEUE_SIZE") {
+        if let Ok(n) = qsize.parse::<usize>() {
+            cfg.max_queue_size = n.max(1);
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Some(cfg)
 }
 
 /// Build a [`BlocklistConfig`] from env vars, or `None` if no
