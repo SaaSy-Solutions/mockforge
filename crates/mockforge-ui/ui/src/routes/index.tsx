@@ -105,6 +105,9 @@ const CloudRecorderPage = lazy(() => import('../pages/CloudRecorderPage').then(m
 // Cloud showcase admin (#12) — submit / publish / feature gallery entries
 const CloudShowcaseAdminPage = lazy(() => import('../pages/CloudShowcaseAdminPage').then(m => ({ default: m.CloudShowcaseAdminPage })));
 
+// Cloud plugins (Phase 3) — manage plugins attached to hosted-mock deployments
+const CloudPluginsPage = lazy(() => import('../pages/CloudPluginsPage').then(m => ({ default: m.CloudPluginsPage })));
+
 // Registry admin (cloud: Postgres via /api/v1/*, self-hosted: SQLite via /api/admin/registry/*)
 const RegistryLoginPage = lazy(() => import('../pages/RegistryLoginPage').then(m => ({ default: m.RegistryLoginPage })));
 const RegistryAdminPage = lazy(() => import('../pages/RegistryAdminPage').then(m => ({ default: m.RegistryAdminPage })));
@@ -224,6 +227,7 @@ export const routes: RouteConfig[] = [
 
   // Plugins
   { path: '/plugins', element: <PluginsPage /> },
+  { path: '/cloud-plugins', element: <CloudPluginsPage /> },
   { path: '/plugin-registry', element: <PluginRegistryPage /> },
   { path: '/plugin-registry/moderation', element: <PluginModerationPage /> },
 
