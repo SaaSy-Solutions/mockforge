@@ -8600,6 +8600,7 @@ name = "mockforge-plugin-host"
 version = "0.3.126"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
  "serde",

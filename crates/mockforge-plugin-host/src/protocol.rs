@@ -31,21 +31,32 @@ pub enum Request {
         /// can multiplex requests over a single connection.
         id: Uuid,
     },
-    /// Load a signed WASM plugin into a fresh `Store`. **Not
-    /// implemented in this scaffold.** Will dispatch to the real
-    /// `PluginSandbox` once signature verification + permission
-    /// grant evaluation lands.
+    /// Load a WASM plugin into a fresh `Store`.
+    ///
+    /// In v1 the WASM bytes are inlined as base64 in the request.
+    /// The follow-up "registry fetch" path will replace this with a
+    /// `download_url` field that the host fetches itself, so
+    /// signature verification can happen before any bytes touch
+    /// the loader. Until then, the caller is expected to verify
+    /// signatures upstream.
     LoadPlugin {
         /// Correlation id.
         id: Uuid,
         /// Plugin name from the registry.
         plugin_name: String,
-        /// Plugin version, pinned at attach time.
+        /// Plugin version, pinned at attach time. Parsed via
+        /// `PluginVersion::parse` (semver-shaped:
+        /// `major.minor.patch`).
         version: String,
-        /// Permission grant payload (RFC §4.2).
+        /// Permission grant payload (RFC §4.2). Stored alongside
+        /// the loaded plugin; runtime enforcement of the
+        /// `manifest ∩ grant` invariant lands with the egress
+        /// proxy + env-grant integration.
         permissions: serde_json::Value,
+        /// Base64-encoded WASM module bytes.
+        wasm_b64: String,
     },
-    /// Detach a plugin. **Not implemented in this scaffold.**
+    /// Detach a plugin and free its sandbox.
     UnloadPlugin {
         /// Correlation id.
         id: Uuid,
@@ -53,7 +64,6 @@ pub enum Request {
         plugin_name: String,
     },
     /// Invoke a plugin function on a request/response pair.
-    /// **Not implemented in this scaffold.**
     Invoke {
         /// Correlation id.
         id: Uuid,
@@ -147,7 +157,7 @@ mod tests {
     }
 
     #[test]
-    fn load_plugin_request_carries_permissions() {
+    fn load_plugin_request_carries_permissions_and_wasm() {
         let req = Request::LoadPlugin {
             id: Uuid::new_v4(),
             plugin_name: "stripe-rewriter".into(),
@@ -155,6 +165,7 @@ mod tests {
             permissions: serde_json::json!({
                 "egress": { "allow": ["*.stripe.com"] }
             }),
+            wasm_b64: "AGFzbQEAAAA=".into(), // empty WASM module
         };
         let bytes = serde_json::to_vec(&req).unwrap();
         let parsed: Request = serde_json::from_slice(&bytes).unwrap();
@@ -163,11 +174,13 @@ mod tests {
                 plugin_name,
                 version,
                 permissions,
+                wasm_b64,
                 ..
             } => {
                 assert_eq!(plugin_name, "stripe-rewriter");
                 assert_eq!(version, "1.2.3");
                 assert!(permissions.get("egress").is_some());
+                assert_eq!(wasm_b64, "AGFzbQEAAAA=");
             }
             other => panic!("expected LoadPlugin, got {:?}", other),
         }

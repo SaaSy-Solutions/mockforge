@@ -11,11 +11,12 @@ use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
-use crate::handlers::{handle, HandlerContext};
+use crate::handlers::handle;
+use crate::host::Host;
 use crate::protocol::Request;
 
 /// Configuration for the host server.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ServerConfig {
     /// Filesystem path the Unix socket is bound to. Main mockforge
     /// connects here.
@@ -41,7 +42,7 @@ impl Default for ServerConfig {
 ///
 /// Each accepted connection runs in its own Tokio task so a slow
 /// client doesn't head-of-line-block other callers.
-pub async fn run_server(config: ServerConfig) -> Result<()> {
+pub async fn run_server(config: ServerConfig, host: Host) -> Result<()> {
     // Best-effort cleanup of a stale socket from a previous run.
     // If the previous host crashed the file is still on disk and a
     // fresh bind would fail with EADDRINUSE.
@@ -65,8 +66,6 @@ pub async fn run_server(config: ServerConfig) -> Result<()> {
         "plugin-host listening"
     );
 
-    let ctx = HandlerContext::new();
-
     loop {
         let (stream, _addr) = match listener.accept().await {
             Ok(pair) => pair,
@@ -79,9 +78,9 @@ pub async fn run_server(config: ServerConfig) -> Result<()> {
             }
         };
 
-        let ctx = ctx.clone();
+        let host = host.clone();
         tokio::spawn(async move {
-            if let Err(err) = handle_connection(&ctx, stream).await {
+            if let Err(err) = handle_connection(&host, stream).await {
                 tracing::warn!(error = %err, "client connection terminated with error");
             }
         });
@@ -104,7 +103,7 @@ fn set_socket_permissions(_path: &Path, _mode: u32) -> Result<()> {
     Ok(())
 }
 
-async fn handle_connection(ctx: &HandlerContext, stream: UnixStream) -> Result<()> {
+async fn handle_connection(host: &Host, stream: UnixStream) -> Result<()> {
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
@@ -129,7 +128,7 @@ async fn handle_connection(ctx: &HandlerContext, stream: UnixStream) -> Result<(
             }
         };
 
-        let response = handle(ctx, request).await;
+        let response = handle(host, request).await;
         let mut bytes = serde_json::to_vec(&response).context("serializing response")?;
         bytes.push(b'\n');
         write_half.write_all(&bytes).await.context("writing response")?;
@@ -141,15 +140,37 @@ async fn handle_connection(ctx: &HandlerContext, stream: UnixStream) -> Result<(
 mod tests {
     use super::*;
     use crate::protocol::Response;
+    use mockforge_plugin_loader::PluginLoaderConfig;
     use tokio::io::BufReader as TokioBufReader;
     use uuid::Uuid;
 
-    /// End-to-end: spawn the server in the background, connect over
-    /// the Unix socket, send a Health request, get a HealthOk back.
-    /// Validates the protocol round-trips through real socket I/O,
-    /// which the unit tests in `handlers` and `protocol` don't.
-    #[tokio::test]
-    async fn server_round_trips_a_health_request() {
+    /// Spin up a current-thread runtime that runs the actor + the
+    /// server + the test body concurrently via `select!`. Whichever
+    /// of the three completes first wins; the server and actor are
+    /// designed to run forever, so the test body's completion is
+    /// what ends the runtime.
+    fn run_server_with_actor<F, T>(config: ServerConfig, body: impl FnOnce(Host) -> F) -> T
+    where
+        F: std::future::Future<Output = T>,
+    {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(async move {
+            let (host, actor) = Host::new(PluginLoaderConfig::default());
+            let server_host = host.clone();
+            tokio::select! {
+                result = body(host) => result,
+                _ = actor => panic!("actor exited before test body finished"),
+                result = run_server(config, server_host) => panic!("server exited unexpectedly: {:?}", result),
+            }
+        })
+    }
+
+    /// End-to-end: drive the actor + server, connect over the Unix
+    /// socket, send a Health request, get a HealthOk back. Validates
+    /// the protocol round-trips through real socket I/O, which the
+    /// unit tests in `handlers` and `protocol` don't.
+    #[test]
+    fn server_round_trips_a_health_request() {
         let dir = tempfile::tempdir().unwrap();
         let socket_path = dir.path().join("test.sock");
 
@@ -160,46 +181,39 @@ mod tests {
             socket_mode: 0o600,
         };
 
-        let server_handle = tokio::spawn(async move { run_server(config).await });
+        run_server_with_actor(config, |_host| async move {
+            // Wait for the socket file to appear.
+            let mut attempts = 0;
+            while !socket_path.exists() && attempts < 50 {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                attempts += 1;
+            }
+            assert!(socket_path.exists(), "server didn't bind socket");
 
-        // Wait for the socket file to appear; the server binds on
-        // its own task so there's a small window where it's not
-        // ready yet.
-        let mut attempts = 0;
-        while !socket_path.exists() && attempts < 50 {
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-            attempts += 1;
-        }
-        assert!(socket_path.exists(), "server didn't bind socket");
+            let stream = UnixStream::connect(&socket_path).await.unwrap();
+            let (read_half, mut write_half) = stream.into_split();
+            let mut reader = TokioBufReader::new(read_half);
 
-        let stream = UnixStream::connect(&socket_path).await.unwrap();
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = TokioBufReader::new(read_half);
+            let id = Uuid::new_v4();
+            let req = Request::Health { id };
+            let mut bytes = serde_json::to_vec(&req).unwrap();
+            bytes.push(b'\n');
+            write_half.write_all(&bytes).await.unwrap();
+            write_half.flush().await.unwrap();
 
-        let id = Uuid::new_v4();
-        let req = Request::Health { id };
-        let mut bytes = serde_json::to_vec(&req).unwrap();
-        bytes.push(b'\n');
-        write_half.write_all(&bytes).await.unwrap();
-        write_half.flush().await.unwrap();
+            let mut response_line = String::new();
+            reader.read_line(&mut response_line).await.unwrap();
+            let response: Response = serde_json::from_str(response_line.trim_end()).unwrap();
 
-        let mut response_line = String::new();
-        reader.read_line(&mut response_line).await.unwrap();
-        let response: Response = serde_json::from_str(response_line.trim_end()).unwrap();
-
-        match response {
-            Response::HealthOk { id: echoed, .. } => assert_eq!(echoed, id),
-            other => panic!("expected HealthOk, got {:?}", other),
-        }
-
-        // Cleanup: drop the writer to send EOF, then abort the
-        // server so the test exits.
-        drop(write_half);
-        server_handle.abort();
+            match response {
+                Response::HealthOk { id: echoed, .. } => assert_eq!(echoed, id),
+                other => panic!("expected HealthOk, got {:?}", other),
+            }
+        });
     }
 
-    #[tokio::test]
-    async fn malformed_request_closes_connection_without_panic() {
+    #[test]
+    fn malformed_request_closes_connection_without_panic() {
         let dir = tempfile::tempdir().unwrap();
         let socket_path = dir.path().join("test.sock");
         let config = ServerConfig {
@@ -207,30 +221,29 @@ mod tests {
             socket_mode: 0o600,
         };
 
-        let server_handle = tokio::spawn(async move { run_server(config).await });
-        let mut attempts = 0;
-        while !socket_path.exists() && attempts < 50 {
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-            attempts += 1;
-        }
+        run_server_with_actor(config, |_host| async move {
+            let mut attempts = 0;
+            while !socket_path.exists() && attempts < 50 {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                attempts += 1;
+            }
 
-        let stream = UnixStream::connect(&socket_path).await.unwrap();
-        let (read_half, mut write_half) = stream.into_split();
-        let mut reader = TokioBufReader::new(read_half);
-        write_half.write_all(b"not valid json\n").await.unwrap();
-        write_half.flush().await.unwrap();
+            let stream = UnixStream::connect(&socket_path).await.unwrap();
+            let (read_half, mut write_half) = stream.into_split();
+            let mut reader = TokioBufReader::new(read_half);
+            write_half.write_all(b"not valid json\n").await.unwrap();
+            write_half.flush().await.unwrap();
 
-        // Server should close the connection. A clean EOF from
-        // `read_line` returns Ok(0); we'd time out if the server
-        // got stuck in a parse loop.
-        let mut buf = String::new();
-        let bytes =
-            tokio::time::timeout(std::time::Duration::from_secs(2), reader.read_line(&mut buf))
-                .await
-                .unwrap()
-                .unwrap();
-        assert_eq!(bytes, 0, "expected EOF, got payload {:?}", buf);
-
-        server_handle.abort();
+            // Server should close the connection. A clean EOF from
+            // `read_line` returns Ok(0); we'd time out if the
+            // server got stuck in a parse loop.
+            let mut buf = String::new();
+            let bytes =
+                tokio::time::timeout(std::time::Duration::from_secs(2), reader.read_line(&mut buf))
+                    .await
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(bytes, 0, "expected EOF, got payload {:?}", buf);
+        });
     }
 }

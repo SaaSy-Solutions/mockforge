@@ -7,17 +7,27 @@
 //! up alongside main mockforge.
 //!
 //! See the crate-level docs for the design.
+//!
+//! ### Runtime flavor
+//!
+//! Built on a current-thread Tokio runtime. The plugin sandbox holds
+//! a Wasmtime `Store` whose embedded `WasiCtx` is `!Send`, which
+//! means the actor task that owns it cannot run on a multi-thread
+//! runtime. Every IPC connection from main mockforge is processed
+//! on this single thread. At the latency budgets and concurrency
+//! we're targeting (≤25 plugins per Team-tier deployment, sub-50 ms
+//! invocations) this is plenty.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use mockforge_plugin_host::{run_server, ServerConfig};
+use mockforge_plugin_host::{run_server, Host, ServerConfig};
+use mockforge_plugin_loader::PluginLoaderConfig;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/plugin-host.sock";
 const DEFAULT_SOCKET_MODE: u32 = 0o660;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     init_tracing();
 
     let config = ServerConfig {
@@ -31,18 +41,38 @@ async fn main() -> Result<()> {
         "mockforge-plugin-host starting"
     );
 
-    // Run the server until SIGTERM. The server loop returns only on
-    // bind error or when the runtime is shut down.
-    tokio::select! {
-        result = run_server(config) => {
-            tracing::error!(?result, "plugin-host server loop exited unexpectedly");
-            result
+    // Current-thread runtime — see the module-level note on why
+    // this is required (the Wasmtime store inside the actor is
+    // !Send, so it can't run on a multi-thread runtime).
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("building Tokio current-thread runtime")?;
+
+    rt.block_on(async move {
+        let (host, actor) = Host::new(PluginLoaderConfig::default());
+
+        // Drive actor + server + shutdown_signal concurrently. The
+        // actor owns the !Send sandbox; the server fans connections
+        // out via tokio::spawn, but those tasks only carry the
+        // (Send) `Host` handle — never the sandbox itself.
+        tokio::select! {
+            // Actor exit is unexpected — channel closed without
+            // shutdown signal. Surface as an error.
+            _ = actor => {
+                tracing::error!("plugin-host actor exited unexpectedly");
+                Err(anyhow::anyhow!("plugin-host actor exited"))
+            }
+            result = run_server(config, host) => {
+                tracing::error!(?result, "plugin-host server loop exited unexpectedly");
+                result
+            }
+            _ = shutdown_signal() => {
+                tracing::info!("plugin-host received shutdown signal — exiting");
+                Ok(())
+            }
         }
-        _ = shutdown_signal() => {
-            tracing::info!("plugin-host received shutdown signal — exiting");
-            Ok(())
-        }
-    }
+    })
 }
 
 fn init_tracing() {
