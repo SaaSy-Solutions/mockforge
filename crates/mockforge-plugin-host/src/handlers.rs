@@ -23,6 +23,9 @@ pub async fn handle(host: &Host, request: Request) -> Response {
             version,
             permissions,
             wasm_b64,
+            signature_b64,
+            publisher_key_id,
+            manifest_b64,
         } => {
             let bytes = match base64::engine::general_purpose::STANDARD.decode(wasm_b64.as_bytes())
             {
@@ -35,7 +38,32 @@ pub async fn handle(host: &Host, request: Request) -> Response {
                     };
                 }
             };
-            match host.load_plugin(&plugin_name, &version, permissions, bytes).await {
+            let manifest_bytes = match manifest_b64
+                .as_deref()
+                .map(|s| base64::engine::general_purpose::STANDARD.decode(s.as_bytes()))
+                .transpose()
+            {
+                Ok(b) => b,
+                Err(err) => {
+                    return Response::Error {
+                        id,
+                        code: "invalid_base64".to_string(),
+                        message: format!("decoding manifest_b64: {err}"),
+                    };
+                }
+            };
+            match host
+                .load_plugin(
+                    &plugin_name,
+                    &version,
+                    permissions,
+                    bytes,
+                    signature_b64,
+                    publisher_key_id,
+                    manifest_bytes,
+                )
+                .await
+            {
                 Ok(plugin_id) => Response::Ok {
                     id,
                     body: serde_json::json!({
@@ -113,11 +141,19 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let (host, actor) = Host::new(PluginLoaderConfig {
-                allow_unsigned: true,
-                skip_wasm_validation: true,
-                ..Default::default()
-            });
+            let verifier = crate::signing::SignatureVerifier::new(
+                crate::signing::TrustStore::new(),
+                crate::signing::SignatureMode::Optional,
+            );
+            let (host, actor, _bus) = Host::new(
+                PluginLoaderConfig {
+                    allow_unsigned: true,
+                    skip_wasm_validation: true,
+                    ..Default::default()
+                },
+                verifier,
+                crate::blocklist::Blocklist::new(),
+            );
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -146,6 +182,9 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: b64_minimal(),
+                    signature_b64: None,
+                    publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;
@@ -188,6 +227,9 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: "not-valid-base64-!!!".into(),
+                    signature_b64: None,
+                    publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;
@@ -212,6 +254,9 @@ mod tests {
                 version: "1.0.0".into(),
                 permissions: serde_json::json!({}),
                 wasm_b64: b64_minimal(),
+                signature_b64: None,
+                publisher_key_id: None,
+                manifest_b64: None,
             };
             let _first = handle(&host, make_load(Uuid::new_v4())).await;
             let second = handle(&host, make_load(Uuid::new_v4())).await;
@@ -280,6 +325,9 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: b64_minimal(),
+                    signature_b64: None,
+                    publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;

@@ -21,7 +21,10 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use mockforge_plugin_host::{run_server, Host, ServerConfig};
+use mockforge_plugin_host::{
+    run_exporter, run_poll_loop, run_server, Blocklist, BlocklistConfig, ExporterConfig, Host,
+    ServerConfig, SignatureMode, SignatureVerifier, TrustStore,
+};
 use mockforge_plugin_loader::PluginLoaderConfig;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/plugin-host.sock";
@@ -34,10 +37,20 @@ fn main() -> Result<()> {
         socket_path: env_socket_path()?,
         socket_mode: env_socket_mode()?,
     };
+    let trust_store = env_trust_store()?;
+    let signature_mode = env_signature_mode();
+    let verifier = SignatureVerifier::new(trust_store, signature_mode);
+    let blocklist = Blocklist::new();
+    let blocklist_config = env_blocklist_config();
+    let exporter_config = env_exporter_config();
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         socket = %config.socket_path.display(),
+        signature_mode = ?signature_mode,
+        trusted_keys = verifier.trusted_key_count(),
+        blocklist_url = blocklist_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
+        exporter_url = exporter_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         "mockforge-plugin-host starting"
     );
 
@@ -50,15 +63,31 @@ fn main() -> Result<()> {
         .context("building Tokio current-thread runtime")?;
 
     rt.block_on(async move {
-        let (host, actor) = Host::new(PluginLoaderConfig::default());
+        let (host, actor, metrics_bus) =
+            Host::new(PluginLoaderConfig::default(), verifier, blocklist.clone());
 
-        // Drive actor + server + shutdown_signal concurrently. The
-        // actor owns the !Send sandbox; the server fans connections
-        // out via tokio::spawn, but those tasks only carry the
-        // (Send) `Host` handle — never the sandbox itself.
+        // The blocklist poller is Send (just an HTTP client) so it
+        // could in principle be tokio::spawn'd, but driving it
+        // inline via select! keeps the lifecycle uniform — every
+        // long-running task in this binary is on the main task,
+        // and shutdown is one drop.
+        let poll_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match blocklist_config {
+                Some(cfg) => Box::pin(run_poll_loop(cfg, blocklist)),
+                None => Box::pin(std::future::pending()),
+            };
+
+        // Same pattern for the metric exporter — Send + 'static
+        // (just a reqwest client + a broadcast Receiver) but kept
+        // inline for lifecycle uniformity. `(*metrics_bus).clone()`
+        // gives the exporter its own subscription handle.
+        let exporter_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match exporter_config {
+                Some(cfg) => Box::pin(run_exporter(cfg, (*metrics_bus).clone())),
+                None => Box::pin(std::future::pending()),
+            };
+
         tokio::select! {
-            // Actor exit is unexpected — channel closed without
-            // shutdown signal. Surface as an error.
             _ = actor => {
                 tracing::error!("plugin-host actor exited unexpectedly");
                 Err(anyhow::anyhow!("plugin-host actor exited"))
@@ -67,12 +96,64 @@ fn main() -> Result<()> {
                 tracing::error!(?result, "plugin-host server loop exited unexpectedly");
                 result
             }
+            _ = poll_future => {
+                tracing::error!("blocklist poller exited unexpectedly");
+                Err(anyhow::anyhow!("blocklist poller exited"))
+            }
+            _ = exporter_future => {
+                tracing::error!("metric exporter exited unexpectedly");
+                Err(anyhow::anyhow!("metric exporter exited"))
+            }
             _ = shutdown_signal() => {
                 tracing::info!("plugin-host received shutdown signal — exiting");
                 Ok(())
             }
         }
     })
+}
+
+/// Build an [`ExporterConfig`] from env vars, or `None` if no
+/// `MOCKFORGE_PLUGIN_HOST_METRICS_URL` is set. Same shape as the
+/// blocklist config (URL + optional bearer + optional interval).
+fn env_exporter_config() -> Option<ExporterConfig> {
+    let url = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_URL").ok()?;
+    let mut cfg = ExporterConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_FLUSH_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.flush_interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(qsize) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_QUEUE_SIZE") {
+        if let Ok(n) = qsize.parse::<usize>() {
+            cfg.max_queue_size = n.max(1);
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_METRICS_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Some(cfg)
+}
+
+/// Build a [`BlocklistConfig`] from env vars, or `None` if no
+/// `MOCKFORGE_PLUGIN_HOST_BLOCKLIST_URL` is set. Optional polling
+/// keeps self-hosted / dev simple — only cloud production has a
+/// blocklist endpoint to point at.
+fn env_blocklist_config() -> Option<BlocklistConfig> {
+    let url = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_URL").ok()?;
+    let mut cfg = BlocklistConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Some(cfg)
 }
 
 fn init_tracing() {
@@ -111,6 +192,46 @@ fn env_socket_mode() -> Result<u32> {
                 .with_context(|| format!("parsing MOCKFORGE_PLUGIN_HOST_SOCKET_MODE={}", s))
         }
         Err(_) => Ok(DEFAULT_SOCKET_MODE),
+    }
+}
+
+/// Read the trust store from one of:
+///
+/// - `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS_FILE` (path to JSON file)
+/// - `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS` (inline JSON)
+///
+/// or return an empty store if neither is set. The store is a
+/// JSON object `{ "publisher-id": "<base64-pubkey>", ... }`.
+fn env_trust_store() -> Result<TrustStore> {
+    if let Ok(path) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS_FILE") {
+        return TrustStore::from_file(std::path::Path::new(&path)).map_err(anyhow::Error::from);
+    }
+    if let Ok(inline) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS") {
+        return TrustStore::from_json_str(&inline).map_err(anyhow::Error::from);
+    }
+    Ok(TrustStore::new())
+}
+
+/// Read `MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE` (`required` |
+/// `optional`). Cloud production sets this to `required` via the
+/// orchestrator's env var; self-hosted leaves it unset and gets
+/// the default (`optional`).
+fn env_signature_mode() -> SignatureMode {
+    match std::env::var("MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE")
+        .ok()
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("required") => SignatureMode::Required,
+        Some("optional") => SignatureMode::Optional,
+        Some(other) => {
+            tracing::warn!(
+                value = other,
+                "unrecognized MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE; falling back to Optional"
+            );
+            SignatureMode::Optional
+        }
+        None => SignatureMode::Optional,
     }
 }
 
