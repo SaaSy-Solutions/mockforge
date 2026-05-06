@@ -21,7 +21,9 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use mockforge_plugin_host::{run_server, Host, ServerConfig};
+use mockforge_plugin_host::{
+    run_server, Host, ServerConfig, SignatureMode, SignatureVerifier, TrustStore,
+};
 use mockforge_plugin_loader::PluginLoaderConfig;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/plugin-host.sock";
@@ -34,10 +36,15 @@ fn main() -> Result<()> {
         socket_path: env_socket_path()?,
         socket_mode: env_socket_mode()?,
     };
+    let trust_store = env_trust_store()?;
+    let signature_mode = env_signature_mode();
+    let verifier = SignatureVerifier::new(trust_store, signature_mode);
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         socket = %config.socket_path.display(),
+        signature_mode = ?signature_mode,
+        trusted_keys = verifier.trusted_key_count(),
         "mockforge-plugin-host starting"
     );
 
@@ -50,7 +57,7 @@ fn main() -> Result<()> {
         .context("building Tokio current-thread runtime")?;
 
     rt.block_on(async move {
-        let (host, actor) = Host::new(PluginLoaderConfig::default());
+        let (host, actor) = Host::new(PluginLoaderConfig::default(), verifier);
 
         // Drive actor + server + shutdown_signal concurrently. The
         // actor owns the !Send sandbox; the server fans connections
@@ -111,6 +118,46 @@ fn env_socket_mode() -> Result<u32> {
                 .with_context(|| format!("parsing MOCKFORGE_PLUGIN_HOST_SOCKET_MODE={}", s))
         }
         Err(_) => Ok(DEFAULT_SOCKET_MODE),
+    }
+}
+
+/// Read the trust store from one of:
+///
+/// - `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS_FILE` (path to JSON file)
+/// - `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS` (inline JSON)
+///
+/// or return an empty store if neither is set. The store is a
+/// JSON object `{ "publisher-id": "<base64-pubkey>", ... }`.
+fn env_trust_store() -> Result<TrustStore> {
+    if let Ok(path) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS_FILE") {
+        return TrustStore::from_file(std::path::Path::new(&path)).map_err(anyhow::Error::from);
+    }
+    if let Ok(inline) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS") {
+        return TrustStore::from_json_str(&inline).map_err(anyhow::Error::from);
+    }
+    Ok(TrustStore::new())
+}
+
+/// Read `MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE` (`required` |
+/// `optional`). Cloud production sets this to `required` via the
+/// orchestrator's env var; self-hosted leaves it unset and gets
+/// the default (`optional`).
+fn env_signature_mode() -> SignatureMode {
+    match std::env::var("MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE")
+        .ok()
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("required") => SignatureMode::Required,
+        Some("optional") => SignatureMode::Optional,
+        Some(other) => {
+            tracing::warn!(
+                value = other,
+                "unrecognized MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE; falling back to Optional"
+            );
+            SignatureMode::Optional
+        }
+        None => SignatureMode::Optional,
     }
 }
 

@@ -23,6 +23,8 @@ pub async fn handle(host: &Host, request: Request) -> Response {
             version,
             permissions,
             wasm_b64,
+            signature_b64,
+            publisher_key_id,
         } => {
             let bytes = match base64::engine::general_purpose::STANDARD.decode(wasm_b64.as_bytes())
             {
@@ -35,7 +37,17 @@ pub async fn handle(host: &Host, request: Request) -> Response {
                     };
                 }
             };
-            match host.load_plugin(&plugin_name, &version, permissions, bytes).await {
+            match host
+                .load_plugin(
+                    &plugin_name,
+                    &version,
+                    permissions,
+                    bytes,
+                    signature_b64,
+                    publisher_key_id,
+                )
+                .await
+            {
                 Ok(plugin_id) => Response::Ok {
                     id,
                     body: serde_json::json!({
@@ -113,11 +125,18 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let (host, actor) = Host::new(PluginLoaderConfig {
-                allow_unsigned: true,
-                skip_wasm_validation: true,
-                ..Default::default()
-            });
+            let verifier = crate::signing::SignatureVerifier::new(
+                crate::signing::TrustStore::new(),
+                crate::signing::SignatureMode::Optional,
+            );
+            let (host, actor) = Host::new(
+                PluginLoaderConfig {
+                    allow_unsigned: true,
+                    skip_wasm_validation: true,
+                    ..Default::default()
+                },
+                verifier,
+            );
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -146,6 +165,8 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: b64_minimal(),
+                    signature_b64: None,
+                    publisher_key_id: None,
                 },
             )
             .await;
@@ -188,6 +209,8 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: "not-valid-base64-!!!".into(),
+                    signature_b64: None,
+                    publisher_key_id: None,
                 },
             )
             .await;
@@ -212,6 +235,8 @@ mod tests {
                 version: "1.0.0".into(),
                 permissions: serde_json::json!({}),
                 wasm_b64: b64_minimal(),
+                signature_b64: None,
+                publisher_key_id: None,
             };
             let _first = handle(&host, make_load(Uuid::new_v4())).await;
             let second = handle(&host, make_load(Uuid::new_v4())).await;
@@ -280,6 +305,8 @@ mod tests {
                     version: "1.0.0".into(),
                     permissions: serde_json::json!({}),
                     wasm_b64: b64_minimal(),
+                    signature_b64: None,
+                    publisher_key_id: None,
                 },
             )
             .await;
