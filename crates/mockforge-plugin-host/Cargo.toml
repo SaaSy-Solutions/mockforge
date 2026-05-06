@@ -59,5 +59,11 @@ uuid = { workspace = true, features = ["serde"] }
 base64 = "0.22"
 tempfile = "3"
 
+# Ed25519 signature verification on the WASM bytes (RFC §7.2 step 3).
+# Matches the scheme used by the registry's UserPublicKey +
+# verify_sbom_attestation so trust roots can be shared once the
+# registry-fetch path lands.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+
 [dev-dependencies]
 tempfile = "3"

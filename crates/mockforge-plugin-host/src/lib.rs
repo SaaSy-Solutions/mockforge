@@ -38,7 +38,12 @@ pub mod handlers;
 pub mod host;
 pub mod protocol;
 pub mod server;
+pub mod signing;
 
 pub use host::{Host, HostActor, HostError};
 pub use protocol::{Request, Response};
 pub use server::{run_server, ServerConfig};
+pub use signing::{
+    SignatureMode, SignatureVerifier, TrustStore, TrustStoreError, VerificationError,
+    VerificationOutcome,
+};

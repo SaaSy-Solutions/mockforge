@@ -29,6 +29,8 @@ use mockforge_plugin_loader::{
 };
 use tokio::sync::{mpsc, oneshot};
 
+use crate::signing::{SignatureVerifier, VerificationError};
+
 /// Actor channel capacity. Generous because cloud-plugins ops are
 /// rare (load/unload at attach time, invoke once per request) and
 /// the cost of dropping is high (request gets a 503).
@@ -83,11 +85,23 @@ impl Host {
     /// Construct a new host. Returns the handle (cheap to clone,
     /// shareable across spawned connection tasks) and the actor
     /// future the caller must drive on the current task.
-    pub fn new(loader_config: PluginLoaderConfig) -> (Self, HostActor) {
+    ///
+    /// The verifier is consulted on every LoadPlugin to enforce
+    /// the policy from `cloud-trust-permissions-rfc.md` §7.2 step
+    /// 3. Pass [`SignatureVerifier::new(TrustStore::new(),
+    /// SignatureMode::Optional)`] for the loosest behavior — the
+    /// existing test fixtures use that to keep the tests focused
+    /// on lifecycle rather than signing.
+    ///
+    /// [`SignatureVerifier::new(TrustStore::new(), SignatureMode::Optional)`]: crate::signing::SignatureVerifier::new
+    pub fn new(
+        loader_config: PluginLoaderConfig,
+        verifier: SignatureVerifier,
+    ) -> (Self, HostActor) {
         let (cmd_tx, cmd_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let started_at = Arc::new(Instant::now());
 
-        let actor: HostActor = Box::pin(actor_loop(loader_config, cmd_rx));
+        let actor: HostActor = Box::pin(actor_loop(loader_config, verifier, cmd_rx));
 
         (Self { started_at, cmd_tx }, actor)
     }
@@ -101,12 +115,19 @@ impl Host {
     /// to a tempfile inside the actor so the loader (which takes a
     /// filesystem path) can `Module::from_file` it. Returns the
     /// loaded plugin's `PluginId` on success.
+    ///
+    /// The actor verifies the signature (if any) against its
+    /// `SignatureVerifier` before any bytes touch the loader.
+    /// `signature_b64` and `publisher_key_id` must be passed
+    /// together or both `None`.
     pub async fn load_plugin(
         &self,
         plugin_name: &str,
         version_str: &str,
         permissions: serde_json::Value,
         wasm_bytes: Vec<u8>,
+        signature_b64: Option<String>,
+        publisher_key_id: Option<String>,
     ) -> Result<PluginId, HostError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.cmd_tx
@@ -115,6 +136,8 @@ impl Host {
                 version: version_str.to_string(),
                 permissions,
                 wasm_bytes,
+                signature_b64,
+                publisher_key_id,
                 reply: reply_tx,
             })
             .await
@@ -176,6 +199,8 @@ enum Command {
         version: String,
         permissions: serde_json::Value,
         wasm_bytes: Vec<u8>,
+        signature_b64: Option<String>,
+        publisher_key_id: Option<String>,
         reply: oneshot::Sender<Result<PluginId, HostError>>,
     },
     Unload {
@@ -196,9 +221,18 @@ enum Command {
 /// Actor task. Owns the `PluginSandbox` and the plugin map for the
 /// lifetime of the host process. Returns when the channel closes
 /// (all `Host` handles dropped) or the runtime shuts down.
-async fn actor_loop(loader_config: PluginLoaderConfig, mut cmd_rx: mpsc::Receiver<Command>) {
+async fn actor_loop(
+    loader_config: PluginLoaderConfig,
+    verifier: SignatureVerifier,
+    mut cmd_rx: mpsc::Receiver<Command>,
+) {
     let sandbox = PluginSandbox::new(loader_config);
     let mut plugins: HashMap<String, PluginEntry> = HashMap::new();
+    tracing::info!(
+        mode = ?verifier.mode(),
+        trusted_keys = verifier.trusted_key_count(),
+        "plugin-host actor started"
+    );
 
     while let Some(cmd) = cmd_rx.recv().await {
         match cmd {
@@ -207,15 +241,20 @@ async fn actor_loop(loader_config: PluginLoaderConfig, mut cmd_rx: mpsc::Receive
                 version,
                 permissions,
                 wasm_bytes,
+                signature_b64,
+                publisher_key_id,
                 reply,
             } => {
                 let result = handle_load(
                     &sandbox,
+                    &verifier,
                     &mut plugins,
                     &plugin_name,
                     &version,
                     permissions,
                     wasm_bytes,
+                    signature_b64.as_deref(),
+                    publisher_key_id.as_deref(),
                 )
                 .await;
                 let _ = reply.send(result);
@@ -247,14 +286,38 @@ async fn actor_loop(loader_config: PluginLoaderConfig, mut cmd_rx: mpsc::Receive
     tracing::info!("plugin-host actor exiting (channel closed)");
 }
 
+// Many arguments because the function is the
+// destructured-Command equivalent — splitting into a struct
+// would just shift names around without saving a line.
+#[allow(clippy::too_many_arguments)]
 async fn handle_load(
     sandbox: &PluginSandbox,
+    verifier: &SignatureVerifier,
     plugins: &mut HashMap<String, PluginEntry>,
     plugin_name: &str,
     version_str: &str,
     permissions: serde_json::Value,
     wasm_bytes: Vec<u8>,
+    signature_b64: Option<&str>,
+    publisher_key_id: Option<&str>,
 ) -> Result<PluginId, HostError> {
+    // Verify the signature *before* the loader sees the bytes.
+    // Bypass-via-loader-bug is impossible if the bytes never
+    // reach the loader on a verification failure.
+    let outcome = verifier.verify(&wasm_bytes, signature_b64, publisher_key_id)?;
+    match &outcome {
+        crate::signing::VerificationOutcome::Verified { key_id } => {
+            tracing::info!(plugin_name, version = version_str, key_id, "plugin signature verified");
+        }
+        crate::signing::VerificationOutcome::SkippedUnsigned => {
+            tracing::warn!(
+                plugin_name,
+                version = version_str,
+                "plugin loaded without signature (Optional mode)"
+            );
+        }
+    }
+
     if plugins.contains_key(plugin_name) {
         return Err(HostError::AlreadyLoaded {
             plugin_name: plugin_name.to_string(),
@@ -389,6 +452,9 @@ pub enum HostError {
     /// Base64-decode of the WASM bytes failed.
     #[error("invalid base64 wasm: {0}")]
     Base64(#[from] base64::DecodeError),
+    /// Signature verification rejected the load.
+    #[error("signature verification failed: {0}")]
+    Signature(#[from] VerificationError),
     /// The actor task is gone — likely runtime shutdown or a
     /// panic in the actor. Caller should reconnect.
     #[error("plugin-host actor task is no longer running")]
@@ -406,6 +472,9 @@ impl HostError {
             HostError::Loader(_) => "loader_error",
             HostError::PluginExecution { .. } => "plugin_execution_error",
             HostError::Base64(_) => "invalid_base64",
+            // Forward the verifier's specific code so callers can
+            // distinguish "missing signature" from "wrong key" etc.
+            HostError::Signature(err) => err.code(),
             HostError::ActorGone => "actor_gone",
         }
     }
@@ -460,7 +529,11 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let (host, actor) = Host::new(loader_config());
+            let verifier = SignatureVerifier::new(
+                crate::signing::TrustStore::new(),
+                crate::signing::SignatureMode::Optional,
+            );
+            let (host, actor) = Host::new(loader_config(), verifier);
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -471,9 +544,16 @@ mod tests {
     #[test]
     fn load_plugin_then_list_returns_one_entry() {
         run_with_actor(|host| async move {
-            host.load_plugin("test-plugin", "1.0.0", serde_json::json!({}), minimal_wasm())
-                .await
-                .unwrap();
+            host.load_plugin(
+                "test-plugin",
+                "1.0.0",
+                serde_json::json!({}),
+                minimal_wasm(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
             let loaded = host.loaded_plugins().await.unwrap();
             assert_eq!(loaded.len(), 1);
             assert_eq!(loaded[0].0, "test-plugin");
@@ -483,11 +563,25 @@ mod tests {
     #[test]
     fn load_plugin_twice_returns_already_loaded() {
         run_with_actor(|host| async move {
-            host.load_plugin("test-plugin", "1.0.0", serde_json::json!({}), minimal_wasm())
-                .await
-                .unwrap();
+            host.load_plugin(
+                "test-plugin",
+                "1.0.0",
+                serde_json::json!({}),
+                minimal_wasm(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
             let err = host
-                .load_plugin("test-plugin", "1.0.0", serde_json::json!({}), minimal_wasm())
+                .load_plugin(
+                    "test-plugin",
+                    "1.0.0",
+                    serde_json::json!({}),
+                    minimal_wasm(),
+                    None,
+                    None,
+                )
                 .await
                 .unwrap_err();
             assert_eq!(err.code(), "already_loaded");
@@ -497,9 +591,16 @@ mod tests {
     #[test]
     fn unload_plugin_removes_entry() {
         run_with_actor(|host| async move {
-            host.load_plugin("test-plugin", "1.0.0", serde_json::json!({}), minimal_wasm())
-                .await
-                .unwrap();
+            host.load_plugin(
+                "test-plugin",
+                "1.0.0",
+                serde_json::json!({}),
+                minimal_wasm(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
             let detached = host.unload_plugin("test-plugin").await.unwrap();
             assert!(detached);
             assert!(host.loaded_plugins().await.unwrap().is_empty());
@@ -522,11 +623,79 @@ mod tests {
         });
     }
 
+    /// Drive a Host wired to a Required-mode verifier so we can
+    /// observe end-to-end signature-rejection behavior.
+    fn run_with_required_actor<F, T>(body: impl FnOnce(Host) -> F) -> T
+    where
+        F: std::future::Future<Output = T>,
+    {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(async move {
+            let verifier = SignatureVerifier::new(
+                crate::signing::TrustStore::new(),
+                crate::signing::SignatureMode::Required,
+            );
+            let (host, actor) = Host::new(loader_config(), verifier);
+            tokio::select! {
+                result = body(host) => result,
+                _ = actor => panic!("actor exited before test body finished"),
+            }
+        })
+    }
+
+    #[test]
+    fn load_in_required_mode_without_signature_is_rejected() {
+        run_with_required_actor(|host| async move {
+            let err = host
+                .load_plugin(
+                    "test-plugin",
+                    "1.0.0",
+                    serde_json::json!({}),
+                    minimal_wasm(),
+                    None,
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "signature_required");
+        });
+    }
+
+    #[test]
+    fn load_in_required_mode_with_unknown_publisher_key_is_rejected() {
+        run_with_required_actor(|host| async move {
+            // 64 zero bytes — base64-encoded — is the right shape
+            // for an Ed25519 signature, but the publisher_key_id
+            // isn't in the (empty) trust store.
+            use base64::Engine;
+            let sig_b64 = base64::engine::general_purpose::STANDARD.encode([0u8; 64]);
+            let err = host
+                .load_plugin(
+                    "test-plugin",
+                    "1.0.0",
+                    serde_json::json!({}),
+                    minimal_wasm(),
+                    Some(sig_b64),
+                    Some("unknown-key".to_string()),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), "unknown_publisher_key");
+        });
+    }
+
     #[test]
     fn load_with_invalid_version_returns_invalid_version() {
         run_with_actor(|host| async move {
             let err = host
-                .load_plugin("test-plugin", "not-a-version", serde_json::json!({}), minimal_wasm())
+                .load_plugin(
+                    "test-plugin",
+                    "not-a-version",
+                    serde_json::json!({}),
+                    minimal_wasm(),
+                    None,
+                    None,
+                )
                 .await
                 .unwrap_err();
             assert_eq!(err.code(), "invalid_version");

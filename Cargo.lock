@@ -8601,6 +8601,7 @@ version = "0.3.126"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "ed25519-dalek",
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
  "serde",
