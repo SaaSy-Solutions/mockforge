@@ -136,6 +136,7 @@ mod tests {
                     ..Default::default()
                 },
                 verifier,
+                crate::blocklist::Blocklist::new(),
             );
             tokio::select! {
                 result = body(host) => result,

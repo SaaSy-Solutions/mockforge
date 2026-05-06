@@ -34,12 +34,14 @@
 //! stay small and lets us iterate on cloud-only concerns without
 //! touching the OSS API.
 
+pub mod blocklist;
 pub mod handlers;
 pub mod host;
 pub mod protocol;
 pub mod server;
 pub mod signing;
 
+pub use blocklist::{run_poll_loop, Blocklist, BlocklistConfig, BlocklistEntry, PollError};
 pub use host::{Host, HostActor, HostError};
 pub use protocol::{Request, Response};
 pub use server::{run_server, ServerConfig};
