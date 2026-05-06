@@ -22,7 +22,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use mockforge_plugin_host::{
-    run_server, Host, ServerConfig, SignatureMode, SignatureVerifier, TrustStore,
+    run_poll_loop, run_server, Blocklist, BlocklistConfig, Host, ServerConfig, SignatureMode,
+    SignatureVerifier, TrustStore,
 };
 use mockforge_plugin_loader::PluginLoaderConfig;
 
@@ -39,12 +40,15 @@ fn main() -> Result<()> {
     let trust_store = env_trust_store()?;
     let signature_mode = env_signature_mode();
     let verifier = SignatureVerifier::new(trust_store, signature_mode);
+    let blocklist = Blocklist::new();
+    let blocklist_config = env_blocklist_config();
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         socket = %config.socket_path.display(),
         signature_mode = ?signature_mode,
         trusted_keys = verifier.trusted_key_count(),
+        blocklist_url = blocklist_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         "mockforge-plugin-host starting"
     );
 
@@ -57,15 +61,25 @@ fn main() -> Result<()> {
         .context("building Tokio current-thread runtime")?;
 
     rt.block_on(async move {
-        let (host, actor) = Host::new(PluginLoaderConfig::default(), verifier);
+        let (host, actor) = Host::new(PluginLoaderConfig::default(), verifier, blocklist.clone());
 
-        // Drive actor + server + shutdown_signal concurrently. The
-        // actor owns the !Send sandbox; the server fans connections
-        // out via tokio::spawn, but those tasks only carry the
-        // (Send) `Host` handle — never the sandbox itself.
+        // The blocklist poller is Send (just an HTTP client) so it
+        // could in principle be tokio::spawn'd, but driving it
+        // inline via select! keeps the lifecycle uniform — every
+        // long-running task in this binary is on the main task,
+        // and shutdown is one drop.
+        let poll_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match blocklist_config {
+                Some(cfg) => Box::pin(run_poll_loop(cfg, blocklist)),
+                None => Box::pin(std::future::pending()),
+            };
+
+        // Drive actor + server + poller + shutdown_signal
+        // concurrently. The actor owns the !Send sandbox; the
+        // server fans connections out via tokio::spawn but those
+        // tasks only carry the (Send) `Host` handle — never the
+        // sandbox itself.
         tokio::select! {
-            // Actor exit is unexpected — channel closed without
-            // shutdown signal. Surface as an error.
             _ = actor => {
                 tracing::error!("plugin-host actor exited unexpectedly");
                 Err(anyhow::anyhow!("plugin-host actor exited"))
@@ -74,12 +88,36 @@ fn main() -> Result<()> {
                 tracing::error!(?result, "plugin-host server loop exited unexpectedly");
                 result
             }
+            _ = poll_future => {
+                tracing::error!("blocklist poller exited unexpectedly");
+                Err(anyhow::anyhow!("blocklist poller exited"))
+            }
             _ = shutdown_signal() => {
                 tracing::info!("plugin-host received shutdown signal — exiting");
                 Ok(())
             }
         }
     })
+}
+
+/// Build a [`BlocklistConfig`] from env vars, or `None` if no
+/// `MOCKFORGE_PLUGIN_HOST_BLOCKLIST_URL` is set. Optional polling
+/// keeps self-hosted / dev simple — only cloud production has a
+/// blocklist endpoint to point at.
+fn env_blocklist_config() -> Option<BlocklistConfig> {
+    let url = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_URL").ok()?;
+    let mut cfg = BlocklistConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_BLOCKLIST_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Some(cfg)
 }
 
 fn init_tracing() {
