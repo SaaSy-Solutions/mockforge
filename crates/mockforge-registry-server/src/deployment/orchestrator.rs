@@ -370,6 +370,11 @@ impl DeploymentOrchestrator {
             env,
             services,
             checks: Some(checks),
+            // None = accept Fly's API default (shared-cpu-1x:256MB)
+            // for legacy hosted-mocks. Cloud-plugin-enabled deploys
+            // will set this via FlyioGuest::for_hosted_mock when the
+            // plugin runtime ships in Phase 2.
+            guest: None,
         };
 
         DeploymentLog::create(pool, deployment.id, "info", "Creating Fly.io machine", None).await?;
@@ -594,6 +599,11 @@ impl DeploymentOrchestrator {
             env,
             services,
             checks: Some(checks),
+            // None = accept Fly's API default (shared-cpu-1x:256MB)
+            // for legacy hosted-mocks. Cloud-plugin-enabled deploys
+            // will set this via FlyioGuest::for_hosted_mock when the
+            // plugin runtime ships in Phase 2.
+            guest: None,
         };
 
         // Build registry auth
