@@ -62,6 +62,11 @@ vi.mock('@xyflow/react', async () => {
 describe('ScenarioStateMachineEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Force local mode — global setup sets VITE_API_BASE_URL, which would
+    // route the editor through cloud dispatchers instead of the mocked
+    // local API service.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
   });
 
   it('should render editor page', () => {

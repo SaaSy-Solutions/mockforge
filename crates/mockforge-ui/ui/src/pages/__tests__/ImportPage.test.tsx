@@ -88,6 +88,11 @@ describe('ImportPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Force local mode — global setup sets VITE_API_BASE_URL, which would
+    // route ImportPage through cloudPreview/cloudImport instead of the
+    // mocked usePreviewImport/useImportPostman hooks.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
   });
 
   it('renders import page header', () => {
