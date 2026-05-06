@@ -11,18 +11,19 @@
 //!
 //! ## Status
 //!
-//! **Phase 2 scaffold.** Boots, listens on the Unix socket, and
-//! handles `health` round-trips. The `load_plugin` / `unload_plugin`
-//! / `invoke` handlers return `not_implemented` placeholders — wiring
-//! them to the real `mockforge-plugin-loader::sandbox::PluginSandbox`
-//! is the next deliverable.
+//! **Phase 2 — IPC handlers wired.** Health/LoadPlugin/UnloadPlugin/
+//! Invoke all dispatch through to [`Host`], which owns a real
+//! `mockforge_plugin_loader::sandbox::PluginSandbox`. WASM bytes
+//! are inlined as base64 in the LoadPlugin request; the registry-
+//! fetch path lands separately so signature verification can hook
+//! in upstream.
 //!
 //! ## Wire protocol
 //!
-//! JSON requests / responses, one per Unix socket message, length-
-//! prefixed. Protocol is intentionally simple and language-agnostic
-//! so we can swap to protobuf later without breaking the on-the-wire
-//! semantics. See [`protocol`].
+//! Newline-delimited JSON, request/response tagged by `id` for
+//! multiplexing on a single connection. Protocol is intentionally
+//! simple and language-agnostic so we can swap to protobuf later
+//! without breaking the on-the-wire semantics. See [`protocol`].
 //!
 //! ## Why a separate crate from `mockforge-plugin-loader`?
 //!
@@ -34,8 +35,10 @@
 //! touching the OSS API.
 
 pub mod handlers;
+pub mod host;
 pub mod protocol;
 pub mod server;
 
+pub use host::{Host, HostActor, HostError};
 pub use protocol::{Request, Response};
 pub use server::{run_server, ServerConfig};
