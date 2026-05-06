@@ -25,6 +25,7 @@ pub async fn handle(host: &Host, request: Request) -> Response {
             wasm_b64,
             signature_b64,
             publisher_key_id,
+            manifest_b64,
         } => {
             let bytes = match base64::engine::general_purpose::STANDARD.decode(wasm_b64.as_bytes())
             {
@@ -37,6 +38,20 @@ pub async fn handle(host: &Host, request: Request) -> Response {
                     };
                 }
             };
+            let manifest_bytes = match manifest_b64
+                .as_deref()
+                .map(|s| base64::engine::general_purpose::STANDARD.decode(s.as_bytes()))
+                .transpose()
+            {
+                Ok(b) => b,
+                Err(err) => {
+                    return Response::Error {
+                        id,
+                        code: "invalid_base64".to_string(),
+                        message: format!("decoding manifest_b64: {err}"),
+                    };
+                }
+            };
             match host
                 .load_plugin(
                     &plugin_name,
@@ -45,6 +60,7 @@ pub async fn handle(host: &Host, request: Request) -> Response {
                     bytes,
                     signature_b64,
                     publisher_key_id,
+                    manifest_bytes,
                 )
                 .await
             {
@@ -168,6 +184,7 @@ mod tests {
                     wasm_b64: b64_minimal(),
                     signature_b64: None,
                     publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;
@@ -212,6 +229,7 @@ mod tests {
                     wasm_b64: "not-valid-base64-!!!".into(),
                     signature_b64: None,
                     publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;
@@ -238,6 +256,7 @@ mod tests {
                 wasm_b64: b64_minimal(),
                 signature_b64: None,
                 publisher_key_id: None,
+                manifest_b64: None,
             };
             let _first = handle(&host, make_load(Uuid::new_v4())).await;
             let second = handle(&host, make_load(Uuid::new_v4())).await;
@@ -308,6 +327,7 @@ mod tests {
                     wasm_b64: b64_minimal(),
                     signature_b64: None,
                     publisher_key_id: None,
+                    manifest_b64: None,
                 },
             )
             .await;

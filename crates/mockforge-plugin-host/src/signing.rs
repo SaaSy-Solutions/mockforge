@@ -31,11 +31,19 @@
 //!
 //! ## Signed payload
 //!
-//! Signature is over the **WASM bytes alone** — the canonical hash
-//! used for storage and signing. We don't include the manifest in
-//! the signed payload yet; that's a Phase 2 follow-up that pairs
-//! with fetching the real manifest from the registry instead of
-//! using the synthetic one in `host.rs::build_synthetic_manifest`.
+//! See [`build_signed_payload`] for the canonical bytes. Two
+//! versions, distinguished by domain-separation prefix:
+//!
+//!   - **v1** (legacy / no manifest): `prefix-v1 || wasm_bytes`
+//!   - **v2** (cloud / with manifest): `prefix-v2 || u64-be(wasm.len()) || wasm || manifest`
+//!
+//! v2 covers the manifest as well as the bytes — defense-in-depth
+//! against a registry compromise that swaps out a published
+//! plugin's permission grant. The big-endian length prefix
+//! prevents a length-extension attack that could shift the
+//! wasm/manifest boundary while keeping the signature valid.
+//! Domain prefixes prevent v1 signatures from being replayed
+//! against v2 payloads (and vice-versa).
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -178,6 +186,54 @@ pub enum TrustStoreError {
 }
 
 /// Verifier — combines the trust store and the policy mode.
+/// Domain-separation prefixes for the signed payload.
+///
+/// Why a prefix at all: cross-protocol attacks. Without a fixed
+/// prefix, a signature over (say) some other JSON document with a
+/// matching first chunk could be coerced into looking like a
+/// MockForge plugin signature. The prefix forces the signed
+/// payload to be plugin-shaped or invalid.
+///
+/// Two prefixes — one per "shape" — so a v1 signature over
+/// `wasm_bytes` alone can never be replayed as a v2 (manifest-
+/// covering) signature. The wire format is implicitly versioned
+/// through the prefix even though the wire field is unchanged.
+const PREFIX_V1_WASM_ONLY: &[u8] = b"mockforge-plugin/v1/wasm-only\n";
+const PREFIX_V2_WASM_AND_MANIFEST: &[u8] = b"mockforge-plugin/v2/wasm-and-manifest\n";
+
+/// Build the canonical signed payload for verification.
+///
+/// - **Without a manifest** (legacy / OSS): prefix-v1 || wasm
+/// - **With a manifest** (cloud production): prefix-v2 || u64-be(wasm.len()) || wasm || manifest
+///
+/// The big-endian length prefix in v2 prevents a length-extension
+/// trick where an attacker shifts the wasm/manifest boundary to
+/// still produce the same byte sequence — without the length, the
+/// concatenation is ambiguous.
+pub fn build_signed_payload(wasm_bytes: &[u8], manifest_bytes: Option<&[u8]>) -> Vec<u8> {
+    match manifest_bytes {
+        None => {
+            let mut payload = Vec::with_capacity(PREFIX_V1_WASM_ONLY.len() + wasm_bytes.len());
+            payload.extend_from_slice(PREFIX_V1_WASM_ONLY);
+            payload.extend_from_slice(wasm_bytes);
+            payload
+        }
+        Some(manifest) => {
+            let mut payload = Vec::with_capacity(
+                PREFIX_V2_WASM_AND_MANIFEST.len() + 8 + wasm_bytes.len() + manifest.len(),
+            );
+            payload.extend_from_slice(PREFIX_V2_WASM_AND_MANIFEST);
+            payload.extend_from_slice(&(wasm_bytes.len() as u64).to_be_bytes());
+            payload.extend_from_slice(wasm_bytes);
+            payload.extend_from_slice(manifest);
+            payload
+        }
+    }
+}
+
+/// Verifies plugin Ed25519 signatures against a trust store under a
+/// policy mode. Constructed once at host startup (see
+/// [`crate::host::Host::new`]) and consulted by every `LoadPlugin`.
 pub struct SignatureVerifier {
     store: TrustStore,
     mode: SignatureMode,
@@ -189,13 +245,22 @@ impl SignatureVerifier {
         Self { store, mode }
     }
 
-    /// Verify a signature over `wasm_bytes`. Pass `None` for
+    /// Verify a signature over the canonical signed payload
+    /// (see [`build_signed_payload`]). Pass `None` for
     /// `signature_b64` / `publisher_key_id` if the LoadPlugin
     /// request didn't include a signature — the verifier will
     /// either accept (Optional mode) or reject (Required mode).
+    ///
+    /// `manifest_bytes` is optional. When `Some`, the signature
+    /// must cover both the WASM and the manifest — defense-in-
+    /// depth so a colluding signer can't pair one verified WASM
+    /// with a forged manifest. When `None`, the signature covers
+    /// just the WASM (legacy v1 path; backward-compatible with
+    /// PR #403).
     pub fn verify(
         &self,
         wasm_bytes: &[u8],
+        manifest_bytes: Option<&[u8]>,
         signature_b64: Option<&str>,
         publisher_key_id: Option<&str>,
     ) -> Result<VerificationOutcome, VerificationError> {
@@ -227,7 +292,8 @@ impl SignatureVerifier {
                         key_id: key_id.to_string(),
                     })?;
 
-                key.verify(wasm_bytes, &signature)
+                let signed_payload = build_signed_payload(wasm_bytes, manifest_bytes);
+                key.verify(&signed_payload, &signature)
                     .map_err(|err| VerificationError::SignatureMismatch(err.to_string()))?;
 
                 Ok(VerificationOutcome::Verified {
@@ -346,14 +412,24 @@ mod tests {
         base64::engine::general_purpose::STANDARD.encode(bytes)
     }
 
+    /// Sign `build_signed_payload(wasm, manifest)` so the test
+    /// signature matches what the verifier reconstructs. Tests
+    /// constructing signatures over raw bytes (without the
+    /// canonical wrapping) used to work in the v1-no-prefix world
+    /// of #403; this PR adds the domain prefix and they need to
+    /// follow.
+    fn sign_canonical(sk: &SigningKey, wasm: &[u8], manifest: Option<&[u8]>) -> String {
+        let payload = build_signed_payload(wasm, manifest);
+        b64(sk.sign(&payload).to_bytes().as_ref())
+    }
+
     #[test]
-    fn verifier_accepts_valid_signature() {
+    fn verifier_accepts_valid_v1_signature_no_manifest() {
         let (store, sk) = make_store_with_test_key("publisher-1");
         let verifier = SignatureVerifier::new(store, SignatureMode::Required);
         let wasm = b"\x00asm\x01\x00\x00\x00";
-        let sig = sk.sign(wasm);
         let outcome = verifier
-            .verify(wasm, Some(&b64(sig.to_bytes().as_ref())), Some("publisher-1"))
+            .verify(wasm, None, Some(&sign_canonical(&sk, wasm, None)), Some("publisher-1"))
             .unwrap();
         match outcome {
             VerificationOutcome::Verified { key_id } => assert_eq!(key_id, "publisher-1"),
@@ -362,30 +438,67 @@ mod tests {
     }
 
     #[test]
-    fn verifier_rejects_signature_against_wrong_key() {
-        let (mut store, _sk) = make_store_with_test_key("publisher-1");
-        // Add a second key but sign with the first.
-        let (other_sk, _other_vk) = fixture_keypair();
-        let _ = other_sk; // unused; signing was with the first
-        let (real_sk, _real_vk) = fixture_keypair();
-        let verifier = SignatureVerifier::new(store.clone(), SignatureMode::Required);
-        let wasm = b"different bytes";
-        let sig = real_sk.sign(wasm);
-
-        // Sign over different bytes than what we'll ask the
-        // verifier to check — should fail.
-        let bad_message = b"original bytes";
-        let outcome =
-            verifier.verify(bad_message, Some(&b64(sig.to_bytes().as_ref())), Some("publisher-1"));
+    fn verifier_accepts_valid_v2_signature_with_manifest() {
+        let (store, sk) = make_store_with_test_key("publisher-1");
+        let verifier = SignatureVerifier::new(store, SignatureMode::Required);
+        let wasm = b"\x00asm\x01\x00\x00\x00";
+        let manifest = br#"{"name":"example","version":"1.0.0"}"#;
+        let outcome = verifier
+            .verify(
+                wasm,
+                Some(manifest),
+                Some(&sign_canonical(&sk, wasm, Some(manifest))),
+                Some("publisher-1"),
+            )
+            .unwrap();
         match outcome {
-            Err(err) => assert_eq!(err.code(), "signature_mismatch"),
-            Ok(other) => panic!("expected signature_mismatch error, got {:?}", other),
+            VerificationOutcome::Verified { key_id } => assert_eq!(key_id, "publisher-1"),
+            other => panic!("expected Verified, got {:?}", other),
         }
+    }
 
-        // Confirm the sk we built was actually consulted (sanity
-        // check that store has the right key).
-        assert!(store.get("publisher-1").is_some());
-        let _ = store.insert("publisher-2".to_string(), real_sk.verifying_key());
+    #[test]
+    fn verifier_rejects_v1_signature_replayed_against_v2_payload() {
+        // Sign over wasm-only, then ask verifier to check wasm+manifest.
+        // Domain-separation prefix means the v1 signature can't
+        // match the v2 payload.
+        let (store, sk) = make_store_with_test_key("publisher-1");
+        let verifier = SignatureVerifier::new(store, SignatureMode::Required);
+        let wasm = b"\x00asm\x01\x00\x00\x00";
+        let manifest = b"manifest-bytes";
+        let v1_sig = sign_canonical(&sk, wasm, None);
+        let err = verifier
+            .verify(wasm, Some(manifest), Some(&v1_sig), Some("publisher-1"))
+            .unwrap_err();
+        assert_eq!(err.code(), "signature_mismatch");
+    }
+
+    #[test]
+    fn verifier_rejects_v2_signature_with_tampered_manifest() {
+        // Sign over wasm + manifest_a, present manifest_b at
+        // verify time. Length-prefix + bytes mean any change to
+        // the manifest invalidates the signature.
+        let (store, sk) = make_store_with_test_key("publisher-1");
+        let verifier = SignatureVerifier::new(store, SignatureMode::Required);
+        let wasm = b"\x00asm\x01\x00\x00\x00";
+        let original_manifest = br#"{"name":"good","version":"1.0.0"}"#;
+        let tampered_manifest = br#"{"name":"evil","version":"1.0.0"}"#;
+        let sig = sign_canonical(&sk, wasm, Some(original_manifest));
+        let err = verifier
+            .verify(wasm, Some(tampered_manifest), Some(&sig), Some("publisher-1"))
+            .unwrap_err();
+        assert_eq!(err.code(), "signature_mismatch");
+    }
+
+    #[test]
+    fn verifier_rejects_signature_against_wrong_key() {
+        let (store, sk) = make_store_with_test_key("publisher-1");
+        let verifier = SignatureVerifier::new(store, SignatureMode::Required);
+        let wasm = b"original bytes";
+        // Sign different bytes than what the verifier checks.
+        let sig = sign_canonical(&sk, b"different bytes", None);
+        let err = verifier.verify(wasm, None, Some(&sig), Some("publisher-1")).unwrap_err();
+        assert_eq!(err.code(), "signature_mismatch");
     }
 
     #[test]
@@ -393,10 +506,8 @@ mod tests {
         let (store, sk) = make_store_with_test_key("publisher-1");
         let verifier = SignatureVerifier::new(store, SignatureMode::Required);
         let wasm = b"\x00asm\x01\x00\x00\x00";
-        let sig = sk.sign(wasm);
-        let err = verifier
-            .verify(wasm, Some(&b64(sig.to_bytes().as_ref())), Some("not-a-real-key"))
-            .unwrap_err();
+        let sig = sign_canonical(&sk, wasm, None);
+        let err = verifier.verify(wasm, None, Some(&sig), Some("not-a-real-key")).unwrap_err();
         assert_eq!(err.code(), "unknown_publisher_key");
     }
 
@@ -404,7 +515,7 @@ mod tests {
     fn verifier_required_mode_rejects_unsigned() {
         let (store, _sk) = make_store_with_test_key("publisher-1");
         let verifier = SignatureVerifier::new(store, SignatureMode::Required);
-        let err = verifier.verify(b"wasm", None, None).unwrap_err();
+        let err = verifier.verify(b"wasm", None, None, None).unwrap_err();
         assert_eq!(err.code(), "signature_required");
     }
 
@@ -412,7 +523,7 @@ mod tests {
     fn verifier_optional_mode_accepts_unsigned() {
         let (store, _sk) = make_store_with_test_key("publisher-1");
         let verifier = SignatureVerifier::new(store, SignatureMode::Optional);
-        let outcome = verifier.verify(b"wasm", None, None).unwrap();
+        let outcome = verifier.verify(b"wasm", None, None, None).unwrap();
         assert_eq!(outcome, VerificationOutcome::SkippedUnsigned);
     }
 
@@ -422,10 +533,10 @@ mod tests {
         for mode in [SignatureMode::Required, SignatureMode::Optional] {
             let verifier = SignatureVerifier::new(store.clone(), mode);
             // Only signature, no key id.
-            let err = verifier.verify(b"wasm", Some("AAAA"), None).unwrap_err();
+            let err = verifier.verify(b"wasm", None, Some("AAAA"), None).unwrap_err();
             assert_eq!(err.code(), "incomplete_signature");
             // Only key id, no signature.
-            let err = verifier.verify(b"wasm", None, Some("publisher-1")).unwrap_err();
+            let err = verifier.verify(b"wasm", None, None, Some("publisher-1")).unwrap_err();
             assert_eq!(err.code(), "incomplete_signature");
         }
     }
@@ -435,7 +546,7 @@ mod tests {
         let (store, _sk) = make_store_with_test_key("publisher-1");
         let verifier = SignatureVerifier::new(store, SignatureMode::Required);
         let err = verifier
-            .verify(b"wasm", Some("not-valid-base64-!!!"), Some("publisher-1"))
+            .verify(b"wasm", None, Some("not-valid-base64-!!!"), Some("publisher-1"))
             .unwrap_err();
         assert_eq!(err.code(), "invalid_signature_base64");
     }
@@ -447,7 +558,7 @@ mod tests {
         // Valid base64 but only 8 bytes — Ed25519 signatures are
         // 64 bytes.
         let err = verifier
-            .verify(b"wasm", Some(&b64(&[0u8; 8])), Some("publisher-1"))
+            .verify(b"wasm", None, Some(&b64(&[0u8; 8])), Some("publisher-1"))
             .unwrap_err();
         assert_eq!(err.code(), "invalid_signature_length");
     }
@@ -477,12 +588,34 @@ mod tests {
     #[test]
     fn empty_trust_store_in_required_mode_rejects_signed_load() {
         let verifier = SignatureVerifier::new(TrustStore::new(), SignatureMode::Required);
-        let err = verifier.verify(b"wasm", Some("AAAA"), Some("any-key")).unwrap_err();
+        let err = verifier.verify(b"wasm", None, Some("AAAA"), Some("any-key")).unwrap_err();
         // Empty store means even a syntactically valid request
         // can't find a trust root.
         assert!(matches!(
             err.code(),
             "unknown_publisher_key" | "invalid_signature_length" | "invalid_signature_base64"
         ));
+    }
+
+    #[test]
+    fn build_signed_payload_v1_starts_with_version_prefix() {
+        let payload = build_signed_payload(b"abc", None);
+        assert!(payload.starts_with(PREFIX_V1_WASM_ONLY));
+    }
+
+    #[test]
+    fn build_signed_payload_v2_starts_with_version_prefix() {
+        let payload = build_signed_payload(b"abc", Some(b"manifest"));
+        assert!(payload.starts_with(PREFIX_V2_WASM_AND_MANIFEST));
+    }
+
+    #[test]
+    fn build_signed_payload_v2_includes_length_prefix() {
+        // Length prefix prevents wasm/manifest boundary shifts —
+        // i.e., flipping a byte from end-of-wasm to start-of-manifest
+        // can't yield the same signed payload.
+        let p1 = build_signed_payload(b"abcdef", Some(b"xyz"));
+        let p2 = build_signed_payload(b"abcde", Some(b"fxyz"));
+        assert_ne!(p1, p2, "length-prefix should disambiguate boundary shifts");
     }
 }

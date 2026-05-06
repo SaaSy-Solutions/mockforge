@@ -58,9 +58,11 @@ pub enum Request {
         permissions: serde_json::Value,
         /// Base64-encoded WASM module bytes.
         wasm_b64: String,
-        /// Base64-encoded Ed25519 signature over the decoded WASM
-        /// bytes (64 bytes raw, ~88 chars after base64). Required
-        /// in cloud mode. Pairs with `publisher_key_id`.
+        /// Base64-encoded Ed25519 signature. The signed payload is
+        /// `build_signed_payload(wasm, manifest)` from `signing.rs`
+        /// — domain-prefixed so v1 (wasm-only) and v2 (with
+        /// manifest) signatures can't be cross-replayed. Pairs
+        /// with `publisher_key_id`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         signature_b64: Option<String>,
         /// Trust-root id naming the public key the signature is
@@ -68,6 +70,12 @@ pub enum Request {
         /// `signature_b64` — both or neither.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         publisher_key_id: Option<String>,
+        /// Optional base64-encoded plugin manifest. When present,
+        /// the signature must cover both WASM and manifest
+        /// (defense-in-depth). Content is opaque to the signing
+        /// layer; the host parses it after verification.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        manifest_b64: Option<String>,
     },
     /// Detach a plugin and free its sandbox.
     UnloadPlugin {
@@ -181,6 +189,7 @@ mod tests {
             wasm_b64: "AGFzbQEAAAA=".into(), // empty WASM module
             signature_b64: None,
             publisher_key_id: None,
+            manifest_b64: None,
         };
         let bytes = serde_json::to_vec(&req).unwrap();
         let parsed: Request = serde_json::from_slice(&bytes).unwrap();
@@ -215,6 +224,7 @@ mod tests {
             wasm_b64: "AGFzbQEAAAA=".into(),
             signature_b64: Some("BBBB".repeat(22)), // 88-char base64-shaped value
             publisher_key_id: Some("publisher-1".into()),
+            manifest_b64: None,
         };
         let bytes = serde_json::to_vec(&req).unwrap();
         let parsed: Request = serde_json::from_slice(&bytes).unwrap();
@@ -241,6 +251,7 @@ mod tests {
             wasm_b64: "AGFzbQEAAAA=".into(),
             signature_b64: None,
             publisher_key_id: None,
+            manifest_b64: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         // skip_serializing_if drops the keys entirely so older

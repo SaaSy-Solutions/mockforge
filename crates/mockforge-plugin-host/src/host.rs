@@ -138,6 +138,7 @@ impl Host {
     /// `SignatureVerifier` before any bytes touch the loader.
     /// `signature_b64` and `publisher_key_id` must be passed
     /// together or both `None`.
+    #[allow(clippy::too_many_arguments)]
     pub async fn load_plugin(
         &self,
         plugin_name: &str,
@@ -146,6 +147,7 @@ impl Host {
         wasm_bytes: Vec<u8>,
         signature_b64: Option<String>,
         publisher_key_id: Option<String>,
+        manifest_bytes: Option<Vec<u8>>,
     ) -> Result<PluginId, HostError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.cmd_tx
@@ -156,6 +158,7 @@ impl Host {
                 wasm_bytes,
                 signature_b64,
                 publisher_key_id,
+                manifest_bytes,
                 reply: reply_tx,
             })
             .await
@@ -219,6 +222,7 @@ enum Command {
         wasm_bytes: Vec<u8>,
         signature_b64: Option<String>,
         publisher_key_id: Option<String>,
+        manifest_bytes: Option<Vec<u8>>,
         reply: oneshot::Sender<Result<PluginId, HostError>>,
     },
     Unload {
@@ -270,6 +274,7 @@ async fn actor_loop(
                         wasm_bytes,
                         signature_b64,
                         publisher_key_id,
+                        manifest_bytes,
                         reply,
                     } => {
                         let result = handle_load(
@@ -283,6 +288,7 @@ async fn actor_loop(
                             wasm_bytes,
                             signature_b64.as_deref(),
                             publisher_key_id.as_deref(),
+                            manifest_bytes.as_deref(),
                         )
                         .await;
                         let _ = reply.send(result);
@@ -372,6 +378,7 @@ async fn handle_load(
     wasm_bytes: Vec<u8>,
     signature_b64: Option<&str>,
     publisher_key_id: Option<&str>,
+    manifest_bytes: Option<&[u8]>,
 ) -> Result<PluginId, HostError> {
     // Reject revoked plugins before any other work — including
     // signature verification. A revoked plugin shouldn't get
@@ -387,7 +394,7 @@ async fn handle_load(
     // Verify the signature *before* the loader sees the bytes.
     // Bypass-via-loader-bug is impossible if the bytes never
     // reach the loader on a verification failure.
-    let outcome = verifier.verify(&wasm_bytes, signature_b64, publisher_key_id)?;
+    let outcome = verifier.verify(&wasm_bytes, manifest_bytes, signature_b64, publisher_key_id)?;
     match &outcome {
         crate::signing::VerificationOutcome::Verified { key_id } => {
             tracing::info!(plugin_name, version = version_str, key_id, "plugin signature verified");
@@ -647,6 +654,7 @@ mod tests {
                 minimal_wasm(),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -666,6 +674,7 @@ mod tests {
                 minimal_wasm(),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -675,6 +684,7 @@ mod tests {
                     "1.0.0",
                     serde_json::json!({}),
                     minimal_wasm(),
+                    None,
                     None,
                     None,
                 )
@@ -692,6 +702,7 @@ mod tests {
                 "1.0.0",
                 serde_json::json!({}),
                 minimal_wasm(),
+                None,
                 None,
                 None,
             )
@@ -751,6 +762,7 @@ mod tests {
                     minimal_wasm(),
                     None,
                     None,
+                    None,
                 )
                 .await
                 .unwrap_err();
@@ -774,6 +786,7 @@ mod tests {
                     minimal_wasm(),
                     Some(sig_b64),
                     Some("unknown-key".to_string()),
+                    None,
                 )
                 .await
                 .unwrap_err();
@@ -823,7 +836,15 @@ mod tests {
 
         run_with_blocklist(bl, |host| async move {
             let err = host
-                .load_plugin("evil", "1.0.0", serde_json::json!({}), minimal_wasm(), None, None)
+                .load_plugin(
+                    "evil",
+                    "1.0.0",
+                    serde_json::json!({}),
+                    minimal_wasm(),
+                    None,
+                    None,
+                    None,
+                )
                 .await
                 .unwrap_err();
             assert_eq!(err.code(), "revoked");
@@ -850,9 +871,17 @@ mod tests {
 
         run_with_blocklist(bl, |host| async move {
             // A different plugin with a different version is fine.
-            host.load_plugin("good", "1.0.0", serde_json::json!({}), minimal_wasm(), None, None)
-                .await
-                .unwrap();
+            host.load_plugin(
+                "good",
+                "1.0.0",
+                serde_json::json!({}),
+                minimal_wasm(),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
         });
     }
 
@@ -865,6 +894,7 @@ mod tests {
                     "not-a-version",
                     serde_json::json!({}),
                     minimal_wasm(),
+                    None,
                     None,
                     None,
                 )
