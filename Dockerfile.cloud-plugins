@@ -1,0 +1,111 @@
+# MockForge Cloud Plugins — multi-process container image.
+#
+# Bundles the three processes called for by the trust RFC §5 into
+# one container suitable for a Fly machine:
+#   - mockforge        (main, user-facing HTTP/admin)
+#   - mockforge-plugin-host (sidecar; owns the WASM runtime)
+#   - mockforge-plugin-egress (HTTP CONNECT proxy enforcing the
+#                              per-plugin allowlist)
+#
+# Use this image only on plugin-enabled hosted-mock deployments —
+# the existing mockforge:latest image (see ./Dockerfile) is still
+# correct for non-plugin deployments and stays smaller.
+#
+# Sizing per the build-vs-buy spike (#387) and the real-Fly
+# measurement (#398): this image needs at least
+# `shared-cpu-1x:512MB` for Pro tier and `shared-cpu-1x:1024MB`
+# for Team tier. See FlyioGuest::for_hosted_mock for the chooser.
+
+# ─── Stage 0: UI bundle ─────────────────────────────────────────────
+# Same pattern as the main Dockerfile — Vite + pnpm produce the
+# admin UI assets the Rust binary embeds.
+FROM node:22-slim AS ui-builder
+
+WORKDIR /ui
+RUN corepack enable
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+COPY crates/mockforge-ui/ui/package.json crates/mockforge-ui/ui/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY crates/mockforge-ui/ui/ ./
+RUN pnpm build
+
+# ─── Stage 1: Rust builder ──────────────────────────────────────────
+FROM rust:1.90-slim AS builder
+
+RUN apt-get update && apt-get install -y \
+        pkg-config \
+        libssl-dev \
+        protobuf-compiler \
+        build-essential \
+        g++ \
+        cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY Cargo.toml Cargo.lock ./
+# Strip the same workspace members the main Dockerfile strips —
+# they don't contribute to the runtime binaries.
+RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"tests"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/\s*"desktop-app"\s*,\?\s*$/d' Cargo.toml && \
+    sed -i '/# Integration tests package/d' Cargo.toml
+
+COPY crates/ ./crates/
+COPY proto/ ./proto/
+COPY templates/ ./templates/
+
+# Copy the pre-built UI bundle into the position the Rust build
+# expects to embed it from.
+COPY --from=ui-builder /ui/dist ./crates/mockforge-ui/ui/dist
+
+# Build all three binaries in one cargo invocation so they share
+# the dependency graph cache.
+RUN cargo build --release \
+        --bin mockforge \
+        --bin mockforge-plugin-host \
+        --bin mockforge-plugin-egress
+
+# ─── Stage 2: Runtime image ─────────────────────────────────────────
+# Debian slim with just the libraries the binaries dlopen at
+# runtime + tini for PID 1 reaping. No build toolchain.
+FROM debian:trixie-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tini \
+        ca-certificates \
+        libssl3 \
+        procps \
+        netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user for the runtime processes. tini stays root so it
+# can reap children regardless of UID; the application binaries
+# drop down to this UID via the entrypoint.
+RUN useradd --system --create-home --shell /sbin/nologin --uid 1000 mockforge
+
+# Copy the three binaries.
+COPY --from=builder /app/target/release/mockforge /usr/local/bin/mockforge
+COPY --from=builder /app/target/release/mockforge-plugin-host /usr/local/bin/mockforge-plugin-host
+COPY --from=builder /app/target/release/mockforge-plugin-egress /usr/local/bin/mockforge-plugin-egress
+
+# Entrypoint script orchestrates the three processes.
+COPY scripts/cloud-plugins-entrypoint.sh /usr/local/bin/cloud-plugins-entrypoint.sh
+RUN chmod +x /usr/local/bin/cloud-plugins-entrypoint.sh
+
+# Default plugin-host socket path lives under /run so it doesn't
+# pollute /tmp and is auto-created with appropriate perms.
+RUN mkdir -p /run/mockforge && chown mockforge:mockforge /run/mockforge
+
+# Expose the standard mockforge ports. The egress proxy stays on
+# loopback (it's only meant for the plugin-host, not external
+# callers) so we don't expose it.
+EXPOSE 3000 3001 9080
+
+# Health check — main mockforge's admin liveness endpoint covers
+# all three because the entrypoint takes the whole container down
+# if any child dies.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD nc -z 127.0.0.1 9080 || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/cloud-plugins-entrypoint.sh"]
