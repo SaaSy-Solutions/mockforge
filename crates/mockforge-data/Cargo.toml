@@ -27,7 +27,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 fake = { version = "3.0", features = ["derive", "http", "chrono", "uuid", "random_color"] }
-fastrand = "2.0"
+fastrand = "2.4"
 itertools = { workspace = true }
 reqwest = { workspace = true }
 url = { workspace = true }
