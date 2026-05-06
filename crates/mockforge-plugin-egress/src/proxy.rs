@@ -5,14 +5,14 @@
 //! which is `Send + Sync`.
 
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::denylist::denied_ip;
-use crate::policy::{HostPolicy, PolicyDecision};
+use crate::handle::PolicyHandle;
+use crate::policy::PolicyDecision;
 
 /// Configuration for the proxy server.
 #[derive(Clone)]
@@ -20,9 +20,13 @@ pub struct ProxyConfig {
     /// TCP address to bind. Plugins set `HTTP_PROXY` /
     /// `HTTPS_PROXY` env vars at this address.
     pub listen: SocketAddr,
-    /// Per-plugin allowlist policy. Wrapped in `Arc` so the
-    /// per-connection tasks can clone the handle cheaply.
-    pub policy: Arc<HostPolicy>,
+    /// Hot-swappable allowlist handle. Per-connection tasks clone
+    /// the handle (cheap), snapshot it for each request, and drop
+    /// the snapshot when the request ends. The SIGHUP signal
+    /// handler in `main.rs` swaps the inner policy without
+    /// affecting in-flight connections — those finish under
+    /// their own snapshot.
+    pub policy: PolicyHandle,
     /// Hard cap on the number of bytes we'll buffer while reading
     /// the request line + headers. 64 KiB is generous for realistic
     /// HTTP traffic; protects against malicious clients sending
@@ -33,7 +37,7 @@ pub struct ProxyConfig {
 impl ProxyConfig {
     /// Convenience constructor with sensible defaults for header
     /// limits.
-    pub fn new(listen: SocketAddr, policy: Arc<HostPolicy>) -> Self {
+    pub fn new(listen: SocketAddr, policy: PolicyHandle) -> Self {
         Self {
             listen,
             policy,
@@ -72,7 +76,7 @@ pub async fn run_proxy(config: ProxyConfig) -> Result<()> {
 async fn handle_connection(
     mut stream: TcpStream,
     _peer: SocketAddr,
-    policy: Arc<HostPolicy>,
+    policy: PolicyHandle,
     max_header_bytes: usize,
 ) -> Result<()> {
     let request_line = read_request_line(&mut stream, max_header_bytes).await?;
@@ -191,7 +195,7 @@ async fn handle_connect(
     mut client: TcpStream,
     host: String,
     port: u16,
-    policy: Arc<HostPolicy>,
+    policy: PolicyHandle,
 ) -> Result<()> {
     // Drain remaining client headers before deciding — RFC 7231
     // requires consuming through the empty line. Use a fresh
