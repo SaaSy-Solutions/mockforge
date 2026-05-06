@@ -1,53 +1,87 @@
-//! Memory tracking and enforcement for WASM sandbox
+//! Memory tracking and enforcement for the WASM sandbox.
 //!
-//! This module provides real-time memory tracking and enforcement of limits
-//! using Wasmtime's resource monitoring capabilities
+//! [`MemoryTracker`] implements Wasmtime's [`ResourceLimiter`] trait so
+//! the host can deny linear-memory growth that would exceed the
+//! configured cap, and observe the per-store peak. Wire it into a
+//! `Store<T>` by holding the tracker inside the store's data type and
+//! installing the limiter:
+//!
+//! ```ignore
+//! struct StoreData {
+//!     wasi: WasiCtx,
+//!     tracker: MemoryTracker,
+//! }
+//!
+//! let mut store = Store::new(&engine, StoreData {
+//!     wasi: wasi_ctx,
+//!     tracker: MemoryTracker::with_byte_limit(10 * 1024 * 1024),
+//! });
+//! store.limiter(|d| &mut d.tracker as &mut dyn wasmtime::ResourceLimiter);
+//! ```
+//!
+//! Modern Wasmtime (≥27) removed the standalone `Store::set_limits`
+//! API in favor of the closure-based `Store::limiter`, which is why
+//! the limiter must live inside the store's data type.
 
-use wasmtime::{ResourceLimiter, Store, StoreLimits, StoreLimitsBuilder};
+use wasmtime::ResourceLimiter;
 
-/// Memory tracker for WASM store
+/// Memory tracker for a single Wasmtime `Store`.
+///
+/// One tracker per store. The `Store::limiter` closure should hand
+/// back `&mut self` so Wasmtime can call `memory_growing` /
+/// `table_growing` for resource accounting.
 pub struct MemoryTracker {
-    /// Maximum memory allowed (bytes)
+    /// Maximum memory allowed (bytes).
     max_memory_bytes: usize,
-    /// Current memory usage (bytes)
+    /// Current memory usage (bytes), as reported by the most recent
+    /// `memory_growing` callback.
     current_memory_bytes: usize,
-    /// Peak memory usage (bytes)
+    /// Peak memory ever observed across the lifetime of this store.
+    /// Linear memory only grows in WASM, so this is monotonically
+    /// non-decreasing.
     peak_memory_bytes: usize,
-    /// Maximum instances allowed
-    max_instances: usize,
-    /// Current instances
-    current_instances: usize,
-    /// Maximum tables allowed
+    /// Maximum tables allowed.
     max_tables: usize,
-    /// Current tables
+    /// Current table count.
     current_tables: usize,
 }
 
 impl MemoryTracker {
-    /// Create a new memory tracker
+    /// Create a tracker with a megabyte-precision cap.
     pub fn new(max_memory_mb: usize) -> Self {
+        Self::with_byte_limit(max_memory_mb * 1024 * 1024)
+    }
+
+    /// Create a tracker with a byte-precision cap. Use this when the
+    /// caller already has a value in bytes (e.g. from
+    /// `ExecutionLimits::max_memory_bytes`) so the conversion can be
+    /// exact.
+    pub fn with_byte_limit(max_memory_bytes: usize) -> Self {
         Self {
-            max_memory_bytes: max_memory_mb * 1024 * 1024,
+            max_memory_bytes,
             current_memory_bytes: 0,
             peak_memory_bytes: 0,
-            max_instances: 10,
-            current_instances: 0,
             max_tables: 10,
             current_tables: 0,
         }
     }
 
-    /// Get current memory usage in bytes
+    /// Current linear-memory size in bytes.
     pub fn current_memory(&self) -> usize {
         self.current_memory_bytes
     }
 
-    /// Get peak memory usage in bytes
+    /// Highest linear-memory size observed in this store's lifetime.
     pub fn peak_memory(&self) -> usize {
         self.peak_memory_bytes
     }
 
-    /// Get memory usage as percentage
+    /// Configured upper bound in bytes.
+    pub fn max_memory(&self) -> usize {
+        self.max_memory_bytes
+    }
+
+    /// Memory usage as a percentage of the configured limit.
     pub fn memory_usage_percent(&self) -> f64 {
         if self.max_memory_bytes == 0 {
             0.0
@@ -56,12 +90,11 @@ impl MemoryTracker {
         }
     }
 
-    /// Check if memory limit exceeded
+    /// Whether the most recent observation exceeded the cap.
     pub fn is_memory_exceeded(&self) -> bool {
         self.current_memory_bytes > self.max_memory_bytes
     }
 
-    /// Update peak memory if current exceeds it
     fn update_peak(&mut self) {
         if self.current_memory_bytes > self.peak_memory_bytes {
             self.peak_memory_bytes = self.current_memory_bytes;
@@ -70,46 +103,39 @@ impl MemoryTracker {
 }
 
 impl ResourceLimiter for MemoryTracker {
-    /// Called when memory is requested
     fn memory_growing(
         &mut self,
         current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> anyhow::Result<bool> {
-        // Calculate the new memory size
-        let new_size = desired;
-
-        // Check if it exceeds the limit
-        if new_size > self.max_memory_bytes {
+        if desired > self.max_memory_bytes {
             tracing::warn!(
                 "Memory growth denied: {} bytes requested, {} bytes allowed",
-                new_size,
+                desired,
                 self.max_memory_bytes
             );
-            return Ok(false); // Deny the allocation
+            return Ok(false);
         }
 
-        // Update current memory
-        self.current_memory_bytes = new_size;
+        self.current_memory_bytes = desired;
         self.update_peak();
 
         tracing::debug!(
             "Memory growth allowed: {} -> {} bytes ({:.1}% of limit)",
             current,
-            new_size,
+            desired,
             self.memory_usage_percent()
         );
 
-        Ok(true) // Allow the allocation
+        Ok(true)
     }
 
-    /// Called when a table is created
     fn table_growing(
         &mut self,
-        _current: u32,
-        _desired: u32,
-        _maximum: Option<u32>,
+        _current: usize,
+        _desired: usize,
+        _maximum: Option<usize>,
     ) -> anyhow::Result<bool> {
         if self.current_tables >= self.max_tables {
             tracing::warn!(
@@ -124,78 +150,52 @@ impl ResourceLimiter for MemoryTracker {
         Ok(true)
     }
 
-    /// Called when an instance is created
-    fn instances(&self) -> usize {
-        self.current_instances
-    }
-
-    /// Called to get maximum instances
     fn tables(&self) -> usize {
         self.current_tables
     }
 
-    /// Called to get current memory size
     fn memories(&self) -> usize {
-        1 // We allow one memory instance
+        // We allow one memory instance per plugin sandbox.
+        1
     }
 }
 
-/// Configure a Wasmtime store with memory limits
-pub fn configure_store_with_limits<T>(
-    store: &mut Store<T>,
-    max_memory_mb: usize,
-) -> MemoryTracker {
-    let tracker = MemoryTracker::new(max_memory_mb);
-
-    // Set up store limits
-    let limits = StoreLimitsBuilder::new()
-        .memory_size(max_memory_mb * 1024 * 1024)
-        .instances(10)
-        .tables(10)
-        .memories(1)
-        .build();
-
-    store.limiter(|_| &mut tracker);
-    store.set_limits(limits);
-
-    tracker
-}
-
-/// Memory usage statistics
+/// Snapshot of a tracker's state. Cheap to clone for emitting on the
+/// invocation metrics bus or returning from a status endpoint.
 #[derive(Debug, Clone)]
 pub struct MemoryStats {
-    /// Current memory usage (bytes)
+    /// Current linear-memory size in bytes.
     pub current_bytes: usize,
-    /// Peak memory usage (bytes)
+    /// Peak linear-memory size observed in this store's lifetime.
     pub peak_bytes: usize,
-    /// Maximum allowed (bytes)
+    /// Configured upper bound in bytes.
     pub limit_bytes: usize,
-    /// Usage percentage
+    /// Current usage as a percentage of the configured limit.
     pub usage_percent: f64,
 }
 
 impl MemoryStats {
-    /// Create from memory tracker
+    /// Capture a snapshot of the current tracker state.
     pub fn from_tracker(tracker: &MemoryTracker) -> Self {
         Self {
             current_bytes: tracker.current_memory(),
             peak_bytes: tracker.peak_memory(),
-            limit_bytes: tracker.max_memory_bytes,
+            limit_bytes: tracker.max_memory(),
             usage_percent: tracker.memory_usage_percent(),
         }
     }
 
-    /// Check if usage is critical (>90%)
+    /// Usage above 90% of the limit.
     pub fn is_critical(&self) -> bool {
         self.usage_percent > 90.0
     }
 
-    /// Check if usage is high (>75%)
+    /// Usage above 75% of the limit.
     pub fn is_high(&self) -> bool {
         self.usage_percent > 75.0
     }
 
-    /// Get human-readable summary
+    /// Human-readable summary for log lines and the admin UI.
     pub fn summary(&self) -> String {
         format!(
             "{} / {} MB ({:.1}%), peak: {} MB",
@@ -213,32 +213,35 @@ mod tests {
 
     #[test]
     fn test_memory_tracker_creation() {
-        let tracker = MemoryTracker::new(10); // 10MB
+        let tracker = MemoryTracker::new(10);
         assert_eq!(tracker.current_memory(), 0);
         assert_eq!(tracker.peak_memory(), 0);
+        assert_eq!(tracker.max_memory(), 10 * 1024 * 1024);
         assert_eq!(tracker.memory_usage_percent(), 0.0);
     }
 
     #[test]
-    fn test_memory_tracker_growing() {
-        let mut tracker = MemoryTracker::new(10); // 10MB max
+    fn test_with_byte_limit_is_exact() {
+        let tracker = MemoryTracker::with_byte_limit(5_242_880); // exact 5 MiB
+        assert_eq!(tracker.max_memory(), 5_242_880);
+    }
 
-        // Allow growth within limit
-        let result = tracker.memory_growing(0, 5 * 1024 * 1024, None);
-        assert!(result.is_ok());
-        assert!(result.unwrap());
+    #[test]
+    fn test_memory_tracker_growing() {
+        let mut tracker = MemoryTracker::new(10);
+
+        let ok = tracker.memory_growing(0, 5 * 1024 * 1024, None).unwrap();
+        assert!(ok);
         assert_eq!(tracker.current_memory(), 5 * 1024 * 1024);
         assert_eq!(tracker.peak_memory(), 5 * 1024 * 1024);
 
-        // Deny growth exceeding limit
-        let result = tracker.memory_growing(5 * 1024 * 1024, 15 * 1024 * 1024, None);
-        assert!(result.is_ok());
-        assert!(!result.unwrap()); // Should deny
+        let denied = tracker.memory_growing(5 * 1024 * 1024, 15 * 1024 * 1024, None).unwrap();
+        assert!(!denied);
     }
 
     #[test]
     fn test_memory_stats() {
-        let mut tracker = MemoryTracker::new(10); // 10MB
+        let mut tracker = MemoryTracker::new(10);
         tracker.memory_growing(0, 8 * 1024 * 1024, None).unwrap();
 
         let stats = MemoryStats::from_tracker(&tracker);
@@ -252,15 +255,15 @@ mod tests {
     fn test_memory_tracker_peak() {
         let mut tracker = MemoryTracker::new(10);
 
-        // Grow to 5MB
         tracker.memory_growing(0, 5 * 1024 * 1024, None).unwrap();
         assert_eq!(tracker.peak_memory(), 5 * 1024 * 1024);
 
-        // Grow to 8MB
         tracker.memory_growing(5 * 1024 * 1024, 8 * 1024 * 1024, None).unwrap();
         assert_eq!(tracker.peak_memory(), 8 * 1024 * 1024);
 
-        // Shrink to 6MB (peak should remain 8MB)
+        // Peak persists even after a hypothetical shrink (linear memory
+        // doesn't actually shrink in WASM, but the invariant still holds
+        // if a future Wasmtime version added shrink callbacks).
         tracker.current_memory_bytes = 6 * 1024 * 1024;
         assert_eq!(tracker.peak_memory(), 8 * 1024 * 1024);
     }
@@ -270,15 +273,12 @@ mod tests {
         let mut tracker = MemoryTracker::new(10);
         tracker.max_tables = 2;
 
-        // First table should succeed
         assert!(tracker.table_growing(0, 1, None).unwrap());
         assert_eq!(tracker.current_tables, 1);
 
-        // Second table should succeed
         assert!(tracker.table_growing(1, 2, None).unwrap());
         assert_eq!(tracker.current_tables, 2);
 
-        // Third table should be denied
         assert!(!tracker.table_growing(2, 3, None).unwrap());
     }
 }
