@@ -37,9 +37,11 @@
 //!   same allowlist. No "this rewrite-rule may call X, that one Y."
 
 pub mod denylist;
+pub mod handle;
 pub mod policy;
 pub mod proxy;
 
 pub use denylist::is_denied_target;
+pub use handle::{load_policy_from_file, PolicyHandle, ReloadError};
 pub use policy::{HostPolicy, PolicyDecision};
 pub use proxy::{run_proxy, ProxyConfig};
