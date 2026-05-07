@@ -64,6 +64,11 @@ describe('ChainsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Force local mode — global setup sets VITE_API_BASE_URL, which would
+    // route ChainsPage through cloud dispatchers instead of the mocked
+    // apiService.* methods.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('VITE_MOCKFORGE_MODE', '');
     (apiService.listChains as any) = vi.fn().mockResolvedValue({ chains: mockChains });
   });
 
