@@ -2795,9 +2795,15 @@ pub async fn trigger_smoke_run(
         // Hide existence from non-members of the deployment's org.
         return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
     }
-    if deployment.status != "running" {
+    if deployment.status != "active" {
+        // `active` is the canonical "deployment is up + serving" status
+        // (see `DeploymentStatus::Active` in mockforge-registry-core).
+        // Anything else (`pending`, `deploying`, `stopped`, `failed`,
+        // `deleting`) means we'd be probing a deployment that isn't
+        // actually serving traffic — every route would surface as a
+        // misleading red.
         return Err(ApiError::InvalidRequest(format!(
-            "Deployment is in '{}' status; smoke runs require 'running'",
+            "Deployment is in '{}' status; smoke runs require 'active'",
             deployment.status,
         )));
     }
