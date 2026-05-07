@@ -11,10 +11,12 @@
 //!     for a deployment and asserts a percentile latency < threshold.
 //!   - `error_rate` — same aggregate endpoint, asserts
 //!     `error_count / count <= threshold_rate`.
+//!   - `contract_stability` — aggregates `contract_diff_findings`
+//!     for a monitored service over a window, asserts
+//!     `breaking_count <= max_breaking` (default 0).
 //!
 //! Stubbed (returns `errored` with a clear "not yet implemented in
-//! cloud" message; tracking PRs follow this one):
-//!   - `contract_stability`
+//! cloud" message; tracking PR follows this one):
 //!   - `custom_query` — likely permanent stub since we don't run
 //!     arbitrary user code on cloud workers; will surface in the UI as
 //!     "self-hosted only".
@@ -34,7 +36,10 @@ use std::time::Instant;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::callbacks::{DeploymentLatencyStats, FitnessFunctionDefinition, RegistryCallbacks};
+use crate::callbacks::{
+    DeploymentLatencyStats, FitnessFunctionDefinition, MonitoredServiceContractStability,
+    RegistryCallbacks,
+};
 use crate::error::Result;
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 
@@ -102,7 +107,10 @@ impl Executor for FitnessExecutor {
                 evaluate_latency_threshold(&function, callbacks, &job, started).await
             }
             "error_rate" => evaluate_error_rate(&function, callbacks, &job, started).await,
-            "contract_stability" | "custom_query" => {
+            "contract_stability" => {
+                evaluate_contract_stability(&function, callbacks, &job, started).await
+            }
+            "custom_query" => {
                 errored_run(
                     callbacks,
                     &job,
@@ -614,6 +622,241 @@ async fn evaluate_error_rate(
     })
 }
 
+// ─── contract_stability evaluator ────────────────────────────────────
+
+/// Resolved `contract_stability` config. Different shape from the
+/// latency-based evaluators because it queries a different data
+/// source (contract_diff_findings) keyed off `monitored_service_id`,
+/// not `deployment_id`.
+///
+/// `max_breaking` defaults to 0 — the strictest reading of "stable".
+/// `max_non_breaking` is opt-in: when omitted, non-breaking findings
+/// don't fail the assertion, matching the typical "I only care about
+/// breaking drift" check users want by default.
+#[derive(Debug)]
+struct ContractStabilityConfig {
+    monitored_service_id: Uuid,
+    max_breaking: i64,
+    max_non_breaking: Option<i64>,
+    window_minutes: i64,
+}
+
+/// 24h is the default window — contract diffs run on cron schedules
+/// (typically per-deploy or daily), so a 1h window often misses signal.
+const CONTRACT_STABILITY_DEFAULT_WINDOW: i64 = 1_440;
+/// 1 week ceiling. Matches the registry handler's clamp.
+const CONTRACT_STABILITY_MAX_WINDOW: i64 = 10_080;
+
+fn parse_contract_stability_config(
+    config: &serde_json::Value,
+) -> std::result::Result<ContractStabilityConfig, String> {
+    let monitored_service_id = config
+        .get("monitored_service_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "config.monitored_service_id missing".to_string())
+        .and_then(|s| {
+            Uuid::parse_str(s).map_err(|e| format!("config.monitored_service_id invalid: {e}"))
+        })?;
+    let max_breaking = config.get("max_breaking").and_then(|v| v.as_i64()).unwrap_or(0);
+    if max_breaking < 0 {
+        return Err(format!(
+            "config.max_breaking must be a non-negative integer (got {max_breaking})"
+        ));
+    }
+    let max_non_breaking = match config.get("max_non_breaking") {
+        Some(v) if v.is_null() => None,
+        Some(v) => {
+            let n = v
+                .as_i64()
+                .ok_or_else(|| "config.max_non_breaking must be an integer or null".to_string())?;
+            if n < 0 {
+                return Err(format!(
+                    "config.max_non_breaking must be a non-negative integer (got {n})"
+                ));
+            }
+            Some(n)
+        }
+        None => None,
+    };
+    let window_minutes = config
+        .get("window_minutes")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(CONTRACT_STABILITY_DEFAULT_WINDOW)
+        .clamp(1, CONTRACT_STABILITY_MAX_WINDOW);
+    Ok(ContractStabilityConfig {
+        monitored_service_id,
+        max_breaking,
+        max_non_breaking,
+        window_minutes,
+    })
+}
+
+async fn evaluate_contract_stability(
+    function: &FitnessFunctionDefinition,
+    callbacks: &RegistryCallbacks,
+    job: &RunJob,
+    started: Instant,
+) -> Result<JobOutcome> {
+    let config = match parse_contract_stability_config(&function.config) {
+        Ok(c) => c,
+        Err(reason) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("invalid contract_stability config: {reason}"),
+            )
+            .await;
+        }
+    };
+
+    let stats: MonitoredServiceContractStability = match callbacks
+        .fetch_monitored_service_contract_stability(
+            config.monitored_service_id,
+            config.window_minutes,
+        )
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("failed to fetch contract stability stats: {e}"),
+            )
+            .await;
+        }
+    };
+
+    // No diff runs in the window: report `unknown` rather than passing
+    // by silence. A monitored service with no recent diffs probably
+    // means the schedule is misconfigured — operator should know.
+    if stats.run_count == 0 {
+        callbacks
+            .run_event(
+                job.run_id,
+                2,
+                "log",
+                serde_json::json!({
+                    "level": "warn",
+                    "message": format!(
+                        "No contract diff runs for monitored service {} in the last {} minutes — \
+                         cannot evaluate stability",
+                        config.monitored_service_id, config.window_minutes,
+                    ),
+                    "function_name": function.name,
+                }),
+            )
+            .await?;
+        let elapsed = started.elapsed();
+        return Ok(JobOutcome {
+            status: JobStatus::Errored,
+            runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            summary: Some(serde_json::json!({
+                "executor_phase": "real_contract_stability",
+                "tracking_task": 8,
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "contract_stability",
+                "monitored_service_id": config.monitored_service_id,
+                "window_minutes": config.window_minutes,
+                "max_breaking": config.max_breaking,
+                "measured_value": serde_json::Value::Null,
+                "threshold_value": config.max_breaking,
+                "run_count": 0,
+                "reason": "no_diff_runs",
+            })),
+        });
+    }
+
+    let breaking_pass = stats.breaking_count <= config.max_breaking;
+    let non_breaking_pass = match config.max_non_breaking {
+        Some(cap) => stats.non_breaking_count <= cap,
+        None => true,
+    };
+    let pass = breaking_pass && non_breaking_pass;
+    let event_type = if pass { "fitness_pass" } else { "fitness_fail" };
+    let reason = if pass {
+        String::new()
+    } else if !breaking_pass {
+        format!(
+            "{} breaking finding(s) > max_breaking {}",
+            stats.breaking_count, config.max_breaking,
+        )
+    } else {
+        // Only non-breaking ceiling exceeded.
+        format!(
+            "{} non-breaking finding(s) > max_non_breaking {}",
+            stats.non_breaking_count,
+            config.max_non_breaking.unwrap_or(0),
+        )
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            2,
+            event_type,
+            serde_json::json!({
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "contract_stability",
+                "monitored_service_id": config.monitored_service_id,
+                // Primary axis the assertion fires on. The non-breaking
+                // count is reported alongside but the threshold for it
+                // is opt-in.
+                "measured_value": stats.breaking_count,
+                "threshold_value": config.max_breaking,
+                "breaking_count": stats.breaking_count,
+                "non_breaking_count": stats.non_breaking_count,
+                "cosmetic_count": stats.cosmetic_count,
+                "max_non_breaking": config.max_non_breaking,
+                "run_count": stats.run_count,
+                "latest_run_at": stats.latest_run_at,
+                "window_minutes": config.window_minutes,
+                "reason": reason,
+            }),
+        )
+        .await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    Ok(JobOutcome {
+        status: if pass {
+            JobStatus::Passed
+        } else {
+            JobStatus::Failed
+        },
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "real_contract_stability",
+            "tracking_task": 8,
+            "function_id": function.id,
+            "function_name": function.name,
+            "kind": "contract_stability",
+            "monitored_service_id": config.monitored_service_id,
+            "window_minutes": config.window_minutes,
+            // Same `measured_value` / `threshold_value` contract used
+            // by the other evaluators so mirror_kind_status can
+            // populate `fitness_evaluations` without per-kind logic.
+            // Cast to f64 because the column is DOUBLE PRECISION.
+            "measured_value": stats.breaking_count as f64,
+            "threshold_value": config.max_breaking as f64,
+            "breaking_count": stats.breaking_count,
+            "non_breaking_count": stats.non_breaking_count,
+            "cosmetic_count": stats.cosmetic_count,
+            "max_breaking": config.max_breaking,
+            "max_non_breaking": config.max_non_breaking,
+            "run_count": stats.run_count,
+            "latest_run_at": stats.latest_run_at,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /// Emit a single error log + return an `Errored` outcome. Used for
@@ -907,5 +1150,109 @@ mod tests {
         }))
         .unwrap_err();
         assert!(err.contains("deployment_id"), "got: {err}");
+    }
+
+    fn cs_cfg(json: serde_json::Value) -> std::result::Result<ContractStabilityConfig, String> {
+        parse_contract_stability_config(&json)
+    }
+
+    #[test]
+    fn parse_contract_stability_config_minimal() {
+        let svc = Uuid::new_v4();
+        let c = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+        }))
+        .unwrap();
+        assert_eq!(c.monitored_service_id, svc);
+        assert_eq!(c.max_breaking, 0);
+        assert_eq!(c.max_non_breaking, None);
+        assert_eq!(c.window_minutes, CONTRACT_STABILITY_DEFAULT_WINDOW);
+    }
+
+    #[test]
+    fn parse_contract_stability_config_full() {
+        let svc = Uuid::new_v4();
+        let c = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "max_breaking": 2,
+            "max_non_breaking": 10,
+            "window_minutes": 60,
+        }))
+        .unwrap();
+        assert_eq!(c.max_breaking, 2);
+        assert_eq!(c.max_non_breaking, Some(10));
+        assert_eq!(c.window_minutes, 60);
+    }
+
+    #[test]
+    fn parse_contract_stability_config_explicit_null_non_breaking() {
+        let svc = Uuid::new_v4();
+        // Explicit null is the same as omitting the key — no ceiling
+        // on non-breaking findings.
+        let c = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "max_non_breaking": serde_json::Value::Null,
+        }))
+        .unwrap();
+        assert_eq!(c.max_non_breaking, None);
+    }
+
+    #[test]
+    fn parse_contract_stability_config_clamps_window() {
+        let svc = Uuid::new_v4();
+        let c = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "window_minutes": 99_999,
+        }))
+        .unwrap();
+        assert_eq!(c.window_minutes, CONTRACT_STABILITY_MAX_WINDOW);
+    }
+
+    #[test]
+    fn parse_contract_stability_config_rejects_missing_service() {
+        let err = cs_cfg(serde_json::json!({})).unwrap_err();
+        assert!(err.contains("monitored_service_id"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_contract_stability_config_rejects_invalid_uuid() {
+        let err = cs_cfg(serde_json::json!({
+            "monitored_service_id": "not-a-uuid",
+        }))
+        .unwrap_err();
+        assert!(err.contains("monitored_service_id"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_contract_stability_config_rejects_negative_max_breaking() {
+        let svc = Uuid::new_v4();
+        let err = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "max_breaking": -1,
+        }))
+        .unwrap_err();
+        assert!(err.contains("max_breaking"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_contract_stability_config_rejects_negative_max_non_breaking() {
+        let svc = Uuid::new_v4();
+        let err = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "max_non_breaking": -5,
+        }))
+        .unwrap_err();
+        assert!(err.contains("max_non_breaking"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_contract_stability_config_rejects_non_integer_max_non_breaking() {
+        let svc = Uuid::new_v4();
+        let err = cs_cfg(serde_json::json!({
+            "monitored_service_id": svc.to_string(),
+            "max_non_breaking": "many",
+        }))
+        .unwrap_err();
+        assert!(err.contains("max_non_breaking"), "got: {err}");
     }
 }
