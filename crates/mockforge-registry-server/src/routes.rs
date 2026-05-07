@@ -165,6 +165,16 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/organizations/{org_id}/public-keys",
             get(handlers::public_keys::list_org_public_keys),
         )
+        // Org trust-roots (cloud-plugin signature verification — issue #416)
+        .route(
+            "/api/v1/organizations/{org_id}/trust-roots",
+            get(handlers::trust_roots::list_trust_roots)
+                .post(handlers::trust_roots::create_trust_root),
+        )
+        .route(
+            "/api/v1/organizations/{org_id}/trust-roots/{root_id}/revoke",
+            post(handlers::trust_roots::revoke_trust_root),
+        )
         // 2FA routes
         .route("/api/v1/auth/2fa/setup", get(handlers::two_factor::setup_2fa))
         .route("/api/v1/auth/2fa/verify-setup", post(handlers::two_factor::verify_2fa_setup_with_secret))

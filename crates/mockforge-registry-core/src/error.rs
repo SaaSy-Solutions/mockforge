@@ -75,6 +75,13 @@ pub enum ApiError {
     #[error("Scenario already exists: {0}")]
     ScenarioExists(String),
 
+    /// Generic resource-state conflict — maps to 409 CONFLICT. Use this
+    /// when an action is rejected because the resource is already in the
+    /// requested terminal state (e.g. double-revoke) and the typed
+    /// `*Exists` variants don't apply.
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
     // Authentication and authorization errors
     #[error("Authentication required")]
     AuthRequired,
@@ -194,6 +201,14 @@ impl IntoResponse for ApiError {
                 json!({
                     "resource": "scenario",
                     "name": name
+                }),
+            ),
+            ApiError::Conflict(msg) => (
+                StatusCode::CONFLICT,
+                "CONFLICT",
+                msg.clone(),
+                json!({
+                    "message": msg
                 }),
             ),
 
@@ -497,6 +512,19 @@ mod tests {
     #[tokio::test]
     async fn test_into_response_scenario_exists() {
         let error = ApiError::ScenarioExists("test".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn test_api_error_conflict() {
+        let error = ApiError::Conflict("Trust root is already revoked".to_string());
+        assert_eq!(error.to_string(), "Conflict: Trust root is already revoked");
+    }
+
+    #[tokio::test]
+    async fn test_into_response_conflict() {
+        let error = ApiError::Conflict("test".to_string());
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::CONFLICT);
     }
