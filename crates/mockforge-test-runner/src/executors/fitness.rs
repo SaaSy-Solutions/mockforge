@@ -15,11 +15,22 @@
 //!     for a monitored service over a window, asserts
 //!     `breaking_count <= max_breaking` (default 0).
 //!
-//! Stubbed (returns `errored` with a clear "not yet implemented in
-//! cloud" message; tracking PR follows this one):
-//!   - `custom_query` — likely permanent stub since we don't run
-//!     arbitrary user code on cloud workers; will surface in the UI as
-//!     "self-hosted only".
+//! Permanently cloud-rejected:
+//!   - `custom_query` — this kind is self-hosted-only by design.
+//!     The local driftApi `custom_query` evaluator runs arbitrary
+//!     user-supplied evaluator code (e.g. Lua), which we don't run
+//!     on cloud workers — the security model would have to be
+//!     "trust every workspace owner with code execution on shared
+//!     runners," which isn't a posture we want. Cloud users who
+//!     need custom logic should run self-hosted, or open a feature
+//!     request for a specific declarative check we can implement
+//!     safely (e.g. as a new `kind`).
+//!
+//!     The cloud-side `create_fitness_function` and
+//!     `update_fitness_function` handlers reject `kind='custom_query'`
+//!     at the API boundary so cloud rows can't be created in this
+//!     state. The runner-side rejection here is defense-in-depth
+//!     for any pre-existing rows or scheduled runs.
 //!
 //! `run.suite_id` is the fitness function's id (per the `mirror_kind_status`
 //! convention). The summary the executor returns includes
@@ -111,16 +122,21 @@ impl Executor for FitnessExecutor {
                 evaluate_contract_stability(&function, callbacks, &job, started).await
             }
             "custom_query" => {
+                // Permanent rejection — see module docstring. Cloud
+                // create/update handlers should already block
+                // kind='custom_query', so reaching this arm means
+                // either a pre-existing row or a direct queue insert.
                 errored_run(
                     callbacks,
                     &job,
                     started,
                     2,
-                    format!(
-                        "fitness kind '{}' isn't implemented in the cloud executor yet — \
-                         tracking PR follows #355 item 2",
-                        function.kind
-                    ),
+                    "fitness kind 'custom_query' is self-hosted only — \
+                     run a self-hosted MockForge instance to use arbitrary \
+                     evaluator code, or use one of the declarative kinds \
+                     (latency_threshold, error_rate, contract_stability) \
+                     in cloud"
+                        .to_string(),
                 )
                 .await
             }
