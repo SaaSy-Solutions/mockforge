@@ -1430,7 +1430,7 @@ pub async fn serve_router_with_tls_notify_chaos(
     app: Router,
     tls_config: Option<mockforge_core::config::HttpTlsConfig>,
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
-    chaos_config: Option<std::sync::Arc<tokio::sync::RwLock<mockforge_chaos::ChaosConfig>>>,
+    chaos_config: Option<Arc<RwLock<mockforge_chaos::ChaosConfig>>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
@@ -1496,7 +1496,7 @@ pub async fn serve_router_with_tls_notify_chaos(
 /// `ConnectInfo<SocketAddr>` so handlers extracting `ConnectInfo<SocketAddr>`
 /// keep working when chaos TCP wrapping is enabled.
 async fn copy_chaos_addr_to_socketaddr(
-    mut req: axum::http::Request<axum::body::Body>,
+    mut req: Request<Body>,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::extract::ConnectInfo;
