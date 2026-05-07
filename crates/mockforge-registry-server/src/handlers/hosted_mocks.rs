@@ -23,10 +23,11 @@ use crate::{
     },
     models::{
         feature_usage::FeatureType, AuditEventType, DeploymentLog, DeploymentMetrics,
-        DeploymentStatus, HostedMock,
+        DeploymentStatus, HostedMock, TestRun,
     },
     AppState,
 };
+use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use tracing::warn;
 
 /// Create a new hosted mock deployment
@@ -2726,4 +2727,285 @@ pub async fn clear_custom_domain(
         "hostname": serde_json::Value::Null,
         "deployment_url": default_url,
     })))
+}
+
+// ─── Smoke-test trigger (Issue #392) ─────────────────────────────────
+
+/// Optional overrides on the smoke run. Both fields fall back to the
+/// runner's executor defaults when omitted (5s latency budget, GET-only).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TriggerSmokeRunRequest {
+    /// Per-route latency assertion ceiling, in milliseconds.
+    pub latency_budget_ms: Option<u64>,
+    /// HTTP methods to probe. Defaults to `["GET"]` at the executor.
+    /// Currently only GET has been thought through — POST/PUT/PATCH need
+    /// a body source which v1 doesn't have.
+    pub methods: Option<Vec<String>>,
+}
+
+/// `POST /api/v1/hosted-mocks/{deployment_id}/smoke-runs`
+///
+/// Triggers a smoke test against a hosted-mock deployment. Reuses the
+/// existing `test_runs` lifecycle with `kind = "smoke"` so smokes share
+/// the runner pool, concurrency cap, and runner_seconds metering with
+/// every other run kind. The runner-side `SmokeTestExecutor` (see
+/// `crates/mockforge-test-runner/src/executors/smoke.rs`) walks the
+/// deployment's OpenAPI spec, probes each declared route against the
+/// deployment's public URL, and reports `route_pass` / `route_fail`
+/// events back via the internal callbacks.
+///
+/// Authorization: caller must hold `Permission::HostedMockUpdate` on
+/// the deployment's org. Cross-org access surfaces as
+/// "Deployment not found" rather than "forbidden" (matches the
+/// convention in `delete_deployment`).
+///
+/// Failure modes (all 400 InvalidRequest):
+///   - Deployment not found / not in caller's org.
+///   - Deployment is not in `running` status — running smoke against a
+///     deployment that's still provisioning or has crashed gives
+///     misleading red routes that aren't actually regressions.
+///   - Deployment has no `deployment_url` (still being provisioned).
+///   - Deployment has no `openapi_spec_url` (no spec uploaded yet).
+pub async fn trigger_smoke_run(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(deployment_id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Option<Json<TriggerSmokeRunRequest>>,
+) -> ApiResult<Json<TestRun>> {
+    let req = body.map(|Json(r)| r).unwrap_or_default();
+
+    // ─── Auth + deployment lookup ────────────────────────────────
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    let checker = PermissionChecker::new(&state);
+    checker
+        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
+        .await?;
+
+    let deployment = state
+        .store
+        .find_hosted_mock_by_id(deployment_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
+    if deployment.org_id != org_ctx.org_id {
+        // Hide existence from non-members of the deployment's org.
+        return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
+    }
+    if deployment.status != "running" {
+        return Err(ApiError::InvalidRequest(format!(
+            "Deployment is in '{}' status; smoke runs require 'running'",
+            deployment.status,
+        )));
+    }
+
+    // ─── Plan-limit gate (shared with every other test_run kind) ──
+    let limits = crate::handlers::usage::effective_limits(&state, &org_ctx.org).await?;
+    let max_concurrent = limits.get("max_concurrent_runs").and_then(|v| v.as_i64()).unwrap_or(0);
+    if max_concurrent == 0 {
+        return Err(ApiError::ResourceLimitExceeded(
+            "Test execution is not enabled on this plan".into(),
+        ));
+    }
+    if max_concurrent > 0 {
+        let inflight = TestRun::count_inflight(state.db.pool(), org_ctx.org_id)
+            .await
+            .map_err(ApiError::Database)?;
+        if inflight.total() >= max_concurrent {
+            return Err(ApiError::ResourceLimitExceeded(format!(
+                "Concurrent run limit reached ({}/{}).",
+                inflight.total(),
+                max_concurrent,
+            )));
+        }
+    }
+
+    // ─── Build the runner payload ────────────────────────────────
+    let payload = build_smoke_payload(&deployment, &req)?;
+
+    // ─── Enqueue test_runs row ───────────────────────────────────
+    let run = TestRun::enqueue(
+        state.db.pool(),
+        EnqueueTestRun {
+            suite_id: deployment.id,
+            org_id: org_ctx.org_id,
+            kind: "smoke",
+            triggered_by: "manual",
+            triggered_by_user: Some(user_id),
+            git_ref: None,
+            git_sha: None,
+        },
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    // ─── Push onto the Redis queue for the runner ────────────────
+    if let Err(e) = crate::run_queue::enqueue(
+        state.redis.as_ref(),
+        crate::run_queue::EnqueuedJob {
+            run_id: run.id,
+            org_id: run.org_id,
+            source_id: deployment.id,
+            kind: "smoke",
+            payload,
+        },
+    )
+    .await
+    {
+        // Match the chaos handler's behaviour: log the failure but still
+        // return the queued row. The runner will pick it up when the
+        // queue is healthy again, and the test_runs status reflects that
+        // it never left 'queued' in the meantime.
+        tracing::error!(run_id = %run.id, error = %e, "failed to enqueue smoke run");
+    }
+
+    Ok(Json(run))
+}
+
+/// Build the JSON payload the runner's `SmokeTestExecutor` consumes.
+/// Pre-flight validates that the deployment has the URLs the executor
+/// needs (base + spec) so a "missing field" doesn't surface as a
+/// runner-side `errored` run after queueing.
+fn build_smoke_payload(
+    deployment: &HostedMock,
+    req: &TriggerSmokeRunRequest,
+) -> ApiResult<serde_json::Value> {
+    let base_url =
+        deployment.deployment_url.as_deref().filter(|s| !s.is_empty()).ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "Deployment has no public URL — wait for the deploy to finish before running smoke"
+                    .to_string(),
+            )
+        })?;
+    let spec_url =
+        deployment
+            .openapi_spec_url
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(
+                    "Deployment has no OpenAPI spec — upload one before running smoke".to_string(),
+                )
+            })?;
+
+    let mut payload = serde_json::json!({
+        "deployment_id": deployment.id,
+        "base_url": base_url,
+        "openapi_spec_url": spec_url,
+    });
+    let obj = payload
+        .as_object_mut()
+        .expect("payload was constructed as an object on the line above");
+
+    if let Some(budget) = req.latency_budget_ms {
+        obj.insert("latency_budget_ms".into(), budget.into());
+    }
+    if let Some(methods) = req.methods.as_ref() {
+        // `to_value` on a Vec<String> is infallible in practice, but
+        // bail with a clean error rather than panic if it ever isn't.
+        let v = serde_json::to_value(methods)
+            .map_err(|e| ApiError::InvalidRequest(format!("invalid methods array: {e}")))?;
+        obj.insert("methods".into(), v);
+    }
+
+    Ok(payload)
+}
+
+#[cfg(test)]
+mod smoke_trigger_tests {
+    use super::*;
+
+    fn deployment_with(
+        status: &str,
+        deployment_url: Option<&str>,
+        spec_url: Option<&str>,
+    ) -> HostedMock {
+        // Construct the full struct rather than `..Default::default()`:
+        // HostedMock doesn't impl Default, and listing every field
+        // explicitly means a future schema column addition triggers a
+        // compile error here so the test gets a chance to opt in.
+        HostedMock {
+            id: Uuid::new_v4(),
+            org_id: Uuid::new_v4(),
+            project_id: None,
+            name: "test".to_string(),
+            slug: "test".to_string(),
+            description: None,
+            config_json: serde_json::json!({}),
+            openapi_spec_url: spec_url.map(String::from),
+            status: status.to_string(),
+            deployment_url: deployment_url.map(String::from),
+            internal_url: None,
+            region: "iad".to_string(),
+            instance_type: "shared-cpu-1x".to_string(),
+            health_check_url: None,
+            last_health_check: None,
+            health_status: "unknown".to_string(),
+            error_message: None,
+            metadata_json: serde_json::json!({}),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn build_smoke_payload_uses_deployment_urls() {
+        let dep = deployment_with(
+            "running",
+            Some("https://my-mock.fly.dev"),
+            Some("https://specs.example.com/abc.json"),
+        );
+        let req = TriggerSmokeRunRequest::default();
+        let payload = build_smoke_payload(&dep, &req).unwrap();
+        assert_eq!(payload["base_url"], "https://my-mock.fly.dev");
+        assert_eq!(payload["openapi_spec_url"], "https://specs.example.com/abc.json");
+        assert_eq!(payload["deployment_id"], serde_json::json!(dep.id));
+        assert!(payload.get("latency_budget_ms").is_none());
+        assert!(payload.get("methods").is_none());
+    }
+
+    #[test]
+    fn build_smoke_payload_passes_overrides() {
+        let dep = deployment_with("running", Some("https://x"), Some("https://y"));
+        let req = TriggerSmokeRunRequest {
+            latency_budget_ms: Some(2000),
+            methods: Some(vec!["GET".into(), "HEAD".into()]),
+        };
+        let payload = build_smoke_payload(&dep, &req).unwrap();
+        assert_eq!(payload["latency_budget_ms"], 2000);
+        assert_eq!(payload["methods"], serde_json::json!(["GET", "HEAD"]));
+    }
+
+    #[test]
+    fn build_smoke_payload_rejects_missing_deployment_url() {
+        let dep = deployment_with("running", None, Some("https://y"));
+        let err = build_smoke_payload(&dep, &TriggerSmokeRunRequest::default()).unwrap_err();
+        match err {
+            ApiError::InvalidRequest(msg) => assert!(msg.contains("public URL")),
+            other => panic!("expected InvalidRequest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_smoke_payload_rejects_empty_deployment_url() {
+        let dep = deployment_with("running", Some(""), Some("https://y"));
+        assert!(matches!(
+            build_smoke_payload(&dep, &TriggerSmokeRunRequest::default()),
+            Err(ApiError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn build_smoke_payload_rejects_missing_spec_url() {
+        let dep = deployment_with("running", Some("https://x"), None);
+        let err = build_smoke_payload(&dep, &TriggerSmokeRunRequest::default()).unwrap_err();
+        match err {
+            ApiError::InvalidRequest(msg) => assert!(msg.contains("OpenAPI spec")),
+            other => panic!("expected InvalidRequest, got {other:?}"),
+        }
+    }
 }

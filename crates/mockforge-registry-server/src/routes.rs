@@ -236,6 +236,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/status", patch(handlers::hosted_mocks::update_deployment_status))
         .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/redeploy", post(handlers::hosted_mocks::redeploy_deployment))
+        // Smoke test against the deployment's declared routes (#392).
+        // Reuses test_runs with kind='smoke'; the runner-side
+        // SmokeTestExecutor (mockforge-test-runner) does the probing.
+        .route("/api/v1/hosted-mocks/{deployment_id}/smoke-runs", post(handlers::hosted_mocks::trigger_smoke_run))
         .route("/api/v1/hosted-mocks/{deployment_id}/set-domain", post(handlers::hosted_mocks::set_domain))
         .route("/api/v1/hosted-mocks/{deployment_id}/custom-domain", get(handlers::hosted_mocks::get_custom_domain))
         .route("/api/v1/hosted-mocks/{deployment_id}/custom-domain", delete(handlers::hosted_mocks::clear_custom_domain))
