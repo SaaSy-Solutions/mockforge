@@ -72,6 +72,7 @@ pub fn error_code_from_api_error(error: &crate::error::ApiError) -> &'static str
         ApiError::PluginExists(_) | ApiError::TemplateExists(_) | ApiError::ScenarioExists(_) => {
             "already_exists"
         }
+        ApiError::Conflict(_) => "conflict",
         ApiError::AuthRequired => "auth_required",
         ApiError::PermissionDenied => "permission_denied",
         ApiError::InsufficientScope { .. } => "insufficient_scope",
