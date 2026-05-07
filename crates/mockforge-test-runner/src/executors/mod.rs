@@ -21,6 +21,7 @@ pub mod contract;
 pub mod flow;
 pub mod integration;
 pub mod replay;
+pub mod smoke;
 pub mod snapshot;
 pub mod test;
 
@@ -157,6 +158,7 @@ impl Default for ExecutorRegistry {
         }
 
         by_kind.insert("replay", Box::new(replay::ReplayExecutor));
+        by_kind.insert("smoke", Box::new(smoke::SmokeTestExecutor));
 
         Self { by_kind }
     }
@@ -214,6 +216,7 @@ mod tests {
             "state_machine",
             "chain",
             "replay",
+            "smoke",
         ];
         for k in kinds {
             reg.lookup(k).unwrap_or_else(|_| panic!("missing executor for kind {k}"));
