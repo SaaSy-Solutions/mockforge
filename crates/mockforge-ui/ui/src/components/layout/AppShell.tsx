@@ -166,6 +166,7 @@ const navSections = [
       { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
       { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
       { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
+      { id: 'cloud-behavioral-cloning', labelKey: 'tab.cloudBehavioralCloning', icon: Copy },
     ]
   },
   {
@@ -307,6 +308,9 @@ const cloudNavItemIds = new Set([
   'cloud-contract',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
   'cloud-recorder',
+  // Cloud behavioral cloning (#393) — clone-model-centric view with live
+  // SSE training/replay streams via cloudTestRunsApi.streamRunEvents.
+  'cloud-behavioral-cloning',
   // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
   // adminUpdate / adminDelete.
   'cloud-showcase-admin',
@@ -341,6 +345,7 @@ const cloudHiddenNavItemIds = new Set([
   // Each entry has a cloud sibling that serves the same purpose:
   'chaos',                  // → cloud-chaos
   'recorder',               // → cloud-recorder
+  'behavioral-cloning',     // → cloud-behavioral-cloning
   'incidents',              // → cloud-incidents
   'traces',                 // → cloud-traces
   'contract-diff',          // → cloud-contract

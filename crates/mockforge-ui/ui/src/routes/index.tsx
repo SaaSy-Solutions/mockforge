@@ -102,6 +102,10 @@ const CloudContractPage = lazy(() => import('../pages/CloudContractPage').then(m
 // Cloud recorder + behavioral cloning (#6)
 const CloudRecorderPage = lazy(() => import('../pages/CloudRecorderPage').then(m => ({ default: m.CloudRecorderPage })));
 
+// Cloud behavioral cloning (#393) — clone-model-centric sibling of the local
+// BehavioralCloningPage, with live SSE training streams.
+const CloudBehavioralCloningPage = lazy(() => import('../pages/CloudBehavioralCloningPage').then(m => ({ default: m.CloudBehavioralCloningPage })));
+
 // Cloud showcase admin (#12) — submit / publish / feature gallery entries
 const CloudShowcaseAdminPage = lazy(() => import('../pages/CloudShowcaseAdminPage').then(m => ({ default: m.CloudShowcaseAdminPage })));
 
@@ -242,6 +246,7 @@ export const routes: RouteConfig[] = [
   { path: '/cloud-flows', element: <CloudFlowsPage /> },
   { path: '/cloud-contract', element: <CloudContractPage /> },
   { path: '/cloud-recorder', element: <CloudRecorderPage /> },
+  { path: '/cloud-behavioral-cloning', element: <CloudBehavioralCloningPage /> },
   { path: '/cloud-showcase-admin', element: <CloudShowcaseAdminPage /> },
 
   // Registry admin (cloud: Postgres, self-hosted: SQLite)
