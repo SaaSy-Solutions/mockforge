@@ -45,8 +45,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use mockforge_registry_core::models::{
-    feature_usage::FeatureType, hosted_mock_plugin::AttachHostedMockPlugin, AuditEventType,
-    HostedMockPlugin,
+    feature_usage::{FeatureType, FeatureUsage, PluginInvokeAggregateRow},
+    hosted_mock_plugin::AttachHostedMockPlugin,
+    AuditEventType, HostedMockPlugin,
 };
 
 use crate::{
@@ -150,7 +151,8 @@ pub async fn list_attachments(
     Path(deployment_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<AttachmentResponse>>> {
-    authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    authorize_deployment(&state, user_id, &headers, deployment_id, Permission::HostedMockUpdate)
+        .await?;
 
     let rows = HostedMockPlugin::list_by_deployment(state.db.pool(), deployment_id)
         .await
@@ -167,7 +169,14 @@ pub async fn attach_plugin(
     headers: HeaderMap,
     Json(request): Json<AttachRequest>,
 ) -> ApiResult<Json<AttachmentResponse>> {
-    let org_ctx = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let org_ctx = authorize_deployment(
+        &state,
+        user_id,
+        &headers,
+        deployment_id,
+        Permission::HostedMockUpdate,
+    )
+    .await?;
 
     // Validate the grant payload before any storage work — fail fast
     // on shape errors.
@@ -275,7 +284,8 @@ pub async fn update_attachment(
     headers: HeaderMap,
     Json(request): Json<UpdateAttachmentRequest>,
 ) -> ApiResult<Json<AttachmentResponse>> {
-    authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    authorize_deployment(&state, user_id, &headers, deployment_id, Permission::HostedMockUpdate)
+        .await?;
 
     // Load the row and verify it belongs to this deployment. Cross-
     // deployment writes via path manipulation get a "not found" so we
@@ -316,7 +326,14 @@ pub async fn detach_plugin(
     Path((deployment_id, attachment_id)): Path<(Uuid, Uuid)>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let org_ctx = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let org_ctx = authorize_deployment(
+        &state,
+        user_id,
+        &headers,
+        deployment_id,
+        Permission::HostedMockUpdate,
+    )
+    .await?;
 
     let existing = load_authorized_attachment(&state, deployment_id, attachment_id).await?;
 
@@ -366,29 +383,166 @@ pub async fn detach_plugin(
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+// ─── Metering (Issue #417) ───────────────────────────────────────────
+
+/// Per-plugin row in the deployment usage response.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUsageEntry {
+    /// `hosted_mock_plugins.id`. Stable per (deployment, plugin) — a
+    /// re-attach after detach gets a new id, so historical data from a
+    /// previous attachment surfaces with its old id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_id: Option<Uuid>,
+    /// `plugins.name` as snapshot in the metric's metadata at write time.
+    /// Optional because the OTLP aggregator may not have populated it
+    /// yet; renders as "—" in the UI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugin_version: Option<String>,
+    /// SUM of wall-time across all buckets for this attachment in the
+    /// current billing period.
+    pub invoke_ms: i64,
+    /// MAX peak memory across buckets, in MB. Optional in v1 — the OTLP
+    /// aggregator's MemoryTracker integration (PR #396) may not populate
+    /// this yet. Surfaces as "—" in the UI when missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_peak_mb: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPluginUsageResponse {
+    /// First instant of the current billing period (start of UTC month).
+    pub period_start: DateTime<Utc>,
+    /// Exclusive — first instant of the next billing period.
+    pub period_end: DateTime<Utc>,
+    /// Per-attachment breakdown, ordered by `invoke_ms` desc.
+    pub by_plugin: Vec<PluginUsageEntry>,
+    /// Sum of `invoke_ms` across all `by_plugin` entries.
+    pub deployment_total_invoke_ms: i64,
+    /// `organizations.limits_json -> max_plugin_invoke_ms_per_month`.
+    /// `-1` = unlimited; `0` = feature disabled. UI maps both to
+    /// distinct affordances ("∞" / "upgrade to enable").
+    pub plan_limit_invoke_ms_per_month: i64,
+    /// `organizations.limits_json -> max_plugin_memory_mb`. Same `-1`/
+    /// `0` semantics. Per-attachment cap rather than per-deployment.
+    pub plan_limit_memory_mb: i64,
+}
+
+/// `GET /api/v1/hosted-mocks/{deployment_id}/plugins/usage`
+///
+/// Rolled-up per-plugin metering for the deployment in the current
+/// billing period. Source: `feature_usage` rows where
+/// `feature = 'plugin_invoke_ms'` and
+/// `metadata->>'deployment_id' = {deployment_id}`. The OTLP pipeline
+/// (Phase 2 — see migration `20250101000074`) writes those rows; this
+/// endpoint just aggregates them.
+///
+/// Returns `by_plugin = []` and `deployment_total_invoke_ms = 0` when
+/// the pipeline hasn't populated any rows yet — UI renders that as
+/// "no usage this period" rather than erroring.
+pub async fn get_plugin_usage(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(deployment_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<DeploymentPluginUsageResponse>> {
+    let org_ctx =
+        authorize_deployment(&state, user_id, &headers, deployment_id, Permission::HostedMockRead)
+            .await?;
+
+    let (period_start, period_end) = current_billing_period();
+
+    let rows = FeatureUsage::aggregate_plugin_invoke_ms_by_deployment(
+        state.db.pool(),
+        org_ctx.org_id,
+        deployment_id,
+        period_start,
+    )
+    .await
+    .map_err(ApiError::Database)?;
+
+    let by_plugin: Vec<PluginUsageEntry> = rows.into_iter().map(into_usage_entry).collect();
+    let deployment_total_invoke_ms: i64 = by_plugin.iter().map(|p| p.invoke_ms).sum();
+
+    let limits = &org_ctx.org.limits_json;
+    let plan_limit_invoke_ms_per_month = limits
+        .get("max_plugin_invoke_ms_per_month")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let plan_limit_memory_mb =
+        limits.get("max_plugin_memory_mb").and_then(|v| v.as_i64()).unwrap_or(0);
+
+    Ok(Json(DeploymentPluginUsageResponse {
+        period_start,
+        period_end,
+        by_plugin,
+        deployment_total_invoke_ms,
+        plan_limit_invoke_ms_per_month,
+        plan_limit_memory_mb,
+    }))
+}
+
+/// Convert a SQL aggregate row into the API entry. Lossy on a
+/// malformed `attachment_id` — drops the field rather than rejecting
+/// the whole row, since one bad bucket shouldn't poison the response.
+fn into_usage_entry(row: PluginInvokeAggregateRow) -> PluginUsageEntry {
+    PluginUsageEntry {
+        attachment_id: row.attachment_id.as_deref().and_then(|s| Uuid::parse_str(s).ok()),
+        plugin_name: row.plugin_name,
+        plugin_version: row.plugin_version,
+        invoke_ms: row.invoke_ms,
+        memory_peak_mb: row.memory_peak_mb,
+    }
+}
+
+/// First instant of the current UTC month + first instant of the next
+/// month (exclusive end). Mirrors the `DATE_TRUNC('month', NOW())`
+/// convention used throughout `usage_counters`.
+fn current_billing_period() -> (DateTime<Utc>, DateTime<Utc>) {
+    use chrono::{Datelike, NaiveDate, TimeZone};
+    let now = Utc::now();
+    let start_date = NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
+        .expect("month/year are valid by construction");
+    let (next_year, next_month) = if now.month() == 12 {
+        (now.year() + 1, 1)
+    } else {
+        (now.year(), now.month() + 1)
+    };
+    let end_date = NaiveDate::from_ymd_opt(next_year, next_month, 1)
+        .expect("next month/year are valid by construction");
+    let start = Utc.from_utc_datetime(&start_date.and_hms_opt(0, 0, 0).expect("midnight is valid"));
+    let end = Utc.from_utc_datetime(&end_date.and_hms_opt(0, 0, 0).expect("midnight is valid"));
+    (start, end)
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
-/// Verify the caller belongs to the deployment's org, has the
-/// `HostedMockUpdate` permission, and the deployment exists within
-/// their resolved org. Returns the resolved org context for
-/// downstream telemetry. Cross-org access surfaces as
-/// "Deployment not found" rather than "forbidden" to avoid leaking
-/// existence (matches the convention in hosted_mocks::delete_deployment
-/// and notification_channels::load_authorized_channel).
+/// Verify the caller belongs to the deployment's org, holds `permission`
+/// on it, and the deployment exists within their resolved org. Returns
+/// the resolved org context for downstream telemetry. Cross-org access
+/// surfaces as "Deployment not found" rather than "forbidden" to avoid
+/// leaking existence (matches the convention in
+/// `hosted_mocks::delete_deployment` and
+/// `notification_channels::load_authorized_channel`).
+///
+/// Mutating routes pass `Permission::HostedMockUpdate`; the read-only
+/// usage endpoint passes `Permission::HostedMockRead`.
 async fn authorize_deployment(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     deployment_id: Uuid,
+    permission: Permission,
 ) -> ApiResult<crate::middleware::org_context::OrgContext> {
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
 
     let checker = PermissionChecker::new(state);
-    checker
-        .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
-        .await?;
+    checker.require_permission(user_id, org_ctx.org_id, permission).await?;
 
     let deployment = state
         .store
@@ -556,5 +710,58 @@ mod tests {
             ApiError::InvalidRequest(msg) => assert!(msg.contains("too large")),
             other => panic!("expected InvalidRequest, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn current_billing_period_starts_at_month_boundary() {
+        let (start, end) = current_billing_period();
+        // Both endpoints are at midnight UTC.
+        assert_eq!(start.time(), chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        assert_eq!(end.time(), chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+        // Day-of-month is 1 for both — start of *some* month, exclusive
+        // end at start of *next* month.
+        assert_eq!(chrono::Datelike::day(&start), 1);
+        assert_eq!(chrono::Datelike::day(&end), 1);
+        // End is strictly after start.
+        assert!(end > start);
+        // The window covers ≥28 and ≤31 days (every calendar month).
+        let span = end - start;
+        assert!(
+            span.num_days() >= 28 && span.num_days() <= 31,
+            "span = {} days",
+            span.num_days()
+        );
+    }
+
+    #[test]
+    fn into_usage_entry_drops_malformed_attachment_id() {
+        let row = PluginInvokeAggregateRow {
+            attachment_id: Some("not-a-uuid".to_string()),
+            plugin_name: Some("foo".to_string()),
+            plugin_version: Some("1.0.0".to_string()),
+            invoke_ms: 100,
+            memory_peak_mb: Some(42),
+        };
+        let entry = into_usage_entry(row);
+        assert_eq!(entry.attachment_id, None);
+        assert_eq!(entry.plugin_name, Some("foo".to_string()));
+        assert_eq!(entry.invoke_ms, 100);
+        assert_eq!(entry.memory_peak_mb, Some(42));
+    }
+
+    #[test]
+    fn into_usage_entry_parses_well_formed_attachment_id() {
+        let id = Uuid::new_v4();
+        let row = PluginInvokeAggregateRow {
+            attachment_id: Some(id.to_string()),
+            plugin_name: None,
+            plugin_version: None,
+            invoke_ms: 0,
+            memory_peak_mb: None,
+        };
+        let entry = into_usage_entry(row);
+        assert_eq!(entry.attachment_id, Some(id));
+        assert_eq!(entry.invoke_ms, 0);
+        assert_eq!(entry.memory_peak_mb, None);
     }
 }

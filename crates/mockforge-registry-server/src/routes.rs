@@ -278,6 +278,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             patch(handlers::cloud_plugin_attachments::update_attachment)
                 .delete(handlers::cloud_plugin_attachments::detach_plugin),
         )
+        // Cloud Plugins per-deployment metering (issue #417). Aggregates
+        // `feature_usage` rows where feature='plugin_invoke_ms' and
+        // metadata->>'deployment_id' matches.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/plugins/usage",
+            get(handlers::cloud_plugin_attachments::get_plugin_usage),
+        )
         // State machines (cloud-side proxy to the deployed instance).
         // Mirrors the captures pattern: read-only proxy gated by org
         // membership; writes go via the same management API as today
