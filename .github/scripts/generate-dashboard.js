@@ -23,6 +23,12 @@ const BASELINE_DIR = process.env.BASELINE_DIR || '.github/benchmarks';
 function parseCriterionResults(criterionPath) {
     const results = [];
 
+    if (!fs.existsSync(criterionPath)) {
+        console.warn(`Warning: ${criterionPath} not found — generating an empty dashboard. ` +
+                     `This usually means the upstream 'cargo bench' step did not produce output.`);
+        return results;
+    }
+
     function walkDir(dir, prefix = '') {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
 

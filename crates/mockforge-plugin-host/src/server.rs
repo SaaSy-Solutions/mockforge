@@ -155,7 +155,11 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let (host, actor) = Host::new(PluginLoaderConfig::default());
+            let verifier = crate::signing::SignatureVerifier::new(
+                crate::signing::TrustStore::new(),
+                crate::signing::SignatureMode::Optional,
+            );
+            let (host, actor, _bus) = Host::new(PluginLoaderConfig::default(), verifier, crate::blocklist::Blocklist::new());
             let server_host = host.clone();
             tokio::select! {
                 result = body(host) => result,

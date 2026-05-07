@@ -33,12 +33,15 @@ pub enum Request {
     },
     /// Load a WASM plugin into a fresh `Store`.
     ///
-    /// In v1 the WASM bytes are inlined as base64 in the request.
-    /// The follow-up "registry fetch" path will replace this with a
-    /// `download_url` field that the host fetches itself, so
-    /// signature verification can happen before any bytes touch
-    /// the loader. Until then, the caller is expected to verify
-    /// signatures upstream.
+    /// The optional `signature_b64` + `publisher_key_id` fields
+    /// carry an Ed25519 signature over `wasm_bytes` (the decoded
+    /// `wasm_b64`). Whether they're required is governed by the
+    /// host's `SignatureMode`:
+    ///   - `Required` (cloud default): both fields must be present
+    ///     and the signature must verify against an active trust
+    ///     root, or the load is rejected.
+    ///   - `Optional` (self-hosted/dev): unsigned loads are
+    ///     allowed (and logged).
     LoadPlugin {
         /// Correlation id.
         id: Uuid,
@@ -55,6 +58,24 @@ pub enum Request {
         permissions: serde_json::Value,
         /// Base64-encoded WASM module bytes.
         wasm_b64: String,
+        /// Base64-encoded Ed25519 signature. The signed payload is
+        /// `build_signed_payload(wasm, manifest)` from `signing.rs`
+        /// — domain-prefixed so v1 (wasm-only) and v2 (with
+        /// manifest) signatures can't be cross-replayed. Pairs
+        /// with `publisher_key_id`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        signature_b64: Option<String>,
+        /// Trust-root id naming the public key the signature is
+        /// expected to verify against. Pairs with
+        /// `signature_b64` — both or neither.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        publisher_key_id: Option<String>,
+        /// Optional base64-encoded plugin manifest. When present,
+        /// the signature must cover both WASM and manifest
+        /// (defense-in-depth). Content is opaque to the signing
+        /// layer; the host parses it after verification.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        manifest_b64: Option<String>,
     },
     /// Detach a plugin and free its sandbox.
     UnloadPlugin {
@@ -166,6 +187,9 @@ mod tests {
                 "egress": { "allow": ["*.stripe.com"] }
             }),
             wasm_b64: "AGFzbQEAAAA=".into(), // empty WASM module
+            signature_b64: None,
+            publisher_key_id: None,
+            manifest_b64: None,
         };
         let bytes = serde_json::to_vec(&req).unwrap();
         let parsed: Request = serde_json::from_slice(&bytes).unwrap();
@@ -175,15 +199,66 @@ mod tests {
                 version,
                 permissions,
                 wasm_b64,
+                signature_b64,
+                publisher_key_id,
                 ..
             } => {
                 assert_eq!(plugin_name, "stripe-rewriter");
                 assert_eq!(version, "1.2.3");
                 assert!(permissions.get("egress").is_some());
                 assert_eq!(wasm_b64, "AGFzbQEAAAA=");
+                assert!(signature_b64.is_none());
+                assert!(publisher_key_id.is_none());
             }
             other => panic!("expected LoadPlugin, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn load_plugin_request_with_signature_round_trips() {
+        let req = Request::LoadPlugin {
+            id: Uuid::new_v4(),
+            plugin_name: "p".into(),
+            version: "1.0.0".into(),
+            permissions: serde_json::json!({}),
+            wasm_b64: "AGFzbQEAAAA=".into(),
+            signature_b64: Some("BBBB".repeat(22)), // 88-char base64-shaped value
+            publisher_key_id: Some("publisher-1".into()),
+            manifest_b64: None,
+        };
+        let bytes = serde_json::to_vec(&req).unwrap();
+        let parsed: Request = serde_json::from_slice(&bytes).unwrap();
+        match parsed {
+            Request::LoadPlugin {
+                signature_b64,
+                publisher_key_id,
+                ..
+            } => {
+                assert!(signature_b64.is_some());
+                assert_eq!(publisher_key_id.as_deref(), Some("publisher-1"));
+            }
+            other => panic!("expected LoadPlugin, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn load_plugin_request_signature_fields_omitted_when_none() {
+        let req = Request::LoadPlugin {
+            id: Uuid::new_v4(),
+            plugin_name: "p".into(),
+            version: "1.0.0".into(),
+            permissions: serde_json::json!({}),
+            wasm_b64: "AGFzbQEAAAA=".into(),
+            signature_b64: None,
+            publisher_key_id: None,
+            manifest_b64: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        // skip_serializing_if drops the keys entirely so older
+        // wire-format consumers (and the `nc -U` debug path)
+        // don't see surprising `null`s.
+        assert!(!json.contains("signature_b64"), "expected omitted, got {}", json);
+        assert!(!json.contains("publisher_key_id"));
     }
 
     #[test]

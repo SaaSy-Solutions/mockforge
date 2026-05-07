@@ -8596,13 +8596,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-plugin-egress"
+version = "0.3.126"
+dependencies = [
+ "anyhow",
+ "ipnet",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "mockforge-plugin-host"
 version = "0.3.126"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "chrono",
+ "ed25519-dalek",
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tempfile",
