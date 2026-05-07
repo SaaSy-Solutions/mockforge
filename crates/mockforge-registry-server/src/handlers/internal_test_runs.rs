@@ -738,6 +738,101 @@ struct DeploymentLatencyStatsRow {
     avg_ms: Option<f64>,
 }
 
+/// Aggregate of contract-diff findings for a monitored service, used
+/// by `kind='contract_stability'` fitness checks. Counts findings by
+/// severity over the configured window.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Serialize)]
+pub struct MonitoredServiceContractStability {
+    pub breaking_count: i64,
+    pub non_breaking_count: i64,
+    pub cosmetic_count: i64,
+    pub run_count: i64,
+    /// Most recent diff-run start timestamp inside the window. `None`
+    /// when no runs have happened — distinguishes "no data" from
+    /// "lots of data but no findings". ISO-8601 string for wire
+    /// stability across runner builds.
+    pub latest_run_at: Option<String>,
+}
+
+/// Query params for the contract-stability endpoint.
+#[derive(Debug, Deserialize)]
+pub struct ContractStabilityQuery {
+    /// Look-back window. Default 24h since contract diffs run far
+    /// less frequently than smoke / latency probes (typically once
+    /// per deploy or once per day on a schedule). Clamped to
+    /// `[1, 10080]` (1 minute to one week).
+    #[serde(default)]
+    pub window_minutes: Option<i64>,
+}
+
+/// `GET /api/v1/internal/monitored-services/{id}/contract-stability`
+///
+/// Internal-only — the FitnessExecutor calls this when evaluating
+/// `kind='contract_stability'` checks. Aggregates `contract_diff_findings`
+/// joined to `contract_diff_runs.monitored_service_id` over the
+/// requested window.
+pub async fn get_monitored_service_contract_stability(
+    State(state): State<AppState>,
+    Path(monitored_service_id): Path<Uuid>,
+    Query(params): Query<ContractStabilityQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Json<MonitoredServiceContractStability>> {
+    require_internal_auth(&headers)?;
+    // 1 week ceiling — contract diffs are expensive and a longer
+    // window gives misleading "stable" signals when an old breaking
+    // finding has already been fixed.
+    let window = params.window_minutes.unwrap_or(1_440).clamp(1, 10_080);
+
+    let row = sqlx::query_as::<_, ContractStabilityRow>(
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE f.severity = 'breaking')::bigint     AS breaking_count,
+            COUNT(*) FILTER (WHERE f.severity = 'non_breaking')::bigint AS non_breaking_count,
+            COUNT(*) FILTER (WHERE f.severity = 'cosmetic')::bigint     AS cosmetic_count,
+            (SELECT COUNT(*) FROM contract_diff_runs
+                WHERE monitored_service_id = $1
+                  AND started_at >= NOW() - ($2::bigint * INTERVAL '1 minute'))::bigint
+                                                                         AS run_count,
+            (SELECT MAX(started_at) FROM contract_diff_runs
+                WHERE monitored_service_id = $1
+                  AND started_at >= NOW() - ($2::bigint * INTERVAL '1 minute'))
+                                                                         AS latest_run_at
+        FROM contract_diff_findings f
+        JOIN contract_diff_runs r ON f.run_id = r.id
+        WHERE r.monitored_service_id = $1
+          AND r.started_at >= NOW() - ($2::bigint * INTERVAL '1 minute')
+        "#,
+    )
+    .bind(monitored_service_id)
+    .bind(window)
+    .fetch_one(state.db.pool())
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(MonitoredServiceContractStability {
+        breaking_count: row.breaking_count,
+        non_breaking_count: row.non_breaking_count,
+        cosmetic_count: row.cosmetic_count,
+        run_count: row.run_count,
+        latest_run_at: row.latest_run_at.map(|t| t.to_rfc3339()),
+    }))
+}
+
+/// SQL row shape for contract-stability. Severity counts come from
+/// the FILTERed COUNTs on `contract_diff_findings`; run_count + latest
+/// timestamp come from a correlated subquery so we get sensible
+/// values even when there are zero findings (i.e. count rows from
+/// `contract_diff_runs` directly rather than relying on the JOIN).
+#[derive(Debug, sqlx::FromRow)]
+struct ContractStabilityRow {
+    breaking_count: i64,
+    non_breaking_count: i64,
+    cosmetic_count: i64,
+    run_count: i64,
+    latest_run_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

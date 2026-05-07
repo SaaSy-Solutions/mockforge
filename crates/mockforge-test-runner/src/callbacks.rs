@@ -181,6 +181,32 @@ impl RegistryCallbacks {
         Ok(stats)
     }
 
+    /// Pull contract-stability aggregates for a monitored service over
+    /// a window. Used by `kind='contract_stability'` fitness checks.
+    /// Returns severity counts (breaking / non_breaking / cosmetic)
+    /// plus run count + latest run timestamp; the executor asserts
+    /// thresholds against the breaking count.
+    pub async fn fetch_monitored_service_contract_stability(
+        &self,
+        monitored_service_id: Uuid,
+        window_minutes: i64,
+    ) -> Result<MonitoredServiceContractStability> {
+        let url = format!(
+            "{}/api/v1/internal/monitored-services/{monitored_service_id}/contract-stability",
+            self.base_url.trim_end_matches('/'),
+        );
+        let resp = self
+            .http
+            .get(&url)
+            .bearer_auth(&self.token)
+            .query(&[("window_minutes", window_minutes.to_string())])
+            .send()
+            .await?;
+        let resp = resp.error_for_status()?;
+        let stats: MonitoredServiceContractStability = resp.json().await?;
+        Ok(stats)
+    }
+
     /// Toggle chaos on a hosted-mock deployment via the registry's
     /// internal proxy. Used by the chaos executor for
     /// target_kind=hosted_mock — the registry resolves the
@@ -238,6 +264,23 @@ pub struct DeploymentLatencyStats {
     pub p99_ms: Option<f64>,
     pub max_ms: Option<f64>,
     pub avg_ms: Option<f64>,
+}
+
+/// Aggregate of contract-diff findings for a monitored service over
+/// a window. Mirrors the registry handler's
+/// `MonitoredServiceContractStability` shape; used by
+/// `kind='contract_stability'` fitness checks.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct MonitoredServiceContractStability {
+    pub breaking_count: i64,
+    pub non_breaking_count: i64,
+    pub cosmetic_count: i64,
+    pub run_count: i64,
+    /// Most recent diff-run timestamp inside the window. `None` when
+    /// no runs happened — distinguishes "no data" (e.g. nothing
+    /// scheduled) from "lots of data but no findings".
+    pub latest_run_at: Option<String>,
 }
 
 #[derive(Serialize)]

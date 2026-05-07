@@ -109,6 +109,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::internal_test_runs::get_deployment_latency_stats),
         )
         .route(
+            // Contract-finding aggregate for kind='contract_stability'
+            // fitness checks. Counts contract_diff_findings by severity
+            // over the configured window for one monitored service.
+            "/api/v1/internal/monitored-services/{id}/contract-stability",
+            get(handlers::internal_test_runs::get_monitored_service_contract_stability),
+        )
+        .route(
             "/api/v1/internal/hosted-mocks/{id}/chaos",
             post(handlers::internal_test_runs::proxy_chaos_toggle),
         )
