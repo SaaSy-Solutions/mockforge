@@ -205,7 +205,8 @@ async fn mirror_kind_status(
     summary: Option<&serde_json::Value>,
 ) -> sqlx::Result<()> {
     use mockforge_registry_core::models::chaos::CreateChaosCampaignReport;
-    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
+    use mockforge_registry_core::models::incident::RaiseIncidentInput;
+    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Incident, Snapshot};
 
     let pool = state.db.pool();
     match run.kind.as_str() {
@@ -277,6 +278,81 @@ async fn mirror_kind_status(
                 },
             )
             .await?;
+        }
+        "smoke" => {
+            // Smoke runs against a hosted-mock deployment (issue #392).
+            // Failed routes (status not 2xx, or latency over budget)
+            // surface here as a non-passed run; the executor pre-flight
+            // path (bad URL / missing spec / build failure) surfaces as
+            // 'errored'. Either way we raise an incident so the on-call
+            // notification channels fire — matches the per-route audit
+            // surface the UI streams live, but durably.
+            //
+            // Dedupe on `(org_id, source, deployment_id)` so repeated
+            // smoke failures on the same deployment collapse onto one
+            // open incident until acknowledged. A re-fire after resolve
+            // creates a new incident (the partial-unique index only
+            // covers `status != 'resolved'`).
+            //
+            // `failed` (clean negative) → severity high; `errored`
+            // (executor pre-flight) → severity medium since it's an
+            // operational signal, not necessarily a deployment regression.
+            if !matches!(run.status.as_str(), "passed" | "cancelled") {
+                let failed_count =
+                    summary.and_then(|s| s.get("failed")).and_then(|v| v.as_i64()).unwrap_or(0);
+                let total_routes = summary
+                    .and_then(|s| s.get("total_routes"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let base_url =
+                    summary.and_then(|s| s.get("base_url")).and_then(|v| v.as_str()).unwrap_or("");
+
+                let severity = if run.status == "errored" {
+                    "medium"
+                } else {
+                    "high"
+                };
+                let title = if run.status == "errored" {
+                    "Smoke test errored before probing routes".to_string()
+                } else if total_routes > 0 {
+                    format!("{}/{} routes failed smoke test", failed_count.max(1), total_routes)
+                } else {
+                    "Smoke test failed".to_string()
+                };
+                let dedupe_key = run.suite_id.to_string();
+                let source_ref = run.id.to_string();
+                let description = serde_json::json!({
+                    "deployment_id": run.suite_id,
+                    "run_id": run.id,
+                    "run_status": run.status,
+                    "base_url": base_url,
+                    "total_routes": total_routes,
+                    "failed": failed_count,
+                })
+                .to_string();
+
+                Incident::raise(
+                    pool,
+                    RaiseIncidentInput {
+                        org_id: run.org_id,
+                        // Smoke runs are tied to a hosted-mock deployment,
+                        // not a workspace — workspaces hold templates +
+                        // scenarios, hosted mocks live one level up at
+                        // the org. Leaving this None keeps the routing
+                        // rules' workspace filter untouched (handler
+                        // matches on `workspace_id IS NULL` for
+                        // org-wide rules anyway).
+                        workspace_id: None,
+                        source: "hosted_mock_smoke",
+                        source_ref: Some(&source_ref),
+                        dedupe_key: &dedupe_key,
+                        severity,
+                        title: &title,
+                        description: Some(&description),
+                    },
+                )
+                .await?;
+            }
         }
         // Other kinds (unit/contract_diff/replay/flow.*) don't have a
         // separate per-resource status — the test_runs row is the
