@@ -225,6 +225,53 @@ impl FitnessFunction {
             .rows_affected();
         Ok(rows > 0)
     }
+
+    /// Persist a per-evaluation row + roll up `last_evaluated_at` /
+    /// `last_status` on the parent function in one transaction.
+    ///
+    /// Called by `mirror_kind_status` when a `kind='fitness_evaluation'`
+    /// test_run finishes — the run's `summary` carries the values
+    /// pulled into `measured_value` / `threshold_value`. `status` must
+    /// be one of `pass | fail | unknown`. The history row in
+    /// `fitness_evaluations` is append-only; the `last_*` columns
+    /// give the UI a fast read for the "last run" widget without
+    /// scanning the timeline.
+    pub async fn record_evaluation(
+        pool: &PgPool,
+        function_id: Uuid,
+        status: &str,
+        measured_value: Option<f64>,
+        threshold_value: Option<f64>,
+    ) -> sqlx::Result<()> {
+        let mut tx = pool.begin().await?;
+        sqlx::query(
+            r#"
+            INSERT INTO fitness_evaluations
+                (function_id, status, measured_value, threshold_value)
+            VALUES ($1, $2, $3, $4)
+            "#,
+        )
+        .bind(function_id)
+        .bind(status)
+        .bind(measured_value)
+        .bind(threshold_value)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"
+            UPDATE fitness_functions
+            SET last_evaluated_at = NOW(),
+                last_status = $2,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(function_id)
+        .bind(status)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
+    }
 }
 
 #[cfg(feature = "postgres")]

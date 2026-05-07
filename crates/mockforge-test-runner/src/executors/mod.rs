@@ -18,6 +18,7 @@ pub mod chain;
 pub mod chaos;
 pub mod clone_train;
 pub mod contract;
+pub mod fitness;
 pub mod flow;
 pub mod integration;
 pub mod replay;
@@ -147,10 +148,12 @@ impl Default for ExecutorRegistry {
             "verification_suite",
             Box::new(contract::ContractExecutor::for_kind("verification_suite")),
         );
-        by_kind.insert(
-            "fitness_evaluation",
-            Box::new(contract::ContractExecutor::for_kind("fitness_evaluation")),
-        );
+        // fitness_evaluation has its own executor now (#355). The
+        // ContractExecutor's synthetic fallback for this kind has been
+        // retired — FitnessExecutor fetches the function definition,
+        // dispatches on `kind` (latency_threshold, error_rate, etc.),
+        // and queries the matching data source via internal callbacks.
+        by_kind.insert("fitness_evaluation", Box::new(fitness::FitnessExecutor));
 
         for k in ["scenario", "orchestration", "state_machine", "chain"] {
             by_kind.insert(k, Box::new(flow::FlowExecutor::for_kind(k)));

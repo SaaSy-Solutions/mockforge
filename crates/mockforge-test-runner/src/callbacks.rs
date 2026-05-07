@@ -133,6 +133,54 @@ impl RegistryCallbacks {
         Ok(rows)
     }
 
+    /// Fetch a fitness function definition (id, name, kind, config)
+    /// for the FitnessExecutor (#355). Called once per run before
+    /// dispatching to the kind-specific evaluator.
+    pub async fn fetch_fitness_function(
+        &self,
+        function_id: Uuid,
+    ) -> Result<FitnessFunctionDefinition> {
+        let url = format!(
+            "{}/api/v1/internal/fitness-functions/{function_id}",
+            self.base_url.trim_end_matches('/'),
+        );
+        let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
+        let resp = resp.error_for_status()?;
+        let row: FitnessFunctionDefinition = resp.json().await?;
+        Ok(row)
+    }
+
+    /// Pull latency-aggregate stats for a deployment over a window.
+    /// Used by `kind='latency_threshold'` fitness checks. The optional
+    /// `path` filter narrows to a single endpoint when the function's
+    /// config specifies one.
+    pub async fn fetch_deployment_latency_stats(
+        &self,
+        deployment_id: Uuid,
+        window_minutes: i64,
+        path: Option<&str>,
+    ) -> Result<DeploymentLatencyStats> {
+        let url = format!(
+            "{}/api/v1/internal/deployments/{deployment_id}/latency-stats",
+            self.base_url.trim_end_matches('/'),
+        );
+        // `reqwest::RequestBuilder::query` urlencodes both keys and
+        // values — handles paths with `/`, spaces, etc. without us
+        // pulling in an extra urlencoding dep.
+        let mut req = self
+            .http
+            .get(&url)
+            .bearer_auth(&self.token)
+            .query(&[("window_minutes", window_minutes.to_string())]);
+        if let Some(p) = path {
+            req = req.query(&[("path", p)]);
+        }
+        let resp = req.send().await?;
+        let resp = resp.error_for_status()?;
+        let stats: DeploymentLatencyStats = resp.json().await?;
+        Ok(stats)
+    }
+
     /// Toggle chaos on a hosted-mock deployment via the registry's
     /// internal proxy. Used by the chaos executor for
     /// target_kind=hosted_mock — the registry resolves the
@@ -162,6 +210,34 @@ pub struct EndpointHit {
     pub method: String,
     pub path: String,
     pub hits: i64,
+}
+
+/// Subset of `FitnessFunction` the runner needs to dispatch + evaluate.
+/// We don't pull the full model row (last_evaluated_at, last_status,
+/// timestamps) since the runner only consumes id, name, kind, config.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct FitnessFunctionDefinition {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+    pub kind: String,
+    pub config: serde_json::Value,
+}
+
+/// Aggregate latency stats over a window for one deployment. Mirrors
+/// the registry handler's `DeploymentLatencyStats` shape exactly.
+/// Percentile / max / avg fields are `None` when `count == 0`.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeploymentLatencyStats {
+    pub count: i64,
+    pub error_count: i64,
+    pub p50_ms: Option<f64>,
+    pub p95_ms: Option<f64>,
+    pub p99_ms: Option<f64>,
+    pub max_ms: Option<f64>,
+    pub avg_ms: Option<f64>,
 }
 
 #[derive(Serialize)]

@@ -1,0 +1,603 @@
+//! Architectural fitness function evaluator (#355 item 2).
+//!
+//! Replaces the synthetic `fitness_evaluation` arm of `ContractExecutor`
+//! with real, data-source-backed evaluation. Each fitness function row
+//! has a `kind` + `config` blob; the executor fetches the definition
+//! from the registry, dispatches on kind, and runs the corresponding
+//! evaluator against live data.
+//!
+//! Currently implemented in this PR:
+//!   - `latency_threshold` — queries `runtime_request_logs` aggregates
+//!     for a deployment and asserts a percentile latency < threshold.
+//!
+//! Stubbed (returns `errored` with a clear "not yet implemented in
+//! cloud" message; tracking PRs follow this one):
+//!   - `error_rate`
+//!   - `contract_stability`
+//!   - `custom_query` — likely permanent stub since we don't run
+//!     arbitrary user code on cloud workers; will surface in the UI as
+//!     "self-hosted only".
+//!
+//! `run.suite_id` is the fitness function's id (per the `mirror_kind_status`
+//! convention). The summary the executor returns includes
+//! `measured_value` + `threshold_value` so `mirror_kind_status` can
+//! write a row into `fitness_evaluations` and update
+//! `fitness_functions.last_status` for the timeline UI.
+//!
+//! Failure → incident handoff lives in `mirror_kind_status` already; we
+//! just need to return `Failed`/`Errored` cleanly here and the
+//! existing notification dispatcher fires.
+
+use std::time::Instant;
+
+use async_trait::async_trait;
+use uuid::Uuid;
+
+use crate::callbacks::{DeploymentLatencyStats, FitnessFunctionDefinition, RegistryCallbacks};
+use crate::error::Result;
+use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+
+/// Default look-back window for stat queries when the function's
+/// config doesn't pin one. 60 minutes balances "recent enough to flag
+/// regressions promptly" against "wide enough to have signal" for low-
+/// QPS deployments.
+const DEFAULT_WINDOW_MINUTES: i64 = 60;
+
+/// Per-call hard cap on the look-back. Mirrors the registry handler's
+/// 24-hour clamp so a misshapen config doesn't burn worker time on a
+/// week-long aggregate.
+const MAX_WINDOW_MINUTES: i64 = 1_440;
+
+/// Executor for `kind = "fitness_evaluation"`. See module docs for
+/// payload + dispatch semantics.
+pub struct FitnessExecutor;
+
+#[async_trait]
+impl Executor for FitnessExecutor {
+    fn kind(&self) -> &'static str {
+        "fitness_evaluation"
+    }
+
+    async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
+        let started = Instant::now();
+        callbacks.run_started(job.run_id).await?;
+
+        // Fetch the function definition. `run.suite_id` is the fitness
+        // function's id (set when the run was enqueued — see the
+        // mirror_kind_status comment chain).
+        let function = match callbacks.fetch_fitness_function(job.source_id).await {
+            Ok(f) => f,
+            Err(e) => {
+                return errored_run(
+                    callbacks,
+                    &job,
+                    started,
+                    1,
+                    format!("failed to fetch fitness function definition: {e}"),
+                )
+                .await;
+            }
+        };
+
+        callbacks
+            .run_event(
+                job.run_id,
+                1,
+                "log",
+                serde_json::json!({
+                    "level": "info",
+                    "message": format!(
+                        "Evaluating fitness function '{}' (kind={})",
+                        function.name, function.kind,
+                    ),
+                    "function_id": function.id,
+                    "tracking_task": 8,
+                }),
+            )
+            .await?;
+
+        match function.kind.as_str() {
+            "latency_threshold" => {
+                evaluate_latency_threshold(&function, callbacks, &job, started).await
+            }
+            "error_rate" | "contract_stability" | "custom_query" => {
+                errored_run(
+                    callbacks,
+                    &job,
+                    started,
+                    2,
+                    format!(
+                        "fitness kind '{}' isn't implemented in the cloud executor yet — \
+                         tracking PR follows #355 item 2",
+                        function.kind
+                    ),
+                )
+                .await
+            }
+            other => {
+                errored_run(
+                    callbacks,
+                    &job,
+                    started,
+                    2,
+                    format!(
+                        "unknown fitness kind '{}' — must be one of latency_threshold, \
+                         error_rate, contract_stability, custom_query",
+                        other
+                    ),
+                )
+                .await
+            }
+        }
+    }
+}
+
+// ─── latency_threshold evaluator ─────────────────────────────────────
+
+/// Resolved `latency_threshold` config pulled out of the function's
+/// JSONB blob. `deployment_id` is required; everything else has a
+/// sensible default.
+#[derive(Debug)]
+struct LatencyThresholdConfig {
+    deployment_id: Uuid,
+    threshold_ms: f64,
+    percentile: LatencyPercentile,
+    window_minutes: i64,
+    /// Optional path filter — narrows the aggregate to one endpoint.
+    path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LatencyPercentile {
+    P50,
+    P95,
+    P99,
+    Max,
+    Avg,
+}
+
+impl LatencyPercentile {
+    fn parse(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "p50" | "50" | "median" => Some(Self::P50),
+            "p95" | "95" => Some(Self::P95),
+            "p99" | "99" => Some(Self::P99),
+            "max" => Some(Self::Max),
+            "avg" | "mean" | "average" => Some(Self::Avg),
+            _ => None,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Self::P50 => "p50",
+            Self::P95 => "p95",
+            Self::P99 => "p99",
+            Self::Max => "max",
+            Self::Avg => "avg",
+        }
+    }
+
+    fn value_from(&self, stats: &DeploymentLatencyStats) -> Option<f64> {
+        match self {
+            Self::P50 => stats.p50_ms,
+            Self::P95 => stats.p95_ms,
+            Self::P99 => stats.p99_ms,
+            Self::Max => stats.max_ms,
+            Self::Avg => stats.avg_ms,
+        }
+    }
+}
+
+fn parse_latency_config(
+    config: &serde_json::Value,
+) -> std::result::Result<LatencyThresholdConfig, String> {
+    let deployment_id = config
+        .get("deployment_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "config.deployment_id missing".to_string())
+        .and_then(|s| {
+            Uuid::parse_str(s).map_err(|e| format!("config.deployment_id invalid: {e}"))
+        })?;
+    let threshold_ms = config
+        .get("threshold_ms")
+        .and_then(|v| v.as_f64())
+        .ok_or_else(|| "config.threshold_ms missing or non-numeric".to_string())?;
+    if threshold_ms <= 0.0 || !threshold_ms.is_finite() {
+        return Err(format!(
+            "config.threshold_ms must be a positive finite number (got {threshold_ms})"
+        ));
+    }
+    let percentile = match config.get("percentile").and_then(|v| v.as_str()) {
+        Some(s) => LatencyPercentile::parse(s)
+            .ok_or_else(|| format!("config.percentile '{s}' must be p50|p95|p99|max|avg"))?,
+        // Default to p95 — the most common SLO percentile and matches
+        // the migration's column naming convention.
+        None => LatencyPercentile::P95,
+    };
+    let window_minutes = config
+        .get("window_minutes")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(DEFAULT_WINDOW_MINUTES)
+        .clamp(1, MAX_WINDOW_MINUTES);
+    let path = config
+        .get("path")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    Ok(LatencyThresholdConfig {
+        deployment_id,
+        threshold_ms,
+        percentile,
+        window_minutes,
+        path,
+    })
+}
+
+async fn evaluate_latency_threshold(
+    function: &FitnessFunctionDefinition,
+    callbacks: &RegistryCallbacks,
+    job: &RunJob,
+    started: Instant,
+) -> Result<JobOutcome> {
+    let config = match parse_latency_config(&function.config) {
+        Ok(c) => c,
+        Err(reason) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("invalid latency_threshold config: {reason}"),
+            )
+            .await;
+        }
+    };
+
+    let stats = match callbacks
+        .fetch_deployment_latency_stats(
+            config.deployment_id,
+            config.window_minutes,
+            config.path.as_deref(),
+        )
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("failed to fetch latency stats: {e}"),
+            )
+            .await;
+        }
+    };
+
+    // No traffic in the window: report `unknown` (we don't have a
+    // measurement, so passing or failing would both be lying). Returns
+    // `Errored` rather than `Passed` so the cloud-side dispatcher
+    // surfaces it as something the operator should see.
+    if stats.count == 0 {
+        callbacks
+            .run_event(
+                job.run_id,
+                2,
+                "log",
+                serde_json::json!({
+                    "level": "warn",
+                    "message": format!(
+                        "No traffic for deployment {} in the last {} minutes — cannot measure {}",
+                        config.deployment_id, config.window_minutes, config.percentile.label(),
+                    ),
+                    "function_name": function.name,
+                }),
+            )
+            .await?;
+        let elapsed = started.elapsed();
+        return Ok(JobOutcome {
+            status: JobStatus::Errored,
+            runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            summary: Some(serde_json::json!({
+                "executor_phase": "real_latency_threshold",
+                "tracking_task": 8,
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "latency_threshold",
+                "deployment_id": config.deployment_id,
+                "window_minutes": config.window_minutes,
+                "path": config.path,
+                "percentile": config.percentile.label(),
+                "threshold_value": config.threshold_ms,
+                "measured_value": serde_json::Value::Null,
+                "count": 0,
+                "reason": "no_traffic",
+            })),
+        });
+    }
+
+    let measured = match config.percentile.value_from(&stats) {
+        Some(v) => v,
+        None => {
+            // count > 0 but the percentile came back NULL — shouldn't
+            // happen with `percentile_cont` over a non-empty set, but
+            // defend against future schema changes (e.g. `latency_ms`
+            // becoming nullable).
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!(
+                    "deployment {} has {} request(s) but {} percentile is NULL",
+                    config.deployment_id,
+                    stats.count,
+                    config.percentile.label(),
+                ),
+            )
+            .await;
+        }
+    };
+
+    let pass = measured <= config.threshold_ms;
+    let event_type = if pass { "fitness_pass" } else { "fitness_fail" };
+    let reason = if pass {
+        String::new()
+    } else {
+        format!(
+            "{} latency = {:.1}ms > threshold {:.1}ms",
+            config.percentile.label(),
+            measured,
+            config.threshold_ms,
+        )
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            2,
+            event_type,
+            serde_json::json!({
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "latency_threshold",
+                "deployment_id": config.deployment_id,
+                "percentile": config.percentile.label(),
+                "measured_value": measured,
+                "threshold_value": config.threshold_ms,
+                "count": stats.count,
+                "error_count": stats.error_count,
+                "window_minutes": config.window_minutes,
+                "path": config.path,
+                "reason": reason,
+            }),
+        )
+        .await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    Ok(JobOutcome {
+        status: if pass {
+            JobStatus::Passed
+        } else {
+            JobStatus::Failed
+        },
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "real_latency_threshold",
+            "tracking_task": 8,
+            "function_id": function.id,
+            "function_name": function.name,
+            "kind": "latency_threshold",
+            "deployment_id": config.deployment_id,
+            "window_minutes": config.window_minutes,
+            "path": config.path,
+            "percentile": config.percentile.label(),
+            // These two field names are the contract `mirror_kind_status`
+            // reads to populate `fitness_evaluations.measured_value` /
+            // `threshold_value`. Don't rename without updating both.
+            "measured_value": measured,
+            "threshold_value": config.threshold_ms,
+            "count": stats.count,
+            "error_count": stats.error_count,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+/// Emit a single error log + return an `Errored` outcome. Used for
+/// pre-flight failures (bad config, fetch errors) that prevent any
+/// real evaluation. Includes `function_name` in the summary when
+/// available so the incidents UI surfaces it.
+async fn errored_run(
+    callbacks: &RegistryCallbacks,
+    job: &RunJob,
+    started: Instant,
+    seq: u32,
+    message: String,
+) -> Result<JobOutcome> {
+    callbacks
+        .run_event(
+            job.run_id,
+            seq,
+            "log",
+            serde_json::json!({
+                "level": "error",
+                "message": message,
+            }),
+        )
+        .await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    Ok(JobOutcome {
+        status: JobStatus::Errored,
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "errored_pre_flight",
+            "tracking_task": 8,
+        })),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg(json: serde_json::Value) -> std::result::Result<LatencyThresholdConfig, String> {
+        parse_latency_config(&json)
+    }
+
+    #[test]
+    fn parse_latency_config_minimal() {
+        let dep = Uuid::new_v4();
+        let c = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 500,
+        }))
+        .unwrap();
+        assert_eq!(c.deployment_id, dep);
+        assert_eq!(c.threshold_ms, 500.0);
+        // Default percentile is p95, default window 60m.
+        assert_eq!(c.percentile, LatencyPercentile::P95);
+        assert_eq!(c.window_minutes, DEFAULT_WINDOW_MINUTES);
+        assert_eq!(c.path, None);
+    }
+
+    #[test]
+    fn parse_latency_config_full() {
+        let dep = Uuid::new_v4();
+        let c = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 250.5,
+            "percentile": "p99",
+            "window_minutes": 120,
+            "path": "/api/checkout",
+        }))
+        .unwrap();
+        assert_eq!(c.threshold_ms, 250.5);
+        assert_eq!(c.percentile, LatencyPercentile::P99);
+        assert_eq!(c.window_minutes, 120);
+        assert_eq!(c.path.as_deref(), Some("/api/checkout"));
+    }
+
+    #[test]
+    fn parse_latency_config_clamps_window() {
+        let dep = Uuid::new_v4();
+        // window above the cap clamps to MAX_WINDOW_MINUTES.
+        let c = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 1,
+            "window_minutes": 99_999,
+        }))
+        .unwrap();
+        assert_eq!(c.window_minutes, MAX_WINDOW_MINUTES);
+        // window below 1 clamps to 1.
+        let c = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 1,
+            "window_minutes": 0,
+        }))
+        .unwrap();
+        assert_eq!(c.window_minutes, 1);
+    }
+
+    #[test]
+    fn parse_latency_config_drops_empty_path() {
+        let dep = Uuid::new_v4();
+        let c = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 1,
+            "path": "",
+        }))
+        .unwrap();
+        assert_eq!(c.path, None);
+    }
+
+    #[test]
+    fn parse_latency_config_rejects_missing_deployment() {
+        let err = cfg(serde_json::json!({
+            "threshold_ms": 100,
+        }))
+        .unwrap_err();
+        assert!(err.contains("deployment_id"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_latency_config_rejects_invalid_deployment_uuid() {
+        let err = cfg(serde_json::json!({
+            "deployment_id": "not-a-uuid",
+            "threshold_ms": 100,
+        }))
+        .unwrap_err();
+        assert!(err.contains("deployment_id"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_latency_config_rejects_zero_threshold() {
+        let dep = Uuid::new_v4();
+        let err = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 0,
+        }))
+        .unwrap_err();
+        assert!(err.contains("positive"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_latency_config_rejects_negative_threshold() {
+        let dep = Uuid::new_v4();
+        let err = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": -10,
+        }))
+        .unwrap_err();
+        assert!(err.contains("positive"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_latency_config_rejects_unknown_percentile() {
+        let dep = Uuid::new_v4();
+        let err = cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_ms": 1,
+            "percentile": "p42",
+        }))
+        .unwrap_err();
+        assert!(err.contains("p42"), "got: {err}");
+    }
+
+    #[test]
+    fn percentile_parse_accepts_synonyms() {
+        assert_eq!(LatencyPercentile::parse("p50"), Some(LatencyPercentile::P50));
+        assert_eq!(LatencyPercentile::parse("median"), Some(LatencyPercentile::P50));
+        assert_eq!(LatencyPercentile::parse("MEDIAN"), Some(LatencyPercentile::P50));
+        assert_eq!(LatencyPercentile::parse("avg"), Some(LatencyPercentile::Avg));
+        assert_eq!(LatencyPercentile::parse("MEAN"), Some(LatencyPercentile::Avg));
+        assert_eq!(LatencyPercentile::parse("Average"), Some(LatencyPercentile::Avg));
+        assert_eq!(LatencyPercentile::parse("Max"), Some(LatencyPercentile::Max));
+        assert_eq!(LatencyPercentile::parse("99"), Some(LatencyPercentile::P99));
+        assert_eq!(LatencyPercentile::parse("garbage"), None);
+    }
+
+    #[test]
+    fn percentile_value_from_picks_right_field() {
+        let stats = DeploymentLatencyStats {
+            count: 100,
+            error_count: 1,
+            p50_ms: Some(10.0),
+            p95_ms: Some(50.0),
+            p99_ms: Some(80.0),
+            max_ms: Some(200.0),
+            avg_ms: Some(15.0),
+        };
+        assert_eq!(LatencyPercentile::P50.value_from(&stats), Some(10.0));
+        assert_eq!(LatencyPercentile::P95.value_from(&stats), Some(50.0));
+        assert_eq!(LatencyPercentile::P99.value_from(&stats), Some(80.0));
+        assert_eq!(LatencyPercentile::Max.value_from(&stats), Some(200.0));
+        assert_eq!(LatencyPercentile::Avg.value_from(&stats), Some(15.0));
+    }
+}
