@@ -6,13 +6,14 @@
 //! from the registry, dispatches on kind, and runs the corresponding
 //! evaluator against live data.
 //!
-//! Currently implemented in this PR:
+//! Currently implemented:
 //!   - `latency_threshold` — queries `runtime_request_logs` aggregates
 //!     for a deployment and asserts a percentile latency < threshold.
+//!   - `error_rate` — same aggregate endpoint, asserts
+//!     `error_count / count <= threshold_rate`.
 //!
 //! Stubbed (returns `errored` with a clear "not yet implemented in
 //! cloud" message; tracking PRs follow this one):
-//!   - `error_rate`
 //!   - `contract_stability`
 //!   - `custom_query` — likely permanent stub since we don't run
 //!     arbitrary user code on cloud workers; will surface in the UI as
@@ -100,7 +101,8 @@ impl Executor for FitnessExecutor {
             "latency_threshold" => {
                 evaluate_latency_threshold(&function, callbacks, &job, started).await
             }
-            "error_rate" | "contract_stability" | "custom_query" => {
+            "error_rate" => evaluate_error_rate(&function, callbacks, &job, started).await,
+            "contract_stability" | "custom_query" => {
                 errored_run(
                     callbacks,
                     &job,
@@ -406,6 +408,212 @@ async fn evaluate_latency_threshold(
     })
 }
 
+// ─── error_rate evaluator ────────────────────────────────────────────
+
+/// Resolved `error_rate` config. Same data source as
+/// `latency_threshold` (the deployment's runtime_request_logs
+/// aggregate), but the assertion is against `error_count / count`
+/// rather than a percentile latency. `threshold_rate` is a fraction
+/// in `[0.0, 1.0]` — values like `0.05` ("5% error rate ceiling")
+/// are typical.
+#[derive(Debug)]
+struct ErrorRateConfig {
+    deployment_id: Uuid,
+    threshold_rate: f64,
+    window_minutes: i64,
+    /// Optional path filter — same semantics as latency_threshold.
+    path: Option<String>,
+}
+
+fn parse_error_rate_config(
+    config: &serde_json::Value,
+) -> std::result::Result<ErrorRateConfig, String> {
+    let deployment_id = config
+        .get("deployment_id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "config.deployment_id missing".to_string())
+        .and_then(|s| {
+            Uuid::parse_str(s).map_err(|e| format!("config.deployment_id invalid: {e}"))
+        })?;
+    let threshold_rate = config
+        .get("threshold_rate")
+        .and_then(|v| v.as_f64())
+        .ok_or_else(|| "config.threshold_rate missing or non-numeric".to_string())?;
+    if !threshold_rate.is_finite() || !(0.0..=1.0).contains(&threshold_rate) {
+        return Err(format!(
+            "config.threshold_rate must be a finite fraction in [0.0, 1.0] (got {threshold_rate})"
+        ));
+    }
+    let window_minutes = config
+        .get("window_minutes")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(DEFAULT_WINDOW_MINUTES)
+        .clamp(1, MAX_WINDOW_MINUTES);
+    let path = config
+        .get("path")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    Ok(ErrorRateConfig {
+        deployment_id,
+        threshold_rate,
+        window_minutes,
+        path,
+    })
+}
+
+async fn evaluate_error_rate(
+    function: &FitnessFunctionDefinition,
+    callbacks: &RegistryCallbacks,
+    job: &RunJob,
+    started: Instant,
+) -> Result<JobOutcome> {
+    let config = match parse_error_rate_config(&function.config) {
+        Ok(c) => c,
+        Err(reason) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("invalid error_rate config: {reason}"),
+            )
+            .await;
+        }
+    };
+
+    let stats = match callbacks
+        .fetch_deployment_latency_stats(
+            config.deployment_id,
+            config.window_minutes,
+            config.path.as_deref(),
+        )
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            return errored_run(
+                callbacks,
+                job,
+                started,
+                2,
+                format!("failed to fetch deployment stats: {e}"),
+            )
+            .await;
+        }
+    };
+
+    // Same no-traffic semantics as latency_threshold: we don't have a
+    // measurement, so return `Errored` rather than implying the
+    // assertion passed by silence.
+    if stats.count == 0 {
+        callbacks
+            .run_event(
+                job.run_id,
+                2,
+                "log",
+                serde_json::json!({
+                    "level": "warn",
+                    "message": format!(
+                        "No traffic for deployment {} in the last {} minutes — cannot measure error rate",
+                        config.deployment_id, config.window_minutes,
+                    ),
+                    "function_name": function.name,
+                }),
+            )
+            .await?;
+        let elapsed = started.elapsed();
+        return Ok(JobOutcome {
+            status: JobStatus::Errored,
+            runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            summary: Some(serde_json::json!({
+                "executor_phase": "real_error_rate",
+                "tracking_task": 8,
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "error_rate",
+                "deployment_id": config.deployment_id,
+                "window_minutes": config.window_minutes,
+                "path": config.path,
+                "threshold_value": config.threshold_rate,
+                "measured_value": serde_json::Value::Null,
+                "count": 0,
+                "error_count": 0,
+                "reason": "no_traffic",
+            })),
+        });
+    }
+
+    // Casts are safe — `stats.count > 0` (checked above) and i64 → f64
+    // loses precision only above 2^53, while a single deployment
+    // window holds at most a few hundred thousand requests in
+    // practice.
+    let measured = stats.error_count as f64 / stats.count as f64;
+    let pass = measured <= config.threshold_rate;
+    let event_type = if pass { "fitness_pass" } else { "fitness_fail" };
+    let reason = if pass {
+        String::new()
+    } else {
+        format!(
+            "error rate = {:.2}% ({} / {}) > threshold {:.2}%",
+            measured * 100.0,
+            stats.error_count,
+            stats.count,
+            config.threshold_rate * 100.0,
+        )
+    };
+
+    callbacks
+        .run_event(
+            job.run_id,
+            2,
+            event_type,
+            serde_json::json!({
+                "function_id": function.id,
+                "function_name": function.name,
+                "kind": "error_rate",
+                "deployment_id": config.deployment_id,
+                "measured_value": measured,
+                "threshold_value": config.threshold_rate,
+                "count": stats.count,
+                "error_count": stats.error_count,
+                "window_minutes": config.window_minutes,
+                "path": config.path,
+                "reason": reason,
+            }),
+        )
+        .await?;
+
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    Ok(JobOutcome {
+        status: if pass {
+            JobStatus::Passed
+        } else {
+            JobStatus::Failed
+        },
+        runner_seconds: secs,
+        summary: Some(serde_json::json!({
+            "executor_phase": "real_error_rate",
+            "tracking_task": 8,
+            "function_id": function.id,
+            "function_name": function.name,
+            "kind": "error_rate",
+            "deployment_id": config.deployment_id,
+            "window_minutes": config.window_minutes,
+            "path": config.path,
+            // Same `measured_value` / `threshold_value` contract that
+            // latency_threshold uses — `mirror_kind_status` reads these
+            // names to populate `fitness_evaluations`.
+            "measured_value": measured,
+            "threshold_value": config.threshold_rate,
+            "count": stats.count,
+            "error_count": stats.error_count,
+            "wall_ms": elapsed.as_millis() as u64,
+        })),
+    })
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 /// Emit a single error log + return an `Errored` outcome. Used for
@@ -599,5 +807,105 @@ mod tests {
         assert_eq!(LatencyPercentile::P99.value_from(&stats), Some(80.0));
         assert_eq!(LatencyPercentile::Max.value_from(&stats), Some(200.0));
         assert_eq!(LatencyPercentile::Avg.value_from(&stats), Some(15.0));
+    }
+
+    fn err_cfg(json: serde_json::Value) -> std::result::Result<ErrorRateConfig, String> {
+        parse_error_rate_config(&json)
+    }
+
+    #[test]
+    fn parse_error_rate_config_minimal() {
+        let dep = Uuid::new_v4();
+        let c = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 0.05,
+        }))
+        .unwrap();
+        assert_eq!(c.deployment_id, dep);
+        assert_eq!(c.threshold_rate, 0.05);
+        assert_eq!(c.window_minutes, DEFAULT_WINDOW_MINUTES);
+        assert_eq!(c.path, None);
+    }
+
+    #[test]
+    fn parse_error_rate_config_full() {
+        let dep = Uuid::new_v4();
+        let c = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 0.01,
+            "window_minutes": 30,
+            "path": "/checkout",
+        }))
+        .unwrap();
+        assert_eq!(c.threshold_rate, 0.01);
+        assert_eq!(c.window_minutes, 30);
+        assert_eq!(c.path.as_deref(), Some("/checkout"));
+    }
+
+    #[test]
+    fn parse_error_rate_config_accepts_zero_and_one() {
+        // 0.0 means "no errors allowed", 1.0 means "no ceiling at all".
+        // Both edge cases should parse cleanly — the assertion logic
+        // handles them naturally.
+        let dep = Uuid::new_v4();
+        assert!(err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 0.0,
+        }))
+        .is_ok());
+        assert!(err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 1.0,
+        }))
+        .is_ok());
+    }
+
+    #[test]
+    fn parse_error_rate_config_rejects_out_of_range() {
+        let dep = Uuid::new_v4();
+        let err = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 1.5,
+        }))
+        .unwrap_err();
+        assert!(err.contains("[0.0, 1.0]"), "got: {err}");
+
+        let err = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": -0.1,
+        }))
+        .unwrap_err();
+        assert!(err.contains("[0.0, 1.0]"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_error_rate_config_rejects_missing_threshold() {
+        let dep = Uuid::new_v4();
+        let err = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+        }))
+        .unwrap_err();
+        assert!(err.contains("threshold_rate"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_error_rate_config_clamps_window() {
+        let dep = Uuid::new_v4();
+        let c = err_cfg(serde_json::json!({
+            "deployment_id": dep.to_string(),
+            "threshold_rate": 0.05,
+            "window_minutes": 99_999,
+        }))
+        .unwrap();
+        assert_eq!(c.window_minutes, MAX_WINDOW_MINUTES);
+    }
+
+    #[test]
+    fn parse_error_rate_config_rejects_missing_deployment() {
+        let err = err_cfg(serde_json::json!({
+            "threshold_rate": 0.05,
+        }))
+        .unwrap_err();
+        assert!(err.contains("deployment_id"), "got: {err}");
     }
 }
