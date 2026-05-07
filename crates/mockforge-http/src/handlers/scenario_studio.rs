@@ -222,7 +222,6 @@ pub async fn delete_flow(
 /// Execute a flow
 ///
 /// POST /api/v1/scenario-studio/flows/:id/execute
-#[axum::debug_handler]
 pub async fn execute_flow(
     Path(id): Path<String>,
     State(state): State<ScenarioStudioState>,

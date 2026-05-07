@@ -24,6 +24,8 @@ members = [
     # Plugin system
     "crates/mockforge-plugin-core",
     "crates/mockforge-plugin-cli",
+    "crates/mockforge-plugin-egress",
+    "crates/mockforge-plugin-host",
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-registry",
     "crates/mockforge-plugin-sdk",

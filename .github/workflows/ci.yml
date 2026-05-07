@@ -40,7 +40,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: "2G"
     strategy:
       fail-fast: false
       matrix:
@@ -59,36 +58,12 @@ jobs:
 
     - name: Install system dependencies
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
-    - name: Install sccache
-      run: |
-        SCCACHE_VERSION=0.10.0
-        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-        curl -L "$SCCACHE_URL" | tar xz
-        sudo mv sccache-*/sccache /usr/local/bin/
-        sccache --version
 
-    - name: Verify sccache works
-      id: sccache-check
-      run: |
-        if sccache --start-server 2>/dev/null; then
-          echo "sccache_available=true" >> "$GITHUB_OUTPUT"
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-        else
-          echo "sccache_available=false" >> "$GITHUB_OUTPUT"
-          echo "::warning::sccache unavailable — building without cache"
-        fi
-      continue-on-error: true
-
-    - name: Cache sccache
-      if: steps.sccache-check.outputs.sccache_available == 'true'
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/sccache
-        key: sccache-${{ matrix.rust }}-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          sccache-${{ matrix.rust }}-${{ runner.os }}-
-          sccache-${{ matrix.rust }}-
-
+    # sccache was here, removed 2026-05-06: 0% Rust hit rate over 1378+
+    # compile attempts. Self-hosted runners' rustc invocations include
+    # absolute paths to /home/actions/actions-runner-{N}/_work/.../target/
+    # in --extern args, so cache keys differ across the 9 sibling runners.
+    # Swatinem/rust-cache@v2 below covers the same use case (target/ caching).
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
 
@@ -171,7 +146,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
@@ -181,31 +155,6 @@ jobs:
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
-    - name: Install sccache
-      run: |
-        SCCACHE_VERSION=0.10.0
-        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-        curl -L "$SCCACHE_URL" | tar xz
-        sudo mv sccache-*/sccache /usr/local/bin/
-        sccache --version
-
-    - name: Verify sccache works
-      id: sccache-check
-      run: |
-        if sccache --start-server 2>/dev/null; then
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-        else
-          echo "::warning::sccache unavailable — building without cache"
-        fi
-      continue-on-error: true
-
-    - name: Cache sccache
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/sccache
-        key: warning-gate-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          warning-gate-sccache-${{ runner.os }}-
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -219,7 +168,6 @@ jobs:
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
@@ -229,31 +177,6 @@ jobs:
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
-    - name: Install sccache
-      run: |
-        SCCACHE_VERSION=0.10.0
-        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-        curl -L "$SCCACHE_URL" | tar xz
-        sudo mv sccache-*/sccache /usr/local/bin/
-        sccache --version
-
-    - name: Verify sccache works
-      id: sccache-check
-      run: |
-        if sccache --start-server 2>/dev/null; then
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-        else
-          echo "::warning::sccache unavailable — building without cache"
-        fi
-      continue-on-error: true
-
-    - name: Cache sccache
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/sccache
-        key: warning-preview-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          warning-preview-sccache-${{ runner.os }}-
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -335,7 +258,6 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: "2G"
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
@@ -347,31 +269,6 @@ jobs:
 
     - name: Install protoc (protobuf compiler)
       run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
-    - name: Install sccache
-      run: |
-        SCCACHE_VERSION=0.10.0
-        SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-        curl -L "$SCCACHE_URL" | tar xz
-        sudo mv sccache-*/sccache /usr/local/bin/
-        sccache --version
-
-    - name: Verify sccache works
-      id: sccache-check
-      run: |
-        if sccache --start-server 2>/dev/null; then
-          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
-        else
-          echo "::warning::sccache unavailable — building without cache"
-        fi
-      continue-on-error: true
-
-    - name: Cache sccache
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/sccache
-        key: msrv-sccache-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          msrv-sccache-${{ runner.os }}-
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2

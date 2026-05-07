@@ -44,6 +44,14 @@ const createWrapper = () => {
   );
 };
 
+// DashboardPage captures `const isCloud = isCloudMode()` at module load,
+// so per-test env stubbing is too late. Mock the module to keep the page
+// in local mode for the existing tests.
+vi.mock('../../utils/cloudMode', () => ({
+  isCloudMode: () => false,
+  getCloudApiBase: () => '',
+}));
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();

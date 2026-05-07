@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::invocation_metrics::{InvocationMetricsBus, InvocationTimer};
+use crate::memory_tracking::MemoryTracker;
 use mockforge_plugin_core::{
     PluginCapabilities, PluginContext, PluginHealth, PluginId, PluginMetrics, PluginResult,
     PluginState,
@@ -12,8 +13,35 @@ use mockforge_plugin_core::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use wasmtime::{Engine, Linker, Module, Store};
+use wasmtime::{Engine, Linker, Module, ResourceLimiter, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
+
+/// Per-store data carried by every WASM `Store` in this sandbox.
+///
+/// Bundles the WASI context (for stdio + filesystem capability bits)
+/// with a [`MemoryTracker`] that Wasmtime calls back via the
+/// `ResourceLimiter` trait. The tracker has to live inside the store
+/// data because Wasmtime's modern API (`Store::limiter`) takes a
+/// closure `|t: &mut T| &mut dyn ResourceLimiter` — there's no way to
+/// hand it an externally-owned tracker.
+pub struct SandboxStoreData {
+    /// WASI context for stdio inheritance + filesystem capabilities.
+    pub wasi: WasiCtx,
+    /// Memory + table accounting installed on the store via
+    /// `Store::limiter`.
+    pub tracker: MemoryTracker,
+}
+
+/// Build a fully-configured `Store` with the `MemoryTracker` installed
+/// as a `ResourceLimiter`. Centralized so the real `new` and the stub
+/// `stub_new` can't drift on how the limiter gets wired up.
+fn make_store(engine: &Engine, max_memory_bytes: usize) -> Store<SandboxStoreData> {
+    let wasi = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
+    let tracker = MemoryTracker::with_byte_limit(max_memory_bytes);
+    let mut store = Store::new(engine, SandboxStoreData { wasi, tracker });
+    store.limiter(|d| &mut d.tracker as &mut dyn ResourceLimiter);
+    store
+}
 
 /// Plugin sandbox for secure execution
 pub struct PluginSandbox {
@@ -158,9 +186,9 @@ pub struct SandboxInstance {
     /// WebAssembly module
     _module: Module,
     /// WebAssembly store
-    store: Store<WasiCtx>,
+    store: Store<SandboxStoreData>,
     /// Linker for the instance
-    linker: Linker<WasiCtx>,
+    linker: Linker<SandboxStoreData>,
     /// Sandbox resources
     resources: SandboxResources,
     /// Health monitor
@@ -185,11 +213,12 @@ impl SandboxInstance {
         let module = Module::from_file(engine, &context.plugin_path)
             .map_err(|e| PluginLoaderError::wasm(format!("Failed to load WASM module: {}", e)))?;
 
-        // Create WASI context
-        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
+        // Set up execution limits up front so the memory cap is wired
+        // into the store from creation time.
+        let plugin_capabilities = PluginCapabilities::default();
+        let limits = ExecutionLimits::from_capabilities(&plugin_capabilities);
 
-        // Create WebAssembly store
-        let mut store = Store::new(engine, wasi_ctx);
+        let mut store = make_store(engine, limits.max_memory_bytes);
 
         // Create linker
         let linker = Linker::new(engine);
@@ -202,10 +231,6 @@ impl SandboxInstance {
         linker
             .instantiate(&mut store, &module)
             .map_err(|e| PluginLoaderError::wasm(format!("Failed to instantiate module: {}", e)))?;
-
-        // Set up execution limits
-        let plugin_capabilities = PluginCapabilities::default();
-        let limits = ExecutionLimits::from_capabilities(&plugin_capabilities);
 
         Ok(Self {
             plugin_id: plugin_id.clone(),
@@ -227,16 +252,15 @@ impl SandboxInstance {
         let plugin_id = &context.plugin_id;
 
         // Create dummy values for when WebAssembly is disabled
-        let module = Module::new(&Engine::default(), [])
+        let engine = Engine::default();
+        let module = Module::new(&engine, [])
             .map_err(|e| PluginLoaderError::wasm(format!("Failed to create stub module: {}", e)))?;
-
-        let wasi_ctx = WasiCtxBuilder::new().inherit_stderr().inherit_stdout().build();
-
-        let store = Store::new(&Engine::default(), wasi_ctx);
-        let linker = Linker::new(&Engine::default());
 
         let plugin_capabilities = PluginCapabilities::default();
         let limits = ExecutionLimits::from_capabilities(&plugin_capabilities);
+
+        let store = make_store(&engine, limits.max_memory_bytes);
+        let linker = Linker::new(&engine);
 
         Ok(Self {
             plugin_id: plugin_id.clone(),
@@ -317,11 +341,18 @@ impl SandboxInstance {
             self.resources.max_execution_time = execution_time;
         }
 
-        // Snapshot the peak memory at the end of the invocation. Today
-        // this comes from `resources.peak_memory_usage` which is not
-        // wired to the WASM `MemoryTracker` yet — it stays at 0 in
-        // most paths. Cloud Phase 2 wires this through.
-        let peak_memory_bytes = self.resources.peak_memory_usage as u64;
+        // Read peak memory from the `MemoryTracker` installed on the
+        // store. Wasmtime calls back into the tracker via
+        // `ResourceLimiter::memory_growing` whenever the WASM module
+        // grows linear memory, so this is a real observation — not the
+        // 0 placeholder from the previous iteration of this code path.
+        // Mirror it onto the aggregate `SandboxResources` for the
+        // existing health-check + status surfaces.
+        let peak_memory_bytes = self.store.data().tracker.peak_memory() as u64;
+        if (peak_memory_bytes as usize) > self.resources.peak_memory_usage {
+            self.resources.peak_memory_usage = peak_memory_bytes as usize;
+        }
+        self.resources.memory_usage = self.store.data().tracker.current_memory();
 
         match result {
             Ok(data) => {
