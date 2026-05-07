@@ -166,4 +166,73 @@ impl FeatureUsage {
             .await?;
         Ok(result.rows_affected())
     }
+
+    /// Aggregate `plugin_invoke_ms` rows for a deployment within a time
+    /// window, grouped by attachment.
+    ///
+    /// Each `plugin_invoke_ms` row is a bucket emitted by the OTLP
+    /// aggregator (see migration `20250101000074`); its `metadata` JSONB
+    /// is expected to carry:
+    ///
+    /// ```json
+    /// {
+    ///   "deployment_id":   "uuid",
+    ///   "attachment_id":   "uuid",
+    ///   "plugin_id":       "uuid",
+    ///   "plugin_name":     "string",
+    ///   "plugin_version":  "string",
+    ///   "invoke_ms":       12345,
+    ///   "memory_peak_mb":  42        // optional
+    /// }
+    /// ```
+    ///
+    /// SUMs `invoke_ms`, MAXes `memory_peak_mb` (peak across buckets),
+    /// and ORDERs by total invoke_ms descending so the heaviest plugin
+    /// surfaces first in the UI. Returns an empty Vec when the OTLP
+    /// pipeline hasn't populated any rows yet.
+    pub async fn aggregate_plugin_invoke_ms_by_deployment(
+        pool: &sqlx::PgPool,
+        org_id: Uuid,
+        deployment_id: Uuid,
+        since: DateTime<Utc>,
+    ) -> sqlx::Result<Vec<PluginInvokeAggregateRow>> {
+        sqlx::query_as::<_, PluginInvokeAggregateRow>(
+            r#"
+            SELECT
+                metadata->>'attachment_id'                                AS attachment_id,
+                MAX(metadata->>'plugin_name')                             AS plugin_name,
+                MAX(metadata->>'plugin_version')                          AS plugin_version,
+                COALESCE(SUM((metadata->>'invoke_ms')::bigint), 0)::bigint AS invoke_ms,
+                MAX(NULLIF(metadata->>'memory_peak_mb', '')::bigint)      AS memory_peak_mb
+            FROM feature_usage
+            WHERE feature = 'plugin_invoke_ms'
+              AND org_id = $1
+              AND metadata->>'deployment_id' = $2::text
+              AND created_at >= $3
+              AND metadata ? 'attachment_id'
+            GROUP BY metadata->>'attachment_id'
+            ORDER BY invoke_ms DESC
+            "#,
+        )
+        .bind(org_id)
+        .bind(deployment_id)
+        .bind(since)
+        .fetch_all(pool)
+        .await
+    }
+}
+
+/// One row of the per-attachment plugin-invoke aggregate. Strings are
+/// `Option<String>` because the metadata fields are text-extracted from
+/// JSONB (`->>`), which yields NULL when the key is absent rather than
+/// erroring — we'd rather degrade gracefully than reject the whole
+/// query if a single row was misshapen.
+#[cfg(feature = "postgres")]
+#[derive(Debug, Clone, FromRow)]
+pub struct PluginInvokeAggregateRow {
+    pub attachment_id: Option<String>,
+    pub plugin_name: Option<String>,
+    pub plugin_version: Option<String>,
+    pub invoke_ms: i64,
+    pub memory_peak_mb: Option<i64>,
 }
