@@ -42,6 +42,13 @@ pub enum FeatureType {
     FixtureCreate,
     FixtureUpdate,
     FixtureDelete,
+    // Cloud Plugins (Phase 1) — see migration
+    // 20250101000074_cloud_plugin_attachments.sql.
+    PluginAttach,
+    PluginDetach,
+    /// Wall-time accumulator populated by the OTLP pipeline from the
+    /// `mockforge-plugin-loader` invocation metrics bus.
+    PluginInvokeMs,
 }
 
 /// Feature usage event

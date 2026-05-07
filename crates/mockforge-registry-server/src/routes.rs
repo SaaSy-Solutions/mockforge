@@ -255,6 +255,19 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/disable", post(handlers::hosted_mocks::disable_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/clear", post(handlers::hosted_mocks::clear_recorder))
         .route("/api/v1/hosted-mocks/{deployment_id}/captures/{capture_id}/replay", post(handlers::hosted_mocks::replay_recorder_capture))
+        // Cloud Plugins attach/detach (cloud-plugins Phase 1, Task #6).
+        // Manages rows in hosted_mock_plugins; the plugin-host on the
+        // deployed Fly machine reads its enabled set on boot/reload.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/plugins",
+            get(handlers::cloud_plugin_attachments::list_attachments)
+                .post(handlers::cloud_plugin_attachments::attach_plugin),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/plugins/{attachment_id}",
+            patch(handlers::cloud_plugin_attachments::update_attachment)
+                .delete(handlers::cloud_plugin_attachments::detach_plugin),
+        )
         // State machines (cloud-side proxy to the deployed instance).
         // Mirrors the captures pattern: read-only proxy gated by org
         // membership; writes go via the same management API as today

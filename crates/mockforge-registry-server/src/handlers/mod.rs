@@ -9,6 +9,7 @@ pub mod captures;
 pub mod chaos;
 pub mod cloud_dashboard;
 pub mod cloud_fixtures;
+pub mod cloud_plugin_attachments;
 pub mod cloud_plugins;
 pub mod cloud_services;
 pub mod cloud_workspaces;
