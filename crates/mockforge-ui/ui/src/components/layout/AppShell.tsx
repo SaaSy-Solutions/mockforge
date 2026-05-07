@@ -266,6 +266,10 @@ const cloudNavItemIds = new Set([
   // Cloud test runs — org-wide history with SSE event tailing via
   // cloudTestRunsApi.streamRunEvents.
   'cloud-test-runs',
+  // Testing page — cloud mode dispatches through cloudSmokeApi against
+  // /api/v1/hosted-mocks/{id}/smoke-runs and tails route_pass/_fail/_skipped
+  // events via cloudTestRunsApi.streamRunEvents (#392).
+  'testing',
   // Integration Test Builder persists as test_suite kind='integration'
   // and runs through the IntegrationExecutor in mockforge-test-runner
   // (#356).

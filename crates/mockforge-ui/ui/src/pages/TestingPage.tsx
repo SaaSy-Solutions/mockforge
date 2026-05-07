@@ -11,6 +11,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { dashboardApi, smokeTestsApi } from '../services/api';
 import type { SmokeTestResult } from '../types';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudSmokeView } from './CloudSmokeView';
 
 interface TestResult {
   id: string;
@@ -34,6 +36,16 @@ interface TestSuite {
 }
 
 export function TestingPage() {
+  // Cloud mode: run smoke tests against a hosted-mock deployment via
+  // the SmokeTestExecutor in mockforge-test-runner (#392). Local mode
+  // keeps using the embedded `/__mockforge/smoke` flow below.
+  if (isCloudMode()) {
+    return <CloudSmokeView />;
+  }
+  return <LocalTestingPage />;
+}
+
+function LocalTestingPage() {
   const [selectedSuite] = useState<string | null>(null);
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [testResults, setTestResults] = useState<TestSuite[]>([
