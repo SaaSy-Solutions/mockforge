@@ -352,6 +352,13 @@ const cloudHiddenNavItemIds = new Set([
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"
 // entries so users can discover the full product surface and understand what
 // requires a local MockForge instance. In self-hosted mode every item is active.
+//
+// Cloud-mode label overrides: when the local Analytics tab is hidden in cloud,
+// pillar-analytics becomes the de-facto analytics destination, so it surfaces
+// under the plain "Analytics" label instead of "Pillar Analytics" (#394).
+const cloudLabelOverrides: Record<string, string> = {
+  'pillar-analytics': 'tab.analytics',
+};
 const effectiveNavSections = navSections
   .map(section => ({
     ...section,
@@ -359,16 +366,22 @@ const effectiveNavSections = navSections
       .filter(item => !(isCloudMode && cloudHiddenNavItemIds.has(item.id)))
       .map(item => ({
         ...item,
+        labelKey: (isCloudMode && cloudLabelOverrides[item.id]) || item.labelKey,
         localOnly: isCloudMode && !cloudNavItemIds.has(item.id),
       })),
   }))
   .filter(section => section.items.length > 0);
 
-// Flattened items for title lookup (includes non-sidebar pages for breadcrumb resolution)
+// Flattened items for title lookup (includes non-sidebar pages for breadcrumb
+// resolution). Apply the same cloud-mode label overrides so the breadcrumb
+// matches the nav label users clicked on.
 const allNavItems = [
   ...navSections.flatMap(section => section.items),
   { id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 },
-];
+].map(item => ({
+  ...item,
+  labelKey: (isCloudMode && cloudLabelOverrides[item.id]) || item.labelKey,
+}));
 
 export function AppShell({ children, onRefresh }: AppShellProps) {
   const { t, locale, supportedLocales, setLocale } = useI18n();
