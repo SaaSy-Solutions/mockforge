@@ -57,6 +57,18 @@ export interface FitnessFunction {
   updated_at: string;
 }
 
+/**
+ * Wire shape for create + update — matches `CreateFitnessFunctionRequest`
+ * on the registry handler. The richer `function_type` / `scope` typing
+ * the local `driftApi` uses gets folded into the opaque `config` blob
+ * via the page-side adapter so the cloud surface stays minimal.
+ */
+export interface CreateFitnessFunctionRequest {
+  name: string;
+  kind: string;
+  config: Record<string, unknown>;
+}
+
 class CloudContractApi {
   private guard(method: string): void {
     if (!isCloudMode()) {
@@ -126,6 +138,40 @@ class CloudContractApi {
     return fetchJsonWithErrorBody(
       `/api/v1/workspaces/${workspaceId}/fitness-functions`,
     ) as Promise<FitnessFunction[]>;
+  }
+
+  async createFitnessFunction(
+    workspaceId: string,
+    body: CreateFitnessFunctionRequest,
+  ): Promise<FitnessFunction> {
+    this.guard('createFitnessFunction');
+    return fetchJsonWithErrorBody(
+      `/api/v1/workspaces/${workspaceId}/fitness-functions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    ) as Promise<FitnessFunction>;
+  }
+
+  async updateFitnessFunction(
+    id: string,
+    body: CreateFitnessFunctionRequest,
+  ): Promise<FitnessFunction> {
+    this.guard('updateFitnessFunction');
+    return fetchJsonWithErrorBody(`/api/v1/fitness-functions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }) as Promise<FitnessFunction>;
+  }
+
+  async deleteFitnessFunction(id: string): Promise<{ deleted: boolean }> {
+    this.guard('deleteFitnessFunction');
+    return fetchJsonWithErrorBody(`/api/v1/fitness-functions/${id}`, {
+      method: 'DELETE',
+    }) as Promise<{ deleted: boolean }>;
   }
 }
 

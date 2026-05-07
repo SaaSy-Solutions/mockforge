@@ -225,6 +225,33 @@ impl FitnessFunction {
             .rows_affected();
         Ok(rows > 0)
     }
+
+    /// Replace the mutable fields (name, kind, config) on an existing
+    /// fitness function. Returns `Ok(None)` if the row doesn't exist
+    /// rather than erroring — caller can map that to a 404. Bumps
+    /// `updated_at` (no DB trigger covers this column on the table).
+    pub async fn update(
+        pool: &PgPool,
+        id: Uuid,
+        name: &str,
+        kind: &str,
+        config: &serde_json::Value,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            UPDATE fitness_functions
+            SET name = $2, kind = $3, config = $4, updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(name)
+        .bind(kind)
+        .bind(config)
+        .fetch_optional(pool)
+        .await
+    }
 }
 
 #[cfg(feature = "postgres")]

@@ -19,7 +19,11 @@ import {
 } from 'lucide-react';
 import { driftApi, type FitnessFunction, type FitnessFunctionType, type FitnessScope, type CreateFitnessFunctionRequest, type FitnessTestResult, type DriftIncident } from '../services/driftApi';
 import { useDriftIncidents } from '../hooks/useApi';
-import { cloudContractApi, type FitnessFunction as CloudFitnessFunction } from '../services/api/cloudContract';
+import {
+  cloudContractApi,
+  type FitnessFunction as CloudFitnessFunction,
+  type CreateFitnessFunctionRequest as CloudCreateFitnessFunctionRequest,
+} from '../services/api/cloudContract';
 import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
@@ -96,12 +100,17 @@ function FitnessFunctionRow({
   onDelete,
   onTest,
   readOnly = false,
+  hideTest = false,
 }: {
   function: FitnessFunction;
   onEdit: (func: FitnessFunction) => void;
   onDelete: (id: string) => void;
   onTest: (id: string) => void;
+  /** Hide the entire action group. Reserved for genuinely read-only views. */
   readOnly?: boolean;
+  /** Hide only the Test button — used in cloud mode where the test-now
+   *  endpoint isn't wired yet, while edit/delete still work. */
+  hideTest?: boolean;
 }) {
   const formatDate = (timestamp: number) => {
     return new Date(timestamp * 1000).toLocaleString();
@@ -137,14 +146,16 @@ function FitnessFunctionRow({
 
           {!readOnly && (
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onTest(func.id)}
-              >
-                <Play className="w-4 h-4 mr-1" />
-                Test
-              </Button>
+              {!hideTest && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onTest(func.id)}
+                >
+                  <Play className="w-4 h-4 mr-1" />
+                  Test
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -677,10 +688,43 @@ function GlobalFitnessSummary({ incidents }: { incidents: DriftIncident[] }) {
   );
 }
 
+// Fold the local typed shape (`function_type` + `scope`) back into the
+// cloud's flat `{name, kind, config}` payload. Goes the opposite
+// direction from `adaptCloudFitnessFunction`. Symmetry matters for
+// edit: a cloud row read → adapted to local → user edits → folded back
+// for the PATCH must round-trip without dropping config keys, so
+// `function_type` and `scope` ride inside `config` alongside whatever
+// kind-specific fields the form added.
+function localToCloudFitnessFunction(
+  request: CreateFitnessFunctionRequest,
+): CloudCreateFitnessFunctionRequest {
+  return {
+    name: request.name,
+    kind: request.function_type.type,
+    config: {
+      ...(request.config ?? {}),
+      // Persist the rich typing alongside the raw config so a future
+      // round-trip back to the local shape can reconstruct exactly
+      // what the user picked, instead of having `adaptCloudFitnessFunction`
+      // guess from `kind`.
+      function_type: request.function_type,
+      scope: request.scope,
+      // `description` and `enabled` aren't part of the backend schema
+      // (no columns), but the local form collects them. Stashing inside
+      // config keeps them visible to a future edit without losing data;
+      // the cloud-side `FitnessFunction` interface already exposes
+      // `description` + `enabled` as optional fields, so the read-side
+      // adapter can pull these back out when they were set.
+      description: request.description,
+      enabled: request.enabled ?? true,
+    },
+  };
+}
+
 // Adapt the generic cloud FitnessFunction (kind + config blob) into the
-// richer typed shape the local UI expects. Cloud rows are read-only —
-// the registry exposes a list endpoint only — so the mapping is
-// best-effort and only needs to keep the table viewable.
+// richer typed shape the local UI expects. Mapping is best-effort —
+// extra fields the local UI added when writing (function_type, scope,
+// description, enabled) are pulled back out of `config` if present.
 function adaptCloudFitnessFunction(cf: CloudFitnessFunction): FitnessFunction {
   const cfg = (cf.config ?? {}) as Record<string, unknown>;
   const fnType = cfg.function_type as FitnessFunctionType | undefined;
@@ -740,11 +784,32 @@ export function FitnessFunctionsPage() {
   const { data: incidentsData } = useDriftIncidents({}, { refetchInterval: 10000 });
   const incidents = incidentsData?.incidents || [];
 
-  // Create mutation
+  // Invalidation key — must match the queryKey used above so create/
+  // update/delete refresh the right cache slot regardless of mode.
+  const fitnessFunctionsQueryKey: (string | undefined)[] = cloudMode
+    ? ['fitness-functions', 'cloud', activeWorkspace?.id ?? '']
+    : ['fitness-functions'];
+
+  // Create mutation. In cloud mode, the workspace id is required by the
+  // backend route; without it we surface a clear error before queueing
+  // a request that would fail on the server.
   const createMutation = useMutation({
-    mutationFn: (request: CreateFitnessFunctionRequest) => driftApi.createFitnessFunction(request),
+    mutationFn: (request: CreateFitnessFunctionRequest) => {
+      if (cloudMode) {
+        if (!activeWorkspace?.id) {
+          return Promise.reject(
+            new Error('Pick a workspace before creating a fitness function.'),
+          );
+        }
+        return cloudContractApi.createFitnessFunction(
+          activeWorkspace.id,
+          localToCloudFitnessFunction(request),
+        );
+      }
+      return driftApi.createFitnessFunction(request);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
+      queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
       setShowForm(false);
       setEditingFunction(null);
     },
@@ -756,10 +821,17 @@ export function FitnessFunctionsPage() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }) =>
-      driftApi.updateFitnessFunction(id, request),
+    mutationFn: ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }) => {
+      if (cloudMode) {
+        return cloudContractApi.updateFitnessFunction(
+          id,
+          localToCloudFitnessFunction(request),
+        );
+      }
+      return driftApi.updateFitnessFunction(id, request);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
+      queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
       setShowForm(false);
       setEditingFunction(null);
     },
@@ -771,9 +843,14 @@ export function FitnessFunctionsPage() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => driftApi.deleteFitnessFunction(id),
+    mutationFn: (id: string) => {
+      if (cloudMode) {
+        return cloudContractApi.deleteFitnessFunction(id);
+      }
+      return driftApi.deleteFitnessFunction(id);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fitness-functions'] });
+      queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
     },
     onError: (error: Error) => {
       logger.error('Failed to delete fitness function', error);
@@ -835,9 +912,10 @@ export function FitnessFunctionsPage() {
 
       {cloudMode && (
         <Alert variant="info">
-          Cloud workspaces expose fitness functions read-only — create and
-          edit aren&apos;t wired to the registry yet. Use the local CLI or
-          contract verification config to author new functions.
+          Cloud fitness functions support create, edit, and delete via the
+          registry. The <strong>Test</strong> button is currently
+          local-only — until the cloud-side evaluator lands, evaluation
+          happens on a schedule via the test-runner.
         </Alert>
       )}
 
@@ -854,8 +932,12 @@ export function FitnessFunctionsPage() {
               setEditingFunction(null);
               setShowForm(true);
             }}
-            disabled={cloudMode}
-            title={cloudMode ? 'Create not supported in cloud mode' : undefined}
+            disabled={cloudMode && !activeWorkspace?.id}
+            title={
+              cloudMode && !activeWorkspace?.id
+                ? 'Pick a workspace before creating a fitness function.'
+                : undefined
+            }
           >
             <Plus className="w-4 h-4 mr-2" />
             Create Fitness Function
@@ -889,7 +971,7 @@ export function FitnessFunctionsPage() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onTest={handleTest}
-                readOnly={cloudMode}
+                hideTest={cloudMode}
               />
             ))}
           </div>
