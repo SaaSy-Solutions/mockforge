@@ -63,9 +63,11 @@ test.describe('Pillar Analytics — Deployed Site', () => {
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
+      // In cloud mode the local Analytics tab is hidden and pillar-analytics
+      // surfaces under the plain "Analytics" label (#394).
       const banner = page.getByRole('banner');
       await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Pillar Analytics')).toBeVisible();
+      await expect(banner.getByText('Analytics', { exact: true })).toBeVisible();
     });
   });
 
@@ -214,7 +216,9 @@ test.describe('Pillar Analytics — Deployed Site', () => {
         mainContent(page).getByRole('heading', { name: 'Dashboard', level: 1 })
       ).toBeVisible({ timeout: 5000 });
 
-      await nav.getByRole('button', { name: 'Pillar Analytics' }).click();
+      // In cloud mode the pillar-analytics nav button surfaces under the
+      // plain "Analytics" label (#394).
+      await nav.getByRole('button', { name: 'Analytics', exact: true }).click();
       await page.waitForTimeout(1500);
 
       await expect(

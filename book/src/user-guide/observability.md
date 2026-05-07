@@ -14,11 +14,14 @@ MockForge ships all three. Pick whichever fits your workflow.
 | Surface | Source of truth | When to use |
 |---|---|---|
 | TUI dashboard | In-process | Local dev, quick eyeballing |
+| Admin UI **Analytics** page | In-process | Browser-based per-server traffic charts (request volume, p95/p99 latency, error rate, endpoint heatmap) — self-hosted only |
 | Prometheus `/metrics` | In-process Prometheus registry | You already run Prometheus / Grafana |
 | OpenTelemetry / OTLP | OTLP exporter → collector | You already run Jaeger / Tempo / Honeycomb |
 | CSV metrics log | `MOCKFORGE_METRICS_LOG_FILE` env var | Multi-day soak tests; want a flat file |
 
 These aren't mutually exclusive — turn on whichever combination fits.
+
+> **Cloud users:** the Admin UI Analytics page reads in-process counters from the local mock server and is hidden in cloud mode. For hosted-mock analytics see the [Analytics Dashboard](./cloud/analytics-dashboard.md) (pillar-level usage) and the in-app Cloud Traces view (individual requests).
 
 ## TUI dashboard
 

@@ -4,6 +4,8 @@
 
 The Analytics Dashboard provides leadership insight into coverage, risk, and usage. It shows which scenarios are used most, what personas are hit by CI, which endpoints are under-tested, which mocks have stale reality levels, and what percentage of mocks are drifting from real data.
 
+> **Scope.** This dashboard surfaces *pillar-level usage* (Reality / Chaos / Contracts / etc.) at workspace and org scope. **Request-traffic analytics** — per-server request volume, p95/p99 latency, error rate, and endpoint heatmaps — is a self-hosted feature exposed through the local `/analytics` page. In cloud mode use this dashboard plus the in-app **Cloud Traces** view for individual-request inspection.
+
 > Deployment note: the analytics routes documented here exist in the codebase, but they depend on the analytics database and the UI/router layer being enabled in your environment. Treat this as a real API surface with deployment prerequisites, not a guaranteed default on every MockForge install.
 
 ## Overview

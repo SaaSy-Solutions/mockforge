@@ -119,14 +119,15 @@ module.exports = async (page) => {
   m = await mainText();
   results['behavioral_cloning_renders'] = !m.includes('Something went wrong');
 
-  // ===== Additional: World State, Performance, Incidents, Traces, Analytics, Pillar Analytics =====
+  // ===== Additional: World State, Performance, Incidents, Traces, Analytics =====
+  // Note: in cloud mode the local Analytics tab is hidden and pillar-analytics
+  // surfaces under the plain "Analytics" label (#394).
   for (const pageName of [
     'World State',
     'Performance',
     'Incidents',
     'Traces',
     'Analytics',
-    'Pillar Analytics',
     'Integration Tests',
     'Test Execution',
     'MockAI Rules',
