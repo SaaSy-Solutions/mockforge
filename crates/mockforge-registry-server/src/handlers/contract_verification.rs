@@ -316,6 +316,56 @@ pub async fn create_fitness_function(
     Ok(Json(row))
 }
 
+/// `PATCH /api/v1/fitness-functions/{id}`
+///
+/// Replace name + kind + config on an existing fitness function. The
+/// surface mirrors `create_fitness_function` so the cloud UI can reuse
+/// the same form payload for both create and edit.
+///
+/// 404 InvalidRequest when the row doesn't exist or the caller's org
+/// doesn't own its workspace (cross-org access surfaces as not-found
+/// to avoid leaking existence — matches `delete_fitness_function`).
+pub async fn update_fitness_function(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(request): Json<CreateFitnessFunctionRequest>,
+) -> ApiResult<Json<FitnessFunction>> {
+    // Existence + auth check via the existing row's workspace_id, mirroring
+    // delete_fitness_function. The body's workspace_id is implicit (we don't
+    // allow re-homing fitness functions across workspaces in the same call).
+    let existing = FitnessFunction::find_by_id(state.db.pool(), id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
+    authorize_workspace(&state, user_id, &headers, existing.workspace_id).await?;
+
+    if request.name.trim().is_empty() {
+        return Err(ApiError::InvalidRequest("name must not be empty".into()));
+    }
+    if !FitnessFunction::is_valid_kind(&request.kind) {
+        return Err(ApiError::InvalidRequest(format!(
+            "kind must be one of: {}",
+            FitnessFunction::VALID_KINDS.join(", ")
+        )));
+    }
+
+    let row = FitnessFunction::update(
+        state.db.pool(),
+        id,
+        request.name.trim(),
+        &request.kind,
+        &request.config,
+    )
+    .await
+    .map_err(ApiError::Database)?
+    // Lost a race with a concurrent delete — surface as not-found, same
+    // as the cross-org check above.
+    .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
+    Ok(Json(row))
+}
+
 /// `DELETE /api/v1/fitness-functions/{id}`
 pub async fn delete_fitness_function(
     State(state): State<AppState>,

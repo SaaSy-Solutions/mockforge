@@ -579,7 +579,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/fitness-functions/{id}",
-            axum::routing::delete(handlers::contract_verification::delete_fitness_function),
+            patch(handlers::contract_verification::update_fitness_function)
+                .delete(handlers::contract_verification::delete_fitness_function),
         )
         .route(
             "/api/v1/workspaces/{workspace_id}/verification-suites",
