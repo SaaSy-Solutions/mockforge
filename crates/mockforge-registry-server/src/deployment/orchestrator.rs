@@ -13,7 +13,54 @@ use uuid::Uuid;
 use crate::deployment::flyio::{
     FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioPort, FlyioRegistryAuth, FlyioService,
 };
-use crate::models::{DeploymentLog, DeploymentStatus, HostedMock};
+use crate::models::{DeploymentLog, DeploymentStatus, HostedMock, HostedMockPlugin};
+
+/// Default OCI image for plugin-disabled hosted-mocks. Same as the
+/// existing main mockforge image — preserves prior behavior.
+const DEFAULT_BASE_IMAGE: &str = "ghcr.io/saasy-solutions/mockforge:latest";
+
+/// Default OCI image for plugin-enabled hosted-mocks. Bundles
+/// main mockforge + mockforge-plugin-host + mockforge-plugin-egress
+/// per `Dockerfile.cloud-plugins`. Operators can override via
+/// `MOCKFORGE_CLOUD_PLUGINS_IMAGE` env var.
+const DEFAULT_CLOUD_PLUGINS_IMAGE: &str = "ghcr.io/saasy-solutions/mockforge-cloud-plugins:latest";
+
+/// Pick the right OCI image for a deployment based on whether
+/// any plugins are attached. Reads:
+///
+/// - `MOCKFORGE_CLOUD_PLUGINS_IMAGE` — overrides the default
+///   plugin-enabled image
+/// - `MOCKFORGE_DOCKER_IMAGE` — overrides the default base image
+///
+/// Pairs with [`crate::deployment::flyio::FlyioGuest::for_hosted_mock`]
+/// so the orchestrator picks both the right image AND the right
+/// machine size for the deployment's tier.
+async fn resolve_image_for_deployment(pool: &PgPool, deployment_id: Uuid) -> String {
+    let plugins_attached = match HostedMockPlugin::count_active_by_deployment(pool, deployment_id)
+        .await
+    {
+        Ok(count) => count > 0,
+        Err(err) => {
+            // A query failure shouldn't block deploy. Fall back to
+            // the base image — the deploy proceeds without plugin
+            // support, and the next attach call surfaces the
+            // failure on the control-plane API.
+            warn!(
+                error = %err,
+                deployment_id = %deployment_id,
+                "could not count attached plugins for image selection; falling back to base image"
+            );
+            false
+        }
+    };
+
+    if plugins_attached {
+        std::env::var("MOCKFORGE_CLOUD_PLUGINS_IMAGE")
+            .unwrap_or_else(|_| DEFAULT_CLOUD_PLUGINS_IMAGE.to_string())
+    } else {
+        std::env::var("MOCKFORGE_DOCKER_IMAGE").unwrap_or_else(|_| DEFAULT_BASE_IMAGE.to_string())
+    }
+}
 
 /// Deployment orchestrator that manages hosted mock deployments
 pub struct DeploymentOrchestrator {
@@ -304,8 +351,7 @@ impl DeploymentOrchestrator {
         }
 
         // Use MockForge Docker image
-        let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
-            .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());
+        let image = resolve_image_for_deployment(pool, deployment.id).await;
 
         // Always-on HTTP service (also serves WS upgrade and /graphql).
         let mut services = vec![FlyioService {
@@ -561,8 +607,7 @@ impl DeploymentOrchestrator {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
         }
 
-        let image = std::env::var("MOCKFORGE_DOCKER_IMAGE")
-            .unwrap_or_else(|_| "ghcr.io/saasy-solutions/mockforge:latest".to_string());
+        let image = resolve_image_for_deployment(pool, deployment.id).await;
 
         let services = vec![FlyioService {
             protocol: "tcp".to_string(),
