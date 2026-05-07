@@ -198,6 +198,7 @@ const navSections = [
     titleKey: 'nav.plugins',
     items: [
       { id: 'plugins', labelKey: 'tab.plugins', icon: Puzzle },
+      { id: 'cloud-plugins', labelKey: 'tab.cloudPlugins', icon: Puzzle },
       { id: 'plugin-registry', labelKey: 'tab.pluginRegistry', icon: Package },
     ]
   },
@@ -309,6 +310,11 @@ const cloudNavItemIds = new Set([
   // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
   // adminUpdate / adminDelete.
   'cloud-showcase-admin',
+  // Cloud plugins (Phase 3) — read-only attachment listing today;
+  // attach/permission/detach controls land in subsequent sub-PRs once
+  // PR #395's control-plane API merges. Listed here so the sidebar
+  // shows it as active in cloud mode.
+  'cloud-plugins',
   // Public showcase + learning hub adapt /api/v1/showcase/* and
   // /api/v1/learning/* into the legacy ShowcaseProject / LearningResource
   // shapes via cloudCommunityApi (services/api/cloudCommunity.ts).

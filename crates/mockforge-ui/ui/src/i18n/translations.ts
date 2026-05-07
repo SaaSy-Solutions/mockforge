@@ -95,6 +95,7 @@ const en: Dictionary = {
   'tab.showcase': 'Showcase',
   'tab.learningHub': 'Learning Hub',
   'tab.plugins': 'Plugins',
+  'tab.cloudPlugins': 'Cloud Plugins',
   'tab.pluginRegistry': 'Plugin Registry',
   'tab.config': 'Config',
   'tab.organization': 'Organization',
@@ -128,6 +129,10 @@ const en: Dictionary = {
   'page.plugins.browseMarketplace': 'Browse Marketplace',
   'page.plugins.installPlugin': 'Install Plugin',
   'page.plugins.reloadAll': 'Reload All',
+  'page.cloudPlugins.title': 'Cloud Plugins',
+  'page.cloudPlugins.subtitle':
+    'Manage plugins attached to your hosted-mock deployments. Each attachment has its own permission grants and runtime config.',
+  'page.cloudPlugins.browseRegistry': 'Browse Registry',
   'page.mockai.title': 'MockAI',
   'page.mockai.description':
     'AI-powered mock API intelligence for realistic, context-aware responses',
