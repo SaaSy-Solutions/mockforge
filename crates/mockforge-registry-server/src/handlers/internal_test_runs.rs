@@ -354,6 +354,98 @@ async fn mirror_kind_status(
                 .await?;
             }
         }
+        "fitness_evaluation" => {
+            // Architectural fitness functions evaluate declared invariants
+            // against live traffic / contract drift / traces (#355). When
+            // the run terminates non-passing, raise an incident so the
+            // configured notification channels (Slack/webhook/etc.) fire
+            // — the live UI already shows pass/fail, but durable alerting
+            // is the point of the executor existing on the cloud test
+            // runner at all. Mirrors the wiring shipped for smoke runs
+            // (#392) and is the canonical pattern for #391 conformance
+            // and #390 verification when their executors land.
+            //
+            // Dedupe on `(org_id, source, fitness_function_id)` —
+            // `run.suite_id` is the fitness-function row's id, so
+            // repeated violations of the *same* function collapse onto
+            // one open incident. A different function failing gets its
+            // own incident. Resolution requires explicit acknowledge.
+            //
+            // The synthetic ContractExecutor returns Passed today, so
+            // this branch is dormant until the real FitnessExecutor
+            // lands (#355 item 2). Wiring it now means item 2 is purely
+            // additive — it doesn't have to also touch the registry
+            // alerting path.
+            if !matches!(run.status.as_str(), "passed" | "cancelled") {
+                let service_name = summary
+                    .and_then(|s| s.get("service_name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let breaking_count = summary
+                    .and_then(|s| s.get("breaking_count"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let findings_count = summary
+                    .and_then(|s| s.get("findings_count"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+
+                // `errored` (executor pre-flight: bad config, missing
+                // data source) is operational; `failed` (a declared
+                // invariant violated) is the architectural-regression
+                // case. Once the real FitnessExecutor lands and emits
+                // per-finding severity, this can grade further (e.g.
+                // critical when ≥1 critical_count).
+                let severity = if run.status == "errored" {
+                    "medium"
+                } else {
+                    "high"
+                };
+                let title = if run.status == "errored" {
+                    "Fitness function evaluation errored".to_string()
+                } else if breaking_count > 0 {
+                    format!(
+                        "{} breaking fitness violation{}",
+                        breaking_count,
+                        if breaking_count == 1 { "" } else { "s" },
+                    )
+                } else {
+                    "Fitness function failed".to_string()
+                };
+                let dedupe_key = run.suite_id.to_string();
+                let source_ref = run.id.to_string();
+                let description = serde_json::json!({
+                    "fitness_function_id": run.suite_id,
+                    "run_id": run.id,
+                    "run_status": run.status,
+                    "service_name": service_name,
+                    "breaking_count": breaking_count,
+                    "findings_count": findings_count,
+                })
+                .to_string();
+
+                Incident::raise(
+                    pool,
+                    RaiseIncidentInput {
+                        org_id: run.org_id,
+                        // Fitness functions are workspace-scoped (their
+                        // backing table tags `workspace_id`); we don't
+                        // have it on the TestRun row though, so leaving
+                        // this None routes to org-wide notification rules.
+                        // A follow-up could read from the cloud-side
+                        // fitness function row to populate this.
+                        workspace_id: None,
+                        source: "fitness_function",
+                        source_ref: Some(&source_ref),
+                        dedupe_key: &dedupe_key,
+                        severity,
+                        title: &title,
+                        description: Some(&description),
+                    },
+                )
+                .await?;
+            }
+        }
         // Other kinds (unit/contract_diff/replay/flow.*) don't have a
         // separate per-resource status — the test_runs row is the
         // source of truth.
