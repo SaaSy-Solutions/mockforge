@@ -96,6 +96,26 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::internal_test_runs::get_workspace_endpoint_hits),
         )
         .route(
+            // Fetch a fitness function definition for the FitnessExecutor
+            // on the cloud test-runner (#355).
+            "/api/v1/internal/fitness-functions/{id}",
+            get(handlers::internal_test_runs::get_fitness_function),
+        )
+        .route(
+            // Latency-aggregate query for kind='latency_threshold'
+            // fitness checks. Reads runtime_request_logs scoped to
+            // the deployment + window passed via the function's config.
+            "/api/v1/internal/deployments/{id}/latency-stats",
+            get(handlers::internal_test_runs::get_deployment_latency_stats),
+        )
+        .route(
+            // Contract-finding aggregate for kind='contract_stability'
+            // fitness checks. Counts contract_diff_findings by severity
+            // over the configured window for one monitored service.
+            "/api/v1/internal/monitored-services/{id}/contract-stability",
+            get(handlers::internal_test_runs::get_monitored_service_contract_stability),
+        )
+        .route(
             "/api/v1/internal/hosted-mocks/{id}/chaos",
             post(handlers::internal_test_runs::proxy_chaos_toggle),
         )
