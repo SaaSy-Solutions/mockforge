@@ -45,7 +45,7 @@ jsonwebtoken = "9.2"
 bcrypt = "0.15"
 totp-lite = "2.0"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
-data-encoding = "2.5"
+data-encoding = "2.11"
 ring = "0.17"
 sha1 = "0.10"
 
@@ -56,7 +56,7 @@ async-trait = "0.1"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
-rust_decimal = "1.33"
+rust_decimal = "1.42"
 
 # Crypto / hashing
 sha2 = "0.10"
