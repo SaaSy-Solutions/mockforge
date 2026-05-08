@@ -1,5 +1,23 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.127] - 2026-05-08
+
+### Fixed
+
+- **[Reality]** TPS / RPS200 dashboard counters stuck at 0 under load (#351, #79)
+  - Metrics middleware (`collect_http_metrics`) was never `.layer()`d on the production router built in `serve.rs`. CPS still advanced because `CountingMakeService` wraps the make-service at a different layer.
+  - Layer `collect_http_metrics` as the outermost wrapper on `http_app` so every response — including chaos-mutated ones — bumps the rate counters the dashboard sampler reads.
+
+### Added
+
+- **[DevX]** `bench-chunked` accepts `--base-path`, humantime `--duration`, `--validate-requests`, `--export-requests` (#352, #79)
+  - `--base-path <PATH>` prepends to every spec-derived operation path before URL construction. CLI > spec.servers > none.
+  - `-d 600s` / `--duration <DURATION>` switched from bare seconds (u64) to humantime parsing.
+  - `--validate-requests` and `--export-requests` mirror the flags already on `mockforge bench`.
+- **[DevX]** Supervisor wrappers for unattended runs under heavy traffic (#350, #79)
+  - `deploy/systemd/mockforge.service` — systemd unit with `Restart=always`.
+  - `deploy/scripts/run-forever.sh` — bash supervisor that restarts the binary after any non-clean exit.
+
 ## [0.3.73] - 2026-03-05
 
 ### Fixed

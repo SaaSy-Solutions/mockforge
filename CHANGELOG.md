@@ -1,3 +1,30 @@
+## [0.3.127] - 2026-05-08
+
+### Fixed
+
+- **[Reality]** TPS / RPS200 dashboard counters stuck at 0 under load (#351, #79)
+  - Root cause: `record_response()` lives inside `collect_http_metrics`, but the middleware was exported from `mockforge-http` and never `.layer()`d onto the production router built in `serve.rs`. CPS kept ticking because `CountingMakeService` wraps the make-service at a different layer.
+  - Layer `collect_http_metrics` as the outermost wrapper on `http_app` so every response — including chaos-mutated ones — bumps the rate counters the dashboard sampler reads.
+  - Regression test pins the actual counter delta on a 2xx response, not just the response status.
+
+### Added
+
+- **[DevX]** `bench-chunked` accepts `--base-path`, humantime `--duration`, `--validate-requests`, `--export-requests` (#352, #79)
+  - `--base-path <PATH>` prepends to every spec-derived operation path before URL construction. CLI > spec.servers > none, matching `mockforge bench`. No-op without `--spec`.
+  - `-d 600s` / `--duration <DURATION>` switched from bare seconds (u64) to humantime parsing — `30s`, `5m`, `1h`, or bare seconds all parse.
+  - `--validate-requests` (OpenAPI request validation) and `--export-requests` (per-request JSON export) now mirror the same flags on `mockforge bench`.
+  - The full Microsoft Graph invocation reported in #79 now parses end-to-end:
+    ```
+    mockforge bench-chunked --chunk-size-bytes 4096 --total-size-bytes 10485760 \
+      --chunk-interval-ms 50 --spec microsoft-graph.yaml \
+      --target https://192.168.2.86 --base-path /v1.0 \
+      --validate-requests --export-requests --insecure -d 600s
+    ```
+- **[DevX]** Supervisor wrappers for unattended runs under heavy traffic (#350, #79)
+  - `deploy/systemd/mockforge.service` — systemd unit with `Restart=always`, resource limits, and hardening directives. Documents the install dance and the two knobs (`MemoryMax`, `LimitNOFILE`) most likely to matter at high concurrency.
+  - `deploy/scripts/run-forever.sh` — bash supervisor that restarts the binary after any non-clean exit. Forwards SIGINT/SIGTERM so Ctrl-C stops cleanly. Useful on macOS / non-systemd hosts and ad-hoc bench rigs.
+  - `deploy/systemd/README.md` picks between them.
+
 ## [0.3.126] - 2026-05-03
 
 ### Added
