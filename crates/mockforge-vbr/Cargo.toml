@@ -50,7 +50,7 @@ url = { workspace = true }
 sha2 = "0.10"
 base64 = "0.21"
 jsonwebtoken = { version = "9", optional = true }
-rand = "0.8"
+rand = "0.9"
 regex = "1.10"
 jsonpath = "0.1"
 
