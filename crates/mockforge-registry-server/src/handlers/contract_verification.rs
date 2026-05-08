@@ -303,6 +303,22 @@ pub async fn create_fitness_function(
             FitnessFunction::VALID_KINDS.join(", ")
         )));
     }
+    // `custom_query` runs arbitrary user-supplied evaluator code on
+    // self-hosted MockForge — fine for trusted single-tenant
+    // deployments, not safe to honour on shared cloud workers
+    // (would let any workspace owner execute code on the runner
+    // pool). Cloud rejects the kind at this boundary so a row in
+    // the state matching `kind='custom_query'` never exists in
+    // cloud, even if the user tried to bypass the UI gate.
+    if request.kind == "custom_query" {
+        return Err(ApiError::InvalidRequest(
+            "kind 'custom_query' is self-hosted only — \
+             arbitrary evaluator code isn't supported on cloud workers. \
+             Use latency_threshold, error_rate, or contract_stability instead, \
+             or run a self-hosted MockForge instance."
+                .into(),
+        ));
+    }
 
     let row = FitnessFunction::create(
         state.db.pool(),
