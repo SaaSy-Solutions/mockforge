@@ -50,8 +50,12 @@ check_pillar_tags() {
   fi
 
   # Extract the first version section (most recent release)
-  # Skip the [Unreleased] section and get the first actual version
-  local version_section=$(awk '/^## \[[0-9]/{p=1} p{print} /^## \[[0-9]/ && NR>1{exit}' "$changelog_file" 2>/dev/null || true)
+  # Skip the [Unreleased] section and get the first actual version.
+  # The previous awk used `NR>1` to detect "this is the second version heading",
+  # but that exits immediately when the first version heading is itself past
+  # line 1 (e.g. book/src/reference/changelog.md has a preamble blockquote).
+  # Track whether we already opened a section instead.
+  local version_section=$(awk '/^## \[[0-9]/{ if (in_section) exit; in_section=1 } in_section{print}' "$changelog_file" 2>/dev/null || true)
 
   if [ -z "$version_section" ]; then
     # If no version section found, might be a new file or only Unreleased section
