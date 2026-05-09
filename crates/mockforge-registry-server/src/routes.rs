@@ -802,6 +802,31 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/workspaces/{workspace_id}/encryption/enable", post(handlers::workspace_encryption::enable))
         .route("/api/v1/workspaces/{workspace_id}/encryption/disable", post(handlers::workspace_encryption::disable))
         .route("/api/v1/workspaces/{workspace_id}/encryption/security-check", post(handlers::workspace_encryption::security_check))
+        // Cloud-mode request verification (assertions against runtime_captures, mirrors local /__mockforge/verification/*)
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/status",
+            get(handlers::request_verification::status),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/verify",
+            post(handlers::request_verification::verify),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/count",
+            post(handlers::request_verification::count),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/sequence",
+            post(handlers::request_verification::sequence),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/never",
+            post(handlers::request_verification::never),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-log/at-least",
+            post(handlers::request_verification::at_least),
+        )
         // Service routes
         .route("/api/v1/services", get(handlers::cloud_services::list_services))
         .route("/api/v1/services", post(handlers::cloud_services::create_service))

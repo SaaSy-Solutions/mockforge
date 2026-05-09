@@ -310,6 +310,10 @@ const cloudNavItemIds = new Set([
   'fitness-functions',
   // Cloud contract diff + verification via cloudContractApi.
   'cloud-contract',
+  // Cloud-mode request verification (#390): WireMock-style assertions
+  // against the workspace's runtime_captures table, dispatched through
+  // cloudVerificationApi against /api/v1/workspaces/{id}/request-log/*.
+  'verification',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
   'cloud-recorder',
   // Cloud behavioral cloning (#393) — clone-model-centric view with live

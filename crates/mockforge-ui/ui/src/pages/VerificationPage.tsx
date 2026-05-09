@@ -1,7 +1,10 @@
 import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
-import { CheckCircle2, XCircle, Search, Play, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Search, Play, RefreshCw, AlertCircle, Cloud } from 'lucide-react';
 import { verificationApi } from '../services/api';
+import { cloudVerificationApi, type TimeWindow } from '../services/api/cloudVerification';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import type { VerificationRequest, VerificationCount, VerificationResult } from '../types';
 import {
   PageHeader,
@@ -18,6 +21,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../components/ui/textarea';
 
 type VerificationMode = 'verify' | 'never' | 'at-least' | 'sequence';
+
+// Lookback options for the cloud time-window selector. Server caps the
+// effective window at 24h regardless, so anything in this list is safe
+// even on Free-tier retention.
+const CLOUD_LOOKBACK_OPTIONS: Array<{ label: string; minutes: number }> = [
+  { label: 'Last 5 minutes', minutes: 5 },
+  { label: 'Last 15 minutes', minutes: 15 },
+  { label: 'Last 1 hour', minutes: 60 },
+  { label: 'Last 6 hours', minutes: 360 },
+  { label: 'Last 24 hours', minutes: 1440 },
+];
+
+function buildCloudWindow(minutes: number): TimeWindow {
+  const until = new Date();
+  const since = new Date(until.getTime() - minutes * 60_000);
+  return { since: since.toISOString(), until: until.toISOString() };
+}
 
 export function VerificationPage() {
   const [mode, setMode] = useState<VerificationMode>('verify');
@@ -37,9 +57,38 @@ export function VerificationPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cloudMode = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const [lookbackMinutes, setLookbackMinutes] = useState(60);
+  const [captureStatus, setCaptureStatus] = useState<{ has_captures: boolean; recent_capture_count: number } | null>(null);
+
   useEffect(() => {
     setResult(null);
   }, [mode]);
+
+  // In cloud mode, fetch the workspace capture status so we can show a
+  // helpful banner if no deployment is currently recording. We poll on
+  // workspace change rather than on every action — captures take a few
+  // seconds to ship anyway, so a stale read is fine.
+  useEffect(() => {
+    if (!cloudMode || !activeWorkspace?.id) {
+      setCaptureStatus(null);
+      return;
+    }
+    let cancelled = false;
+    cloudVerificationApi
+      .status(activeWorkspace.id)
+      .then((s) => {
+        if (!cancelled) setCaptureStatus(s);
+      })
+      .catch((err) => {
+        logger.warn('Failed to load capture status', err);
+        if (!cancelled) setCaptureStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudMode, activeWorkspace?.id]);
 
   const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
@@ -91,24 +140,39 @@ export function VerificationPage() {
       }
     }
 
+    if (cloudMode && !activeWorkspace?.id) {
+      setError('Select an active workspace before running cloud verification.');
+      return;
+    }
+
     setIsLoading(true);
     setResult(null);
 
     try {
       let verificationResult: VerificationResult;
+      const window = cloudMode ? buildCloudWindow(lookbackMinutes) : undefined;
+      const wsId = activeWorkspace?.id ?? '';
 
       switch (mode) {
         case 'verify':
-          verificationResult = await verificationApi.verify(pattern, expectedCount);
+          verificationResult = cloudMode
+            ? await cloudVerificationApi.verify(wsId, pattern, expectedCount, window)
+            : await verificationApi.verify(pattern, expectedCount);
           break;
         case 'never':
-          verificationResult = await verificationApi.verifyNever(pattern);
+          verificationResult = cloudMode
+            ? await cloudVerificationApi.verifyNever(wsId, pattern, window)
+            : await verificationApi.verifyNever(pattern);
           break;
         case 'at-least':
-          verificationResult = await verificationApi.verifyAtLeast(pattern, minCount);
+          verificationResult = cloudMode
+            ? await cloudVerificationApi.verifyAtLeast(wsId, pattern, minCount, window)
+            : await verificationApi.verifyAtLeast(pattern, minCount);
           break;
         case 'sequence':
-          verificationResult = await verificationApi.verifySequence(sequencePatterns);
+          verificationResult = cloudMode
+            ? await cloudVerificationApi.verifySequence(wsId, sequencePatterns, window)
+            : await verificationApi.verifySequence(sequencePatterns);
           break;
         default:
           throw new Error('Invalid verification mode');
@@ -130,10 +194,17 @@ export function VerificationPage() {
       setError(err);
       return;
     }
+    if (cloudMode && !activeWorkspace?.id) {
+      setError('Select an active workspace before running cloud verification.');
+      return;
+    }
     setIsLoading(true);
 
     try {
-      const response = await verificationApi.count(pattern);
+      const window = cloudMode ? buildCloudWindow(lookbackMinutes) : undefined;
+      const response = cloudMode
+        ? await cloudVerificationApi.count(activeWorkspace!.id, pattern, window)
+        : await verificationApi.count(pattern);
       setResult({
         matched: true,
         count: response.count,
@@ -166,12 +237,67 @@ export function VerificationPage() {
     <div className="space-y-8">
       <PageHeader
         title="Request Verification"
-        subtitle="Verify that specific requests were made (or not made) during test execution"
+        subtitle={cloudMode
+          ? "Assert against captured hosted-mock requests in this workspace"
+          : "Verify that specific requests were made (or not made) during test execution"}
       />
+
+      {cloudMode && !activeWorkspace && (
+        <Alert variant="warning" className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5" />
+          <span>Select an active workspace from the workspace switcher to run cloud verification.</span>
+        </Alert>
+      )}
+
+      {cloudMode && activeWorkspace && captureStatus && !captureStatus.has_captures && (
+        <Alert variant="warning" className="flex items-start gap-2">
+          <Cloud className="h-5 w-5 mt-0.5" />
+          <div>
+            <div className="font-medium">No recent captures in this workspace</div>
+            <div className="text-sm">
+              Cloud verification reads from <code>runtime_captures</code>, which is only populated for
+              hosted-mock deployments with the recorder enabled. Open a deployment&apos;s detail page and
+              click &quot;Enable recording&quot; to start capturing requests.
+            </div>
+          </div>
+        </Alert>
+      )}
 
       <Section>
         <ModernCard>
           <div className="space-y-6">
+            {cloudMode && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cloud-workspace">Workspace</Label>
+                  <Input
+                    id="cloud-workspace"
+                    value={activeWorkspace?.name || ''}
+                    placeholder="No active workspace"
+                    disabled
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cloud-lookback">Time window</Label>
+                  <Select
+                    value={String(lookbackMinutes)}
+                    onValueChange={(v) => setLookbackMinutes(parseInt(v, 10) || 60)}
+                  >
+                    <SelectTrigger id="cloud-lookback">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLOUD_LOOKBACK_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.minutes} value={String(opt.minutes)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             {/* Mode Selection */}
             <div>
               <Label htmlFor="mode">Verification Mode</Label>
