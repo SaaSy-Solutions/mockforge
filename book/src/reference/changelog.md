@@ -1,5 +1,18 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.128] - 2026-05-09
+
+### Fixed
+
+- **[DevX]** k6 metric-name validation failure on deeply nested OpenAPI specs (Microsoft Graph etc.) (#436, #79)
+  - Root cause: `operationId`s like `drives.drive.items.driveItem.workbook.worksheets.workbookWorksheet.charts.workbookChart.axes.categoryAxis.format.line.clear`, after dot-to-underscore sanitization plus `_latency` / `_errors` suffix, exceeded k6's 128-char metric-name cap. `validate_script` correctly rejected the script before k6 ran.
+  - New `K6ScriptGenerator::sanitize_k6_metric_name` caps the base at 112 chars (128 − 16 for `_step99_latency`) and appends an 8-hex-char hash of the original name when truncating, so distinct long names produce distinct metric names. JS variable identifiers keep the full readable form; only the metric *string* is truncated.
+  - Wired into both render paths: `k6_script.hbs` (per-operation) and `k6_crud_flow.hbs`. Tests cover passthrough, truncation, prefix-collision uniqueness, the "starts with letter or _" rule after truncation, and end-to-end script validation on a microsoft-graph-style operationId.
+- **[Reality]** Chaos prometheus counters were registered but never incremented (#436, #79)
+  - `mockforge_chaos_faults_total{fault_type, endpoint}`, `mockforge_chaos_latency_ms`, and `mockforge_chaos_rate_limit_violations_total` all existed in the registry, but no caller invoked the corresponding `record_*` methods. `/metrics` reported zero faults regardless of how many were actually firing — masking the effect of configured chaos rules from operators.
+  - Wired `record_fault(...)` at every fault decision point in the HTTP middleware (`http_error`, `timeout`, `rate_limit`, `connection_limit`, `packet_loss`, `partial_response`, `payload_corruption`) and the TCP chaos listener (`tcp_reset`, `tcp_close`). Latency injection also now records to the histogram via `record_latency`.
+  - The TUI Chaos screen still renders config-only; surfacing these counters as a stats panel is tracked as a follow-up.
+
 ## [0.3.127] - 2026-05-08
 
 ### Fixed
