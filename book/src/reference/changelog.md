@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.129] - 2026-05-09
+
+### Added
+
+- **[Reality]** YAML config now exposes every chaos `fault_injection` field (#79 follow-up)
+  - `mockforge_core::config::FaultConfig` gains `connection_error_kind`, `partial_responses` + `partial_response_probability`, `payload_corruption` + `payload_corruption_probability`, `corruption_type`, `error_pattern` (Burst / Random / Sequential), `mockai_enabled`, and `request_matcher`. All `#[serde(default)]` so existing chaos.yaml files keep parsing.
+  - The bridge in `serve.rs` now maps every field through to `mockforge_chaos::config::FaultInjectionConfig`; previously these were silently defaulted at YAML load time and only the `PUT /api/chaos/config/faults` REST API could set them.
+
 ## [0.3.128] - 2026-05-09
 
 ### Fixed

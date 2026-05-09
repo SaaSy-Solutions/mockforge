@@ -1,3 +1,12 @@
+## [0.3.129] - 2026-05-09
+
+### Added
+
+- **[Reality]** YAML config now exposes every chaos `fault_injection` field (#79 follow-up)
+  - `mockforge_core::config::FaultConfig` gains the fields it was missing relative to `mockforge_chaos::config::FaultInjectionConfig`: `connection_error_kind` (`http_503` / `tcp_reset` / `tcp_close`), `partial_responses` + `partial_response_probability`, `payload_corruption` + `payload_corruption_probability`, `corruption_type` (`none` / `random_bytes` / `truncate` / `bit_flip`), `error_pattern` (Burst / Random / Sequential), `mockai_enabled`, and `request_matcher` (source IPs, headers, body-size bounds, chunked-only). All new fields use `#[serde(default)]` so existing chaos.yaml files continue to parse unchanged.
+  - The bridge in `serve.rs` (`fault_config_to_chaos`) now maps every field through to the chaos crate's runtime `FaultInjectionConfig`. Previously `--config chaos.yaml` set them to defaults silently and operators had to use the `PUT /api/chaos/config/faults` REST API to configure them.
+  - Tests cover round-trip parsing of the full YAML shape from the issue-#79 reply, backward-compat parsing of legacy YAML without the new fields, snake_case enum encoding, and end-to-end bridge preservation of every new field.
+
 ## [0.3.128] - 2026-05-09
 
 ### Fixed

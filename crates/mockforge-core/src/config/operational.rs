@@ -1150,26 +1150,163 @@ pub struct LatencyInjectionConfig {
     pub probability: f64,
 }
 
-/// Fault injection configuration for chaos engineering
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// What "connection error" means at the wire level when injected.
+///
+/// Mirrors `mockforge_chaos::config::ConnectionErrorKind` so the YAML
+/// loader can stay dep-free of the chaos crate. The bridge in `serve.rs`
+/// converts to the chaos type at runtime.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum ConnectionErrorKindConfig {
+    /// HTTP 503 on a healthy connection (default, back-compat).
+    #[default]
+    Http503,
+    /// TCP RST at accept time (`SO_LINGER=0` + drop).
+    TcpReset,
+    /// TCP FIN at accept time (clean drop, client sees EOF).
+    TcpClose,
+}
+
+/// Payload corruption type. Mirrors `mockforge_chaos::config::CorruptionType`.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum CorruptionTypeConfig {
+    /// No corruption.
+    #[default]
+    None,
+    /// Replace random bytes with random values.
+    RandomBytes,
+    /// Truncate payload at random position.
+    Truncate,
+    /// Flip random bits in the payload.
+    BitFlip,
+}
+
+/// Error injection pattern. Mirrors `mockforge_chaos::config::ErrorPattern`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "type")]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub enum ErrorPatternConfig {
+    /// Burst pattern: inject N errors within a time interval.
+    Burst {
+        /// Number of errors to inject in the burst.
+        count: usize,
+        /// Time interval in milliseconds for the burst.
+        interval_ms: u64,
+    },
+    /// Random pattern: inject errors with a probability.
+    Random {
+        /// Probability of injecting an error (0.0-1.0).
+        probability: f64,
+    },
+    /// Sequential pattern: inject errors in a specific sequence.
+    Sequential {
+        /// Sequence of status codes to inject in order.
+        sequence: Vec<u16>,
+    },
+}
+
+/// Header presence / exact-value filter for the request matcher.
+/// Mirrors `mockforge_chaos::request_matcher::HeaderMatch`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct HeaderMatchConfig {
+    /// Header name (case-insensitive).
+    pub name: String,
+    /// Optional exact value. `None` = match on presence only.
+    #[serde(default)]
+    pub value: Option<String>,
+}
+
+/// Per-request matcher gating chaos injection.
+/// Mirrors `mockforge_chaos::request_matcher::RequestMatcher`.
+///
+/// AND across populated fields; within a list, OR. Empty matcher = match all.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct RequestMatcherConfig {
+    /// CIDR ranges to match against the client IP. A bare IP without prefix
+    /// is treated as `/32` (v4) or `/128` (v6). Empty = match any IP.
+    #[serde(default)]
+    pub source_ips: Vec<String>,
+    /// Required headers. All entries must be satisfied (AND across the list).
+    #[serde(default)]
+    pub headers: Vec<HeaderMatchConfig>,
+    /// Minimum request body size in bytes (inclusive).
+    #[serde(default)]
+    pub min_body_size_bytes: Option<usize>,
+    /// Maximum request body size in bytes (inclusive).
+    #[serde(default)]
+    pub max_body_size_bytes: Option<usize>,
+    /// `Some(true)` matches only chunked requests, `Some(false)` only
+    /// non-chunked, `None` matches either.
+    #[serde(default)]
+    pub chunked_only: Option<bool>,
+}
+
+/// Fault injection configuration for chaos engineering.
+///
+/// Field set mirrors `mockforge_chaos::config::FaultInjectionConfig` so that
+/// `--config chaos.yaml` can configure every fault knob the chaos middleware
+/// understands. The bridge in `serve.rs` converts this to the chaos crate's
+/// type at runtime.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct FaultConfig {
-    /// Enable fault injection
+    /// Enable fault injection.
     pub enabled: bool,
-    /// HTTP status codes to randomly return (e.g., [500, 502, 503])
+    /// HTTP status codes to randomly return (e.g., `[500, 502, 503]`).
     pub http_errors: Vec<u16>,
-    /// Probability of returning HTTP errors (0.0 to 1.0)
+    /// Probability of returning HTTP errors (0.0 to 1.0).
     pub http_error_probability: f64,
-    /// Enable connection errors (connection refused, reset, etc.)
+    /// Enable connection errors.
     pub connection_errors: bool,
-    /// Probability of connection errors (0.0 to 1.0)
+    /// Probability of connection errors (0.0 to 1.0).
     pub connection_error_probability: f64,
-    /// Enable timeout errors
+    /// What "connection error" means at the wire level — HTTP 503 (default,
+    /// back-compat), TCP RST, or TCP FIN. The TCP variants require the chaos
+    /// listener wrapper, which the bridge installs automatically when
+    /// connection_errors is enabled and this is `tcp_reset` / `tcp_close`.
+    #[serde(default)]
+    pub connection_error_kind: ConnectionErrorKindConfig,
+    /// Enable timeout errors.
     pub timeout_errors: bool,
-    /// Timeout duration in milliseconds
+    /// Timeout duration in milliseconds.
     pub timeout_ms: u64,
-    /// Probability of timeout errors (0.0 to 1.0)
+    /// Probability of timeout errors (0.0 to 1.0).
     pub timeout_probability: f64,
+    /// Enable partial-response truncation. Non-chunked responses keep the
+    /// original `Content-Length` so clients see an unexpected EOF; chunked
+    /// responses end without the terminating `0\r\n\r\n`.
+    #[serde(default)]
+    pub partial_responses: bool,
+    /// Probability of truncating a response (0.0 to 1.0).
+    #[serde(default)]
+    pub partial_response_probability: f64,
+    /// Enable payload corruption (post-response, before send).
+    #[serde(default)]
+    pub payload_corruption: bool,
+    /// Probability of corrupting a response payload (0.0 to 1.0).
+    #[serde(default)]
+    pub payload_corruption_probability: f64,
+    /// Type of corruption to apply when `payload_corruption` fires.
+    #[serde(default)]
+    pub corruption_type: CorruptionTypeConfig,
+    /// Optional structured pattern for error injection (Burst / Random /
+    /// Sequential). When `None`, the per-fault probabilities above govern
+    /// firing independently.
+    #[serde(default)]
+    pub error_pattern: Option<ErrorPatternConfig>,
+    /// Enable MockAI-driven dynamic error generation (advanced).
+    #[serde(default)]
+    pub mockai_enabled: bool,
+    /// Optional per-request matcher. When set, faults only fire for
+    /// requests that match (AND across populated fields). `None` = always.
+    #[serde(default)]
+    pub request_matcher: Option<RequestMatcherConfig>,
 }
 
 /// Rate limiting configuration for traffic control
@@ -1200,4 +1337,107 @@ pub struct NetworkShapingConfig {
     pub packet_loss_percent: f64,
     /// Maximum concurrent connections allowed
     pub max_connections: u32,
+}
+
+#[cfg(test)]
+mod fault_config_yaml_tests {
+    use super::*;
+
+    /// The YAML shape promised in the issue-#79 reply must round-trip cleanly,
+    /// including the new fields (`request_matcher`, `connection_error_kind`,
+    /// `partial_responses`, `payload_corruption`, `error_pattern`).
+    #[test]
+    fn full_yaml_roundtrip() {
+        let yaml = r#"
+enabled: true
+http_errors: [503]
+http_error_probability: 0.5
+connection_errors: true
+connection_error_probability: 0.05
+connection_error_kind: tcp_reset
+timeout_errors: true
+timeout_ms: 30000
+timeout_probability: 0.1
+partial_responses: true
+partial_response_probability: 0.1
+payload_corruption: true
+payload_corruption_probability: 0.05
+corruption_type: bit_flip
+error_pattern:
+  type: burst
+  count: 5
+  interval_ms: 1000
+mockai_enabled: false
+request_matcher:
+  source_ips: ["10.0.0.0/8", "192.168.1.42"]
+  headers:
+    - name: x-test
+      value: yes
+    - name: x-debug
+  min_body_size_bytes: 1048576
+  chunked_only: true
+"#;
+        let parsed: FaultConfig = serde_yaml::from_str(yaml).expect("parse YAML");
+        assert!(parsed.enabled);
+        assert_eq!(parsed.http_errors, vec![503]);
+        assert_eq!(parsed.connection_error_kind, ConnectionErrorKindConfig::TcpReset);
+        assert!(parsed.partial_responses);
+        assert_eq!(parsed.partial_response_probability, 0.1);
+        assert!(parsed.payload_corruption);
+        assert_eq!(parsed.corruption_type, CorruptionTypeConfig::BitFlip);
+        match parsed.error_pattern.as_ref().expect("error_pattern present") {
+            ErrorPatternConfig::Burst { count, interval_ms } => {
+                assert_eq!(*count, 5);
+                assert_eq!(*interval_ms, 1000);
+            }
+            other => panic!("expected Burst, got {other:?}"),
+        }
+        let m = parsed.request_matcher.expect("matcher present");
+        assert_eq!(m.source_ips, vec!["10.0.0.0/8", "192.168.1.42"]);
+        assert_eq!(m.headers.len(), 2);
+        assert_eq!(m.headers[0].name, "x-test");
+        // YAML `yes` parses as bool true; serde-yaml puts it back as the
+        // string "true" when typed as Option<String>. The exact value is
+        // implementation-dependent; assert it's *some* non-empty value.
+        assert!(m.headers[0].value.as_deref().is_some_and(|s| !s.is_empty()));
+        assert!(m.headers[1].value.is_none());
+        assert_eq!(m.min_body_size_bytes, Some(1048576));
+        assert_eq!(m.chunked_only, Some(true));
+    }
+
+    /// Backward-compat: a YAML file written for the old (pre-0.3.129) FaultConfig
+    /// must still parse without listing any of the new fields.
+    #[test]
+    fn legacy_yaml_without_new_fields_still_parses() {
+        let yaml = r#"
+enabled: true
+http_errors: [500, 502, 503]
+http_error_probability: 0.1
+connection_errors: false
+connection_error_probability: 0.0
+timeout_errors: false
+timeout_ms: 5000
+timeout_probability: 0.0
+"#;
+        let parsed: FaultConfig = serde_yaml::from_str(yaml).expect("parse legacy YAML");
+        assert!(parsed.enabled);
+        assert_eq!(parsed.http_errors, vec![500, 502, 503]);
+        // New fields default cleanly.
+        assert_eq!(parsed.connection_error_kind, ConnectionErrorKindConfig::Http503);
+        assert!(!parsed.partial_responses);
+        assert!(!parsed.payload_corruption);
+        assert!(parsed.error_pattern.is_none());
+        assert!(parsed.request_matcher.is_none());
+    }
+
+    /// The connection_error_kind enum must serialize as snake_case strings
+    /// (not the Rust variant name) for YAML compatibility with the chaos crate's
+    /// own enum. Same for corruption_type.
+    #[test]
+    fn enum_serde_uses_snake_case() {
+        let cek = ConnectionErrorKindConfig::TcpClose;
+        assert_eq!(serde_yaml::to_string(&cek).unwrap().trim(), "tcp_close");
+        let ct = CorruptionTypeConfig::RandomBytes;
+        assert_eq!(serde_yaml::to_string(&ct).unwrap().trim(), "random_bytes");
+    }
 }
