@@ -44,10 +44,12 @@ pub struct VerificationRequest {
 
     /// Query parameters to match (all must be present and match).
     /// If empty, query parameters are not checked.
+    #[serde(default)]
     pub query_params: HashMap<String, String>,
 
     /// Headers to match (all must be present and match). Case-insensitive header names.
     /// If empty, headers are not checked.
+    #[serde(default)]
     pub headers: HashMap<String, String>,
 
     /// Request body pattern to match. Supports exact match or regex.
@@ -55,9 +57,14 @@ pub struct VerificationRequest {
     pub body_pattern: Option<String>,
 }
 
-/// Count assertion for verification
+/// Count assertion for verification.
+///
+/// Wire format is adjacently tagged (`{ "type": "exactly", "value": 3 }`)
+/// so it round-trips with the TypeScript client which sends
+/// `{ type, value? }`. Variants without a payload (`Never`,
+/// `AtLeastOnce`) omit the `value` field.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum VerificationCount {
     /// Request must be made exactly N times
     Exactly(usize),

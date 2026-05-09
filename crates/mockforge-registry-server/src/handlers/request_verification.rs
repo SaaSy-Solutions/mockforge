@@ -69,14 +69,14 @@ pub struct TimeWindow {
 pub struct VerifyBody {
     pub pattern: VerificationRequest,
     pub expected: VerificationCount,
-    #[serde(default, flatten)]
+    #[serde(flatten)]
     pub window: TimeWindow,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CountBody {
     pub pattern: VerificationRequest,
-    #[serde(default, flatten)]
+    #[serde(flatten)]
     pub window: TimeWindow,
 }
 
@@ -88,14 +88,14 @@ pub struct CountResponse {
 #[derive(Debug, Deserialize)]
 pub struct SequenceBody {
     pub patterns: Vec<VerificationRequest>,
-    #[serde(default, flatten)]
+    #[serde(flatten)]
     pub window: TimeWindow,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct NeverBody {
     pub pattern: VerificationRequest,
-    #[serde(default, flatten)]
+    #[serde(flatten)]
     pub window: TimeWindow,
 }
 
@@ -103,7 +103,7 @@ pub struct NeverBody {
 pub struct AtLeastBody {
     pub pattern: VerificationRequest,
     pub min: usize,
-    #[serde(default, flatten)]
+    #[serde(flatten)]
     pub window: TimeWindow,
 }
 

@@ -139,6 +139,7 @@ jobs:
             --test workspace_content_e2e \
             --test signup_flow_e2e \
             --test marketplace_e2e \
+            --test cloud_verification_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
