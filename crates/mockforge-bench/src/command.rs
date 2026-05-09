@@ -1326,7 +1326,10 @@ impl BenchCommand {
         let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
 
         let flows_data: Vec<serde_json::Value> = flows.iter().map(|f| {
-            let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
+            // Use the metric-name sanitizer (caps at 112 chars + hash suffix)
+            // so deeply nested flow names don't blow past k6's 128-char limit
+            // when concatenated with `_step{i}_latency`. See issue #79.
+            let sanitized_name = K6ScriptGenerator::sanitize_k6_metric_name(&f.name);
             serde_json::json!({
                 "name": sanitized_name.clone(),
                 "display_name": f.name,
@@ -1688,8 +1691,11 @@ impl BenchCommand {
         let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
 
         let flows_data: Vec<serde_json::Value> = flows.iter().map(|f| {
-            // Sanitize flow name for use as JavaScript variable and k6 metric names
-            let sanitized_name = K6ScriptGenerator::sanitize_js_identifier(&f.name);
+            // Sanitize flow name for use as JavaScript variable and k6 metric names.
+            // Use the metric-name sanitizer (caps at 112 chars + hash suffix) so
+            // deeply nested flow names don't blow past k6's 128-char limit when
+            // concatenated with `_step{i}_latency`. See issue #79.
+            let sanitized_name = K6ScriptGenerator::sanitize_k6_metric_name(&f.name);
             serde_json::json!({
                 "name": sanitized_name.clone(),  // Use sanitized name for variable names
                 "display_name": f.name,          // Keep original for comments/display
