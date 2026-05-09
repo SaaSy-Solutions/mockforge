@@ -645,4 +645,24 @@ mod tests {
         assert!(!samples.is_empty(), "Should have recorded at least one latency sample");
         assert_eq!(samples[0].latency_ms, 50, "Recorded latency should match injected delay");
     }
+
+    /// Issue #79 item 6: pre-fix the prometheus counter sat at zero forever
+    /// because nothing called `record_fault`. This is a coarse smoke check
+    /// that the counter mechanism itself works — the actual call sites are
+    /// covered by the wiring in `chaos_middleware_core` and `ChaosTcpListener`.
+    #[test]
+    fn fault_counter_bumps_when_record_fault_is_called() {
+        use crate::metrics::CHAOS_METRICS;
+        let endpoint = "/test_chaos_fault_wiring_smoke";
+        let before = CHAOS_METRICS
+            .faults_injected_total
+            .with_label_values(&["http_error", endpoint])
+            .get();
+        CHAOS_METRICS.record_fault("http_error", endpoint);
+        let after = CHAOS_METRICS
+            .faults_injected_total
+            .with_label_values(&["http_error", endpoint])
+            .get();
+        assert_eq!((after - before) as u64, 1);
+    }
 }
