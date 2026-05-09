@@ -118,11 +118,13 @@ impl axum::serve::Listener for ChaosTcpListener {
                     }
                     drop(stream);
                     warn!("[chaos] injected TCP RST on connection from {}", addr);
+                    crate::metrics::CHAOS_METRICS.record_fault("tcp_reset", "_listener");
                     continue;
                 }
                 Some(ConnectionErrorKind::TcpClose) => {
                     drop(stream);
                     warn!("[chaos] injected TCP FIN on connection from {}", addr);
+                    crate::metrics::CHAOS_METRICS.record_fault("tcp_close", "_listener");
                     continue;
                 }
                 // `Http503` (or no fault hit) lets the connection through; the

@@ -141,6 +141,48 @@ impl K6ScriptGenerator {
             .map_err(|e| BenchError::ScriptGenerationFailed(e.to_string()))
     }
 
+    /// Maximum length for a k6 metric name *base* (the part before any
+    /// `_latency` / `_errors` / `_step{N}_*` suffix). k6 enforces a
+    /// 128-char limit on the full metric name; the longest suffix used by
+    /// our templates is `_step99_errors` (15 chars), so we cap the base at
+    /// 128 - 16 = 112 to be safe.
+    const K6_METRIC_NAME_BASE_MAX_LEN: usize = 112;
+
+    /// Sanitize a name into a valid k6 metric-name base, capped at
+    /// `K6_METRIC_NAME_BASE_MAX_LEN` characters.
+    ///
+    /// k6 rejects metric names longer than 128 chars, and our templates
+    /// append suffixes like `_latency`, `_errors`, `_stepN_latency` —
+    /// reserve room for the longest suffix and truncate the base name
+    /// when needed. Truncation appends an 8-hex-char hash of the original
+    /// name so distinct long names produce distinct metric names.
+    ///
+    /// Examples:
+    /// - "short_name" -> "short_name"
+    /// - 200-char OperationId -> "<first-103-chars>_<8-hex-hash>"
+    pub fn sanitize_k6_metric_name(name: &str) -> String {
+        let sanitized = Self::sanitize_js_identifier(name);
+        if sanitized.len() <= Self::K6_METRIC_NAME_BASE_MAX_LEN {
+            return sanitized;
+        }
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        // Hash the original name (not the sanitized one) so two distinct
+        // sources that sanitize to the same string still get different
+        // hashes when they exceed the limit.
+        name.hash(&mut hasher);
+        let hash_suffix = format!("{:08x}", hasher.finish() as u32);
+
+        // Reserve `_<8-hex>` = 9 chars at the end.
+        let prefix_len = Self::K6_METRIC_NAME_BASE_MAX_LEN - 9;
+        let prefix = &sanitized[..prefix_len];
+        // Strip a trailing underscore on the prefix so we don't end up with `__hash`.
+        let prefix = prefix.trim_end_matches('_');
+        format!("{}_{}", prefix, hash_suffix)
+    }
+
     /// Sanitize a name to be a valid JavaScript identifier
     ///
     /// Replaces invalid characters (dots, spaces, special chars) with underscores.
@@ -204,9 +246,12 @@ impl K6ScriptGenerator {
             .map(|(idx, template)| {
                 let display_name = template.operation.display_name();
                 let sanitized_name = Self::sanitize_js_identifier(&display_name);
-                // metric_name must also be sanitized for k6 metric name validation
-                // k6 metric names must only contain ASCII letters, numbers, or underscores
-                let metric_name = sanitized_name.clone();
+                // metric_name must satisfy k6's 128-char limit AND leave room
+                // for suffixes like `_latency` / `_errors` / `_stepN_*`.
+                // Long deeply-nested operationIds (e.g. Microsoft Graph) exceed
+                // this; sanitize_k6_metric_name truncates with a hash suffix
+                // for uniqueness. (See issue #79 — Srikanth's microsoft-graph.yaml run.)
+                let metric_name = Self::sanitize_k6_metric_name(&display_name);
                 // k6 uses 'del' instead of 'delete' for HTTP DELETE method
                 let k6_method = match template.operation.method.to_lowercase().as_str() {
                     "delete" => "del".to_string(),
@@ -519,6 +564,109 @@ mod tests {
             "plans_update_pricing_schemes"
         );
         assert_eq!(K6ScriptGenerator::sanitize_js_identifier("users CRUD"), "users_CRUD");
+    }
+
+    #[test]
+    fn test_sanitize_k6_metric_name_short_passthrough() {
+        // Names within the limit should pass through unchanged.
+        let short = "billing_subscriptions_list";
+        let out = K6ScriptGenerator::sanitize_k6_metric_name(short);
+        assert_eq!(out, short);
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&format!("{out}_latency")));
+    }
+
+    #[test]
+    fn test_sanitize_k6_metric_name_truncates_long_microsoft_graph_id() {
+        // Real example from issue #79 (Srikanth's microsoft-graph.yaml run):
+        // operationId nested deep enough that the sanitized name + `_latency`
+        // exceeds k6's 128-char limit and gets rejected by validate_script.
+        let long = "drives.drive.items.driveItem.workbook.worksheets.workbookWorksheet.\
+                    charts.workbookChart.axes.categoryAxis.format.line.clear";
+        let metric = K6ScriptGenerator::sanitize_k6_metric_name(long);
+
+        // Base must fit within MAX_LEN, leaving room for `_latency` / `_errors`.
+        assert!(
+            metric.len() <= K6ScriptGenerator::K6_METRIC_NAME_BASE_MAX_LEN,
+            "metric base len {} exceeded cap {}",
+            metric.len(),
+            K6ScriptGenerator::K6_METRIC_NAME_BASE_MAX_LEN
+        );
+
+        // Both the bare metric and the suffixed forms must pass k6's validator.
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&metric));
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&format!("{metric}_latency")));
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&format!("{metric}_errors")));
+        // Worst-case suffix used by `k6_crud_flow.hbs`.
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&format!("{metric}_step99_latency")));
+    }
+
+    #[test]
+    fn test_sanitize_k6_metric_name_distinct_long_names_get_distinct_metrics() {
+        // Two long names that share a long common prefix must NOT collide
+        // after truncation — the trailing hash makes them distinct.
+        let prefix = "a".repeat(150);
+        let a = format!("{prefix}.foo");
+        let b = format!("{prefix}.bar");
+        let ma = K6ScriptGenerator::sanitize_k6_metric_name(&a);
+        let mb = K6ScriptGenerator::sanitize_k6_metric_name(&b);
+        assert_ne!(ma, mb, "distinct long names produced the same metric name");
+    }
+
+    #[test]
+    fn test_sanitize_k6_metric_name_truncated_starts_with_letter() {
+        // Truncation must preserve the "starts with letter or _" k6 rule.
+        let long = format!("{}123end", "x".repeat(120));
+        let metric = K6ScriptGenerator::sanitize_k6_metric_name(&long);
+        assert!(K6ScriptGenerator::is_valid_k6_metric_name(&metric));
+    }
+
+    #[test]
+    fn test_microsoft_graph_long_operation_id_passes_validation() {
+        // End-to-end: an ApiOperation with a microsoft-graph-style long
+        // operationId must produce a script that passes validate_script.
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let long_op_id = "drives.drive.items.driveItem.workbook.worksheets.\
+            workbookWorksheet.charts.workbookChart.axes.categoryAxis.format.\
+            line.clear";
+
+        let operation = ApiOperation {
+            method: "post".to_string(),
+            path: "/drives/{drive-id}/items/{item-id}/workbook/worksheets/{worksheet-id}/charts/{chart-id}/axes/categoryAxis/format/line/clear".to_string(),
+            operation: Operation::default(),
+            operation_id: Some(long_op_id.to_string()),
+        };
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: Some("/v1.0".to_string()),
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+        };
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("script generates");
+
+        let errors = K6ScriptGenerator::validate_script(&script);
+        assert!(
+            errors.is_empty(),
+            "validate_script returned errors for long operationId: {errors:#?}"
+        );
     }
 
     #[test]
