@@ -269,6 +269,8 @@ async fn chaos_middleware_core(
     if let Err(_e) = rate_limiter.check(Some(&ip), Some(&path)) {
         drop(rate_limiter);
         warn!("Rate limit exceeded: {} - {}", ip, path);
+        crate::metrics::CHAOS_METRICS.record_rate_limit_violation(&path);
+        crate::metrics::CHAOS_METRICS.record_fault("rate_limit", &path);
         return (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded").into_response();
     }
     drop(rate_limiter);
@@ -278,6 +280,7 @@ async fn chaos_middleware_core(
     if !traffic_shaper.check_connection_limit() {
         drop(traffic_shaper);
         warn!("Connection limit exceeded");
+        crate::metrics::CHAOS_METRICS.record_fault("connection_limit", &path);
         return (StatusCode::SERVICE_UNAVAILABLE, "Connection limit exceeded").into_response();
     }
 
@@ -288,6 +291,7 @@ async fn chaos_middleware_core(
     if traffic_shaper.should_drop_packet() {
         drop(traffic_shaper);
         warn!("Simulating packet loss for: {}", path);
+        crate::metrics::CHAOS_METRICS.record_fault("packet_loss", &path);
         return (StatusCode::REQUEST_TIMEOUT, "Connection dropped").into_response();
     }
     drop(traffic_shaper);
@@ -298,6 +302,7 @@ async fn chaos_middleware_core(
     drop(latency_injector);
     if delay_ms > 0 {
         chaos.latency_tracker.record_latency(delay_ms);
+        crate::metrics::CHAOS_METRICS.record_latency(&path, delay_ms as f64);
     }
 
     // Detect chunked transfer encoding *before* we collect the body, since
@@ -374,6 +379,7 @@ async fn chaos_middleware_core(
 
     if let Some(status_code) = http_error_status {
         warn!("Injecting HTTP error: {}", status_code);
+        crate::metrics::CHAOS_METRICS.record_fault("http_error", &path);
         return (
             StatusCode::from_u16(status_code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
             format!("Injected error: {}", status_code),
@@ -383,6 +389,7 @@ async fn chaos_middleware_core(
 
     if let Some(timeout_ms) = timeout_fault {
         warn!("Injecting timeout: sleeping {}ms then returning 504", timeout_ms);
+        crate::metrics::CHAOS_METRICS.record_fault("timeout", &path);
         tokio::time::sleep(std::time::Duration::from_millis(timeout_ms)).await;
         return (StatusCode::GATEWAY_TIMEOUT, "Injected timeout (Gateway Timeout)").into_response();
     }
@@ -464,6 +471,7 @@ async fn chaos_middleware_core(
             "Injecting partial response (chunked={}, original_size={})",
             response_was_chunked, response_size
         );
+        crate::metrics::CHAOS_METRICS.record_fault("partial_response", &path);
         let mut rng = rand::rng();
         let truncate_at = if response_size > 0 {
             rng.random_range(0..response_size)
@@ -485,6 +493,7 @@ async fn chaos_middleware_core(
     // Apply payload corruption if enabled
     if should_corrupt && corruption_type != CorruptionType::None {
         warn!("Injecting payload corruption: {:?}", corruption_type);
+        crate::metrics::CHAOS_METRICS.record_fault("payload_corruption", &path);
         final_body_bytes = corrupt_payload(&final_body_bytes, corruption_type);
     }
 
