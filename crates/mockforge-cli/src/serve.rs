@@ -407,6 +407,7 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
                 timeout_errors: false,
                 timeout_ms: 30000,
                 timeout_probability: 0.0,
+                ..Default::default()
             });
         }
 
@@ -1723,27 +1724,7 @@ pub async fn handle_serve(
                     probability: l.probability,
                 }
             }),
-            fault_injection: chaos_eng_config.fault_injection.as_ref().map(|f| {
-                mockforge_chaos::config::FaultInjectionConfig {
-                    enabled: f.enabled,
-                    http_errors: f.http_errors.clone(),
-                    http_error_probability: f.http_error_probability,
-                    connection_errors: f.connection_errors,
-                    connection_error_probability: f.connection_error_probability,
-                    connection_error_kind: mockforge_chaos::config::ConnectionErrorKind::Http503,
-                    timeout_errors: f.timeout_errors,
-                    timeout_ms: f.timeout_ms,
-                    timeout_probability: f.timeout_probability,
-                    partial_responses: false,
-                    partial_response_probability: 0.0,
-                    payload_corruption: false,
-                    payload_corruption_probability: 0.0,
-                    corruption_type: mockforge_chaos::config::CorruptionType::None,
-                    error_pattern: None,
-                    mockai_enabled: false,
-                    request_matcher: None,
-                }
-            }),
+            fault_injection: chaos_eng_config.fault_injection.as_ref().map(fault_config_to_chaos),
             rate_limit: chaos_eng_config.rate_limit.as_ref().map(|r| {
                 mockforge_chaos::config::RateLimitConfig {
                     enabled: r.enabled,
@@ -3016,5 +2997,161 @@ pub async fn handle_serve(
         Err(error.into())
     } else {
         Ok(())
+    }
+}
+
+/// Convert YAML-loaded `mockforge_core::config::FaultConfig` into the chaos
+/// crate's runtime `FaultInjectionConfig`. Issue #79 follow-up: prior to this,
+/// the new fields (`connection_error_kind`, `request_matcher`,
+/// `partial_responses`, `payload_corruption`, `error_pattern`) were hardcoded
+/// to defaults during the bridge — only the runtime REST API (`PUT
+/// /api/chaos/config/faults`) could set them. They now flow from `--config`.
+fn fault_config_to_chaos(
+    f: &mockforge_core::config::FaultConfig,
+) -> mockforge_chaos::config::FaultInjectionConfig {
+    use mockforge_chaos::config::{
+        ConnectionErrorKind, CorruptionType, ErrorPattern, FaultInjectionConfig,
+    };
+    use mockforge_chaos::request_matcher::{HeaderMatch, RequestMatcher};
+    use mockforge_core::config::{
+        ConnectionErrorKindConfig, CorruptionTypeConfig, ErrorPatternConfig,
+    };
+    FaultInjectionConfig {
+        enabled: f.enabled,
+        http_errors: f.http_errors.clone(),
+        http_error_probability: f.http_error_probability,
+        connection_errors: f.connection_errors,
+        connection_error_probability: f.connection_error_probability,
+        connection_error_kind: match f.connection_error_kind {
+            ConnectionErrorKindConfig::Http503 => ConnectionErrorKind::Http503,
+            ConnectionErrorKindConfig::TcpReset => ConnectionErrorKind::TcpReset,
+            ConnectionErrorKindConfig::TcpClose => ConnectionErrorKind::TcpClose,
+        },
+        timeout_errors: f.timeout_errors,
+        timeout_ms: f.timeout_ms,
+        timeout_probability: f.timeout_probability,
+        partial_responses: f.partial_responses,
+        partial_response_probability: f.partial_response_probability,
+        payload_corruption: f.payload_corruption,
+        payload_corruption_probability: f.payload_corruption_probability,
+        corruption_type: match f.corruption_type {
+            CorruptionTypeConfig::None => CorruptionType::None,
+            CorruptionTypeConfig::RandomBytes => CorruptionType::RandomBytes,
+            CorruptionTypeConfig::Truncate => CorruptionType::Truncate,
+            CorruptionTypeConfig::BitFlip => CorruptionType::BitFlip,
+        },
+        error_pattern: f.error_pattern.as_ref().map(|p| match p {
+            ErrorPatternConfig::Burst { count, interval_ms } => ErrorPattern::Burst {
+                count: *count,
+                interval_ms: *interval_ms,
+            },
+            ErrorPatternConfig::Random { probability } => ErrorPattern::Random {
+                probability: *probability,
+            },
+            ErrorPatternConfig::Sequential { sequence } => ErrorPattern::Sequential {
+                sequence: sequence.clone(),
+            },
+        }),
+        mockai_enabled: f.mockai_enabled,
+        request_matcher: f.request_matcher.as_ref().map(|m| RequestMatcher {
+            source_ips: m.source_ips.clone(),
+            headers: m
+                .headers
+                .iter()
+                .map(|h| HeaderMatch {
+                    name: h.name.clone(),
+                    value: h.value.clone(),
+                })
+                .collect(),
+            min_body_size_bytes: m.min_body_size_bytes,
+            max_body_size_bytes: m.max_body_size_bytes,
+            chunked_only: m.chunked_only,
+        }),
+    }
+}
+
+#[cfg(test)]
+mod chaos_yaml_bridge_tests {
+    use super::*;
+    use mockforge_chaos::config::{ConnectionErrorKind, CorruptionType, ErrorPattern};
+    use mockforge_core::config::{
+        ConnectionErrorKindConfig, CorruptionTypeConfig, ErrorPatternConfig, FaultConfig,
+        HeaderMatchConfig, RequestMatcherConfig,
+    };
+
+    /// Issue #79 follow-up: the bridge that runs at server startup must
+    /// preserve every YAML-loadable field, not silently default new fields
+    /// to their no-op values like the previous version did.
+    #[test]
+    fn bridge_preserves_every_new_field() {
+        let yaml = FaultConfig {
+            enabled: true,
+            http_errors: vec![503],
+            http_error_probability: 0.5,
+            connection_errors: true,
+            connection_error_probability: 0.05,
+            connection_error_kind: ConnectionErrorKindConfig::TcpReset,
+            timeout_errors: true,
+            timeout_ms: 30000,
+            timeout_probability: 0.1,
+            partial_responses: true,
+            partial_response_probability: 0.2,
+            payload_corruption: true,
+            payload_corruption_probability: 0.07,
+            corruption_type: CorruptionTypeConfig::BitFlip,
+            error_pattern: Some(ErrorPatternConfig::Burst {
+                count: 5,
+                interval_ms: 1000,
+            }),
+            mockai_enabled: false,
+            request_matcher: Some(RequestMatcherConfig {
+                source_ips: vec!["10.0.0.0/8".into(), "192.168.1.42".into()],
+                headers: vec![HeaderMatchConfig {
+                    name: "x-test".into(),
+                    value: Some("yes".into()),
+                }],
+                min_body_size_bytes: Some(1_048_576),
+                max_body_size_bytes: None,
+                chunked_only: Some(true),
+            }),
+        };
+
+        let bridged = fault_config_to_chaos(&yaml);
+
+        assert!(bridged.enabled);
+        assert_eq!(bridged.connection_error_kind, ConnectionErrorKind::TcpReset);
+        assert!(bridged.partial_responses);
+        assert_eq!(bridged.partial_response_probability, 0.2);
+        assert!(bridged.payload_corruption);
+        assert_eq!(bridged.corruption_type, CorruptionType::BitFlip);
+        match bridged.error_pattern.as_ref().expect("error_pattern present") {
+            ErrorPattern::Burst { count, interval_ms } => {
+                assert_eq!(*count, 5);
+                assert_eq!(*interval_ms, 1000);
+            }
+            other => panic!("expected Burst, got {other:?}"),
+        }
+        let m = bridged.request_matcher.expect("matcher present");
+        assert_eq!(m.source_ips, vec!["10.0.0.0/8", "192.168.1.42"]);
+        assert_eq!(m.headers.len(), 1);
+        assert_eq!(m.headers[0].name, "x-test");
+        assert_eq!(m.headers[0].value.as_deref(), Some("yes"));
+        assert_eq!(m.min_body_size_bytes, Some(1_048_576));
+        assert_eq!(m.chunked_only, Some(true));
+    }
+
+    /// Default `FaultConfig` (e.g., when the user omits new fields) must bridge
+    /// to the same shape the pre-fix code produced — preserves back-compat for
+    /// existing chaos.yaml files.
+    #[test]
+    fn bridge_default_matches_legacy_behavior() {
+        let bridged = fault_config_to_chaos(&FaultConfig::default());
+        assert_eq!(bridged.connection_error_kind, ConnectionErrorKind::Http503);
+        assert!(!bridged.partial_responses);
+        assert_eq!(bridged.partial_response_probability, 0.0);
+        assert!(!bridged.payload_corruption);
+        assert_eq!(bridged.corruption_type, CorruptionType::None);
+        assert!(bridged.error_pattern.is_none());
+        assert!(bridged.request_matcher.is_none());
     }
 }
