@@ -133,6 +133,26 @@ impl RegistryCallbacks {
         Ok(rows)
     }
 
+    /// Run the AI-assisted contract drift second pass (#348). The
+    /// registry samples recent captures for each (method, path), feeds
+    /// them to an LLM with the spec excerpt, and returns scored
+    /// `breaking | non_breaking | cosmetic` findings the runner emits
+    /// as additional `diff_finding` events. Returns an empty findings
+    /// list (with `no_traffic=true`) when no exchanges were captured —
+    /// the structural pass already handled the "spec without traffic"
+    /// case so this is just a quiet skip.
+    pub async fn score_contract_drift(
+        &self,
+        body: &ContractDriftScoreRequest,
+    ) -> Result<ContractDriftScoreResponse> {
+        let url =
+            format!("{}/api/v1/internal/contract-diff/score", self.base_url.trim_end_matches('/'),);
+        let resp = self.http.post(&url).bearer_auth(&self.token).json(body).send().await?;
+        let resp = resp.error_for_status()?;
+        let payload: ContractDriftScoreResponse = resp.json().await?;
+        Ok(payload)
+    }
+
     /// Fetch a fitness function definition (id, name, kind, config)
     /// for the FitnessExecutor (#355). Called once per run before
     /// dispatching to the kind-specific evaluator.
@@ -236,6 +256,52 @@ pub struct EndpointHit {
     pub method: String,
     pub path: String,
     pub hits: i64,
+}
+
+/// Endpoint identifier the AI scoring callback samples captures for.
+/// Format matches what `runtime_captures` stores: method case-
+/// insensitive, path matched literally.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Serialize)]
+pub struct ContractDriftEndpoint {
+    pub method: String,
+    pub path: String,
+}
+
+/// Body for `POST /api/v1/internal/contract-diff/score`.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Serialize)]
+pub struct ContractDriftScoreRequest {
+    pub org_id: Uuid,
+    pub workspace_id: Uuid,
+    pub spec_excerpt: String,
+    pub endpoints: Vec<ContractDriftEndpoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_samples_per_endpoint: Option<i64>,
+}
+
+/// One AI-scored finding mirrored from
+/// `crates/mockforge-registry-server/src/ai/contract_diff.rs::AiFinding`.
+/// Kept in lockstep so the runner can emit the same shape directly.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AiContractFinding {
+    pub severity: String,
+    pub endpoint: String,
+    pub description: String,
+    pub confidence: f64,
+    #[serde(default)]
+    pub rationale: String,
+}
+
+/// Response from the AI scoring endpoint.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct ContractDriftScoreResponse {
+    pub findings: Vec<AiContractFinding>,
+    pub tokens_used: u64,
+    pub provider: String,
+    pub no_traffic: bool,
 }
 
 /// Subset of `FitnessFunction` the runner needs to dispatch + evaluate.

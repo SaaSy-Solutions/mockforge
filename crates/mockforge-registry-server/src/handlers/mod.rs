@@ -20,6 +20,7 @@ pub mod flows;
 pub mod health;
 pub mod hosted_mocks;
 pub mod incidents;
+pub mod internal_contract_diff;
 pub mod internal_test_runs;
 pub mod legal;
 pub mod mockai;
