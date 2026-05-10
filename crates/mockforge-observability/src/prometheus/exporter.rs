@@ -15,14 +15,25 @@ use tracing::{debug, error};
 
 use super::metrics::MetricsRegistry;
 
-/// Handler for the /metrics endpoint
+/// Handler for the /metrics endpoint.
+///
+/// Gathers from two registries: the local `MetricsRegistry` (HTTP request
+/// counters, protocol metrics, etc., wired by the observability layer) and
+/// `prometheus::default_registry()` (where `mockforge-chaos` registers its
+/// `mockforge_chaos_*` counters via `register_counter_vec!`). Without this
+/// merge, chaos counters were silently dropped from `/metrics` even when
+/// they were being incremented — issue #79 follow-up: Srikanth ran a bench
+/// that triggered 80 fault injections but
+/// `curl /metrics | grep mockforge_chaos_` returned nothing because the
+/// two registries were disjoint.
 pub async fn metrics_handler(
     State(registry): State<Arc<MetricsRegistry>>,
 ) -> Result<impl IntoResponse, MetricsError> {
     debug!("Serving Prometheus metrics");
 
     let encoder = TextEncoder::new();
-    let metric_families = registry.registry().gather();
+    let mut metric_families = registry.registry().gather();
+    metric_families.extend(prometheus::default_registry().gather());
 
     let mut buffer = Vec::new();
     encoder.encode(&metric_families, &mut buffer).map_err(|e| {
