@@ -303,6 +303,11 @@ impl MockForgeClient {
         self.get_api("/__mockforge/chaos").await
     }
 
+    /// Snapshot of chaos fault-injection counters (issue-#79 follow-up).
+    pub async fn get_chaos_stats(&self) -> Result<serde_json::Value> {
+        self.get_api("/__mockforge/chaos/stats").await
+    }
+
     pub async fn toggle_chaos(&self, enabled: bool) -> Result<String> {
         self.post_api("/__mockforge/chaos/toggle", &serde_json::json!({ "enabled": enabled }))
             .await

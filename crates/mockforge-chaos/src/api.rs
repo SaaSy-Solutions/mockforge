@@ -193,6 +193,10 @@ pub fn create_chaos_api_router(
         // Metrics endpoints
         .route("/api/chaos/metrics/latency", get(get_latency_metrics))
         .route("/api/chaos/metrics/latency/stats", get(get_latency_stats))
+        // JSON snapshot of fault-injection counters (issue-#79 follow-up;
+        // gives the TUI a structured view of the same data exposed in
+        // Prometheus exposition format at /metrics).
+        .route("/api/chaos/stats", get(get_fault_stats))
 
         // Profile management endpoints
         .route("/api/chaos/profiles", get(list_profiles))
@@ -1654,6 +1658,14 @@ async fn get_latency_stats(
 ) -> Json<crate::latency_metrics::LatencyStats> {
     let stats = state.latency_tracker.get_stats();
     Json(stats)
+}
+
+/// Snapshot of the chaos prometheus counters in JSON form. State is unused;
+/// the snapshot reads directly from the global `CHAOS_METRICS`.
+async fn get_fault_stats(
+    State(_state): State<ChaosApiState>,
+) -> Json<crate::metrics::ChaosStatsSnapshot> {
+    Json(crate::metrics::CHAOS_METRICS.snapshot())
 }
 
 #[derive(Debug, Serialize)]

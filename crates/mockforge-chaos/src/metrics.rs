@@ -5,9 +5,11 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    register_counter_vec, register_gauge_vec, register_histogram_vec, CounterVec, GaugeVec,
-    HistogramVec, Registry,
+    proto::MetricFamily, register_counter_vec, register_gauge_vec, register_histogram_vec,
+    CounterVec, GaugeVec, HistogramVec, Registry,
 };
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Chaos orchestration metrics
 pub struct ChaosMetrics {
@@ -215,6 +217,103 @@ impl ChaosMetrics {
     pub fn update_impact_score(&self, time_window: &str, score: f64) {
         self.chaos_impact_score.with_label_values(&[time_window]).set(score);
     }
+
+    /// Snapshot the active counter values as a JSON-serializable struct.
+    ///
+    /// Issue #79 follow-up: the prometheus counters were wired in 0.3.128 but
+    /// only readable via `/metrics` (Prometheus exposition format). This gives
+    /// the TUI / dashboard a structured JSON view of fault injections,
+    /// rate-limit violations, and latency injection counts — keyed by
+    /// fault_type and endpoint.
+    pub fn snapshot(&self) -> ChaosStatsSnapshot {
+        use prometheus::core::Collector;
+
+        let mut faults_by_type: HashMap<String, HashMap<String, u64>> = HashMap::new();
+        let mut faults_total_by_type: HashMap<String, u64> = HashMap::new();
+        let mut faults_grand_total: u64 = 0;
+        for fam in self.faults_injected_total.collect() {
+            walk_counter(&fam, |labels, count| {
+                let fault_type =
+                    labels.get("fault_type").cloned().unwrap_or_else(|| "unknown".to_string());
+                let endpoint =
+                    labels.get("endpoint").cloned().unwrap_or_else(|| "unknown".to_string());
+                faults_by_type.entry(fault_type.clone()).or_default().insert(endpoint, count);
+                *faults_total_by_type.entry(fault_type).or_default() += count;
+                faults_grand_total += count;
+            });
+        }
+
+        let mut rate_limit_by_endpoint: HashMap<String, u64> = HashMap::new();
+        let mut rate_limit_total: u64 = 0;
+        for fam in self.rate_limit_violations_total.collect() {
+            walk_counter(&fam, |labels, count| {
+                let endpoint =
+                    labels.get("endpoint").cloned().unwrap_or_else(|| "unknown".to_string());
+                rate_limit_by_endpoint.insert(endpoint, count);
+                rate_limit_total += count;
+            });
+        }
+
+        let mut latency_samples_by_endpoint: HashMap<String, u64> = HashMap::new();
+        for fam in self.latency_injected.collect() {
+            for m in fam.get_metric() {
+                let endpoint = m
+                    .get_label()
+                    .iter()
+                    .find(|l| l.name() == "endpoint")
+                    .map(|l| l.value().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let count = m.get_histogram().sample_count();
+                latency_samples_by_endpoint.insert(endpoint, count);
+            }
+        }
+
+        ChaosStatsSnapshot {
+            faults_by_type,
+            faults_total_by_type,
+            faults_grand_total,
+            rate_limit_violations_by_endpoint: rate_limit_by_endpoint,
+            rate_limit_violations_total: rate_limit_total,
+            latency_samples_by_endpoint,
+        }
+    }
+}
+
+/// Iterate counter samples in a metric family, calling `visit(labels, value)`
+/// for each. Only valid for counter-typed families; histograms have a
+/// different shape and we read those inline in `snapshot()`.
+fn walk_counter<F>(fam: &MetricFamily, mut visit: F)
+where
+    F: FnMut(HashMap<String, String>, u64),
+{
+    for m in fam.get_metric() {
+        let labels: HashMap<String, String> = m
+            .get_label()
+            .iter()
+            .map(|l| (l.name().to_string(), l.value().to_string()))
+            .collect();
+        let count = m.get_counter().value() as u64;
+        visit(labels, count);
+    }
+}
+
+/// Structured snapshot of the chaos counter state. Returned by the
+/// `/api/chaos/stats` endpoint and consumed by the TUI Chaos screen.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChaosStatsSnapshot {
+    /// faults_by_type[fault_type][endpoint] = count. Empty when chaos has
+    /// never fired since process start.
+    pub faults_by_type: HashMap<String, HashMap<String, u64>>,
+    /// Total faults per fault_type, summed across endpoints.
+    pub faults_total_by_type: HashMap<String, u64>,
+    /// Total fault injections across all types and endpoints.
+    pub faults_grand_total: u64,
+    /// Rate-limit violations per endpoint.
+    pub rate_limit_violations_by_endpoint: HashMap<String, u64>,
+    /// Total rate-limit violations.
+    pub rate_limit_violations_total: u64,
+    /// Number of latency-injection samples per endpoint (histogram count).
+    pub latency_samples_by_endpoint: HashMap<String, u64>,
 }
 
 impl Default for ChaosMetrics {
@@ -261,5 +360,49 @@ mod tests {
     fn test_record_latency() {
         CHAOS_METRICS.record_latency("/api/test", 100.0);
         // Just ensure it doesn't panic
+    }
+
+    /// Issue #79 follow-up: snapshot must reflect counter increments and the
+    /// label-keyed nesting (fault_type → endpoint → count) the TUI uses.
+    #[test]
+    fn snapshot_reflects_counter_increments() {
+        // Use a unique endpoint label so this test doesn't race with other
+        // tests against the global CHAOS_METRICS singleton.
+        let endpoint = "/api/test_snapshot_endpoint_unique_xyz";
+        let baseline = CHAOS_METRICS.snapshot();
+        let baseline_count = baseline
+            .faults_by_type
+            .get("http_error")
+            .and_then(|m| m.get(endpoint))
+            .copied()
+            .unwrap_or(0);
+
+        CHAOS_METRICS.record_fault("http_error", endpoint);
+        CHAOS_METRICS.record_fault("http_error", endpoint);
+        CHAOS_METRICS.record_rate_limit_violation(endpoint);
+        CHAOS_METRICS.record_latency(endpoint, 42.0);
+
+        let snap = CHAOS_METRICS.snapshot();
+        assert_eq!(
+            snap.faults_by_type
+                .get("http_error")
+                .and_then(|m| m.get(endpoint))
+                .copied()
+                .unwrap_or(0),
+            baseline_count + 2,
+            "fault count for {endpoint} did not advance by 2"
+        );
+        assert!(
+            snap.faults_total_by_type.get("http_error").copied().unwrap_or(0) >= 2,
+            "faults_total_by_type[http_error] should reflect the inc"
+        );
+        assert!(
+            snap.rate_limit_violations_by_endpoint.get(endpoint).copied().unwrap_or(0) >= 1,
+            "rate_limit_violations_by_endpoint did not record"
+        );
+        assert!(
+            snap.latency_samples_by_endpoint.get(endpoint).copied().unwrap_or(0) >= 1,
+            "latency histogram count did not record"
+        );
     }
 }
