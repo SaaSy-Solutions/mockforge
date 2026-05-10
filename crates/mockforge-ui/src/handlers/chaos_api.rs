@@ -138,6 +138,25 @@ pub async fn start_chaos_scenario(
     }
 }
 
+/// JSON snapshot of chaos fault-injection counters (issue-#79 follow-up).
+///
+/// Returns `mockforge_chaos::metrics::ChaosStatsSnapshot` read from the global
+/// `CHAOS_METRICS` prometheus state. The counters track everything the
+/// chaos middleware records regardless of whether a scenario is configured —
+/// so this endpoint works even when chaos has never been enabled.
+pub async fn get_chaos_stats(State(_state): State<AdminState>) -> impl IntoResponse {
+    let snapshot = mockforge_chaos::metrics::CHAOS_METRICS.snapshot();
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "data": snapshot,
+            "error": null,
+            "timestamp": chrono::Utc::now().to_rfc3339()
+        })),
+    )
+}
+
 /// Stop a chaos scenario by name
 pub async fn stop_chaos_scenario(
     State(state): State<AdminState>,

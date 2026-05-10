@@ -365,6 +365,7 @@ pub fn create_admin_router(
         .route("/startupz", get(health::startup_probe))
         // Chaos engineering routes (TUI dashboard)
         .route("/__mockforge/chaos", get(chaos_api::get_chaos_status))
+        .route("/__mockforge/chaos/stats", get(chaos_api::get_chaos_stats))
         .route("/__mockforge/chaos/toggle", post(chaos_api::toggle_chaos))
         .route("/__mockforge/chaos/scenarios/predefined", get(chaos_api::get_chaos_scenarios_predefined))
         .route("/__mockforge/chaos/scenarios/{name}", post(chaos_api::start_chaos_scenario))

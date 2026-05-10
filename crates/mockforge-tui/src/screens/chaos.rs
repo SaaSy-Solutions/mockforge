@@ -36,6 +36,9 @@ enum PendingAction {
 
 pub struct ChaosScreen {
     data: Option<serde_json::Value>,
+    /// Chaos fault counter snapshot (issue-#79 follow-up). Fetched alongside
+    /// status; renders into a third panel beneath Settings.
+    stats: Option<serde_json::Value>,
     error: Option<String>,
     last_fetch: Option<Instant>,
     pending_action: Option<PendingAction>,
@@ -52,6 +55,7 @@ impl ChaosScreen {
     pub fn new() -> Self {
         Self {
             data: None,
+            stats: None,
             error: None,
             last_fetch: None,
             pending_action: None,
@@ -209,8 +213,20 @@ impl Screen for ChaosScreen {
         let cols = Layout::horizontal([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(area);
 
+        // Right column: Settings on top, Stats below (if available).
+        let right_rows = if self.stats.is_some() {
+            Layout::vertical([Constraint::Percentage(60), Constraint::Percentage(40)])
+                .split(cols[1])
+        } else {
+            // No stats yet — settings takes the whole right column.
+            Layout::vertical([Constraint::Percentage(100)]).split(cols[1])
+        };
+
         self.render_status(frame, cols[0], data);
-        self.render_settings(frame, cols[1], data);
+        self.render_settings(frame, right_rows[0], data);
+        if let Some(ref stats) = self.stats {
+            self.render_stats(frame, right_rows[1], stats);
+        }
 
         // Preset picker overlay.
         if self.preset_picker {
@@ -284,28 +300,52 @@ impl Screen for ChaosScreen {
         let client = client.clone();
         let tx = tx.clone();
         tokio::spawn(async move {
-            match client.get_chaos_status().await {
-                Ok(data) => {
-                    let json = serde_json::to_string(&data).unwrap_or_default();
-                    let _ = tx.send(Event::Data {
-                        screen: "chaos",
-                        payload: json,
-                    });
-                }
+            // Status is required; stats are best-effort. If stats fail (e.g. older
+            // server without /__mockforge/chaos/stats), we still render the
+            // existing Status + Settings panels with stats.is_none().
+            let status = match client.get_chaos_status().await {
+                Ok(data) => data,
                 Err(e) => {
                     let _ = tx.send(Event::ApiError {
                         screen: "chaos",
                         message: e.to_string(),
                     });
+                    return;
                 }
-            }
+            };
+            let stats = client.get_chaos_stats().await.ok();
+            let payload = serde_json::json!({
+                "status": status,
+                "stats": stats,
+            });
+            let _ = tx.send(Event::Data {
+                screen: "chaos",
+                payload: serde_json::to_string(&payload).unwrap_or_default(),
+            });
         });
     }
 
     fn on_data(&mut self, payload: &str) {
         match serde_json::from_str::<serde_json::Value>(payload) {
-            Ok(data) => {
-                self.data = Some(data);
+            Ok(combined) => {
+                // tick() now packs {status, stats}; back-compat: if the payload
+                // looks like the old shape (no "status" key), treat the whole
+                // thing as status data and leave stats unchanged.
+                if let Some(status) = combined.get("status").cloned() {
+                    self.data = Some(status);
+                    if let Some(stats) = combined.get("stats").cloned() {
+                        // The endpoint envelope is {success, data, error, ...};
+                        // unwrap to the inner snapshot for rendering.
+                        let snapshot = stats.get("data").cloned().unwrap_or(stats);
+                        self.stats = if snapshot.is_null() {
+                            None
+                        } else {
+                            Some(snapshot)
+                        };
+                    }
+                } else {
+                    self.data = Some(combined);
+                }
                 self.error = None;
             }
             Err(e) => {
@@ -461,6 +501,80 @@ impl ChaosScreen {
         let visible_lines: Vec<Line> = lines.into_iter().skip(self.detail_scroll).collect();
 
         let paragraph = Paragraph::new(visible_lines).block(block);
+        frame.render_widget(paragraph, area);
+    }
+
+    /// Issue-#79 follow-up: show per-fault-type counts from the chaos
+    /// prometheus counters. Sourced from `/__mockforge/chaos/stats` →
+    /// `mockforge_chaos::metrics::CHAOS_METRICS::snapshot()`.
+    fn render_stats(&self, frame: &mut Frame, area: Rect, stats: &serde_json::Value) {
+        let block = Block::default()
+            .title(" Fault Stats ")
+            .title_style(Theme::title())
+            .borders(Borders::ALL)
+            .border_style(Theme::dim())
+            .style(Theme::surface());
+
+        let mut lines: Vec<Line> = Vec::new();
+
+        let grand_total = stats.get("faults_grand_total").and_then(|v| v.as_u64()).unwrap_or(0);
+        lines.push(Line::from(vec![
+            Span::styled("  Total faults injected: ", Theme::dim()),
+            Span::styled(
+                grand_total.to_string(),
+                Style::default().fg(Theme::FG).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+
+        // Per-fault-type totals. Sort descending by count so the noisiest
+        // fault floats to the top.
+        let by_type = stats.get("faults_total_by_type").and_then(|v| v.as_object());
+        if let Some(map) = by_type {
+            let mut entries: Vec<(&String, u64)> =
+                map.iter().filter_map(|(k, v)| v.as_u64().map(|n| (k, n))).collect();
+            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            if entries.is_empty() {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled("  No faults injected yet.", Theme::dim())));
+            } else {
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    "  Per fault_type:",
+                    Style::default().fg(Theme::BLUE).add_modifier(Modifier::BOLD),
+                )));
+                for (fault_type, count) in entries {
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("    {fault_type:<22}"), Theme::dim()),
+                        Span::styled(count.to_string(), Style::default().fg(Theme::FG)),
+                    ]));
+                }
+            }
+        }
+
+        // Rate-limit violations summary.
+        let rl_total =
+            stats.get("rate_limit_violations_total").and_then(|v| v.as_u64()).unwrap_or(0);
+        if rl_total > 0 {
+            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::styled("  Rate-limit violations:  ", Theme::dim()),
+                Span::styled(rl_total.to_string(), Style::default().fg(Theme::FG)),
+            ]));
+        }
+
+        // Latency injection sample count.
+        if let Some(samples) = stats.get("latency_samples_by_endpoint").and_then(|v| v.as_object())
+        {
+            let total: u64 = samples.values().filter_map(|v| v.as_u64()).sum();
+            if total > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("  Latency injections:     ", Theme::dim()),
+                    Span::styled(total.to_string(), Style::default().fg(Theme::FG)),
+                ]));
+            }
+        }
+
+        let paragraph = Paragraph::new(lines).block(block);
         frame.render_widget(paragraph, area);
     }
 
