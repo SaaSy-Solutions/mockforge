@@ -1,0 +1,55 @@
+[package]
+name = "mockforge-chaos-proxy"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Network-layer fault-injecting HTTP client for chaos campaigns against external (non-hosted_mock) targets"
+keywords = ["mock", "chaos", "fault-injection", "testing"]
+categories = ["development-tools::testing"]
+publish = false
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+# HTTP client (target-side egress).
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Serialize/Deserialize for the wire types the executor passes in.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling.
+thiserror = { workspace = true }
+
+# Logging.
+tracing = { workspace = true }
+
+# Random dice for the drop-rate roll. mockforge-chaos uses this same
+# crate internally; we depend on it directly so we don't have to
+# re-export it from the chaos crate.
+rand = { workspace = true }
+
+# Reuses the building blocks from mockforge-chaos rather than
+# re-implementing latency / fault dice. Keeps wire-format coverage in
+# lock-step with the in-process middleware that hosted-mocks already
+# use.
+mockforge-chaos = { path = "../mockforge-chaos" }
+
+# SSRF guard. Re-validating the target URL on every request keeps a
+# poisoned campaign config from escaping into a customer's internal
+# network when the registry-side check (#370) is bypassed somehow.
+mockforge-bench = { path = "../mockforge-bench" }
+
+[dev-dependencies]
+# Local HTTP test server for the unit tests so we don't make real
+# network calls in CI.
+axum = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+
+[lints.rust]
+unsafe_code = "deny"

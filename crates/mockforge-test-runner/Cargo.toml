@@ -48,6 +48,10 @@ redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 # k6 binary on $PATH.
 mockforge-bench = { path = "../mockforge-bench" }
 
+# Network-layer fault-injecting HTTP client used by ChaosExecutor for
+# `target_kind=external` campaigns (#349).
+mockforge-chaos-proxy = { path = "../mockforge-chaos-proxy" }
+
 # tracing-subscriber is only used by the binary entry point; pulling it
 # into normal deps so the binary builds without juggling features.
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
