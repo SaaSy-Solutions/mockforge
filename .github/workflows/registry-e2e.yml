@@ -53,6 +53,10 @@ jobs:
       AWS_ACCESS_KEY_ID: "minioadmin"
       AWS_SECRET_ACCESS_KEY: "minioadmin"
       REGISTRY_URL: "http://localhost:58080"
+      # Shared bearer token between the registry server and the E2E
+      # tests that hit `/api/v1/internal/*`. Kept literal so both
+      # processes see the same value.
+      MOCKFORGE_INTERNAL_API_TOKEN: "e2e-internal-token-do-not-use-in-prod"
 
     steps:
       - name: Checkout
@@ -140,6 +144,7 @@ jobs:
             --test signup_flow_e2e \
             --test marketplace_e2e \
             --test cloud_verification_e2e \
+            --test cloud_ai_contract_diff_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure

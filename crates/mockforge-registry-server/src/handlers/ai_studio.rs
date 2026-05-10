@@ -451,36 +451,47 @@ pub(crate) async fn run_completion(
     headers: &HeaderMap,
     prompt: PromptInputs,
 ) -> ApiResult<(String, UsageMeta)> {
-    // 1. Auth + plan info.
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    run_completion_for_org(state, &org_ctx.org, prompt).await
+}
 
-    // 2. BYOK lookup.
-    let byok = load_byok_config(state, org_ctx.org_id).await?;
+/// Same pipeline as [`run_completion`] but skips the user→org resolution
+/// and operates on a known [`Organization`]. Internal callers (e.g. the
+/// runner-facing `/api/v1/internal/contract-diff/score` endpoint, where
+/// the auth model is a shared internal token rather than a user
+/// session) use this entry point.
+pub(crate) async fn run_completion_for_org(
+    state: &AppState,
+    org: &mockforge_registry_core::models::Organization,
+    prompt: PromptInputs,
+) -> ApiResult<(String, UsageMeta)> {
+    // 1. BYOK lookup.
+    let byok = load_byok_config(state, org.id).await?;
 
-    // 3. Provider routing (pure).
-    let is_paid_plan = matches!(org_ctx.org.plan(), Plan::Pro | Plan::Team);
+    // 2. Provider routing (pure).
+    let is_paid_plan = matches!(org.plan(), Plan::Pro | Plan::Team);
     let provider = pick_provider(is_paid_plan, byok);
 
-    // 4. Pre-call quota check.
-    let quota = check_ai_quota(state, &org_ctx.org, provider.selection()).await?;
+    // 3. Pre-call quota check.
+    let quota = check_ai_quota(state, org, provider.selection()).await?;
     if !quota.allowed {
         return Err(quota.into_error());
     }
 
-    // 5. Build LLM call.
+    // 4. Build LLM call.
     let selection = provider.selection();
     let llm_call = build_llm_call(&provider, prompt)?;
 
-    // 6. Call.
+    // 5. Call.
     let result = call_llm(llm_call).await?;
 
-    // 7. Meter (Platform only; BYOK skips the platform quota).
+    // 6. Meter (Platform only; BYOK skips the platform quota).
     let total_tokens = result.total_tokens();
-    record_ai_usage(state, org_ctx.org_id, selection, total_tokens as i64).await?;
+    record_ai_usage(state, org.id, selection, total_tokens as i64).await?;
 
-    // 8. Build response metadata.
+    // 7. Build response metadata.
     let billed_now = if matches!(selection, ProviderSelection::Platform) {
         total_tokens as i64
     } else {

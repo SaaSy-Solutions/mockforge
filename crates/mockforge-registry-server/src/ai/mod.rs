@@ -7,6 +7,7 @@
 //! See `docs/cloud/CLOUD_AI_STUDIO_DESIGN.md` for the full design.
 
 pub mod client;
+pub mod contract_diff;
 pub mod provider;
 pub mod quota;
 

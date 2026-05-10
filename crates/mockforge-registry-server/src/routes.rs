@@ -123,6 +123,11 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/internal/tunnel-reservations/by-subdomain/{subdomain}",
             get(handlers::internal_test_runs::get_tunnel_reservation_by_subdomain),
         )
+        // AI-assisted contract drift scoring (#348). Runner-only.
+        .route(
+            "/api/v1/internal/contract-diff/score",
+            post(handlers::internal_contract_diff::score_contract_drift),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))

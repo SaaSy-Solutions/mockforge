@@ -15,7 +15,7 @@
 use async_trait::async_trait;
 use std::time::Instant;
 
-use crate::callbacks::RegistryCallbacks;
+use crate::callbacks::{ContractDriftEndpoint, ContractDriftScoreRequest, RegistryCallbacks};
 use crate::error::Result;
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 
@@ -285,12 +285,67 @@ async fn run_real_contract_diff(
         }
     }
 
+    // Optional AI-assisted second pass (#348). Opt-in via the suite
+    // config's `ai_drift_enabled` flag. Scores parameter / schema /
+    // response-shape drift on declared endpoints that actually have
+    // traffic — orphaned and undeclared ones already have clear
+    // severity from the structural pass. Failures from the AI call
+    // are non-fatal: a missing BYOK / exhausted quota / timeout
+    // degrades to "no AI findings" rather than failing the run.
+    let mut ai_findings_count = 0u32;
+    let ai_breaking_count = match (uses_ai_drift_scoring(&job.payload), workspace_id) {
+        (true, Some(wid)) => {
+            let candidates: Vec<ContractDriftEndpoint> = endpoints
+                .iter()
+                .filter(|(method, path)| {
+                    hits_by_endpoint.contains_key(&(method.clone(), path.clone()))
+                })
+                .map(|(method, path)| ContractDriftEndpoint {
+                    method: method.clone(),
+                    path: path.clone(),
+                })
+                .collect();
+
+            if candidates.is_empty() {
+                callbacks
+                    .run_event(
+                        job.run_id,
+                        next_seq,
+                        "log",
+                        serde_json::json!({
+                            "level": "info",
+                            "message": "AI drift scoring skipped: no declared endpoints with recent traffic",
+                            "ai_phase": true,
+                        }),
+                    )
+                    .await?;
+                // Function returns shortly after; we don't bump
+                // next_seq because nothing else in this scope reads
+                // it (clippy::unused_assignments).
+                0u32
+            } else {
+                run_ai_second_pass(
+                    &job,
+                    callbacks,
+                    &mut next_seq,
+                    &mut ai_findings_count,
+                    wid,
+                    &spec_text,
+                    candidates,
+                )
+                .await
+            }
+        }
+        _ => 0u32,
+    };
+
     let elapsed = started.elapsed();
     let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
     // Pass when the spec covers everything the workspace has been
-    // serving. Failed when undeclared traffic shows up — that's
-    // breaking drift the operator needs to address.
-    let status = if undeclared_count == 0 {
+    // serving AND the AI pass didn't surface any new breaking
+    // findings. AI cosmetic / non_breaking findings don't fail the
+    // run — they're informational.
+    let status = if undeclared_count == 0 && ai_breaking_count == 0 {
         JobStatus::Passed
     } else {
         JobStatus::Failed
@@ -310,10 +365,124 @@ async fn run_real_contract_diff(
             "declared_count": declared_count,
             "unused_count": unused_count,
             "undeclared_count": undeclared_count,
+            "ai_findings_count": ai_findings_count,
+            "ai_breaking_count": ai_breaking_count,
             "wall_ms": elapsed.as_millis() as u64,
-            "note": "AI-assisted scoring (param/schema/response drift) is the follow-up via mockforge-ai-contract-diff",
         })),
     })
+}
+
+/// Did the suite config opt into AI drift scoring? Stored on the
+/// suite's `config` JSON as `ai_drift_enabled: bool` (default false).
+fn uses_ai_drift_scoring(payload: &serde_json::Value) -> bool {
+    payload.get("ai_drift_enabled").and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// Run the AI scoring callback and emit one `diff_finding` event per
+/// finding. Returns the count of `breaking`-severity findings so the
+/// caller can decide whether to fail the run.
+async fn run_ai_second_pass(
+    job: &RunJob,
+    callbacks: &RegistryCallbacks,
+    next_seq: &mut u32,
+    ai_findings_count: &mut u32,
+    workspace_id: uuid::Uuid,
+    spec_text: &str,
+    endpoints: Vec<ContractDriftEndpoint>,
+) -> u32 {
+    let body = ContractDriftScoreRequest {
+        org_id: job.org_id,
+        workspace_id,
+        spec_excerpt: spec_text.to_string(),
+        endpoints,
+        max_samples_per_endpoint: None,
+    };
+
+    let response = match callbacks.score_contract_drift(&body).await {
+        Ok(r) => r,
+        Err(e) => {
+            // Non-fatal — log and continue. Common causes: free plan
+            // without BYOK (registry returns 403), platform LLM key
+            // unset on the registry, transient HTTP error.
+            let _ = callbacks
+                .run_event(
+                    job.run_id,
+                    *next_seq,
+                    "log",
+                    serde_json::json!({
+                        "level": "warn",
+                        "message": format!("AI drift scoring failed: {e}"),
+                        "ai_phase": true,
+                    }),
+                )
+                .await;
+            *next_seq += 1;
+            return 0;
+        }
+    };
+
+    if response.no_traffic {
+        let _ = callbacks
+            .run_event(
+                job.run_id,
+                *next_seq,
+                "log",
+                serde_json::json!({
+                    "level": "info",
+                    "message": "AI drift scoring skipped: no captured exchanges to sample",
+                    "ai_phase": true,
+                }),
+            )
+            .await;
+        *next_seq += 1;
+        return 0;
+    }
+
+    let _ = callbacks
+        .run_event(
+            job.run_id,
+            *next_seq,
+            "log",
+            serde_json::json!({
+                "level": "info",
+                "message": format!(
+                    "AI drift scoring returned {} findings ({} tokens, provider={})",
+                    response.findings.len(),
+                    response.tokens_used,
+                    response.provider,
+                ),
+                "ai_phase": true,
+                "tokens_used": response.tokens_used,
+                "provider": response.provider,
+            }),
+        )
+        .await;
+    *next_seq += 1;
+
+    let mut breaking_count = 0u32;
+    for finding in response.findings {
+        if finding.severity == "breaking" {
+            breaking_count += 1;
+        }
+        *ai_findings_count += 1;
+        let _ = callbacks
+            .run_event(
+                job.run_id,
+                *next_seq,
+                "diff_finding",
+                serde_json::json!({
+                    "severity": finding.severity,
+                    "endpoint": finding.endpoint,
+                    "description": finding.description,
+                    "confidence": finding.confidence,
+                    "rationale": finding.rationale,
+                    "ai": true,
+                }),
+            )
+            .await;
+        *next_seq += 1;
+    }
+    breaking_count
 }
 
 /// Walk an OpenAPI 3.x document and collect (method, path) tuples for
