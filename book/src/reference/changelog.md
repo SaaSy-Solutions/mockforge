@@ -1,5 +1,14 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.130] - 2026-05-10
+
+### Fixed
+
+- **[Reality]** `mockforge_chaos_*` counters silently absent from `/metrics` (#79 follow-up)
+  - Chaos counters register against the global `prometheus::default_registry()`; `/metrics` was exporting only the local `MetricsRegistry`. The two were disjoint, so chaos counters never surfaced. `metrics_handler` now gathers from both. No format change for scrapers.
+- **[Reality]** `LatencyInjectionConfig` / `RateLimitingConfig` / `NetworkShapingConfig` rejected partial YAML
+  - Missing fields broke the whole config load (e.g. `traffic_shaping:` without `max_connections`). Adding `Default` + `#[serde(default)]` makes partial YAML parse cleanly.
+
 ## [0.3.129] - 2026-05-09
 
 ### Added

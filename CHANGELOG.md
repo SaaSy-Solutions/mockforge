@@ -1,3 +1,13 @@
+## [0.3.130] - 2026-05-10
+
+### Fixed
+
+- **[Reality]** `mockforge_chaos_*` counters silently absent from `/metrics` (#79 follow-up, Srikanth's 3rd-round reply)
+  - Root cause: chaos counters register against `prometheus::default_registry()` (via `register_counter_vec!`), but the `/metrics` exporter gathered only from a *separate* local `MetricsRegistry` created in `mockforge-observability`. The two registries were disjoint, so even when `record_fault(...)` fired (wired in 0.3.128), nothing appeared at `/metrics` — Srikanth ran a bench that produced 80 failures and `curl /metrics | grep mockforge_chaos_` returned empty.
+  - Fix: `metrics_handler` now extends the local registry's metric families with `prometheus::default_registry().gather()` before encoding, so both registries surface in the same response. No format change for clients — chaos metrics now appear alongside protocol metrics.
+- **[Reality]** Chaos sub-configs (`LatencyInjectionConfig`, `RateLimitingConfig`, `NetworkShapingConfig`) failed YAML parse if any field was omitted (#79 follow-up)
+  - All three structs lacked `Default` and `#[serde(default)]`, so a `traffic_shaping:` block missing `max_connections` would fail the whole config load. Srikanth hit this and worked around it manually. Adding the derives makes partial YAML parse cleanly with sensible zero defaults.
+
 ## [0.3.129] - 2026-05-09
 
 ### Added

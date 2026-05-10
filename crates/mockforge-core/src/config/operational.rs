@@ -1135,7 +1135,8 @@ pub struct ChaosEngConfig {
 }
 
 /// Latency injection configuration for chaos engineering
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LatencyInjectionConfig {
     /// Enable latency injection
@@ -1310,7 +1311,8 @@ pub struct FaultConfig {
 }
 
 /// Rate limiting configuration for traffic control
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct RateLimitingConfig {
     /// Enable rate limiting
@@ -1326,7 +1328,8 @@ pub struct RateLimitingConfig {
 }
 
 /// Network shaping configuration for simulating network conditions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct NetworkShapingConfig {
     /// Enable network shaping
@@ -1428,6 +1431,60 @@ timeout_probability: 0.0
         assert!(!parsed.payload_corruption);
         assert!(parsed.error_pattern.is_none());
         assert!(parsed.request_matcher.is_none());
+    }
+
+    /// Same yaml that the live server failed on — read from disk via the
+    /// production config-loader path (load_config), not just inline string.
+    #[test]
+    fn fault_config_via_load_config_from_disk() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("chaos.yaml");
+        std::fs::write(&path, "observability:\n  chaos:\n    enabled: true\n    fault_injection:\n      enabled: true\n      http_errors: [503]\n      http_error_probability: 1.0\n      connection_errors: false\n      connection_error_probability: 0.0\n      timeout_errors: false\n      timeout_ms: 5000\n      timeout_probability: 0.0\n").unwrap();
+        let cfg = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(crate::config::load_config(&path))
+            .expect("load");
+        let fi = cfg
+            .observability
+            .chaos
+            .expect("chaos")
+            .fault_injection
+            .expect("fault_injection");
+        assert_eq!(fi.http_error_probability, 1.0);
+        assert_eq!(fi.timeout_ms, 5000);
+    }
+
+    /// Issue #79 follow-up (Srikanth's 3rd-round reply):
+    /// my reply pointed at `--config chaos.yaml` for the new chaos fields,
+    /// but his live server reports `http_error_probability: 0.05` even
+    /// though the YAML says `1.0`. Reproduce against the real
+    /// `ServerConfig` deserialization path that mockforge uses at startup,
+    /// not just the inner FaultConfig in isolation.
+    #[test]
+    fn fault_config_through_server_config_observability_chaos() {
+        let yaml = r#"
+observability:
+  chaos:
+    enabled: true
+    fault_injection:
+      enabled: true
+      http_errors: [503]
+      http_error_probability: 1.0
+      connection_errors: false
+      connection_error_probability: 0.0
+      timeout_errors: false
+      timeout_ms: 5000
+      timeout_probability: 0.0
+"#;
+        let cfg: crate::config::ServerConfig = serde_yaml::from_str(yaml).expect("parse");
+        let chaos = cfg.observability.chaos.expect("chaos present");
+        assert!(chaos.enabled);
+        let fi = chaos.fault_injection.expect("fault_injection present");
+        assert_eq!(
+            fi.http_error_probability, 1.0,
+            "http_error_probability lost during nested deserialization"
+        );
+        assert_eq!(fi.timeout_ms, 5000, "timeout_ms lost during nested deserialization");
     }
 
     /// The connection_error_kind enum must serialize as snake_case strings
