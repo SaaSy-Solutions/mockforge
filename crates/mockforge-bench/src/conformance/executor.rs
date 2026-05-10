@@ -523,14 +523,34 @@ impl NativeConformanceExecutor {
     }
 
     /// Load custom checks from the configured YAML file
-    pub fn with_custom_checks(mut self) -> Result<Self> {
+    pub fn with_custom_checks(self) -> Result<Self> {
         let path = match &self.config.custom_checks_file {
             Some(p) => p.clone(),
             None => return Ok(self),
         };
         let custom_config = CustomConformanceConfig::from_file(&path)?;
+        self.append_custom_checks(&custom_config)
+    }
 
-        // Compile the custom filter regex (if provided)
+    /// Load custom checks from an already-parsed `CustomConformanceConfig`.
+    ///
+    /// Counterpart to [`Self::with_custom_checks`] for callers that
+    /// don't have a filesystem path — the cloud test-runner receives
+    /// the YAML inline on the suite config and parses it server-side
+    /// before reaching the executor, so it can't (and shouldn't) write
+    /// the bytes to a tempfile just to satisfy a file-based API.
+    pub fn with_custom_checks_from_config(
+        self,
+        custom_config: CustomConformanceConfig,
+    ) -> Result<Self> {
+        self.append_custom_checks(&custom_config)
+    }
+
+    /// Shared implementation: filter + add a parsed
+    /// `CustomConformanceConfig`'s entries onto the check list.
+    /// Pulled out of `with_custom_checks` so the inline-config and
+    /// file-based paths can't drift.
+    fn append_custom_checks(mut self, custom_config: &CustomConformanceConfig) -> Result<Self> {
         let filter_re = match &self.config.custom_filter {
             Some(pattern) => Some(regex::Regex::new(pattern).map_err(|e| {
                 BenchError::Other(format!("Invalid --conformance-custom-filter regex: {}", e))
@@ -1426,6 +1446,92 @@ mod tests {
         // 7 params + 3 bodies + 6 schema + 3 composition + 7 formats + 5 constraints
         // + 5 response codes + 7 methods + 1 content + 3 security = 47
         assert_eq!(executor.check_count(), 47);
+    }
+
+    #[test]
+    fn with_custom_checks_from_config_appends() {
+        // Construct an inline CustomConformanceConfig and verify both
+        // that the checks are appended on top of reference-checks
+        // mode and that the filter regex (when present) drops
+        // non-matching entries.
+        let custom_yaml = r#"
+custom_checks:
+  - name: "custom:health"
+    path: /health
+    method: GET
+    expected_status: 200
+  - name: "custom:create"
+    path: /widgets
+    method: POST
+    expected_status: 201
+"#;
+        let parsed: super::CustomConformanceConfig =
+            serde_yaml::from_str(custom_yaml).expect("YAML parses");
+        assert_eq!(parsed.custom_checks.len(), 2);
+
+        let base = ConformanceConfig {
+            target_url: "http://localhost:3000".to_string(),
+            ..Default::default()
+        };
+        let executor = NativeConformanceExecutor::new(base)
+            .unwrap()
+            .with_reference_checks()
+            .with_custom_checks_from_config(parsed)
+            .expect("custom checks load");
+        // 47 reference checks + 2 custom = 49.
+        assert_eq!(executor.check_count(), 49);
+    }
+
+    #[test]
+    fn with_custom_checks_from_config_respects_filter() {
+        // custom_filter is regex-based; only matching entries should
+        // make it onto the executor.
+        let custom_yaml = r#"
+custom_checks:
+  - name: "custom:health"
+    path: /health
+    method: GET
+    expected_status: 200
+  - name: "custom:create-widget"
+    path: /widgets
+    method: POST
+    expected_status: 201
+"#;
+        let parsed: super::CustomConformanceConfig =
+            serde_yaml::from_str(custom_yaml).expect("YAML parses");
+
+        let base = ConformanceConfig {
+            target_url: "http://localhost:3000".to_string(),
+            // Reference checks would add 47; turn them off so the
+            // count is purely the custom set after filtering.
+            categories: Some(vec!["no_such_category".to_string()]),
+            custom_filter: Some("health".to_string()),
+            ..Default::default()
+        };
+        let executor = NativeConformanceExecutor::new(base)
+            .unwrap()
+            .with_reference_checks()
+            .with_custom_checks_from_config(parsed)
+            .expect("custom checks load");
+        // categories filter drops all reference checks; custom_filter
+        // keeps the one entry whose name matches /health/.
+        assert_eq!(executor.check_count(), 1);
+    }
+
+    #[test]
+    fn with_custom_checks_from_config_rejects_bad_filter_regex() {
+        let parsed: super::CustomConformanceConfig =
+            serde_yaml::from_str("custom_checks: []").expect("YAML parses");
+        let base = ConformanceConfig {
+            target_url: "http://localhost:3000".to_string(),
+            custom_filter: Some("[unclosed".to_string()),
+            ..Default::default()
+        };
+        let result = NativeConformanceExecutor::new(base)
+            .unwrap()
+            .with_reference_checks()
+            .with_custom_checks_from_config(parsed);
+        assert!(result.is_err(), "bad regex should bubble up as BenchError");
     }
 
     #[test]

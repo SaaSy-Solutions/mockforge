@@ -85,6 +85,10 @@ export function ConformancePage() {
   const [allOperations, setAllOperations] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Inline custom-checks YAML (#391 Phase 2). Wire-only on local
+  // mode (no form field — the local CLI passes it via --custom-checks
+  // file path). In cloud mode the textarea below surfaces it.
+  const [customChecksYaml, setCustomChecksYaml] = useState('');
 
   // Run state
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -125,6 +129,11 @@ export function ConformancePage() {
     setIsStarting(true);
 
     try {
+      // Only forward custom_checks_yaml in cloud mode — the local
+      // CLI/server accepts it but takes the YAML from a --custom-checks
+      // file path, not an inline string, so passing it through here
+      // would land as an unused field on the local API.
+      const trimmedCustomYaml = customChecksYaml.trim();
       const config: ConformanceRunRequest = {
         target_url: targetUrl.trim(),
         ...(basePath && { base_path: basePath }),
@@ -133,6 +142,9 @@ export function ConformancePage() {
         ...(skipTls && { skip_tls_verify: true }),
         ...(allOperations && { all_operations: true }),
         ...(selectedCategories.length > 0 && { categories: selectedCategories }),
+        ...(cloudMode && trimmedCustomYaml
+          ? { custom_checks_yaml: trimmedCustomYaml }
+          : {}),
       };
 
       if (cloudMode) {
@@ -284,6 +296,7 @@ export function ConformancePage() {
     selectedCategories,
     cloudMode,
     activeWorkspace?.id,
+    customChecksYaml,
   ]);
 
   const handleViewRun = useCallback(async (id: string) => {
@@ -459,6 +472,31 @@ export function ConformancePage() {
                     <input type="checkbox" checked={allOperations} onChange={e => setAllOperations(e.target.checked)} className="rounded" />
                     Test all operations
                   </label>
+                </div>
+              )}
+
+              {/*
+                Custom checks YAML (#391 Phase 2). Cloud-only surface
+                because the local CLI takes this as a file path; the
+                cloud runner accepts the inline YAML and parses it
+                server-side via the same declarative schema.
+              */}
+              {showAdvanced && cloudMode && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Custom checks (YAML)
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Declarative checks layered on top of the built-in OpenAPI probes.
+                    See the docs for the <code>custom_checks</code> schema (name, path,
+                    method, expected_status, expected_headers, expected_body_fields).
+                  </p>
+                  <textarea
+                    className="w-full min-h-[140px] p-2 font-mono text-xs border rounded bg-background text-foreground"
+                    placeholder={'custom_checks:\n  - name: "custom:health-200"\n    path: /health\n    method: GET\n    expected_status: 200'}
+                    value={customChecksYaml}
+                    onChange={e => setCustomChecksYaml(e.target.value)}
+                  />
                 </div>
               )}
             </div>

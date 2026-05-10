@@ -49,6 +49,10 @@ function buildConformanceConfig(req: ConformanceRunRequest): Record<string, unkn
   const conformance_headers = req.custom_headers?.length
     ? req.custom_headers.map(([k, v]) => `${k}: ${v}`)
     : undefined;
+  // Trim — empty-string custom_checks_yaml would still hit the
+  // server-side parser, which is wasteful and would surface a noisy
+  // "EOF reached while parsing YAML" error.
+  const customChecksYaml = req.custom_checks_yaml?.trim();
   return {
     use_cloud_api: true,
     target_url: req.target_url,
@@ -60,6 +64,7 @@ function buildConformanceConfig(req: ConformanceRunRequest): Record<string, unkn
     conformance_all_operations: req.all_operations ?? false,
     conformance_delay_ms: req.request_delay_ms ?? 0,
     skip_tls_verify: req.skip_tls_verify ?? false,
+    ...(customChecksYaml ? { custom_checks_yaml: customChecksYaml } : {}),
   };
 }
 

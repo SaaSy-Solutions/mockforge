@@ -33,6 +33,7 @@ use mockforge_bench::cloud_api::{
     self, CloudBenchInputs, CloudCrudFlowInputs, CloudOwaspInputs, CloudRunArtifacts,
     CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
 };
+use mockforge_bench::conformance::custom::CustomConformanceConfig;
 use mockforge_bench::conformance::executor::{ConformanceProgress, NativeConformanceExecutor};
 use mockforge_bench::conformance::generator::ConformanceConfig;
 use mockforge_bench::ssrf::{validate_target_url, Policy as SsrfPolicy};
@@ -652,13 +653,63 @@ async fn run_cloud_conformance(
         validate_requests: false,
     };
 
-    // Construct the executor in reference-checks mode. Spec-driven
-    // checks would require parsing the OpenAPI spec into
-    // `AnnotatedOperation`s — deferred to a follow-up so the first
-    // cloud iteration matches the local "no spec, just probe the
-    // reference endpoints" UX which is what the page form exposes.
+    // Parse the optional inline custom-checks YAML before we
+    // construct the executor — if the user supplied malformed YAML
+    // we want to error fast, not run the reference checks and then
+    // surface a confusing parse failure mid-run. The YAML schema is
+    // purely declarative (status/headers/body-field validators), so
+    // no sandbox is needed server-side.
+    let custom_checks_config = match extract_string(&job.payload, "custom_checks_yaml") {
+        Some(yaml) => match serde_yaml::from_str::<CustomConformanceConfig>(&yaml) {
+            Ok(cfg) => Some(cfg),
+            Err(e) => {
+                return finish_cloud_error(
+                    job.run_id,
+                    callbacks,
+                    started,
+                    "conformance",
+                    &target_url,
+                    2,
+                    mockforge_bench::error::BenchError::Other(format!(
+                        "custom_checks_yaml parse failed: {e}"
+                    )),
+                )
+                .await;
+            }
+        },
+        None => None,
+    };
+
+    // Construct the executor in reference-checks mode, optionally
+    // chaining the user's declarative custom checks on top. Both are
+    // additive — reference checks always run; custom checks extend
+    // the list when provided. Spec-driven checks would require
+    // parsing the OpenAPI spec into `AnnotatedOperation`s — deferred
+    // to a follow-up so the first cloud iteration matches the local
+    // "no spec, just probe the reference endpoints" UX which is what
+    // the page form exposes.
     let executor = match NativeConformanceExecutor::new(config) {
-        Ok(e) => e.with_reference_checks(),
+        Ok(e) => {
+            let e = e.with_reference_checks();
+            match custom_checks_config {
+                Some(cfg) => match e.with_custom_checks_from_config(cfg) {
+                    Ok(e) => e,
+                    Err(err) => {
+                        return finish_cloud_error(
+                            job.run_id,
+                            callbacks,
+                            started,
+                            "conformance",
+                            &target_url,
+                            2,
+                            err,
+                        )
+                        .await
+                    }
+                },
+                None => e,
+            }
+        }
         Err(e) => {
             return finish_cloud_error(
                 job.run_id,
