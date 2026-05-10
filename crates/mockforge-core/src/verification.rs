@@ -44,10 +44,12 @@ pub struct VerificationRequest {
 
     /// Query parameters to match (all must be present and match).
     /// If empty, query parameters are not checked.
+    #[serde(default)]
     pub query_params: HashMap<String, String>,
 
     /// Headers to match (all must be present and match). Case-insensitive header names.
     /// If empty, headers are not checked.
+    #[serde(default)]
     pub headers: HashMap<String, String>,
 
     /// Request body pattern to match. Supports exact match or regex.
@@ -55,9 +57,14 @@ pub struct VerificationRequest {
     pub body_pattern: Option<String>,
 }
 
-/// Count assertion for verification
+/// Count assertion for verification.
+///
+/// Wire format is adjacently tagged (`{ "type": "exactly", "value": 3 }`)
+/// so it round-trips with the TypeScript client which sends
+/// `{ type, value? }`. Variants without a payload (`Never`,
+/// `AtLeastOnce`) omit the `value` field.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
 pub enum VerificationCount {
     /// Request must be made exactly N times
     Exactly(usize),
@@ -284,24 +291,25 @@ fn matches_body_pattern(body: &str, pattern: &str) -> bool {
     }
 }
 
-/// Verify requests against a pattern and count assertion
-pub async fn verify_requests(
-    logger: &crate::request_logger::CentralizedRequestLogger,
+/// Run the count-based verification logic against an explicit slice of
+/// log entries. The logger-backed `verify_requests` and the registry's
+/// cloud verification endpoint both funnel through this so behavior is
+/// bit-for-bit identical.
+///
+/// `entries` should be in any order (matching is per-row); `count` is
+/// the total of matching rows in the slice.
+pub fn verify_entries(
+    entries: &[RequestLogEntry],
     pattern: &VerificationRequest,
     expected: VerificationCount,
 ) -> VerificationResult {
-    // Get all logs
-    let logs = logger.get_recent_logs(None).await;
-
-    // Find matching requests
-    let matches: Vec<RequestLogEntry> = logs
-        .into_iter()
+    let matches: Vec<RequestLogEntry> = entries
+        .iter()
         .filter(|entry| matches_verification_pattern(entry, pattern))
+        .cloned()
         .collect();
 
     let count = matches.len();
-
-    // Check count assertion
     let matched = match &expected {
         VerificationCount::Exactly(n) => count == *n,
         VerificationCount::AtLeast(n) => count >= *n,
@@ -321,43 +329,20 @@ pub async fn verify_requests(
     }
 }
 
-/// Verify that a request was never made
-pub async fn verify_never(
-    logger: &crate::request_logger::CentralizedRequestLogger,
-    pattern: &VerificationRequest,
-) -> VerificationResult {
-    verify_requests(logger, pattern, VerificationCount::Never).await
-}
-
-/// Verify that a request was made at least N times
-pub async fn verify_at_least(
-    logger: &crate::request_logger::CentralizedRequestLogger,
-    pattern: &VerificationRequest,
-    min: usize,
-) -> VerificationResult {
-    verify_requests(logger, pattern, VerificationCount::AtLeast(min)).await
-}
-
-/// Verify that requests occurred in a specific sequence
-pub async fn verify_sequence(
-    logger: &crate::request_logger::CentralizedRequestLogger,
+/// Sequence verification against an explicit slice of log entries.
+/// `entries` must be in chronological order (oldest first).
+pub fn verify_sequence_entries(
+    entries: &[RequestLogEntry],
     patterns: &[VerificationRequest],
 ) -> VerificationResult {
-    // Get all logs (most recent first)
-    let mut logs = logger.get_recent_logs(None).await;
-    // Reverse to get chronological order (oldest first) for sequence verification
-    logs.reverse();
-
-    // Find matches for each pattern in order
     let mut log_idx = 0;
     let mut all_matches = Vec::new();
 
     for pattern in patterns {
-        // Find the next matching request after the last match
         let mut found = false;
-        while log_idx < logs.len() {
-            if matches_verification_pattern(&logs[log_idx], pattern) {
-                all_matches.push(logs[log_idx].clone());
+        while log_idx < entries.len() {
+            if matches_verification_pattern(&entries[log_idx], pattern) {
+                all_matches.push(entries[log_idx].clone());
                 log_idx += 1;
                 found = true;
                 break;
@@ -384,6 +369,43 @@ pub async fn verify_sequence(
         VerificationCount::Exactly(patterns.len()),
         all_matches,
     )
+}
+
+/// Verify requests against a pattern and count assertion
+pub async fn verify_requests(
+    logger: &crate::request_logger::CentralizedRequestLogger,
+    pattern: &VerificationRequest,
+    expected: VerificationCount,
+) -> VerificationResult {
+    let logs = logger.get_recent_logs(None).await;
+    verify_entries(&logs, pattern, expected)
+}
+
+/// Verify that a request was never made
+pub async fn verify_never(
+    logger: &crate::request_logger::CentralizedRequestLogger,
+    pattern: &VerificationRequest,
+) -> VerificationResult {
+    verify_requests(logger, pattern, VerificationCount::Never).await
+}
+
+/// Verify that a request was made at least N times
+pub async fn verify_at_least(
+    logger: &crate::request_logger::CentralizedRequestLogger,
+    pattern: &VerificationRequest,
+    min: usize,
+) -> VerificationResult {
+    verify_requests(logger, pattern, VerificationCount::AtLeast(min)).await
+}
+
+/// Verify that requests occurred in a specific sequence
+pub async fn verify_sequence(
+    logger: &crate::request_logger::CentralizedRequestLogger,
+    patterns: &[VerificationRequest],
+) -> VerificationResult {
+    let mut logs = logger.get_recent_logs(None).await;
+    logs.reverse();
+    verify_sequence_entries(&logs, patterns)
 }
 
 #[cfg(test)]
