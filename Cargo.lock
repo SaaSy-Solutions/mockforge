@@ -7728,6 +7728,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-chaos-proxy"
+version = "0.3.129"
+dependencies = [
+ "axum 0.8.9",
+ "mockforge-bench",
+ "mockforge-chaos",
+ "rand 0.9.4",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mockforge-cli"
 version = "0.3.129"
 dependencies = [
@@ -9082,6 +9098,7 @@ dependencies = [
  "chrono",
  "futures",
  "mockforge-bench",
+ "mockforge-chaos-proxy",
  "redis 0.25.4",
  "reqwest 0.12.28",
  "serde",

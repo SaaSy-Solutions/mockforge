@@ -49,6 +49,7 @@ members = [
 
     # Advanced features
     "crates/mockforge-chaos",
+    "crates/mockforge-chaos-proxy",
     "crates/mockforge-federation",
     "crates/mockforge-performance",
     "crates/mockforge-pipelines",
