@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.131] - 2026-05-10
+
+### Added
+
+- **[Reality]** TUI Chaos screen now surfaces live fault-injection counts (#79 follow-up)
+  - New `ChaosStatsSnapshot` and `GET /api/chaos/stats` (+ admin passthrough at `/__mockforge/chaos/stats`).
+  - Fault Stats panel below Settings shows totals + per-fault-type counts. Older servers without the endpoint fall back to the 2-panel layout.
+
 ## [0.3.130] - 2026-05-10
 
 ### Fixed

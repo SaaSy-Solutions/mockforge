@@ -1,3 +1,12 @@
+## [0.3.131] - 2026-05-10
+
+### Added
+
+- **[Reality]** TUI Chaos screen now surfaces live fault-injection counts (#79 follow-up)
+  - New `mockforge_chaos::metrics::ChaosStatsSnapshot` — JSON-serializable view of `CHAOS_METRICS` keyed by `fault_type → endpoint → count`, plus per-type totals, grand total, rate-limit violations, and latency injection sample counts.
+  - New `GET /api/chaos/stats` (chaos crate) and `GET /__mockforge/chaos/stats` (admin passthrough) endpoints expose the snapshot as JSON.
+  - `ChaosScreen` adds a **Fault Stats** panel below Settings showing total faults, per-type counts (sorted desc by frequency), rate-limit violations, and latency injection samples. Best-effort: older servers without the new endpoint fall back to the existing 2-panel layout, so client/server version mismatches don't break the screen.
+
 ## [0.3.130] - 2026-05-10
 
 ### Fixed
