@@ -289,6 +289,10 @@ const cloudNavItemIds = new Set([
   // clustered by the active workspace. Phase 1 returns no edges; SSE
   // updates are local-only for now (cloud falls back to 30s polling).
   'graph',
+  // Observability dashboard (#465) — Phase 1 lists the org's saved
+  // queries and runs them on-demand via cloudObservabilityApi.execute
+  // SavedQuery. Live dashboard tiles + event stream are a follow-up.
+  'observability',
   // Scenario Studio uses cloudFlowsApi with kind='scenario'. Each flow
   // version stores the full {flow_type, steps, connections, tags}
   // payload as the FlowVersion config; runs queue through test_runs.
