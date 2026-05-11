@@ -139,6 +139,23 @@ pub async fn create_workspace(
         return Err(ApiError::InvalidRequest("Workspace name is required".to_string()));
     }
 
+    // Enforce max_projects from plan limits. -1 means unlimited.
+    let max_projects = org_ctx
+        .org
+        .limits_json
+        .get("max_projects")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(1);
+    if max_projects >= 0 {
+        let existing = state.store.list_cloud_workspaces_by_org(org_ctx.org_id).await?;
+        if existing.len() as i64 >= max_projects {
+            return Err(ApiError::InvalidRequest(format!(
+                "Workspace limit reached. Your plan allows {} workspace(s). Upgrade to create more.",
+                max_projects
+            )));
+        }
+    }
+
     let workspace = state
         .store
         .create_cloud_workspace(org_ctx.org_id, user_id, request.name.trim(), &request.description)
