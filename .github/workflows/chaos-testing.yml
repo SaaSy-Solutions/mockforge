@@ -47,7 +47,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+        run: dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
@@ -84,9 +84,7 @@ jobs:
         run: chmod +x bin/mockforge
 
       - name: Install chaos tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y iproute2 iptables
+        run: dpkg -s iproute2 iptables > /dev/null 2>&1 || { echo "::error::iproute2/iptables missing on self-hosted runner. Run: sudo apt-get install -y iproute2 iptables"; exit 1; }
 
       - name: Run network partition test
         run: |
@@ -146,7 +144,7 @@ jobs:
         run: chmod +x bin/mockforge
 
       - name: Install tc (traffic control)
-        run: sudo apt-get update && sudo apt-get install -y iproute2
+        run: dpkg -s iproute2 > /dev/null 2>&1 || { echo "::error::iproute2 missing on self-hosted runner. Run: sudo apt-get install -y iproute2"; exit 1; }
 
       - name: Run high latency test
         run: |
@@ -258,7 +256,7 @@ jobs:
         run: chmod +x bin/mockforge
 
       - name: Install stress tools
-        run: sudo apt-get update && sudo apt-get install -y stress-ng
+        run: dpkg -s stress-ng > /dev/null 2>&1 || { echo "::error::stress-ng missing on self-hosted runner. Run: sudo apt-get install -y stress-ng"; exit 1; }
 
       - name: Run resource exhaustion test
         run: |
