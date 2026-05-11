@@ -119,7 +119,7 @@ kafka = []
 chaos = []
 
 [dev-dependencies]
-tokio = { version = "1.50", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3"
 tokio-tungstenite = "0.28"

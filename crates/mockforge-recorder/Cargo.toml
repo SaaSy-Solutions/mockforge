@@ -60,6 +60,6 @@ mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-intelligence = { path = "../mockforge-intelligence" }
 
 [dev-dependencies]
-tokio = { version = "1.50", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 tempfile = "3"
 tower = "0.5"

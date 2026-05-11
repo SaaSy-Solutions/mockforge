@@ -159,7 +159,7 @@ serde_jcs = "0.1"
 matchit = "0.8"
 
 # Async runtime
-tokio = { version = "1.50", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
+tokio = { version = "1.52", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
 futures = "0.3"
 async-trait = "0.1"
 
