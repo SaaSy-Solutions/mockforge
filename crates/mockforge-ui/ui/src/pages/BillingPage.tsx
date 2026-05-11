@@ -744,7 +744,7 @@ export function BillingPage() {
             <Card className={subscription.plan === 'pro' ? 'border-primary' : ''}>
               <CardHeader>
                 <CardTitle>Pro</CardTitle>
-                <div className="text-3xl font-bold">$19</div>
+                <div className="text-3xl font-bold">$29</div>
                 <CardDescription>per month</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -794,7 +794,7 @@ export function BillingPage() {
             <Card className={subscription.plan === 'team' ? 'border-primary' : ''}>
               <CardHeader>
                 <CardTitle>Team</CardTitle>
-                <div className="text-3xl font-bold">$79</div>
+                <div className="text-3xl font-bold">$99</div>
                 <CardDescription>per month</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
