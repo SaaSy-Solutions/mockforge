@@ -342,6 +342,11 @@ const cloudNavItemIds = new Set([
   // shapes via cloudCommunityApi (services/api/cloudCommunity.ts).
   'showcase',
   'learning-hub',
+  // Workspace request logs (#462) — read from `runtime_captures` rows
+  // tagged with this workspace via cloudLogsApi. Hosted-mock captures
+  // without workspace_id are invisible until the shipper backfill lands;
+  // cloud-shipped captures (--cloud-ship) work today.
+  'logs',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
