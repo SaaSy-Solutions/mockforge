@@ -42,7 +42,7 @@ MockForge Cloud offers three pricing tiers designed to meet the needs of individ
 
 ### Pro Plan
 
-**$19/month** - For professional developers and small teams
+**$29/month** - For professional developers and small teams
 
 **Everything in Free, plus:**
 - ✅ **250,000 API requests** per month (25x more)
@@ -70,7 +70,7 @@ MockForge Cloud offers three pricing tiers designed to meet the needs of individ
 
 ### Team Plan
 
-**$79/month** - For growing teams and organizations
+**$99/month** - For growing teams and organizations
 
 **Everything in Pro, plus:**
 - ✅ **1,000,000 API requests** per month (100x Free)
@@ -304,10 +304,6 @@ Need more than Team plan offers? Contact us for custom enterprise solutions:
 ### What payment methods do you accept?
 
 We accept all major credit and debit cards through Stripe. We're working on adding more payment methods (PayPal, bank transfer for enterprise).
-
-### Is there a free trial for paid plans?
-
-**Yes!** All paid plans include a 14-day free trial. No credit card required for trial. Cancel anytime during trial with no charges.
 
 ### Can I get a refund?
 

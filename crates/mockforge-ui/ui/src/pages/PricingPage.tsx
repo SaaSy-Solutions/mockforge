@@ -86,7 +86,7 @@ export function PricingPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Pro</CardTitle>
             <div className="mt-4">
-              <span className="text-4xl font-bold">$19</span>
+              <span className="text-4xl font-bold">$29</span>
               <span className="text-muted-foreground">/month</span>
             </div>
             <CardDescription>For professional developers</CardDescription>
@@ -138,7 +138,7 @@ export function PricingPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Team</CardTitle>
             <div className="mt-4">
-              <span className="text-4xl font-bold">$79</span>
+              <span className="text-4xl font-bold">$99</span>
               <span className="text-muted-foreground">/month</span>
             </div>
             <CardDescription>For growing teams</CardDescription>
@@ -292,12 +292,6 @@ export function PricingPage() {
             <h3 className="font-semibold mb-2">Do unused requests roll over?</h3>
             <p className="text-muted-foreground">
               No, limits reset each billing cycle. Unused capacity does not roll over to the next month.
-            </p>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-2">Is there a free trial?</h3>
-            <p className="text-muted-foreground">
-              Yes! All paid plans include a 14-day free trial. No credit card required for trial.
             </p>
           </div>
           <div>
