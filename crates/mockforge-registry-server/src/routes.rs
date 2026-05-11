@@ -530,6 +530,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/flow-versions/{version_id}",
             get(handlers::flows::get_flow_version),
         )
+        // Workspace dependency graph (#460) — services + flows as nodes,
+        // clustered by workspace. Phase 1 returns no edges; edge derivation
+        // from flow.config refs is a follow-up.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/graph",
+            get(handlers::graph::get_workspace_graph),
+        )
         // Observability saved-queries + dashboards (cloud-enablement #2 / Phase 1).
         // Cross-deployment query handlers come in a follow-up slice.
         .route(

@@ -19,6 +19,9 @@ import type {
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { apiService } from '../services/api';
+import { cloudGraphApi } from '../services/api/cloudGraph';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import type { GraphData, GraphNode, GraphEdge } from '../types/graph';
 import { EndpointNode } from '../components/graph/EndpointNode';
 import { ServiceNode } from '../components/graph/ServiceNode';
@@ -39,6 +42,8 @@ const nodeTypes: NodeTypes = {
 };
 
 export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
+  const cloudMode = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,11 +58,12 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [useRealtime, setUseRealtime] = useState(true);
 
-  // SSE for real-time updates
+  // SSE for real-time updates — local only. Cloud mode polls instead;
+  // a workspace-scoped SSE endpoint is a follow-up to the read endpoint.
   const { data: sseData, isConnected: sseConnected } = useSSE<GraphData>(
     '/__mockforge/graph/sse',
     {
-      autoConnect: useRealtime,
+      autoConnect: useRealtime && !cloudMode,
       retry: {
         enabled: true,
         maxAttempts: 5,
@@ -70,7 +76,16 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getGraph();
+      if (cloudMode && !activeWorkspace?.id) {
+        setGraphData(null);
+        setNodes([]);
+        setEdges([]);
+        setError('Select a workspace to view its dependency graph.');
+        return;
+      }
+      const response = cloudMode
+        ? await cloudGraphApi.getWorkspaceGraph(activeWorkspace!.id)
+        : await apiService.getGraph();
       setGraphData(response);
 
       // Apply filters
@@ -123,7 +138,7 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
     } finally {
       setLoading(false);
     }
-  }, [setNodes, setEdges, layout, nodeFilter, protocolFilter]);
+  }, [setNodes, setEdges, layout, nodeFilter, protocolFilter, cloudMode, activeWorkspace?.id]);
 
   useEffect(() => {
     fetchGraphData();
