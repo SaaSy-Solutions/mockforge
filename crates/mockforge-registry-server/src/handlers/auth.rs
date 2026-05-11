@@ -9,6 +9,7 @@ use crate::{
         create_token_pair, hash_password, verify_password, verify_refresh_token,
         REFRESH_TOKEN_EXPIRY_DAYS,
     },
+    email::EmailService,
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::organization::Plan,
@@ -87,6 +88,32 @@ pub async fn register(
         .await
     {
         tracing::warn!("Failed to create personal org for user {}: {}", user.id, e);
+    }
+
+    // Send verification email (non-blocking — don't fail registration if SMTP is down)
+    match state.store.create_verification_token(user.id).await {
+        Ok(verification_token) => {
+            let verification_email = EmailService::generate_verification_email(
+                &user.username,
+                &user.email,
+                &verification_token.token,
+            );
+            tokio::spawn(async move {
+                match EmailService::from_env() {
+                    Ok(email_service) => {
+                        if let Err(e) = email_service.send(verification_email).await {
+                            tracing::warn!("Failed to send verification email at signup: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Email service unavailable at signup: {}", e);
+                    }
+                }
+            });
+        }
+        Err(e) => {
+            tracing::warn!("Failed to create verification token at signup: {}", e);
+        }
     }
 
     // Generate token pair (access + refresh)
@@ -279,7 +306,6 @@ pub async fn refresh_token(
 }
 
 // Password reset handlers (moved here to avoid axum version conflicts)
-use crate::email::EmailService;
 
 #[derive(Debug, Deserialize)]
 pub struct PasswordResetRequest {
