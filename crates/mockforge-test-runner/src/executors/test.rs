@@ -30,9 +30,14 @@ use async_trait::async_trait;
 use std::time::Instant;
 
 use mockforge_bench::cloud_api::{
-    self, CloudBenchInputs, CloudConformanceInputs, CloudCrudFlowInputs, CloudOwaspInputs,
-    CloudRunArtifacts, CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
+    self, CloudBenchInputs, CloudCrudFlowInputs, CloudOwaspInputs, CloudRunArtifacts,
+    CloudSecurityInputs, CloudWafBenchInputs, SpecFormat,
 };
+use mockforge_bench::conformance::custom::CustomConformanceConfig;
+use mockforge_bench::conformance::executor::{ConformanceProgress, NativeConformanceExecutor};
+use mockforge_bench::conformance::generator::ConformanceConfig;
+use mockforge_bench::ssrf::{validate_target_url, Policy as SsrfPolicy};
+use tokio::sync::mpsc;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
@@ -536,11 +541,20 @@ async fn run_cloud_owasp(
     }
 }
 
-/// Drive an OpenAPI 3.0.0 conformance run via `cloud_api::run_conformance`.
+/// Drive an OpenAPI 3.0.0 conformance run via the native conformance
+/// executor in `mockforge_bench::conformance::executor`, streaming
+/// per-check progress through the callbacks channel so the cloud UI can
+/// show live status (`started` / `check_completed` / `finished`).
 ///
-/// Unlike bench/owasp, the spec is optional — the native conformance
-/// executor's reference-check mode runs without one. So this path opts
-/// in purely on `kind == "conformance" && use_cloud_api == true`.
+/// We bypass `cloud_api::run_conformance` here because that path
+/// shells out to the `bench` CLI, runs k6, and returns artifacts in a
+/// single shot — no per-check progress. The native executor exposes
+/// `execute_with_progress`, which is what the local Conformance page
+/// already streams.
+///
+/// SSRF guard is invoked explicitly before construction; without
+/// `cloud_api` in the loop it's the only thing standing between an
+/// attacker-supplied `target_url` and the runner's network.
 async fn run_cloud_conformance(
     job: RunJob,
     callbacks: &RegistryCallbacks,
@@ -561,6 +575,30 @@ async fn run_cloud_conformance(
         .await;
     };
 
+    // SSRF guard. Defense-in-depth — the registry already checks at
+    // trigger time, but a poisoned suite config could still reach a
+    // worker, so we re-validate on this side too. Same env-var
+    // contract (`MOCKFORGE_SSRF_ALLOW_LOOPBACK=1` for tests) as
+    // mockforge_bench::cloud_api uses for the other kinds.
+    let policy = match std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").as_deref() {
+        Ok("1") | Ok("true") => SsrfPolicy::for_test(),
+        _ => SsrfPolicy::strict(),
+    };
+    if let Err(e) = validate_target_url(&target_url, policy).await {
+        return finish_cloud_error(
+            job.run_id,
+            callbacks,
+            started,
+            "conformance",
+            &target_url,
+            1,
+            mockforge_bench::error::BenchError::Other(format!(
+                "target_url rejected by SSRF guard: {e}"
+            )),
+        )
+        .await;
+    }
+
     callbacks
         .run_event(
             job.run_id,
@@ -569,65 +607,212 @@ async fn run_cloud_conformance(
             serde_json::json!({
                 "level": "info",
                 "message": format!("Cloud conformance against {target_url}"),
-                "executor_phase": "cloud_api",
+                "executor_phase": "native_conformance",
             }),
         )
         .await?;
 
-    let inputs = CloudConformanceInputs {
-        spec_bytes: extract_spec_bytes(&job.payload),
-        spec_format: extract_spec_format(&job.payload),
+    let categories = extract_string(&job.payload, "conformance_categories")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect());
+
+    let custom_headers: Vec<(String, String)> =
+        extract_string_vec(&job.payload, "conformance_headers")
+            .into_iter()
+            .filter_map(|raw| {
+                let (k, v) = raw.split_once(':')?;
+                Some((k.trim().to_string(), v.trim().to_string()))
+            })
+            .collect();
+
+    let config = ConformanceConfig {
         target_url: target_url.clone(),
-        base_path: extract_string(&job.payload, "base_path"),
         api_key: extract_string(&job.payload, "conformance_api_key"),
         basic_auth: extract_string(&job.payload, "conformance_basic_auth"),
-        categories: extract_string(&job.payload, "conformance_categories"),
-        headers: extract_string_vec(&job.payload, "conformance_headers"),
-        all_operations: job
-            .payload
-            .get("conformance_all_operations")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        request_delay_ms: job
-            .payload
-            .get("conformance_delay_ms")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        use_k6: job.payload.get("use_k6").and_then(|v| v.as_bool()).unwrap_or(false),
         skip_tls_verify: job
             .payload
             .get("skip_tls_verify")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        report_format: extract_string(&job.payload, "conformance_report_format")
-            .unwrap_or_else(|| "json".to_string()),
-        export_requests: job
+        categories,
+        base_path: extract_string(&job.payload, "base_path"),
+        custom_headers,
+        output_dir: None,
+        all_operations: job
             .payload
-            .get("export_requests")
+            .get("conformance_all_operations")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        validate_requests: job
+        custom_checks_file: None,
+        request_delay_ms: job
             .payload
-            .get("validate_requests")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
+            .get("conformance_delay_ms")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        custom_filter: None,
+        export_requests: false,
+        validate_requests: false,
     };
 
-    match cloud_api::run_conformance(inputs).await {
-        Ok(artifacts) => {
-            finish_cloud_run(
+    // Parse the optional inline custom-checks YAML before we
+    // construct the executor — if the user supplied malformed YAML
+    // we want to error fast, not run the reference checks and then
+    // surface a confusing parse failure mid-run. The YAML schema is
+    // purely declarative (status/headers/body-field validators), so
+    // no sandbox is needed server-side.
+    let custom_checks_config = match extract_string(&job.payload, "custom_checks_yaml") {
+        Some(yaml) => match serde_yaml::from_str::<CustomConformanceConfig>(&yaml) {
+            Ok(cfg) => Some(cfg),
+            Err(e) => {
+                return finish_cloud_error(
+                    job.run_id,
+                    callbacks,
+                    started,
+                    "conformance",
+                    &target_url,
+                    2,
+                    mockforge_bench::error::BenchError::Other(format!(
+                        "custom_checks_yaml parse failed: {e}"
+                    )),
+                )
+                .await;
+            }
+        },
+        None => None,
+    };
+
+    // Construct the executor in reference-checks mode, optionally
+    // chaining the user's declarative custom checks on top. Both are
+    // additive — reference checks always run; custom checks extend
+    // the list when provided. Spec-driven checks would require
+    // parsing the OpenAPI spec into `AnnotatedOperation`s — deferred
+    // to a follow-up so the first cloud iteration matches the local
+    // "no spec, just probe the reference endpoints" UX which is what
+    // the page form exposes.
+    let executor = match NativeConformanceExecutor::new(config) {
+        Ok(e) => {
+            let e = e.with_reference_checks();
+            match custom_checks_config {
+                Some(cfg) => match e.with_custom_checks_from_config(cfg) {
+                    Ok(e) => e,
+                    Err(err) => {
+                        return finish_cloud_error(
+                            job.run_id,
+                            callbacks,
+                            started,
+                            "conformance",
+                            &target_url,
+                            2,
+                            err,
+                        )
+                        .await
+                    }
+                },
+                None => e,
+            }
+        }
+        Err(e) => {
+            return finish_cloud_error(
                 job.run_id,
                 callbacks,
                 started,
                 "conformance",
                 &target_url,
-                artifacts,
                 2,
+                e,
             )
             .await
         }
+    };
+
+    let (tx, mut rx) = mpsc::channel::<ConformanceProgress>(32);
+    let exec_task = tokio::spawn(async move { executor.execute_with_progress(tx).await });
+
+    let mut seq: u32 = 2;
+    while let Some(progress) = rx.recv().await {
+        let (event_type, payload) = match progress {
+            ConformanceProgress::Started { total_checks } => (
+                "started",
+                serde_json::json!({ "type": "started", "total_checks": total_checks }),
+            ),
+            ConformanceProgress::CheckCompleted {
+                name,
+                passed,
+                checks_done,
+            } => (
+                "check_completed",
+                serde_json::json!({
+                    "type": "check_completed",
+                    "name": name,
+                    "passed": passed,
+                    "checks_done": checks_done,
+                }),
+            ),
+            ConformanceProgress::Finished => continue, // emitted below with the report
+            ConformanceProgress::Error { message } => {
+                ("error", serde_json::json!({ "type": "error", "message": message }))
+            }
+        };
+        callbacks.run_event(job.run_id, seq, event_type, payload).await?;
+        seq += 1;
+    }
+
+    let report_result = exec_task
+        .await
+        .map_err(|e| crate::error::Error::Executor(format!("conformance task panicked: {e}")))?;
+
+    match report_result {
+        Ok(report) => {
+            // ConformanceReport doesn't derive Serialize directly — it
+            // ships a to_json() that flattens internal maps for stable
+            // wire shape, so use that.
+            let report_json = report.to_json();
+
+            // Emit the full report on the terminal "finished" event so
+            // the UI can render it without an extra fetch. The cloud
+            // SSE stream does not auto-attach test_runs.summary into
+            // events.
+            callbacks
+                .run_event(
+                    job.run_id,
+                    seq,
+                    "finished",
+                    serde_json::json!({ "type": "finished", "report": report_json.clone() }),
+                )
+                .await?;
+
+            let elapsed = started.elapsed();
+            let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+            let failed_count = report_json
+                .get("summary")
+                .and_then(|s| s.get("failed"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let total_count = report_json
+                .get("summary")
+                .and_then(|s| s.get("total_checks"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let status = if failed_count == 0 {
+                JobStatus::Passed
+            } else {
+                JobStatus::Failed
+            };
+            Ok(JobOutcome {
+                status,
+                runner_seconds: secs,
+                summary: Some(serde_json::json!({
+                    "executor_phase": "native_conformance",
+                    "kind": "conformance",
+                    "target_url": target_url,
+                    "report": report_json,
+                    "total_checks": total_count,
+                    "failed_checks": failed_count,
+                    "wall_ms": elapsed.as_millis() as u64,
+                })),
+            })
+        }
         Err(e) => {
-            finish_cloud_error(job.run_id, callbacks, started, "conformance", &target_url, 2, e)
+            finish_cloud_error(job.run_id, callbacks, started, "conformance", &target_url, seq, e)
                 .await
         }
     }

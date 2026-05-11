@@ -314,6 +314,12 @@ const cloudNavItemIds = new Set([
   // against the workspace's runtime_captures table, dispatched through
   // cloudVerificationApi against /api/v1/workspaces/{id}/request-log/*.
   'verification',
+  // Cloud-mode conformance (#391): ad-hoc OpenAPI conformance runs
+  // dispatched as transient kind='conformance' test_suites through
+  // cloudTestRunsApi. The runner side uses NativeConformanceExecutor
+  // and streams `started` / `check_completed` / `finished` events
+  // through test_run_events.
+  'conformance',
   // Cloud recorder + behavioral cloning via cloudRecorderApi.
   'cloud-recorder',
   // Cloud behavioral cloning (#393) — clone-model-centric view with live

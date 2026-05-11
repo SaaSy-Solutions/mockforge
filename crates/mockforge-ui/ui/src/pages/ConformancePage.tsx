@@ -18,6 +18,10 @@ import {
   deleteConformanceRun,
   streamConformanceProgress,
 } from '../services/conformanceApi';
+import { cloudConformanceApi } from '../services/cloudConformanceApi';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import type { TestRunStatus } from '../services/api/cloudTestRuns';
 import type {
   ConformanceRun,
   ConformanceRunRequest,
@@ -26,6 +30,22 @@ import type {
   CategoryResult,
   FailureDetail,
 } from '../types/conformance';
+
+/** Translate cloud TestRun.status into the local RunStatus vocabulary the page renders against. */
+function cloudStatusToRunStatus(status: TestRunStatus): RunStatus {
+  switch (status) {
+    case 'queued':
+      return 'pending';
+    case 'running':
+      return 'running';
+    case 'passed':
+      return 'completed';
+    case 'failed':
+    case 'cancelled':
+    case 'errored':
+      return 'failed';
+  }
+}
 
 const CATEGORIES = [
   'Parameters', 'Request Bodies', 'Response Codes', 'Schema Types',
@@ -53,6 +73,9 @@ function rateColor(rate: number): string {
 }
 
 export function ConformancePage() {
+  const cloudMode = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+
   // Config state
   const [targetUrl, setTargetUrl] = useState('');
   const [basePath, setBasePath] = useState('');
@@ -62,6 +85,10 @@ export function ConformancePage() {
   const [allOperations, setAllOperations] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Inline custom-checks YAML (#391 Phase 2). Wire-only on local
+  // mode (no form field — the local CLI passes it via --custom-checks
+  // file path). In cloud mode the textarea below surfaces it.
+  const [customChecksYaml, setCustomChecksYaml] = useState('');
 
   // Run state
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -74,10 +101,12 @@ export function ConformancePage() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load runs on mount
+  // Load runs on mount. Cloud mode doesn't have a per-page run list —
+  // CloudTestRunsPage owns that surface — so we skip it.
   useEffect(() => {
+    if (cloudMode) return;
     listConformanceRuns().then(setRuns).catch(() => {});
-  }, []);
+  }, [cloudMode]);
 
   // Clean up SSE and polling on unmount
   useEffect(() => {
@@ -92,10 +121,19 @@ export function ConformancePage() {
       setError('Target URL is required');
       return;
     }
+    if (cloudMode && !activeWorkspace?.id) {
+      setError('Select an active workspace before running cloud conformance.');
+      return;
+    }
     setError(null);
     setIsStarting(true);
 
     try {
+      // Only forward custom_checks_yaml in cloud mode — the local
+      // CLI/server accepts it but takes the YAML from a --custom-checks
+      // file path, not an inline string, so passing it through here
+      // would land as an unused field on the local API.
+      const trimmedCustomYaml = customChecksYaml.trim();
       const config: ConformanceRunRequest = {
         target_url: targetUrl.trim(),
         ...(basePath && { base_path: basePath }),
@@ -104,7 +142,103 @@ export function ConformancePage() {
         ...(skipTls && { skip_tls_verify: true }),
         ...(allOperations && { all_operations: true }),
         ...(selectedCategories.length > 0 && { categories: selectedCategories }),
+        ...(cloudMode && trimmedCustomYaml
+          ? { custom_checks_yaml: trimmedCustomYaml }
+          : {}),
       };
+
+      if (cloudMode) {
+        // Cloud path: create a transient suite + trigger a run, tail
+        // SSE event_types onto the same `activeRun` shape the local
+        // path produces. Final report comes either from the
+        // `finished` event payload or, if missed, from
+        // GET /api/v1/test-runs/{id}.summary.report.
+        const { run } = await cloudConformanceApi.startRun(activeWorkspace!.id, config);
+        const id = run.id;
+        setActiveRunId(id);
+        // Seed an active run so the page has something to render
+        // while we wait for the first event.
+        setActiveRun({
+          id,
+          status: cloudStatusToRunStatus(run.status),
+          config,
+          checks_done: 0,
+          total_checks: 0,
+        });
+
+        eventSourceRef.current?.close();
+        const es = cloudConformanceApi.streamProgress(
+          id,
+          (event) => {
+            setActiveRun((prev) => {
+              if (!prev) return prev;
+              switch (event.type) {
+                case 'started':
+                  return { ...prev, status: 'running', total_checks: event.total_checks };
+                case 'check_completed':
+                  return { ...prev, status: 'running', checks_done: event.checks_done };
+                case 'finished': {
+                  const finished = event as { type: 'finished'; report?: unknown };
+                  const reportTyped =
+                    (finished.report as ConformanceRun['report']) ?? prev.report;
+                  return {
+                    ...prev,
+                    status: 'completed',
+                    report: reportTyped,
+                  };
+                }
+                case 'error':
+                  return { ...prev, status: 'failed', error: event.message };
+              }
+            });
+          },
+          () => {
+            // SSE error / disconnect — fall back to polling the run row.
+            cloudConformanceApi
+              .getRun(id)
+              .then((tr) => {
+                setActiveRun((prev) => {
+                  if (!prev) return prev;
+                  const next: ConformanceRun = {
+                    ...prev,
+                    status: cloudStatusToRunStatus(tr.status),
+                  };
+                  const summary = tr.summary as Record<string, unknown> | null;
+                  const report = summary?.report as ConformanceRun['report'] | undefined;
+                  if (report) next.report = report;
+                  return next;
+                });
+              })
+              .catch(() => {});
+          },
+        );
+        eventSourceRef.current = es;
+
+        // Backstop polling — same cadence as the local path. Closes
+        // the SSE + interval once the run reaches terminal status.
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = setInterval(() => {
+          cloudConformanceApi
+            .getRun(id)
+            .then((tr) => {
+              const status = cloudStatusToRunStatus(tr.status);
+              setActiveRun((prev) => {
+                if (!prev) return prev;
+                const next: ConformanceRun = { ...prev, status };
+                const summary = tr.summary as Record<string, unknown> | null;
+                const report = summary?.report as ConformanceRun['report'] | undefined;
+                if (report) next.report = report;
+                return next;
+              });
+              if (status === 'completed' || status === 'failed') {
+                es.close();
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+              }
+            })
+            .catch(() => {});
+        }, 2000);
+        return;
+      }
 
       const { id } = await startConformanceRun(config);
       setActiveRunId(id);
@@ -152,7 +286,18 @@ export function ConformancePage() {
     } finally {
       setIsStarting(false);
     }
-  }, [targetUrl, basePath, apiKey, basicAuth, skipTls, allOperations, selectedCategories]);
+  }, [
+    targetUrl,
+    basePath,
+    apiKey,
+    basicAuth,
+    skipTls,
+    allOperations,
+    selectedCategories,
+    cloudMode,
+    activeWorkspace?.id,
+    customChecksYaml,
+  ]);
 
   const handleViewRun = useCallback(async (id: string) => {
     try {
@@ -211,8 +356,22 @@ export function ConformancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Conformance Testing"
-        subtitle="Run OpenAPI 3.0 conformance tests against your mock server"
+        subtitle={
+          cloudMode
+            ? 'OpenAPI 3.0 conformance probes dispatched through the cloud test-runner'
+            : 'Run OpenAPI 3.0 conformance tests against your mock server'
+        }
       />
+
+      {cloudMode && !activeWorkspace && (
+        <div className="rounded-lg border border-warning-200 dark:border-warning-800 bg-warning-50 dark:bg-warning-900/20 p-4 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warning-600 dark:text-warning-400" />
+          <span className="text-sm">
+            Select an active workspace from the workspace switcher before triggering a cloud
+            conformance run.
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-900/20 p-4 flex items-center gap-2">
@@ -313,6 +472,31 @@ export function ConformancePage() {
                     <input type="checkbox" checked={allOperations} onChange={e => setAllOperations(e.target.checked)} className="rounded" />
                     Test all operations
                   </label>
+                </div>
+              )}
+
+              {/*
+                Custom checks YAML (#391 Phase 2). Cloud-only surface
+                because the local CLI takes this as a file path; the
+                cloud runner accepts the inline YAML and parses it
+                server-side via the same declarative schema.
+              */}
+              {showAdvanced && cloudMode && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Custom checks (YAML)
+                  </label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Declarative checks layered on top of the built-in OpenAPI probes.
+                    See the docs for the <code>custom_checks</code> schema (name, path,
+                    method, expected_status, expected_headers, expected_body_fields).
+                  </p>
+                  <textarea
+                    className="w-full min-h-[140px] p-2 font-mono text-xs border rounded bg-background text-foreground"
+                    placeholder={'custom_checks:\n  - name: "custom:health-200"\n    path: /health\n    method: GET\n    expected_status: 200'}
+                    value={customChecksYaml}
+                    onChange={e => setCustomChecksYaml(e.target.value)}
+                  />
                 </div>
               )}
             </div>
@@ -493,8 +677,8 @@ export function ConformancePage() {
         </Section>
       )}
 
-      {/* Recent Runs */}
-      {runs.length > 0 && (
+      {/* Recent Runs (local-only — cloud users see history under Cloud Test Runs) */}
+      {!cloudMode && runs.length > 0 && (
         <Section title="Recent Runs">
           <ModernCard>
             <div className="p-6">
