@@ -370,6 +370,10 @@ const cloudHiddenNavItemIds = new Set([
   'plugins',                // → plugin-registry (cloud-side plugin discovery)
   'test-execution',         // → cloud-test-runs (TestExecutionDashboard is mock-data only)
   'analytics',              // → pillar-analytics (request-traffic analytics is local-only)
+  // The next two (#463, #467) are redundant with pages that are already
+  // cloud-enabled — keeping both visible just adds sidebar noise.
+  'metrics',                // → pillar-analytics (request rate / latency / errors live there)
+  'performance',            // → cloud-test-runs (k6 / load runs already covered)
 ]);
 
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"
