@@ -17,6 +17,7 @@ pub mod contract_verification;
 pub mod faq;
 pub mod federations;
 pub mod flows;
+pub mod graph;
 pub mod health;
 pub mod hosted_mocks;
 pub mod incidents;

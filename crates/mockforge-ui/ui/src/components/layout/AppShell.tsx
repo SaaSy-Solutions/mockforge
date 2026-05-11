@@ -285,6 +285,10 @@ const cloudNavItemIds = new Set([
   // Chains share the flows resource (kind='chain') and are executed by
   // the ChainExecutor in mockforge-test-runner (#354).
   'chains',
+  // Workspace dependency graph (#460) — services + flows as nodes,
+  // clustered by the active workspace. Phase 1 returns no edges; SSE
+  // updates are local-only for now (cloud falls back to 30s polling).
+  'graph',
   // Scenario Studio uses cloudFlowsApi with kind='scenario'. Each flow
   // version stores the full {flow_type, steps, connections, tags}
   // payload as the FlowVersion config; runs queue through test_runs.
