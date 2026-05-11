@@ -537,6 +537,15 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/workspaces/{workspace_id}/graph",
             get(handlers::graph::get_workspace_graph),
         )
+        // Workspace request-logs (#462) — surfaces `runtime_captures` rows
+        // tagged with this workspace as the UI `RequestLog` shape consumed
+        // by `LogsPage`. Hosted-mock captures without `workspace_id` are
+        // invisible here until the shipper backfill lands; cloud-shipped
+        // captures (--cloud-ship) already populate it.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/request-logs",
+            get(handlers::runtime_logs::list_workspace_request_logs),
+        )
         // Observability saved-queries + dashboards (cloud-enablement #2 / Phase 1).
         // Cross-deployment query handlers come in a follow-up slice.
         .route(

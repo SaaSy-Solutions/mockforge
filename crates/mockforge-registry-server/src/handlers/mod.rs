@@ -40,6 +40,7 @@ pub mod public_keys;
 pub mod request_verification;
 pub mod reviews;
 pub mod routing_rules;
+pub mod runtime_logs;
 pub mod scenario_promotions;
 pub mod showcase;
 pub mod snapshots;
