@@ -76,7 +76,7 @@ jobs:
         run: rustup default stable
 
       - name: Install protoc (protobuf compiler)
-        run: dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }
+        run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
 
       # Self-hosted runner has persistent disk shared across multiple
       # runners; target/ can balloon past 60GB between jobs and fill the
@@ -177,7 +177,7 @@ jobs:
         run: rustup default stable
 
       - name: Install protoc (protobuf compiler)
-        run: dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }
+        run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
 
       # No cache step here: e2e-tests runs `needs: integration-tests` on
       # the same self-hosted runner, so target/ and ~/.cargo are already
