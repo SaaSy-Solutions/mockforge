@@ -41,6 +41,7 @@
   - [Protocol Buffers](user-guide/grpc-mocking/protobuf.md)
   - [Streaming](user-guide/grpc-mocking/streaming.md)
   - [Advanced Data Synthesis](user-guide/grpc-mocking/advanced-data-synthesis.md)
+- [Kafka Mocking](user-guide/kafka-mocking.md)
 - [GraphQL Mocking](user-guide/graphql-mocking.md)
 - [WebSocket Mocking](user-guide/websocket-mocking.md)
   - [Replay Mode](user-guide/websocket-mocking/replay.md)
