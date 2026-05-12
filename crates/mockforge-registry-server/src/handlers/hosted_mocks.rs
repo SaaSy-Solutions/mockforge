@@ -23,7 +23,7 @@ use crate::{
     },
     models::{
         feature_usage::FeatureType, AuditEventType, DeploymentLog, DeploymentMetrics,
-        DeploymentStatus, HostedMock, TestRun,
+        DeploymentStatus, HostedMock, Subscription, SubscriptionStatus, TestRun,
     },
     AppState,
 };
@@ -49,6 +49,16 @@ pub async fn create_deployment(
     checker
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
+
+    // Block deployment for past_due subscriptions — customer's last payment failed.
+    // Stripe is retrying; we don't accrue more Fly compute on their behalf during dunning.
+    if let Some(subscription) = Subscription::find_by_org(pool, org_ctx.org_id).await? {
+        if subscription.status() == SubscriptionStatus::PastDue {
+            return Err(ApiError::InvalidRequest(
+                "Subscription is past due. Please update your payment method in the billing portal before deploying new mocks.".to_string(),
+            ));
+        }
+    }
 
     // Check plan limits
     let limits = &org_ctx.org.limits_json;

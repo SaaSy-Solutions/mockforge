@@ -264,6 +264,25 @@ pub async fn add_organization_member(
         ));
     }
 
+    // Enforce max_collaborators from plan limits. -1 means unlimited. The owner
+    // is counted as the first seat; members beyond that draw from the quota.
+    let max_collaborators =
+        org.limits_json.get("max_collaborators").and_then(|v| v.as_i64()).unwrap_or(1);
+    if max_collaborators >= 0 {
+        let current_members = state.store.list_org_members(org_id).await?;
+        // current_members includes everyone in org_members. Owner may or may not
+        // be present depending on schema; either way, "members + owner" is the
+        // total seat count.
+        let owner_in_members = current_members.iter().any(|m| m.user_id == org.owner_id);
+        let seat_count = current_members.len() as i64 + if owner_in_members { 0 } else { 1 };
+        if seat_count >= max_collaborators {
+            return Err(ApiError::InvalidRequest(format!(
+                "Collaborator limit reached. Your plan allows {} seat(s). Upgrade to invite more.",
+                max_collaborators
+            )));
+        }
+    }
+
     // Determine role (default to member)
     let role = match request.role.as_deref() {
         Some("admin") => OrgRole::Admin,

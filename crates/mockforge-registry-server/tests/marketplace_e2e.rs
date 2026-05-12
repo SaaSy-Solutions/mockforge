@@ -49,9 +49,14 @@ impl MarketplaceTestHelper {
             .send()
             .await?;
 
-        assert!(response.status().is_success(), "User registration failed");
+        let status = response.status();
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            panic!("User registration failed: {} - {}", status, body_text);
+        }
         let body: serde_json::Value = response.json().await?;
-        self.auth_token = body["token"].as_str().map(|s| s.to_string());
+        // Handler returns AuthResponseV2 with access_token/refresh_token (not legacy `token`).
+        self.auth_token = body["access_token"].as_str().map(|s| s.to_string());
         self.user_id = body["user_id"].as_str().and_then(|s| Uuid::parse_str(s).ok());
         Ok(())
     }
@@ -75,7 +80,7 @@ impl MarketplaceTestHelper {
 
         assert!(response.status().is_success(), "Login failed");
         let body: serde_json::Value = response.json().await?;
-        self.auth_token = body["token"].as_str().map(|s| s.to_string());
+        self.auth_token = body["access_token"].as_str().map(|s| s.to_string());
         self.user_id = body["user_id"].as_str().and_then(|s| Uuid::parse_str(s).ok());
         Ok(())
     }
@@ -85,7 +90,7 @@ impl MarketplaceTestHelper {
         let token = self.auth_token.as_ref().ok_or("Not authenticated")?;
         let response = self
             .client
-            .post(format!("{}/api/v1/orgs", self.base_url))
+            .post(format!("{}/api/v1/organizations", self.base_url))
             .header("Authorization", format!("Bearer {}", token))
             .json(&json!({
                 "name": name,
