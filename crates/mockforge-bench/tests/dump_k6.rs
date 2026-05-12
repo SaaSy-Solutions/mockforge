@@ -42,6 +42,8 @@ mod tests {
             skip_tls_verify: false,
             security_testing_enabled: true,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, templates);

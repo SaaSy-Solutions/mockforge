@@ -1,5 +1,18 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.132] - 2026-05-12
+
+### Added
+
+- **[Reality]** Full chaos fault-category coverage in stats and `/metrics` (#79 round-4)
+  - `connection_error` fault now records at the HTTP layer when `connection_error_kind: http_503` (previously only TCP-level kinds had counters). New `jitter` and `bandwidth_throttle` counters + matching Prometheus histograms (`mockforge_chaos_jitter_ms`, `mockforge_chaos_bandwidth_throttle_ms{direction}`). `ChaosStatsSnapshot` gains mean latency, jitter samples + mean offset, and bandwidth-throttle totals. TUI Chaos `Fault Stats` panel renders all of them.
+- **[Reality]** Bench client surfaces server-injected chaos signals (#79 item 7)
+  - HTTP chaos middleware stamps `X-Mockforge-Injected-Latency-Ms`, `-Injected-Jitter-Ms`, and `-Fault` response headers. Generated k6 script reads them into custom trends (`mockforge_server_injected_latency_ms`, `mockforge_server_injected_jitter_ms`) and a counter (`mockforge_server_fault_total`). Bench summary prints a new `Server-Injected (chaos)` block alongside client-observed latency.
+- **[DevX]** New bench CLI flags `--rps` and `--cps` (#79 item 8)
+  - `--rps N` switches the k6 executor from `ramping-vus` to `constant-arrival-rate` at `N` requests/sec (and drops the per-iteration `sleep(1)` that previously capped throughput at ~2 RPS). `--cps` sets `noConnectionReuse: true` so each request opens a fresh TCP/TLS connection — useful for stressing connection-limit chaos and TCP-level fault injection.
+- **[Reality]** Opt-in `MOCKFORGE_HTTP_KEEPALIVE_HINT=1` advertises `Connection: keep-alive` + `Keep-Alive: timeout=N, max=M` on every response (#79 item 2 workaround)
+  - For proxies (F5/Avi/HAProxy/nginx) that read those headers when deciding to pool upstream sockets. Best-effort signal; the actual fix for the FIN-after-response pattern is upstream HTTP/1.1 negotiation in the proxy itself.
+
 ## [0.3.131] - 2026-05-10
 
 ### Added

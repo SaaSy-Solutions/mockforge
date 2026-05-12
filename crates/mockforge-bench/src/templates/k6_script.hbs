@@ -15,13 +15,40 @@ const {{this.name}}_latency = new Trend('{{this.metric_name}}_latency');
 const {{this.name}}_errors = new Rate('{{this.metric_name}}_errors');
 {{/each}}
 
+// Server-injected chaos signals (parsed from MockForge response headers).
+// `mockforge_server_injected_latency_ms` and `mockforge_server_injected_jitter_ms`
+// are Trends that capture `X-MockForge-Injected-Latency-Ms` / `X-MockForge-
+// Injected-Jitter-Ms`, and `mockforge_server_fault_total` counts responses that
+// carried an `X-MockForge-Fault` marker (e.g. `partial_response`).
+// Issue #79 — Srikanth's round-3 reply asked to see server-side latency on
+// the client side.
+const server_injected_latency_ms = new Trend('mockforge_server_injected_latency_ms');
+const server_injected_jitter_ms = new Trend('mockforge_server_injected_jitter_ms');
+const server_fault_total = new Counter('mockforge_server_fault_total');
+
 // Test configuration
 export const options = {
   {{#if skip_tls_verify}}
   insecureSkipTLSVerify: true,
   {{/if}}
+  {{#if no_keep_alive}}
+  // --cps was passed: force a fresh TCP/TLS connection per request so users
+  // can drive a high connections-per-second rate. Issue #79.
+  noConnectionReuse: true,
+  {{/if}}
   scenarios: {
     {{scenario_name}}: {
+      {{#if target_rps}}
+      // --rps was passed: open-model load at a fixed request rate. VUs are
+      // pre-allocated up to `--vus`; k6 fires {{target_rps}} requests/sec
+      // regardless of how long each one takes.
+      executor: 'constant-arrival-rate',
+      rate: {{target_rps}},
+      timeUnit: '1s',
+      duration: '{{#each stages}}{{#if @last}}{{this.duration}}{{/if}}{{/each}}',
+      preAllocatedVUs: {{#each stages}}{{#if @last}}{{this.target}}{{/if}}{{/each}},
+      maxVUs: {{#each stages}}{{#if @last}}{{this.target}}{{/if}}{{/each}},
+      {{else}}
       executor: 'ramping-vus',
       startVUs: 0,
       stages: [
@@ -30,6 +57,7 @@ export const options = {
         {{/each}}
       ],
       gracefulRampDown: '10s',
+      {{/if}}
     },
   },
   thresholds: {
@@ -37,6 +65,27 @@ export const options = {
     'http_req_failed': ['rate<{{max_error_rate}}'],
   },
 };
+
+// Inspect MockForge response headers and feed the chaos-signal trends/counter.
+// Called after every http.* invocation in the body so server-injected latency
+// and faults surface in summary.json next to the standard k6 metrics.
+function recordMockForgeChaosHeaders(res) {
+  if (!res || !res.headers) return;
+  const lat = res.headers['X-Mockforge-Injected-Latency-Ms'] || res.headers['x-mockforge-injected-latency-ms'];
+  const jit = res.headers['X-Mockforge-Injected-Jitter-Ms'] || res.headers['x-mockforge-injected-jitter-ms'];
+  const fault = res.headers['X-Mockforge-Fault'] || res.headers['x-mockforge-fault'];
+  if (lat != null) {
+    const n = parseFloat(lat);
+    if (!isNaN(n) && n > 0) server_injected_latency_ms.add(n);
+  }
+  if (jit != null) {
+    const n = parseFloat(jit);
+    if (!isNaN(n) && n > 0) server_injected_jitter_ms.add(n);
+  }
+  if (fault != null && fault !== '') {
+    server_fault_total.add(1, { fault: fault });
+  }
+}
 
 const BASE_URL = '{{base_url}}';
 
@@ -149,6 +198,10 @@ export default function () {
     {{/if}}
     {{/if}}
 
+    // Pick up MockForge-injected chaos signals before counting check success
+    // so the trends/counter populate even on injected error paths.
+    recordMockForgeChaosHeaders(res);
+
     const success = check(res, {
       '{{this.display_name}}: status is OK': (r) => r.status >= 200 && r.status < 300,
       '{{this.display_name}}: has response': (r) => r.body !== null && r.body.length > 0,
@@ -157,7 +210,12 @@ export default function () {
     {{this.name}}_latency.add(res.timings.duration);
     {{this.name}}_errors.add(!success);
 
+    {{#unless @root.target_rps}}
+    // `constant-arrival-rate` (set via --rps) drives the rate itself, so any
+    // per-iteration sleep is dead weight that lowers the achievable RPS. Keep
+    // the 1-second pacing only for the legacy ramping-vus executor.
     sleep(1);
+    {{/unless}}
   }
   {{/each}}
 }
@@ -213,6 +271,33 @@ function textSummary(data, options) {
     output += indent + `Error Rate: ${errorRate}%\n\n`;
   } else {
     output += indent + 'Error Rate: N/A\n\n';
+  }
+
+  // MockForge server-injected chaos signals (Issue #79 — surface server-side
+  // injected latency next to client-observed latency so users can see how
+  // much of the wire time is artificial).
+  const mfLat = metrics.mockforge_server_injected_latency_ms;
+  if (mfLat && mfLat.values && mfLat.values.count > 0) {
+    output += indent + 'Server-Injected Latency (from X-Mockforge-Injected-Latency-Ms):\n';
+    output += indent + `  Samples: ${mfLat.values.count}\n`;
+    output += indent + `  Avg: ${mfLat.values.avg != null ? mfLat.values.avg.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Min: ${mfLat.values.min != null ? mfLat.values.min.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Max: ${mfLat.values.max != null ? mfLat.values.max.toFixed(2) : 'N/A'}ms\n`;
+    if (mfLat.values['p(95)'] != null) {
+      output += indent + `  p95: ${mfLat.values['p(95)'].toFixed(2)}ms\n`;
+    }
+    output += '\n';
+  }
+  const mfJit = metrics.mockforge_server_injected_jitter_ms;
+  if (mfJit && mfJit.values && mfJit.values.count > 0) {
+    output += indent + 'Server-Injected Jitter:\n';
+    output += indent + `  Samples: ${mfJit.values.count}\n`;
+    output += indent + `  Avg: ${mfJit.values.avg != null ? mfJit.values.avg.toFixed(2) : 'N/A'}ms\n`;
+    output += indent + `  Max: ${mfJit.values.max != null ? mfJit.values.max.toFixed(2) : 'N/A'}ms\n\n`;
+  }
+  const mfFault = metrics.mockforge_server_fault_total;
+  if (mfFault && mfFault.values && mfFault.values.count > 0) {
+    output += indent + `Server-Reported Faults (X-Mockforge-Fault): ${mfFault.values.count}\n\n`;
   }
 
   output += indent + '='.repeat(60) + '\n';

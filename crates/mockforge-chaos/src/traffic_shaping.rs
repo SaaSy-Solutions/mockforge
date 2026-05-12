@@ -45,13 +45,16 @@ impl TrafficShaper {
         drop
     }
 
-    /// Apply bandwidth throttling for a given data size
-    pub async fn throttle_bandwidth(&self, bytes: usize) {
+    /// Apply bandwidth throttling for a given data size. Returns the delay
+    /// in milliseconds that was actually applied (0 when shaping is disabled,
+    /// bandwidth_limit_bps is 0, or the computed delay rounded to 0).
+    /// Callers use the return value to record a `bandwidth_throttle` metric
+    /// sample (Issue #79).
+    pub async fn throttle_bandwidth(&self, bytes: usize) -> u64 {
         if !self.config.enabled || self.config.bandwidth_limit_bps == 0 {
-            return;
+            return 0;
         }
 
-        // Calculate delay needed to enforce bandwidth limit
         let delay_secs = bytes as f64 / self.config.bandwidth_limit_bps as f64;
         let delay_ms = (delay_secs * 1000.0) as u64;
 
@@ -59,6 +62,7 @@ impl TrafficShaper {
             debug!("Throttling bandwidth: {}ms delay for {} bytes", delay_ms, bytes);
             sleep(Duration::from_millis(delay_ms)).await;
         }
+        delay_ms
     }
 
     /// Check connection limit and increment if allowed

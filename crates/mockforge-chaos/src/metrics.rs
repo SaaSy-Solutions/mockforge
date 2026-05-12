@@ -22,6 +22,18 @@ pub struct ChaosMetrics {
     /// Latency injected (histogram)
     pub latency_injected: HistogramVec,
 
+    /// Jitter applied on top of base latency (histogram, milliseconds, absolute
+    /// offset). Surfaces independently from `latency_injected` so users can
+    /// see jitter activity even when the configured base delay is zero.
+    /// Issue #79 — Srikanth's round-3 reply.
+    pub jitter_applied: HistogramVec,
+
+    /// Bandwidth-throttle delay applied to a request/response transfer
+    /// (histogram, milliseconds). Records the artificial wait that the
+    /// `bandwidth_limit_bps` knob produced; samples = how often we actually
+    /// throttled. Issue #79.
+    pub bandwidth_throttle_delay: HistogramVec,
+
     /// Rate limit violations
     pub rate_limit_violations_total: CounterVec,
 
@@ -74,6 +86,20 @@ impl ChaosMetrics {
                 "Latency injected in milliseconds",
                 &["endpoint"],
                 vec![10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0]
+            )?,
+
+            jitter_applied: register_histogram_vec!(
+                "mockforge_chaos_jitter_ms",
+                "Jitter offset applied on top of base latency, in milliseconds (absolute value)",
+                &["endpoint"],
+                vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0]
+            )?,
+
+            bandwidth_throttle_delay: register_histogram_vec!(
+                "mockforge_chaos_bandwidth_throttle_ms",
+                "Bandwidth-throttle delay added to a transfer, in milliseconds",
+                &["endpoint", "direction"],
+                vec![1.0, 10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]
             )?,
 
             rate_limit_violations_total: register_counter_vec!(
@@ -154,6 +180,22 @@ impl ChaosMetrics {
     /// Record latency injection
     pub fn record_latency(&self, endpoint: &str, latency_ms: f64) {
         self.latency_injected.with_label_values(&[endpoint]).observe(latency_ms);
+    }
+
+    /// Record a jitter offset application. Independent from `record_latency`
+    /// so the TUI / `/metrics` can show jitter activity even when the base
+    /// delay was zero. Issue #79.
+    pub fn record_jitter(&self, endpoint: &str, jitter_ms: f64) {
+        self.jitter_applied.with_label_values(&[endpoint]).observe(jitter_ms);
+    }
+
+    /// Record a bandwidth-throttle delay sample. `direction` is `"request"` or
+    /// `"response"` so users can tell which side of the exchange was
+    /// throttled. Issue #79.
+    pub fn record_bandwidth_throttle(&self, endpoint: &str, direction: &str, delay_ms: f64) {
+        self.bandwidth_throttle_delay
+            .with_label_values(&[endpoint, direction])
+            .observe(delay_ms);
     }
 
     /// Record rate limit violation
@@ -255,6 +297,7 @@ impl ChaosMetrics {
         }
 
         let mut latency_samples_by_endpoint: HashMap<String, u64> = HashMap::new();
+        let mut latency_avg_ms_by_endpoint: HashMap<String, f64> = HashMap::new();
         for fam in self.latency_injected.collect() {
             for m in fam.get_metric() {
                 let endpoint = m
@@ -263,8 +306,48 @@ impl ChaosMetrics {
                     .find(|l| l.name() == "endpoint")
                     .map(|l| l.value().to_string())
                     .unwrap_or_else(|| "unknown".to_string());
-                let count = m.get_histogram().sample_count();
-                latency_samples_by_endpoint.insert(endpoint, count);
+                let hist = m.get_histogram();
+                let count = hist.sample_count();
+                latency_samples_by_endpoint.insert(endpoint.clone(), count);
+                if count > 0 {
+                    latency_avg_ms_by_endpoint.insert(endpoint, hist.sample_sum() / count as f64);
+                }
+            }
+        }
+
+        let mut jitter_samples_by_endpoint: HashMap<String, u64> = HashMap::new();
+        let mut jitter_avg_ms_by_endpoint: HashMap<String, f64> = HashMap::new();
+        for fam in self.jitter_applied.collect() {
+            for m in fam.get_metric() {
+                let endpoint = m
+                    .get_label()
+                    .iter()
+                    .find(|l| l.name() == "endpoint")
+                    .map(|l| l.value().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let hist = m.get_histogram();
+                let count = hist.sample_count();
+                jitter_samples_by_endpoint.insert(endpoint.clone(), count);
+                if count > 0 {
+                    jitter_avg_ms_by_endpoint.insert(endpoint, hist.sample_sum() / count as f64);
+                }
+            }
+        }
+
+        let mut bandwidth_throttle_samples: HashMap<String, u64> = HashMap::new();
+        let mut bandwidth_throttle_total_ms: u64 = 0;
+        for fam in self.bandwidth_throttle_delay.collect() {
+            for m in fam.get_metric() {
+                let direction = m
+                    .get_label()
+                    .iter()
+                    .find(|l| l.name() == "direction")
+                    .map(|l| l.value().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let hist = m.get_histogram();
+                let count = hist.sample_count();
+                *bandwidth_throttle_samples.entry(direction).or_default() += count;
+                bandwidth_throttle_total_ms += hist.sample_sum() as u64;
             }
         }
 
@@ -275,6 +358,11 @@ impl ChaosMetrics {
             rate_limit_violations_by_endpoint: rate_limit_by_endpoint,
             rate_limit_violations_total: rate_limit_total,
             latency_samples_by_endpoint,
+            latency_avg_ms_by_endpoint,
+            jitter_samples_by_endpoint,
+            jitter_avg_ms_by_endpoint,
+            bandwidth_throttle_samples_by_direction: bandwidth_throttle_samples,
+            bandwidth_throttle_total_ms,
         }
     }
 }
@@ -314,6 +402,26 @@ pub struct ChaosStatsSnapshot {
     pub rate_limit_violations_total: u64,
     /// Number of latency-injection samples per endpoint (histogram count).
     pub latency_samples_by_endpoint: HashMap<String, u64>,
+    /// Mean injected latency per endpoint in milliseconds (sample_sum / count).
+    /// Issue #79 — Srikanth's round-3 reply asked for visibility into the
+    /// latency the server is actually injecting; this gives it without
+    /// requiring Prometheus scraping.
+    #[serde(default)]
+    pub latency_avg_ms_by_endpoint: HashMap<String, f64>,
+    /// Per-endpoint count of jitter applications (independent from latency).
+    #[serde(default)]
+    pub jitter_samples_by_endpoint: HashMap<String, u64>,
+    /// Mean jitter offset per endpoint in milliseconds.
+    #[serde(default)]
+    pub jitter_avg_ms_by_endpoint: HashMap<String, f64>,
+    /// Bandwidth-throttle activity counted by direction (`"request"` /
+    /// `"response"`). Empty when the bandwidth_limit_bps knob isn't firing.
+    #[serde(default)]
+    pub bandwidth_throttle_samples_by_direction: HashMap<String, u64>,
+    /// Total bandwidth-throttle delay accumulated across all requests and
+    /// responses, in milliseconds.
+    #[serde(default)]
+    pub bandwidth_throttle_total_ms: u64,
 }
 
 impl Default for ChaosMetrics {

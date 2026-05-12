@@ -62,6 +62,8 @@ async fn test_issue_79_comprehensive_summary() {
         skip_tls_verify: true,
         security_testing_enabled: false,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);
@@ -196,6 +198,8 @@ async fn test_issue_79_full_security_pipeline_with_real_spec() {
         skip_tls_verify: false,
         security_testing_enabled: true,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
 
     // Step 4: Generate base script (same as K6ScriptGenerator::generate)
@@ -516,6 +520,8 @@ tests:
         skip_tls_verify: false,
         security_testing_enabled: true,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);

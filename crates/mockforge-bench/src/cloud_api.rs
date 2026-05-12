@@ -709,6 +709,8 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         base_path: None,
         duration: "30s".to_string(),
         vus: 10,
+        target_rps: None,
+        no_keep_alive: false,
         scenario: "constant".to_string(),
         operations: None,
         exclude_operations: None,
@@ -810,6 +812,9 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
     let json: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|e| BenchError::ResultsParseError(e.to_string()))?;
     let duration_values = &json["metrics"]["http_req_duration"]["values"];
+    let server_latency = &json["metrics"]["mockforge_server_injected_latency_ms"]["values"];
+    let server_jitter = &json["metrics"]["mockforge_server_injected_jitter_ms"]["values"];
+    let server_fault = &json["metrics"]["mockforge_server_fault_total"]["values"]["count"];
     Ok(K6Results {
         total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
         // See `K6Executor::parse_results` for the rationale on why
@@ -826,6 +831,12 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
         max_duration_ms: duration_values["max"].as_f64().unwrap_or(0.0),
         med_duration_ms: duration_values["med"].as_f64().unwrap_or(0.0),
         p90_duration_ms: duration_values["p(90)"].as_f64().unwrap_or(0.0),
+        server_injected_latency_samples: server_latency["count"].as_u64().unwrap_or(0),
+        server_injected_latency_avg_ms: server_latency["avg"].as_f64().unwrap_or(0.0),
+        server_injected_latency_max_ms: server_latency["max"].as_f64().unwrap_or(0.0),
+        server_injected_jitter_samples: server_jitter["count"].as_u64().unwrap_or(0),
+        server_injected_jitter_avg_ms: server_jitter["avg"].as_f64().unwrap_or(0.0),
+        server_reported_faults: server_fault.as_u64().unwrap_or(0),
     })
 }
 

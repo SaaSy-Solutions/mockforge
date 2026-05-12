@@ -76,6 +76,17 @@ pub struct BenchCommand {
     pub base_path: Option<String>,
     pub duration: String,
     pub vus: u32,
+    /// Target requests-per-second. When `Some(n)`, the generated k6 script
+    /// switches to `constant-arrival-rate` executor at `n` RPS with `vus`
+    /// pre-allocated. When `None`, uses the legacy `ramping-vus` executor
+    /// where RPS is implicit (VUs × 1 req/sec from the script's `sleep(1)`).
+    /// Issue #79 — Srikanth's round-3 reply.
+    pub target_rps: Option<u32>,
+    /// When true, every k6 request opens a new TCP/TLS connection
+    /// (`noConnectionReuse: true` and `--no-vu-connection-reuse`). Lets users
+    /// drive a high connections-per-second rate to exercise connection-limit
+    /// chaos and observe TCP-level fault injection. Issue #79.
+    pub no_keep_alive: bool,
     pub scenario: String,
     pub operations: Option<String>,
     /// Exclude operations from testing (comma-separated)
@@ -420,6 +431,8 @@ impl BenchCommand {
             skip_tls_verify: self.skip_tls_verify,
             security_testing_enabled,
             chunked_request_bodies: self.chunked_request_bodies,
+            target_rps: self.target_rps,
+            no_keep_alive: self.no_keep_alive,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -545,6 +558,8 @@ impl BenchCommand {
                 base_path: self.base_path.clone(),
                 duration: self.duration.clone(),
                 vus: self.vus,
+                target_rps: self.target_rps,
+                no_keep_alive: self.no_keep_alive,
                 scenario: self.scenario.clone(),
                 operations: self.operations.clone(),
                 exclude_operations: self.exclude_operations.clone(),
@@ -1564,6 +1579,8 @@ impl BenchCommand {
             skip_tls_verify: self.skip_tls_verify,
             security_testing_enabled,
             chunked_request_bodies: self.chunked_request_bodies,
+            target_rps: self.target_rps,
+            no_keep_alive: self.no_keep_alive,
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -2778,6 +2795,8 @@ mod tests {
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),
@@ -2854,6 +2873,8 @@ mod tests {
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),
@@ -2926,6 +2947,8 @@ mod tests {
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
             results_format: "both".to_string(),

@@ -307,6 +307,10 @@ impl K6Executor {
 
         let duration_values = &json["metrics"]["http_req_duration"]["values"];
 
+        let server_latency = &json["metrics"]["mockforge_server_injected_latency_ms"]["values"];
+        let server_jitter = &json["metrics"]["mockforge_server_injected_jitter_ms"]["values"];
+        let server_fault = &json["metrics"]["mockforge_server_fault_total"]["values"]["count"];
+
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
             // k6 Rate metric: `passes` = count of non-zero values.
@@ -324,6 +328,12 @@ impl K6Executor {
             max_duration_ms: duration_values["max"].as_f64().unwrap_or(0.0),
             med_duration_ms: duration_values["med"].as_f64().unwrap_or(0.0),
             p90_duration_ms: duration_values["p(90)"].as_f64().unwrap_or(0.0),
+            server_injected_latency_samples: server_latency["count"].as_u64().unwrap_or(0),
+            server_injected_latency_avg_ms: server_latency["avg"].as_f64().unwrap_or(0.0),
+            server_injected_latency_max_ms: server_latency["max"].as_f64().unwrap_or(0.0),
+            server_injected_jitter_samples: server_jitter["count"].as_u64().unwrap_or(0),
+            server_injected_jitter_avg_ms: server_jitter["avg"].as_f64().unwrap_or(0.0),
+            server_reported_faults: server_fault.as_u64().unwrap_or(0),
         })
     }
 }
@@ -348,6 +358,23 @@ pub struct K6Results {
     pub max_duration_ms: f64,
     pub med_duration_ms: f64,
     pub p90_duration_ms: f64,
+    /// Issue #79 — client-side visibility into MockForge-injected latency,
+    /// parsed from the `X-Mockforge-Injected-Latency-Ms` response header that
+    /// the chaos middleware sets. Zero when chaos isn't firing or the target
+    /// isn't MockForge.
+    #[serde(default)]
+    pub server_injected_latency_samples: u64,
+    #[serde(default)]
+    pub server_injected_latency_avg_ms: f64,
+    #[serde(default)]
+    pub server_injected_latency_max_ms: f64,
+    #[serde(default)]
+    pub server_injected_jitter_samples: u64,
+    #[serde(default)]
+    pub server_injected_jitter_avg_ms: f64,
+    /// Count of responses that carried an `X-Mockforge-Fault` header.
+    #[serde(default)]
+    pub server_reported_faults: u64,
 }
 
 impl K6Results {
