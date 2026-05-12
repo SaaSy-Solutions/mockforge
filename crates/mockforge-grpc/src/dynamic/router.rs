@@ -5,6 +5,7 @@
 
 use super::ServiceRegistry;
 use http::header::HeaderValue;
+use mockforge_core::config::{GrpcOverride, GrpcOverrideResponse};
 use prost_reflect::prost::Message as _;
 use prost_reflect::{DynamicMessage, MessageDescriptor, Value};
 use tonic::{Code, Status};
@@ -186,7 +187,7 @@ pub async fn handle_dynamic_grpc_request(
 
     // Determine streaming type and handle
     match (method.client_streaming, method.server_streaming) {
-        (false, false) => handle_unary(registry, service_name, method).await,
+        (false, false) => handle_unary(registry, service_name, method, &_body).await,
         (false, true) => handle_server_streaming(registry, service_name, method).await,
         (true, false) => {
             // Client streaming: aggregate incoming frames, respond with single message
@@ -199,16 +200,177 @@ pub async fn handle_dynamic_grpc_request(
     }
 }
 
+/// Find the first override rule that matches a `service/method` request.
+///
+/// Match semantics:
+/// - The override's `service` must exactly equal `service_name` (callers should
+///   pass the same form the proto uses — fully-qualified or not — consistently).
+/// - The override's `method` must exactly equal `method_name`.
+/// - If the override has a non-empty `match` map, every key must correspond to
+///   a top-level field of the decoded request whose stringified value equals
+///   the match value. If `request_body` is None or the request can't be
+///   decoded against `input_desc`, match conditions are skipped (a catch-all
+///   override — empty match — still applies; one with `match` does not).
+pub(super) fn find_matching_override<'a>(
+    overrides: &'a [GrpcOverride],
+    service_name: &str,
+    method_name: &str,
+    input_desc: Option<&MessageDescriptor>,
+    request_body: Option<&[u8]>,
+) -> Option<&'a GrpcOverride> {
+    for rule in overrides {
+        if rule.service != service_name || rule.method != method_name {
+            continue;
+        }
+        if rule.r#match.is_empty() {
+            return Some(rule);
+        }
+        // Need a decoded request to check match conditions.
+        let Some(desc) = input_desc else { continue };
+        let Some(body) = request_body else { continue };
+        let Ok(payload) = decode_grpc_body(body) else {
+            continue;
+        };
+        let Ok(decoded) = DynamicMessage::decode(desc.clone(), payload) else {
+            continue;
+        };
+
+        let all_match = rule.r#match.iter().all(|(field_name, expected)| {
+            let Some(field) = desc.get_field_by_name(field_name) else {
+                return false;
+            };
+            let value = decoded.get_field(&field);
+            stringify_value(value.as_ref()) == *expected
+        });
+        if all_match {
+            return Some(rule);
+        }
+    }
+    None
+}
+
+/// Stringify a `prost_reflect::Value` for equality matching against the
+/// `match` map (which is string-typed in YAML).
+fn stringify_value(value: &Value) -> String {
+    match value {
+        Value::Bool(v) => v.to_string(),
+        Value::I32(v) => v.to_string(),
+        Value::I64(v) => v.to_string(),
+        Value::U32(v) => v.to_string(),
+        Value::U64(v) => v.to_string(),
+        Value::F32(v) => v.to_string(),
+        Value::F64(v) => v.to_string(),
+        Value::String(s) => s.clone(),
+        Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
+        Value::EnumNumber(n) => n.to_string(),
+        // For complex types (Message, List, Map) we don't define equality.
+        // Match map rules are intended for primitive field comparisons.
+        _ => String::new(),
+    }
+}
+
+/// Parse a gRPC status code name (case-insensitive) into a `tonic::Code`.
+/// Returns `Code::Unknown` for anything we don't recognize.
+fn parse_status_code(name: &str) -> Code {
+    match name.to_ascii_uppercase().as_str() {
+        "OK" => Code::Ok,
+        "CANCELLED" => Code::Cancelled,
+        "UNKNOWN" => Code::Unknown,
+        "INVALID_ARGUMENT" => Code::InvalidArgument,
+        "DEADLINE_EXCEEDED" => Code::DeadlineExceeded,
+        "NOT_FOUND" => Code::NotFound,
+        "ALREADY_EXISTS" => Code::AlreadyExists,
+        "PERMISSION_DENIED" => Code::PermissionDenied,
+        "RESOURCE_EXHAUSTED" => Code::ResourceExhausted,
+        "FAILED_PRECONDITION" => Code::FailedPrecondition,
+        "ABORTED" => Code::Aborted,
+        "OUT_OF_RANGE" => Code::OutOfRange,
+        "UNIMPLEMENTED" => Code::Unimplemented,
+        "INTERNAL" => Code::Internal,
+        "UNAVAILABLE" => Code::Unavailable,
+        "DATA_LOSS" => Code::DataLoss,
+        "UNAUTHENTICATED" => Code::Unauthenticated,
+        _ => Code::Unknown,
+    }
+}
+
+/// Build a response from an override rule.
+///
+/// - If `response.status` is set and non-OK, returns a gRPC error response.
+/// - Otherwise, if `response.body` is set, builds a `DynamicMessage` from the
+///   JSON object against the output descriptor and returns it.
+/// - If neither is usable (no descriptor available, body is invalid JSON),
+///   returns Ok(None) so the caller falls back to default generation.
+fn apply_override(
+    rule: &GrpcOverrideResponse,
+    output_desc: Option<&MessageDescriptor>,
+) -> Result<Option<axum::response::Response>, Status> {
+    // Status code first — non-OK short-circuits regardless of body.
+    if let Some(name) = rule.status.as_deref() {
+        let code = parse_status_code(name);
+        if code != Code::Ok {
+            let msg = rule.message.clone().unwrap_or_default();
+            return Ok(Some(create_grpc_error_response(Status::new(code, msg))));
+        }
+    }
+
+    let Some(body) = rule.body.as_ref() else {
+        // No status (or OK) and no body — nothing to apply. Caller falls back.
+        return Ok(None);
+    };
+    let Some(desc) = output_desc else {
+        warn!("Override has body but output descriptor unavailable; falling back to mock");
+        return Ok(None);
+    };
+
+    // Use the existing http_bridge converter — it already handles nested
+    // messages, repeated fields, enums, well-known types like timestamps,
+    // etc. — so we don't re-derive that logic here.
+    let converter =
+        super::http_bridge::converters::ProtobufJsonConverter::new(desc.parent_pool().clone());
+    match converter.json_to_protobuf(desc, body) {
+        Ok(msg) => Ok(Some(build_grpc_response(encode_grpc_body(&msg))?)),
+        Err(e) => {
+            warn!("Override body failed to convert into response message: {}", e);
+            Ok(None)
+        }
+    }
+}
+
 /// Handle a unary gRPC call
 async fn handle_unary(
     registry: &ServiceRegistry,
     service_name: &str,
     method: &super::proto_parser::ProtoMethod,
+    request_body: &[u8],
 ) -> Result<axum::response::Response, Status> {
     let pool = registry.descriptor_pool();
+    let input_desc = pool.get_message_by_name(&method.input_type);
+    let output_desc = pool.get_message_by_name(&method.output_type);
 
-    // Try descriptor-based response generation
-    let response_bytes = if let Some(output_desc) = pool.get_message_by_name(&method.output_type) {
+    // Try configured overrides before falling back to default mock generation.
+    if let Some(rule) = find_matching_override(
+        registry.overrides(),
+        service_name,
+        &method.name,
+        input_desc.as_ref(),
+        Some(request_body),
+    ) {
+        debug!(
+            "Applying override for {}.{} (rule match keys: {:?})",
+            service_name,
+            method.name,
+            rule.r#match.keys().collect::<Vec<_>>()
+        );
+        if let Some(resp) = apply_override(&rule.response, output_desc.as_ref())? {
+            return Ok(resp);
+        }
+        // Override didn't actually produce a response (e.g. body wouldn't
+        // deserialize) — log already happened, fall through.
+    }
+
+    // Default path: descriptor-based response generation.
+    let response_bytes = if let Some(output_desc) = output_desc {
         debug!("Generating response from descriptor for {}.{}", service_name, method.name);
         let mock_msg = generate_message_from_descriptor(&output_desc, 0);
         encode_grpc_body(&mock_msg)
@@ -383,6 +545,78 @@ fn build_grpc_response(body: Vec<u8>) -> Result<axum::response::Response, Status
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn override_rule(
+        service: &str,
+        method: &str,
+        match_fields: &[(&str, &str)],
+        status: Option<&str>,
+    ) -> GrpcOverride {
+        GrpcOverride {
+            service: service.to_string(),
+            method: method.to_string(),
+            r#match: match_fields.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+            response: GrpcOverrideResponse {
+                status: status.map(|s| s.to_string()),
+                message: None,
+                body: None,
+            },
+        }
+    }
+
+    #[test]
+    fn test_find_override_catch_all_matches_when_service_method_match() {
+        let rules = vec![override_rule(
+            "OrderService",
+            "GetOrder",
+            &[],
+            Some("NOT_FOUND"),
+        )];
+        let m = find_matching_override(&rules, "OrderService", "GetOrder", None, None);
+        assert!(m.is_some(), "catch-all override should match");
+    }
+
+    #[test]
+    fn test_find_override_returns_none_when_service_differs() {
+        let rules = vec![override_rule("OrderService", "GetOrder", &[], None)];
+        assert!(find_matching_override(&rules, "PaymentService", "GetOrder", None, None).is_none());
+        assert!(find_matching_override(&rules, "OrderService", "ListOrders", None, None).is_none());
+    }
+
+    #[test]
+    fn test_find_override_skips_match_rule_when_request_missing() {
+        // Rule has a match block, but caller passed no request body — rule
+        // can't be evaluated, so it should NOT fire.
+        let rules = vec![override_rule(
+            "OrderService",
+            "GetOrder",
+            &[("order_id", "x")],
+            Some("OK"),
+        )];
+        assert!(find_matching_override(&rules, "OrderService", "GetOrder", None, None).is_none());
+    }
+
+    #[test]
+    fn test_find_override_first_match_wins() {
+        // Multiple catch-all rules for the same method: the first one in declaration
+        // order should win, even if a later one would also match.
+        let rules = vec![
+            override_rule("OrderService", "GetOrder", &[], Some("NOT_FOUND")),
+            override_rule("OrderService", "GetOrder", &[], Some("PERMISSION_DENIED")),
+        ];
+        let m = find_matching_override(&rules, "OrderService", "GetOrder", None, None).unwrap();
+        assert_eq!(m.response.status.as_deref(), Some("NOT_FOUND"));
+    }
+
+    #[test]
+    fn test_parse_status_code_recognizes_standard_names() {
+        assert_eq!(parse_status_code("NOT_FOUND"), Code::NotFound);
+        assert_eq!(parse_status_code("not_found"), Code::NotFound);
+        assert_eq!(parse_status_code("PERMISSION_DENIED"), Code::PermissionDenied);
+        assert_eq!(parse_status_code("OK"), Code::Ok);
+        // Unknown name maps to Code::Unknown (safe fallback).
+        assert_eq!(parse_status_code("totally-made-up"), Code::Unknown);
+    }
 
     #[test]
     fn test_parse_grpc_path() {

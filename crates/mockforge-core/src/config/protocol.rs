@@ -208,6 +208,10 @@ pub struct GrpcConfig {
     pub proto_dir: Option<String>,
     /// TLS configuration
     pub tls: Option<TlsConfig>,
+    /// Per-method response overrides. First matching rule wins; rules with no
+    /// `match` block are catch-all rules.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<GrpcOverride>,
 }
 
 impl Default for GrpcConfig {
@@ -218,8 +222,54 @@ impl Default for GrpcConfig {
             host: "0.0.0.0".to_string(),
             proto_dir: None,
             tls: None,
+            overrides: Vec::new(),
         }
     }
+}
+
+/// A single per-method override rule for the gRPC mock.
+///
+/// Use this to return specific status codes or response bodies from a method
+/// without modifying the proto file. Rules are evaluated in declaration order;
+/// the first one whose service+method (and optional `match`) match the
+/// incoming request wins. Unmatched calls fall back to the default
+/// smart-mock-generation behavior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct GrpcOverride {
+    /// Fully-qualified service name without leading dot, e.g. `myapp.OrderService`.
+    /// May also be the unqualified service name; matching is exact.
+    pub service: String,
+    /// Method name (case-sensitive, matches proto definition).
+    pub method: String,
+    /// Optional request-field-equality match. Keys are top-level field names of
+    /// the request message; values are stringified expected values. When
+    /// omitted, the rule matches every call to the named method.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub r#match: std::collections::HashMap<String, String>,
+    /// Response to return when this rule fires.
+    pub response: GrpcOverrideResponse,
+}
+
+/// Response shape for a `GrpcOverride`. Either `status` is set to a non-OK
+/// gRPC status code (in which case the call returns an error with `message`),
+/// or `body` is set to a JSON object that's serialized into the response
+/// message. Setting both is allowed but `status` wins when non-OK.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default)]
+pub struct GrpcOverrideResponse {
+    /// gRPC status code name (e.g. `OK`, `NOT_FOUND`, `PERMISSION_DENIED`).
+    /// Case-insensitive. Defaults to `OK` when omitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Human-readable error message used when `status` is non-OK.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// Response body as a JSON object. Field names must match the response
+    /// message type from the proto. Ignored when `status` is non-OK.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
 }
 
 /// GraphQL server configuration
