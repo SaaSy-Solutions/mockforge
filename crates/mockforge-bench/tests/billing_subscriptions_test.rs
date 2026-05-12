@@ -71,6 +71,8 @@ async fn test_billing_subscriptions_spec_generation() {
         skip_tls_verify: false,
         security_testing_enabled: false,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
 
     // Generate the k6 script
@@ -278,6 +280,8 @@ async fn test_insecure_skip_tls_verify_in_global_options() {
         skip_tls_verify: true, // Enable insecure mode
         security_testing_enabled: false,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
 
     let generator = K6ScriptGenerator::new(config, templates);

@@ -372,6 +372,8 @@ impl ParallelExecutor {
             let verbose = self.base_command.verbose;
             let skip_tls_verify = self.base_command.skip_tls_verify;
             let chunked_request_bodies = self.base_command.chunked_request_bodies;
+            let target_rps = self.base_command.target_rps;
+            let no_keep_alive = self.base_command.no_keep_alive;
 
             // Select per-target templates/base_path if this target has a custom spec
             let (templates, base_path) = if let Some(spec_path) = &target.spec {
@@ -425,6 +427,8 @@ impl ParallelExecutor {
                     &base_output,
                     security_testing_enabled,
                     chunked_request_bodies,
+                    target_rps,
+                    no_keep_alive,
                     &enhancement_code,
                 )
                 .await;
@@ -527,6 +531,8 @@ impl ParallelExecutor {
         base_output: &Path,
         security_testing_enabled: bool,
         chunked_request_bodies: bool,
+        target_rps: Option<u32>,
+        no_keep_alive: bool,
         enhancement_code: &str,
     ) -> Result<TargetResult> {
         // Merge target-specific headers with base headers
@@ -553,6 +559,8 @@ impl ParallelExecutor {
             skip_tls_verify,
             security_testing_enabled,
             chunked_request_bodies,
+            target_rps,
+            no_keep_alive,
         };
 
         // Generate k6 script

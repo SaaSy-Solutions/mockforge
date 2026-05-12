@@ -1083,6 +1083,18 @@ pub async fn build_router_with_multi_tenant(
             app.layer(from_fn_with_state(state.clone(), middleware::production_headers_middleware));
     }
 
+    // Optionally advertise `Connection: keep-alive` + `Keep-Alive: timeout=N,
+    // max=M` on every response. Useful when MockForge sits behind a reverse
+    // proxy (F5/Avi/HAProxy/nginx) that pools upstream sockets based on those
+    // headers — see issue #79 (proxy reset after FIN on HTTP/1.0 upstream).
+    // Off by default; opt in via `MOCKFORGE_HTTP_KEEPALIVE_HINT=1`.
+    if middleware::is_keepalive_hint_enabled() {
+        info!(
+            "MOCKFORGE_HTTP_KEEPALIVE_HINT enabled — emitting Connection: keep-alive + Keep-Alive headers on all responses (Issue #79 workaround)"
+        );
+        app = app.layer(axum::middleware::from_fn(middleware::keepalive_hint_middleware));
+    }
+
     // Add authentication middleware if OAuth is configured via deceptive deploy
     if let Some(auth_config) = deceptive_deploy_auth_config {
         use crate::auth::{auth_middleware, create_oauth2_client, AuthState};
@@ -3139,6 +3151,17 @@ pub async fn build_router_with_chains_and_multi_tenant(
     if state.production_headers.is_some() {
         app =
             app.layer(from_fn_with_state(state.clone(), middleware::production_headers_middleware));
+    }
+
+    // Optionally advertise `Connection: keep-alive` + `Keep-Alive: timeout=N,
+    // max=M` on every response (Issue #79 workaround for HTTP/1.0 upstream
+    // proxies that observe FIN from MockForge after each response). Opt in
+    // via `MOCKFORGE_HTTP_KEEPALIVE_HINT=1`.
+    if middleware::is_keepalive_hint_enabled() {
+        info!(
+            "MOCKFORGE_HTTP_KEEPALIVE_HINT enabled — emitting Connection: keep-alive + Keep-Alive headers on all responses (Issue #79 workaround)"
+        );
+        app = app.layer(axum::middleware::from_fn(middleware::keepalive_hint_middleware));
     }
 
     // Add authentication middleware if OAuth is configured via deceptive deploy

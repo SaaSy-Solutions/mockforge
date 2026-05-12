@@ -49,6 +49,38 @@ impl TerminalReporter {
             println!("  Max VUs:              {}", results.vus_max.to_string().cyan());
         }
 
+        // Issue #79 — server-injected chaos signals (latency / jitter / faults)
+        // observed from MockForge response headers. Surfaces the slice of
+        // total wire time that came from the chaos middleware vs the system
+        // under test.
+        if results.server_injected_latency_samples > 0
+            || results.server_injected_jitter_samples > 0
+            || results.server_reported_faults > 0
+        {
+            println!("\n{}", "Server-Injected (chaos):".bold());
+            if results.server_injected_latency_samples > 0 {
+                println!(
+                    "  Latency samples:      {} (avg {:.2}ms, max {:.2}ms)",
+                    results.server_injected_latency_samples.to_string().cyan(),
+                    results.server_injected_latency_avg_ms,
+                    results.server_injected_latency_max_ms,
+                );
+            }
+            if results.server_injected_jitter_samples > 0 {
+                println!(
+                    "  Jitter samples:       {} (avg {:.2}ms)",
+                    results.server_injected_jitter_samples.to_string().cyan(),
+                    results.server_injected_jitter_avg_ms,
+                );
+            }
+            if results.server_reported_faults > 0 {
+                println!(
+                    "  Fault-marked resps:   {}",
+                    results.server_reported_faults.to_string().cyan(),
+                );
+            }
+        }
+
         println!("\n{}", "=".repeat(60).bright_green());
     }
 

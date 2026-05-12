@@ -51,6 +51,8 @@ async fn generate_script(
         skip_tls_verify: false,
         security_testing_enabled: security_enabled,
         chunked_request_bodies: false,
+        target_rps: None,
+        no_keep_alive: false,
     };
     let generator = K6ScriptGenerator::new(config, templates);
     generator.generate().expect("generate k6 script")

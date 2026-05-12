@@ -1678,6 +1678,25 @@ enum Commands {
         #[arg(long, default_value = "10")]
         vus: u32,
 
+        /// Target requests-per-second (open-model load). When set, switches the
+        /// k6 executor from `ramping-vus` (which produces an implicit RPS
+        /// limited by VU sleep time) to `constant-arrival-rate`, which fires
+        /// `--rps` requests per second regardless of how long each one takes.
+        /// Useful for stressing rate limits and observing chaos at a fixed
+        /// throughput. `--vus` becomes the *max* pre-allocated VU pool.
+        /// Issue #79 — Srikanth's round-3 reply.
+        #[arg(long, value_name = "N")]
+        rps: Option<u32>,
+
+        /// Connections-per-second target. When set, disables k6's HTTP keep-
+        /// alive so every request opens a fresh TCP/TLS connection — useful
+        /// for stressing connection-limit / connection-error chaos. Combined
+        /// with `--rps`, the effective new-connection rate equals `--rps`.
+        /// Without `--rps`, the rate is bounded by VUs × (1 / request latency).
+        /// Issue #79.
+        #[arg(long)]
+        cps: bool,
+
         /// Load test scenario (constant, ramp-up, spike, stress, soak)
         #[arg(long, default_value = "ramp-up")]
         scenario: String,
@@ -2876,6 +2895,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             base_path,
             duration,
             vus,
+            rps,
+            cps,
             scenario,
             operations,
             exclude_operations,
@@ -2964,6 +2985,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 base_path,
                 duration,
                 vus,
+                target_rps: rps,
+                no_keep_alive: cps,
                 scenario,
                 operations,
                 exclude_operations,

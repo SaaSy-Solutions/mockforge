@@ -26,30 +26,50 @@ impl LatencyInjector {
     /// Inject latency based on configuration
     /// Returns the delay amount in milliseconds that was injected (0 if no delay was injected)
     pub async fn inject(&self) -> u64 {
+        self.inject_with_breakdown().await.0
+    }
+
+    /// Inject latency and report `(total_delay_ms, base_delay_ms, jitter_abs_ms)`.
+    ///
+    /// `base_delay_ms` is what the fixed/random configuration alone would have
+    /// produced; `jitter_abs_ms` is the absolute jitter offset that was applied
+    /// on top (always ≥ 0). This split lets the chaos middleware record a
+    /// separate `jitter` fault counter so the TUI Chaos screen and `/metrics`
+    /// surface jitter activity independently of total latency. Issue #79 —
+    /// Srikanth's round-3 reply.
+    pub async fn inject_with_breakdown(&self) -> (u64, u64, u64) {
         if !self.config.enabled {
-            return 0;
+            return (0, 0, 0);
         }
 
-        // Check probability
         let mut rng = rand::rng();
         if rng.random::<f64>() > self.config.probability {
-            return 0;
+            return (0, 0, 0);
         }
 
-        let delay_ms = self.calculate_delay();
+        let (delay_ms, base_ms, jitter_abs) = self.calculate_delay_with_breakdown();
         if delay_ms > 0 {
-            debug!("Injecting latency: {}ms", delay_ms);
+            debug!("Injecting latency: {}ms (base={}, jitter={})", delay_ms, base_ms, jitter_abs);
             sleep(Duration::from_millis(delay_ms)).await;
         }
 
-        delay_ms
+        (delay_ms, base_ms, jitter_abs)
     }
 
-    /// Calculate the delay in milliseconds
+    /// Calculate the delay in milliseconds. Only used by unit tests now —
+    /// production callers go through `calculate_delay_with_breakdown` so they
+    /// can also see the jitter component.
+    #[cfg(test)]
     fn calculate_delay(&self) -> u64 {
+        self.calculate_delay_with_breakdown().0
+    }
+
+    /// Calculate `(total, base, jitter_abs)` without sleeping. `jitter_abs` is
+    /// always non-negative — it's the magnitude of the jitter offset before its
+    /// sign was randomized.
+    fn calculate_delay_with_breakdown(&self) -> (u64, u64, u64) {
         let mut rng = rand::rng();
 
-        // Base delay
         let base_delay = if let Some(fixed) = self.config.fixed_delay_ms {
             fixed
         } else if let Some((min, max)) = self.config.random_delay_range_ms {
@@ -58,17 +78,17 @@ impl LatencyInjector {
             0
         };
 
-        // Apply jitter
         if self.config.jitter_percent > 0.0 {
             let jitter = (base_delay as f64 * self.config.jitter_percent / 100.0) as u64;
             let jitter_offset = rng.random_range(0..=jitter);
-            if rng.random_bool(0.5) {
+            let total = if rng.random_bool(0.5) {
                 base_delay + jitter_offset
             } else {
                 base_delay.saturating_sub(jitter_offset)
-            }
+            };
+            (total, base_delay, jitter_offset)
         } else {
-            base_delay
+            (base_delay, base_delay, 0)
         }
     }
 

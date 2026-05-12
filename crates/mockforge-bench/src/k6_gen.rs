@@ -39,6 +39,14 @@ pub struct K6ScriptTemplateData {
     /// `curl --data-binary @file -H "Transfer-Encoding: chunked"` or a custom
     /// hyper/reqwest harness.
     pub chunked_request_bodies: bool,
+    /// Optional target RPS. When `Some(n)`, the script switches the executor
+    /// from `ramping-vus` to `constant-arrival-rate` at `n` requests/sec.
+    /// Issue #79.
+    pub target_rps: Option<u32>,
+    /// When true, the generated script sets `noConnectionReuse: true` on every
+    /// request so each one opens a fresh TCP/TLS connection. Used to drive
+    /// connections-per-second load. Issue #79.
+    pub no_keep_alive: bool,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -111,6 +119,12 @@ pub struct K6Config {
     /// Emit `Transfer-Encoding: chunked` on every request body. See
     /// `K6ScriptTemplateData::chunked_request_bodies` for caveats.
     pub chunked_request_bodies: bool,
+    /// Target RPS for `constant-arrival-rate` executor. `None` falls back to
+    /// the legacy ramping-vus executor.
+    pub target_rps: Option<u32>,
+    /// When true, set `noConnectionReuse: true` on every request so each one
+    /// opens a fresh TCP/TLS connection (drives high CPS).
+    pub no_keep_alive: bool,
 }
 
 /// Generate k6 load test script
@@ -338,6 +352,8 @@ impl K6ScriptGenerator {
             security_testing_enabled: self.config.security_testing_enabled,
             has_custom_headers: !self.config.custom_headers.is_empty(),
             chunked_request_bodies: self.config.chunked_request_bodies,
+            target_rps: self.config.target_rps,
+            no_keep_alive: self.config.no_keep_alive,
         })
     }
 
@@ -500,6 +516,8 @@ mod tests {
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         assert_eq!(config.duration_secs, 60);
@@ -522,6 +540,8 @@ mod tests {
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let templates = vec![];
@@ -658,6 +678,8 @@ mod tests {
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
         let generator = K6ScriptGenerator::new(config, vec![template]);
         let script = generator.generate().expect("script generates");
@@ -704,6 +726,8 @@ mod tests {
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -893,6 +917,8 @@ export default function() {{}}
             skip_tls_verify: true,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -940,6 +966,8 @@ export default function() {{}}
             skip_tls_verify: true,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -987,6 +1015,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1050,6 +1080,8 @@ export default function() {{}}
             skip_tls_verify: true,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
@@ -1112,6 +1144,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1174,6 +1208,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1231,6 +1267,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1288,6 +1326,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1347,6 +1387,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: true,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1444,6 +1486,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1526,6 +1570,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: true,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1644,6 +1690,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: true,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1715,6 +1763,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: true,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1775,6 +1825,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1830,6 +1882,8 @@ export default function() {{}}
             skip_tls_verify: false,
             security_testing_enabled: false,
             chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);

@@ -562,7 +562,7 @@ impl ChaosScreen {
             ]));
         }
 
-        // Latency injection sample count.
+        // Latency injection sample count + mean injected latency.
         if let Some(samples) = stats.get("latency_samples_by_endpoint").and_then(|v| v.as_object())
         {
             let total: u64 = samples.values().filter_map(|v| v.as_u64()).sum();
@@ -571,6 +571,86 @@ impl ChaosScreen {
                     Span::styled("  Latency injections:     ", Theme::dim()),
                     Span::styled(total.to_string(), Style::default().fg(Theme::FG)),
                 ]));
+                let avg_mean = stats
+                    .get("latency_avg_ms_by_endpoint")
+                    .and_then(|v| v.as_object())
+                    .map(|m| {
+                        let vals: Vec<f64> = m.values().filter_map(|v| v.as_f64()).collect();
+                        if vals.is_empty() {
+                            0.0
+                        } else {
+                            vals.iter().sum::<f64>() / vals.len() as f64
+                        }
+                    })
+                    .unwrap_or(0.0);
+                if avg_mean > 0.0 {
+                    lines.push(Line::from(vec![
+                        Span::styled("    mean latency:         ", Theme::dim()),
+                        Span::styled(format!("{avg_mean:.1}ms"), Style::default().fg(Theme::FG)),
+                    ]));
+                }
+            }
+        }
+
+        // Jitter sample count + mean jitter offset.
+        if let Some(samples) = stats.get("jitter_samples_by_endpoint").and_then(|v| v.as_object()) {
+            let total: u64 = samples.values().filter_map(|v| v.as_u64()).sum();
+            if total > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("  Jitter applications:    ", Theme::dim()),
+                    Span::styled(total.to_string(), Style::default().fg(Theme::FG)),
+                ]));
+                let avg_mean = stats
+                    .get("jitter_avg_ms_by_endpoint")
+                    .and_then(|v| v.as_object())
+                    .map(|m| {
+                        let vals: Vec<f64> = m.values().filter_map(|v| v.as_f64()).collect();
+                        if vals.is_empty() {
+                            0.0
+                        } else {
+                            vals.iter().sum::<f64>() / vals.len() as f64
+                        }
+                    })
+                    .unwrap_or(0.0);
+                if avg_mean > 0.0 {
+                    lines.push(Line::from(vec![
+                        Span::styled("    mean offset:          ", Theme::dim()),
+                        Span::styled(format!("{avg_mean:.1}ms"), Style::default().fg(Theme::FG)),
+                    ]));
+                }
+            }
+        }
+
+        // Bandwidth throttle activity. Show per-direction sample counts and
+        // the total artificial delay imposed so users can tell whether their
+        // `bandwidth_limit_bps` config is actually biting.
+        if let Some(samples) =
+            stats.get("bandwidth_throttle_samples_by_direction").and_then(|v| v.as_object())
+        {
+            let total: u64 = samples.values().filter_map(|v| v.as_u64()).sum();
+            if total > 0 {
+                lines.push(Line::from(vec![
+                    Span::styled("  Bandwidth throttles:    ", Theme::dim()),
+                    Span::styled(total.to_string(), Style::default().fg(Theme::FG)),
+                ]));
+                for (dir, v) in samples {
+                    if let Some(c) = v.as_u64() {
+                        if c > 0 {
+                            lines.push(Line::from(vec![
+                                Span::styled(format!("    {dir:<20}"), Theme::dim()),
+                                Span::styled(c.to_string(), Style::default().fg(Theme::FG)),
+                            ]));
+                        }
+                    }
+                }
+                let total_ms =
+                    stats.get("bandwidth_throttle_total_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+                if total_ms > 0 {
+                    lines.push(Line::from(vec![
+                        Span::styled("    total delay:          ", Theme::dim()),
+                        Span::styled(format!("{total_ms}ms"), Style::default().fg(Theme::FG)),
+                    ]));
+                }
             }
         }
 

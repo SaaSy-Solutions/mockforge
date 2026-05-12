@@ -1,7 +1,7 @@
 //! Chaos engineering middleware for HTTP
 
 use crate::{
-    config::CorruptionType,
+    config::{ConnectionErrorKind, CorruptionType},
     fault::FaultInjector,
     latency::LatencyInjector,
     latency_metrics::LatencyMetricsTracker,
@@ -296,13 +296,21 @@ async fn chaos_middleware_core(
     }
     drop(traffic_shaper);
 
-    // Inject latency and record it for metrics
-    let latency_injector = chaos.latency_injector.read().await;
-    let delay_ms = latency_injector.inject().await;
-    drop(latency_injector);
+    // Inject latency and record it for metrics. `inject_with_breakdown` reports
+    // the base delay and the jitter delta separately so we can count jitter
+    // applications as its own fault_type (Issue #79 — user could not see
+    // jitter details in the TUI Chaos screen even though latency was firing).
+    let (delay_ms, _base_ms, jitter_abs) = {
+        let latency_injector = chaos.latency_injector.read().await;
+        latency_injector.inject_with_breakdown().await
+    };
     if delay_ms > 0 {
         chaos.latency_tracker.record_latency(delay_ms);
         crate::metrics::CHAOS_METRICS.record_latency(&path, delay_ms as f64);
+        if jitter_abs > 0 {
+            crate::metrics::CHAOS_METRICS.record_fault("jitter", &path);
+            crate::metrics::CHAOS_METRICS.record_jitter(&path, jitter_abs as f64);
+        }
     }
 
     // Detect chunked transfer encoding *before* we collect the body, since
@@ -358,6 +366,27 @@ async fn chaos_middleware_core(
         None
     };
 
+    // Connection-error fault at the HTTP layer. `TcpReset` / `TcpClose` kinds
+    // are handled by `ChaosTcpListener` at accept time; `Http503` (the default)
+    // surfaces here as an application-level 503 so the `connection_errors`
+    // knob also produces a recordable fault counter when the listener wrapper
+    // isn't installed. Issue #79 — Srikanth's round-3 reply.
+    let connection_error_kind = if should_inject_fault && matcher_passed {
+        fault_config.and_then(|f| {
+            if !f.connection_errors {
+                return None;
+            }
+            let mut rng = rand::rng();
+            if rng.random::<f64>() <= f.connection_error_probability {
+                Some(f.connection_error_kind)
+            } else {
+                None
+            }
+        })
+    } else {
+        None
+    };
+
     // Decide whether to inject a true timeout: sleep for timeout_ms then 504.
     // Decoupled from partial_responses, which has its own probability further down.
     let timeout_fault = if should_inject_fault && matcher_passed {
@@ -387,6 +416,19 @@ async fn chaos_middleware_core(
             .into_response();
     }
 
+    // HTTP-layer connection-error injection (when `connection_error_kind` is
+    // `Http503`). TCP-level kinds are short-circuited by the listener wrapper
+    // before the request reaches us, so we'd never see them here.
+    if let Some(ConnectionErrorKind::Http503) = connection_error_kind {
+        warn!("Injecting connection_error (Http503) for: {}", path);
+        crate::metrics::CHAOS_METRICS.record_fault("connection_error", &path);
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Injected connection error (Service Unavailable)",
+        )
+            .into_response();
+    }
+
     if let Some(timeout_ms) = timeout_fault {
         warn!("Injecting timeout: sleeping {}ms then returning 504", timeout_ms);
         crate::metrics::CHAOS_METRICS.record_fault("timeout", &path);
@@ -394,10 +436,18 @@ async fn chaos_middleware_core(
         return (StatusCode::GATEWAY_TIMEOUT, "Injected timeout (Gateway Timeout)").into_response();
     }
 
-    // Throttle request bandwidth
+    // Throttle request bandwidth and record any actual delay applied.
     {
         let traffic_shaper = chaos.traffic_shaper.read().await;
-        traffic_shaper.throttle_bandwidth(request_size).await;
+        let delay_ms = traffic_shaper.throttle_bandwidth(request_size).await;
+        if delay_ms > 0 {
+            crate::metrics::CHAOS_METRICS.record_fault("bandwidth_throttle", &path);
+            crate::metrics::CHAOS_METRICS.record_bandwidth_throttle(
+                &path,
+                "request",
+                delay_ms as f64,
+            );
+        }
     }
 
     // Reconstruct request
@@ -499,10 +549,39 @@ async fn chaos_middleware_core(
 
     let final_body = Body::from(final_body_bytes);
 
-    // Throttle response bandwidth
+    // Throttle response bandwidth and record the delay.
     {
         let traffic_shaper = chaos.traffic_shaper.read().await;
-        traffic_shaper.throttle_bandwidth(response_size).await;
+        let delay_ms = traffic_shaper.throttle_bandwidth(response_size).await;
+        if delay_ms > 0 {
+            crate::metrics::CHAOS_METRICS.record_fault("bandwidth_throttle", &path);
+            crate::metrics::CHAOS_METRICS.record_bandwidth_throttle(
+                &path,
+                "response",
+                delay_ms as f64,
+            );
+        }
+    }
+
+    // Surface what the server injected back to the client. Bench clients and
+    // browser devtools can read these headers without scraping `/metrics`.
+    // Issue #79 — Srikanth's round-3 reply asked to see injected latency on
+    // the client side. `parts` is already `mut` from the partial-response
+    // truncation block above.
+    if delay_ms > 0 {
+        if let Ok(v) = http::HeaderValue::from_str(&delay_ms.to_string()) {
+            parts.headers.insert("x-mockforge-injected-latency-ms", v);
+        }
+    }
+    if jitter_abs > 0 {
+        if let Ok(v) = http::HeaderValue::from_str(&jitter_abs.to_string()) {
+            parts.headers.insert("x-mockforge-injected-jitter-ms", v);
+        }
+    }
+    if should_truncate {
+        parts
+            .headers
+            .insert("x-mockforge-fault", http::HeaderValue::from_static("partial_response"));
     }
 
     Response::from_parts(parts, final_body)
