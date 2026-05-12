@@ -498,6 +498,13 @@ pub struct KafkaConfig {
     /// and `default_replication_factor`.
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub seed_messages: std::collections::HashMap<String, Vec<KafkaSeedMessage>>,
+    /// Fault-injection rules applied at the protocol-handler boundary.
+    /// Each rule fires either deterministically (no `probability`) or
+    /// stochastically (`probability: 0.0..=1.0`). Rules with `partition`
+    /// set target a single partition; without it, every partition of the
+    /// named topic.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub faults: Vec<KafkaFault>,
 }
 
 impl Default for KafkaConfig {
@@ -517,8 +524,52 @@ impl Default for KafkaConfig {
             advertised_host: None,
             advertised_port: None,
             seed_messages: std::collections::HashMap::new(),
+            faults: Vec::new(),
         }
     }
+}
+
+/// Kafka fault-injection rule. See `KafkaConfig::faults`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct KafkaFault {
+    /// Topic name to target. Required.
+    pub topic: String,
+    /// Specific partition to target. When omitted, the rule fires for any
+    /// partition of the topic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub partition: Option<i32>,
+    /// Which failure mode to inject.
+    pub kind: KafkaFaultKind,
+    /// Delay (in milliseconds) for `produce_throttle`. Ignored by other
+    /// kinds. Defaults to 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_ms: Option<u64>,
+    /// Stochastic firing probability in `0.0..=1.0`. `None` or `1.0` =
+    /// every request matching this rule fires the fault. `0.0` = never.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub probability: Option<f64>,
+}
+
+/// Supported Kafka fault-injection kinds.
+///
+/// Each value matches a specific Kafka protocol error code the mock
+/// returns on the matching request type. Tests are deterministic when
+/// `probability` is None or 1.0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum KafkaFaultKind {
+    /// Delay produce response by `delay_ms` before allowing it through.
+    /// Exercises client retry-and-backoff paths.
+    ProduceThrottle,
+    /// Return NOT_LEADER_OR_FOLLOWER (error code 6) for matching produce
+    /// requests. Real clients re-fetch metadata and retry.
+    ProduceNotLeader,
+    /// Return OFFSET_OUT_OF_RANGE (error code 1) for matching fetch
+    /// requests. Real consumers handle this by resetting to the
+    /// configured `auto.offset.reset` policy.
+    OffsetOutOfRange,
 }
 
 /// A single message to inject into a topic's log at broker startup. See
