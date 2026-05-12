@@ -12,8 +12,14 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::models::HostedMock;
+use crate::middleware::org_rate_limit::increment_usage;
+use crate::models::{HostedMock, Organization, UsageCounter};
 use crate::AppState;
+
+/// Fallback monthly request limit when an org's `limits_json` has no
+/// `requests_per_30d` entry. Matches the Free plan default — conservative
+/// enough that legacy orgs without the field don't get unbounded traffic.
+const DEFAULT_REQUESTS_PER_30D: i64 = 10_000;
 
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
@@ -56,6 +62,11 @@ impl MultitenantRouter {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
+        // Enforce the org's monthly `requests_per_30d` plan limit (#449).
+        // Returns 429 if the deployment's owning org has already burnt through
+        // its monthly request quota.
+        enforce_monthly_quota(&state, deployment.org_id).await?;
+
         // Get the target base URL (prefer internal_url for Fly.io internal routing)
         let base_url = deployment
             .internal_url
@@ -71,7 +82,9 @@ impl MultitenantRouter {
         // Build target URL
         let target_url = build_target_url(base_url, path_after_slug, uri.query());
 
-        proxy_request(method, headers, body, &target_url).await
+        let response = proxy_request(method, headers, body, &target_url).await?;
+        bump_proxy_usage(&state, deployment.org_id, &response);
+        Ok(response)
     }
 }
 
@@ -116,6 +129,9 @@ pub async fn custom_domain_fallback(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Enforce the org's monthly `requests_per_30d` plan limit before forwarding.
+    enforce_monthly_quota(&state, deployment.org_id).await?;
+
     // Get the target base URL (prefer internal_url for Fly.io internal routing)
     let base_url = deployment
         .internal_url
@@ -125,7 +141,9 @@ pub async fn custom_domain_fallback(
 
     let target_url = build_target_url(base_url, uri.path(), uri.query());
 
-    proxy_request(method, headers, body, &target_url).await
+    let response = proxy_request(method, headers, body, &target_url).await?;
+    bump_proxy_usage(&state, deployment.org_id, &response);
+    Ok(response)
 }
 
 /// Build the full target URL from base, path, and optional query string
@@ -226,4 +244,144 @@ async fn proxy_request(
         tracing::error!("Failed to build proxy response: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })
+}
+
+/// Read `requests_per_30d` from `limits_json`, treating `-1` as "unlimited"
+/// and missing / wrong-type / non-positive values as the conservative Free-tier
+/// default. Splitting this out keeps the JSON-parsing rules unit-testable
+/// without needing a Postgres fixture.
+fn monthly_request_limit(limits_json: &serde_json::Value) -> Option<i64> {
+    match limits_json.get("requests_per_30d").and_then(|v| v.as_i64()) {
+        Some(-1) => None, // -1 = unlimited (matches the sentinel used on Team plan)
+        Some(n) if n > 0 => Some(n),
+        // 0 ("disabled"), wrong JSON type, or missing → fall back so we never
+        // accidentally open the gate.
+        _ => Some(DEFAULT_REQUESTS_PER_30D),
+    }
+}
+
+/// Enforce the owning org's `requests_per_30d` plan limit on a hosted-mock
+/// proxy request. Returns 429 if the org has already exhausted its monthly
+/// allotment.
+///
+/// Fail-open semantics on DB/Redis hiccups: a transient infra failure must
+/// not take the proxy offline. The body cap and per-second RPS check (added
+/// in #450) remain absolute safety floors regardless.
+async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), StatusCode> {
+    let org = match Organization::find_by_id(state.db.pool(), org_id).await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
+            return Ok(());
+        }
+        Err(e) => {
+            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
+            return Ok(());
+        }
+    };
+
+    let Some(limit) = monthly_request_limit(&org.limits_json) else {
+        return Ok(()); // unlimited
+    };
+
+    let used = match UsageCounter::get_or_create_current(state.db.pool(), org_id).await {
+        Ok(counter) => counter.requests,
+        Err(e) => {
+            tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
+            return Ok(()); // fail open on DB read errors
+        }
+    };
+
+    if used >= limit {
+        tracing::info!("Monthly request quota exhausted for org {}: {}/{}", org_id, used, limit);
+        Err(StatusCode::TOO_MANY_REQUESTS)
+    } else {
+        Ok(())
+    }
+}
+
+/// Bump the org's monthly request counter after a successful proxy response.
+///
+/// Only counts 2xx — matches the convention in the auth-route rate-limit
+/// middleware so error responses don't burn quota for the customer. Spawned
+/// detached so the response isn't blocked on the counter write.
+///
+/// Synchronous fn (no `.await` here) so the caller can drop `&Response` before
+/// returning it — the upstream `axum::body::Body` is not `Sync`, and holding
+/// the reference across a suspension point would break the `Handler` Send
+/// bound on `route_request`.
+fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
+    if !response.status().is_success() {
+        return;
+    }
+
+    let response_size = response
+        .headers()
+        .get("content-length")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(256);
+
+    let pool = state.db.pool().clone();
+    let redis = state.redis.clone();
+    tokio::spawn(async move {
+        if let Err(e) = increment_usage(&pool, redis.as_ref(), org_id, response_size).await {
+            tracing::error!("Failed to increment proxy usage for org {}: {:?}", org_id, e);
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn monthly_limit_pro_plan_default() {
+        assert_eq!(monthly_request_limit(&json!({ "requests_per_30d": 250_000 })), Some(250_000));
+    }
+
+    #[test]
+    fn monthly_limit_team_plan_default() {
+        assert_eq!(
+            monthly_request_limit(&json!({ "requests_per_30d": 1_000_000 })),
+            Some(1_000_000)
+        );
+    }
+
+    #[test]
+    fn monthly_limit_unlimited_sentinel() {
+        // -1 is the "unlimited" sentinel used elsewhere in limits_json
+        assert_eq!(monthly_request_limit(&json!({ "requests_per_30d": -1 })), None);
+    }
+
+    #[test]
+    fn monthly_limit_zero_falls_back_to_default() {
+        // 0 would mean "no requests allowed ever" — almost certainly a
+        // misconfiguration, fall back instead of bricking the proxy.
+        assert_eq!(
+            monthly_request_limit(&json!({ "requests_per_30d": 0 })),
+            Some(DEFAULT_REQUESTS_PER_30D)
+        );
+    }
+
+    #[test]
+    fn monthly_limit_missing_field_falls_back() {
+        assert_eq!(monthly_request_limit(&json!({})), Some(DEFAULT_REQUESTS_PER_30D));
+    }
+
+    #[test]
+    fn monthly_limit_null_json_falls_back() {
+        assert_eq!(monthly_request_limit(&serde_json::Value::Null), Some(DEFAULT_REQUESTS_PER_30D));
+    }
+
+    #[test]
+    fn monthly_limit_wrong_json_type_falls_back() {
+        // Defensive against limits_json corruption — string "250000" should
+        // not be parsed as an integer here, fall back to the default.
+        assert_eq!(
+            monthly_request_limit(&json!({ "requests_per_30d": "250000" })),
+            Some(DEFAULT_REQUESTS_PER_30D)
+        );
+    }
 }

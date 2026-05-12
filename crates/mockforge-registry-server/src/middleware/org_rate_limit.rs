@@ -10,24 +10,29 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::Datelike;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
     middleware::resolve_org_context,
-    models::{Organization, Plan, UsageCounter},
-    redis::{current_month_period, org_usage_key, RedisPool},
+    models::{Organization, UsageCounter},
+    redis::{current_month_period, RedisPool},
     AppState,
 };
 
-/// Check if organization has exceeded plan limits
+/// Check if organization has exceeded plan limits.
+///
+/// `_redis` and `_user_id` are accepted as part of the public signature so
+/// the auth-route middleware can pass them in; current implementation reads
+/// the authoritative counter from Postgres, but a Redis fast-path is intended
+/// for a follow-up.
 pub async fn check_org_limits(
     pool: &sqlx::PgPool,
-    redis: Option<&RedisPool>,
+    _redis: Option<&RedisPool>,
     org: &Organization,
-    user_id: Uuid,
+    _user_id: Uuid,
 ) -> Result<(), RateLimitError> {
-    let plan = org.plan();
     let limits = &org.limits_json;
 
     // Get current month period
@@ -39,10 +44,7 @@ pub async fn check_org_limits(
         .map_err(|_| RateLimitError::Database)?;
 
     // Check request limit
-    let requests_limit = limits
-        .get("requests_per_30d")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(10000);
+    let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);
 
     if usage.requests >= requests_limit {
         return Err(RateLimitError::LimitExceeded {
@@ -54,10 +56,7 @@ pub async fn check_org_limits(
     }
 
     // Check storage limit
-    let storage_limit_gb = limits
-        .get("storage_gb")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+    let storage_limit_gb = limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1);
     let storage_limit_bytes = storage_limit_gb * 1_000_000_000;
 
     if usage.storage_bytes >= storage_limit_bytes {
@@ -116,13 +115,11 @@ pub async fn increment_usage(
 pub async fn org_rate_limit_middleware(
     State(state): State<AppState>,
     headers: HeaderMap,
-    mut request: Request,
+    request: Request,
     next: Next,
 ) -> Result<Response, impl IntoResponse> {
     // Try to get user_id from auth middleware (set in extensions)
-    let user_id_str = request.extensions()
-        .get::<String>()
-        .cloned();
+    let user_id_str = request.extensions().get::<String>().cloned();
 
     // If no user_id, this might be a public endpoint - skip org rate limiting
     // (but still apply global rate limiting if configured)
@@ -139,13 +136,14 @@ pub async fn org_rate_limit_middleware(
     };
 
     // Resolve org context (pass request extensions for API token org_id lookup)
-    let org_ctx = match resolve_org_context(&state, user_id, &headers, Some(request.extensions())).await {
-        Ok(ctx) => ctx,
-        Err(_) => {
-            // No org context, skip org rate limiting
-            return Ok(next.run(request).await);
-        }
-    };
+    let org_ctx =
+        match resolve_org_context(&state, user_id, &headers, Some(request.extensions())).await {
+            Ok(ctx) => ctx,
+            Err(_) => {
+                // No org context, skip org rate limiting
+                return Ok(next.run(request).await);
+            }
+        };
 
     let pool = state.db.pool();
 
@@ -155,15 +153,10 @@ pub async fn org_rate_limit_middleware(
     }
 
     // Get usage info for rate limit headers
-    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
-        .await
-        .ok();
+    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id).await.ok();
 
     let limits = &org_ctx.org.limits_json;
-    let requests_limit = limits
-        .get("requests_per_30d")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(10000);
+    let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);
 
     let requests_remaining = usage
         .as_ref()
@@ -173,16 +166,15 @@ pub async fn org_rate_limit_middleware(
     // Calculate reset time (end of current month)
     let now = chrono::Utc::now();
     let next_month = if now.month() == 12 {
-        chrono::NaiveDate::from_ymd_opt((now.year() + 1) as i32, 1, 1)
+        chrono::NaiveDate::from_ymd_opt(now.year() + 1, 1, 1)
     } else {
-        chrono::NaiveDate::from_ymd_opt(now.year() as i32, (now.month() + 1) as u32, 1)
+        chrono::NaiveDate::from_ymd_opt(now.year(), now.month() + 1, 1)
     }
     .and_then(|d| d.and_hms_opt(0, 0, 0))
     .map(|dt| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc));
 
-    let reset_timestamp = next_month
-        .map(|dt| dt.timestamp())
-        .unwrap_or_else(|| now.timestamp() + 2592000); // Fallback: 30 days from now
+    let reset_timestamp =
+        next_month.map(|dt| dt.timestamp()).unwrap_or_else(|| now.timestamp() + 2592000); // Fallback: 30 days from now
 
     // Capture request body size before it's consumed
     let request_body_bytes: i64 = request
@@ -267,7 +259,12 @@ fn rate_limit_error_response(error: RateLimitError) -> impl IntoResponse {
                 "message": "Failed to check rate limits"
             })),
         ),
-        RateLimitError::LimitExceeded { limit_type, limit, used, reset_period } => {
+        RateLimitError::LimitExceeded {
+            limit_type,
+            limit,
+            used,
+            reset_period,
+        } => {
             let limit_type_display = match limit_type.as_str() {
                 "requests" => "Monthly request limit",
                 "storage" => "Storage limit",
