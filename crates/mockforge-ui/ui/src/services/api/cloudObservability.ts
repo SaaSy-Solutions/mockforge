@@ -121,6 +121,44 @@ class CloudObservabilityApi {
       },
     ) as Promise<TraceSpanRow[]>;
   }
+
+  /**
+   * Execute a saved query. Phase 1 supports `filters.kind` of
+   * `request_count`, `request_count_by_status`, or `incident_count`.
+   * Optional body lets a tile override the saved window / workspace
+   * without rewriting the underlying SavedQuery row.
+   */
+  async executeSavedQuery(
+    queryId: string,
+    body: ExecuteSavedQueryRequest = {},
+  ): Promise<ExecuteSavedQueryResponse> {
+    this.guard('executeSavedQuery');
+    return fetchJsonWithErrorBody(
+      `/api/v1/observability/saved-queries/${queryId}/execute`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    ) as Promise<ExecuteSavedQueryResponse>;
+  }
+}
+
+export interface ExecuteSavedQueryRequest {
+  workspace_id?: string;
+  window_minutes?: number;
+}
+
+export interface ExecuteSavedQueryBucket {
+  label: string;
+  count: number;
+}
+
+export interface ExecuteSavedQueryResponse {
+  metric: string;
+  total: number;
+  window_minutes: number;
+  series: ExecuteSavedQueryBucket[];
 }
 
 export const cloudObservabilityApi = new CloudObservabilityApi();

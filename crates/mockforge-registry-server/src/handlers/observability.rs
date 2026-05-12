@@ -426,3 +426,273 @@ pub async fn query_traces(
 
     Ok(Json(rows))
 }
+
+// --- saved-query execution (#465) ------------------------------------------
+
+/// One result bucket. `label` is the group key for grouped queries
+/// (e.g. status code "200", "404") or `"all"` for ungrouped totals.
+#[derive(Debug, serde::Serialize)]
+pub struct QueryBucket {
+    pub label: String,
+    pub count: i64,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ExecuteQueryResponse {
+    pub metric: String,
+    pub total: i64,
+    pub window_minutes: i64,
+    pub series: Vec<QueryBucket>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ExecuteQueryRequest {
+    /// Override the saved query's workspace scope. None falls back to
+    /// `SavedQuery.workspace_id`. None on both means org-wide.
+    #[serde(default)]
+    pub workspace_id: Option<Uuid>,
+    /// Override the window encoded in `filters.window_minutes` for ad-hoc
+    /// time-range tweaks from the UI.
+    #[serde(default)]
+    pub window_minutes: Option<i64>,
+}
+
+/// `POST /api/v1/observability/saved-queries/{id}/execute`
+///
+/// Runs the saved query's `filters` payload against runtime data and
+/// returns a flat `{ metric, total, window_minutes, series }` shape the
+/// UI's tile components consume directly. Phase 1 supports three
+/// `filters.kind` shapes — `request_count`, `request_count_by_status`,
+/// `incident_count` — each with an optional `window_minutes`.
+pub async fn execute_saved_query(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Option<Json<ExecuteQueryRequest>>,
+) -> ApiResult<Json<ExecuteQueryResponse>> {
+    let req = body.map(|Json(b)| b).unwrap_or_default();
+    let query = load_authorized_query(&state, user_id, &headers, id).await?;
+
+    let kind = query
+        .filters
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Saved query filters missing required `kind`".into())
+        })?
+        .to_string();
+    let window_minutes = req
+        .window_minutes
+        .or_else(|| query.filters.get("window_minutes").and_then(|v| v.as_i64()))
+        .unwrap_or(15)
+        .clamp(1, 24 * 60);
+    let workspace_filter = req.workspace_id.or(query.workspace_id);
+
+    let pool = state.db.pool();
+    let response = match kind.as_str() {
+        "request_count" => run_request_count(pool, query.org_id, workspace_filter, window_minutes)
+            .await
+            .map_err(ApiError::Database)?,
+        "request_count_by_status" => {
+            run_request_count_by_status(pool, query.org_id, workspace_filter, window_minutes)
+                .await
+                .map_err(ApiError::Database)?
+        }
+        "incident_count" => {
+            run_incident_count(pool, query.org_id, workspace_filter, window_minutes)
+                .await
+                .map_err(ApiError::Database)?
+        }
+        other => {
+            return Err(ApiError::InvalidRequest(format!(
+                "Unsupported saved-query kind '{other}'. Supported: request_count, request_count_by_status, incident_count"
+            )));
+        }
+    };
+
+    Ok(Json(response))
+}
+
+/// Total request count over the window. Workspace-scoped when
+/// `workspace_id` is set; otherwise the `runtime_captures.workspace_id`
+/// filter is dropped (org-wide).
+///
+/// Note (#462): captures shipped from in-container hosted-mocks land
+/// with `workspace_id IS NULL` today, so workspace-scoped counts only
+/// reflect `--cloud-ship` traffic until the shipper backfill ships.
+async fn run_request_count(
+    pool: &sqlx::PgPool,
+    org_id: Uuid,
+    workspace_id: Option<Uuid>,
+    window_minutes: i64,
+) -> sqlx::Result<ExecuteQueryResponse> {
+    let total: i64 = if let Some(ws) = workspace_id {
+        sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)::BIGINT
+            FROM runtime_captures
+            WHERE workspace_id = $1
+              AND occurred_at >= NOW() - make_interval(mins => $2::int)
+            "#,
+        )
+        .bind(ws)
+        .bind(window_minutes as i32)
+        .fetch_one(pool)
+        .await?
+    } else {
+        sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)::BIGINT
+            FROM runtime_captures rc
+            JOIN hosted_mocks hm ON hm.id = rc.deployment_id
+            WHERE hm.org_id = $1
+              AND rc.occurred_at >= NOW() - make_interval(mins => $2::int)
+            "#,
+        )
+        .bind(org_id)
+        .bind(window_minutes as i32)
+        .fetch_one(pool)
+        .await?
+    };
+
+    Ok(ExecuteQueryResponse {
+        metric: "request_count".into(),
+        total,
+        window_minutes,
+        series: vec![QueryBucket {
+            label: "all".into(),
+            count: total,
+        }],
+    })
+}
+
+async fn run_request_count_by_status(
+    pool: &sqlx::PgPool,
+    org_id: Uuid,
+    workspace_id: Option<Uuid>,
+    window_minutes: i64,
+) -> sqlx::Result<ExecuteQueryResponse> {
+    // `COALESCE(response_status_code, status_code)` mirrors what the
+    // request-log endpoint surfaces — a "request that never got a
+    // response" still has a status_code on the request side.
+    let rows: Vec<(Option<i32>, i64)> = if let Some(ws) = workspace_id {
+        sqlx::query_as(
+            r#"
+            SELECT COALESCE(response_status_code, status_code) AS status,
+                   COUNT(*)::BIGINT
+            FROM runtime_captures
+            WHERE workspace_id = $1
+              AND occurred_at >= NOW() - make_interval(mins => $2::int)
+            GROUP BY status
+            ORDER BY status NULLS LAST
+            "#,
+        )
+        .bind(ws)
+        .bind(window_minutes as i32)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as(
+            r#"
+            SELECT COALESCE(rc.response_status_code, rc.status_code) AS status,
+                   COUNT(*)::BIGINT
+            FROM runtime_captures rc
+            JOIN hosted_mocks hm ON hm.id = rc.deployment_id
+            WHERE hm.org_id = $1
+              AND rc.occurred_at >= NOW() - make_interval(mins => $2::int)
+            GROUP BY status
+            ORDER BY status NULLS LAST
+            "#,
+        )
+        .bind(org_id)
+        .bind(window_minutes as i32)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let total = rows.iter().map(|(_, c)| *c).sum();
+    let series = rows
+        .into_iter()
+        .map(|(status, count)| QueryBucket {
+            label: status.map(|s| s.to_string()).unwrap_or_else(|| "unknown".into()),
+            count,
+        })
+        .collect();
+
+    Ok(ExecuteQueryResponse {
+        metric: "request_count_by_status".into(),
+        total,
+        window_minutes,
+        series,
+    })
+}
+
+async fn run_incident_count(
+    pool: &sqlx::PgPool,
+    org_id: Uuid,
+    workspace_id: Option<Uuid>,
+    window_minutes: i64,
+) -> sqlx::Result<ExecuteQueryResponse> {
+    let rows: Vec<(String, i64)> = if let Some(ws) = workspace_id {
+        sqlx::query_as(
+            r#"
+            SELECT severity, COUNT(*)::BIGINT
+            FROM incidents
+            WHERE workspace_id = $1
+              AND created_at >= NOW() - make_interval(mins => $2::int)
+              AND status != 'resolved'
+            GROUP BY severity
+            ORDER BY CASE severity
+                       WHEN 'critical' THEN 0
+                       WHEN 'high' THEN 1
+                       WHEN 'medium' THEN 2
+                       WHEN 'low' THEN 3
+                       ELSE 4
+                     END
+            "#,
+        )
+        .bind(ws)
+        .bind(window_minutes as i32)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_as(
+            r#"
+            SELECT severity, COUNT(*)::BIGINT
+            FROM incidents
+            WHERE org_id = $1
+              AND created_at >= NOW() - make_interval(mins => $2::int)
+              AND status != 'resolved'
+            GROUP BY severity
+            ORDER BY CASE severity
+                       WHEN 'critical' THEN 0
+                       WHEN 'high' THEN 1
+                       WHEN 'medium' THEN 2
+                       WHEN 'low' THEN 3
+                       ELSE 4
+                     END
+            "#,
+        )
+        .bind(org_id)
+        .bind(window_minutes as i32)
+        .fetch_all(pool)
+        .await?
+    };
+
+    let total = rows.iter().map(|(_, c)| *c).sum();
+    let series = rows
+        .into_iter()
+        .map(|(severity, count)| QueryBucket {
+            label: severity,
+            count,
+        })
+        .collect();
+
+    Ok(ExecuteQueryResponse {
+        metric: "incident_count".into(),
+        total,
+        window_minutes,
+        series,
+    })
+}

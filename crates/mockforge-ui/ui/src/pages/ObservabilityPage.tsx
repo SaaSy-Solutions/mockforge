@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Layers, AlertCircle, TrendingUp, Clock, Zap } from 'lucide-react';
+import { Activity, Layers, AlertCircle, TrendingUp, Clock, Zap, Play, Loader2 } from 'lucide-react';
 import {
   PageHeader,
   ModernCard,
@@ -8,7 +8,16 @@ import {
   Section,
   ModernBadge
 } from '../components/ui/DesignSystem';
+import { Button } from '../components/ui/button';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { isCloudMode } from '../utils/cloudMode';
+import { useCloudOrgId } from '../hooks/useCloudOrgId';
+import {
+  cloudObservabilityApi,
+  type ObservabilitySavedQuery,
+  type ExecuteSavedQueryResponse,
+} from '../services/api/cloudObservability';
+import { useQuery } from '@tanstack/react-query';
 
 interface DashboardStats {
   timestamp: string;
@@ -43,6 +52,13 @@ interface MetricsBucket {
 }
 
 export function ObservabilityPage() {
+  if (isCloudMode()) {
+    return <CloudObservabilityView />;
+  }
+  return <LocalObservabilityView />;
+}
+
+function LocalObservabilityView() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [recentMetrics, setRecentMetrics] = useState<MetricsBucket[]>([]);
@@ -270,6 +286,137 @@ export function ObservabilityPage() {
           />
         </div>
       </Section>
+    </div>
+  );
+}
+
+// --- Cloud-mode view (#465) -----------------------------------------------
+//
+// Lists the org's saved queries and lets the user run any of them
+// on-demand. Phase 1 supports three `kind`s in the saved query's
+// `filters` payload — `request_count`, `request_count_by_status`,
+// `incident_count` — and renders the flat
+// {metric,total,window_minutes,series:[{label,count}]} response as a
+// small bar list. Live event-stream tiles + dashboard layouts land in a
+// follow-up slice.
+function CloudObservabilityView() {
+  const orgId = useCloudOrgId();
+  const savedQueriesQuery = useQuery({
+    queryKey: ['cloud', 'observability', 'saved-queries', orgId],
+    queryFn: () => cloudObservabilityApi.listSavedQueries(orgId!),
+    enabled: !!orgId,
+  });
+
+  if (!orgId) {
+    return (
+      <div className="space-y-8">
+        <PageHeader title="Observability" subtitle="Run saved queries against your cloud workspace data." />
+        <Alert type="info" message="No active organization. Sign in or select an org to view saved queries." />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <PageHeader
+        title="Observability"
+        subtitle="Saved queries over request captures and incidents. Execute on-demand; live tiles ship in a follow-up."
+      />
+      <Section title="Saved queries">
+        <ModernCard>
+          {savedQueriesQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading saved queries…
+            </div>
+          ) : savedQueriesQuery.error ? (
+            <Alert type="error" message={`Failed to load saved queries: ${(savedQueriesQuery.error as Error).message}`} />
+          ) : (savedQueriesQuery.data ?? []).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              No saved queries yet. Create one with{' '}
+              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                POST /api/v1/organizations/{'{'}org_id{'}'}/observability/saved-queries
+              </code>{' '}
+              and it will appear here.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {savedQueriesQuery.data!.map((q) => (
+                <SavedQueryCard key={q.id} query={q} />
+              ))}
+            </div>
+          )}
+        </ModernCard>
+      </Section>
+    </div>
+  );
+}
+
+function SavedQueryCard({ query }: { query: ObservabilitySavedQuery }) {
+  const [result, setResult] = useState<ExecuteSavedQueryResponse | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const kind = (query.filters?.kind as string | undefined) ?? null;
+  const supportedKinds = ['request_count', 'request_count_by_status', 'incident_count'];
+  const isSupported = !!kind && supportedKinds.includes(kind);
+
+  const onRun = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await cloudObservabilityApi.executeSavedQuery(query.id);
+      setResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Execute failed');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="border border-border rounded-md p-4 space-y-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="font-medium truncate">{query.name}</div>
+          {query.description && (
+            <div className="text-sm text-muted-foreground truncate">{query.description}</div>
+          )}
+          <div className="text-xs text-muted-foreground mt-1">
+            kind: <code>{kind ?? '(missing)'}</code>
+            {!isSupported && (
+              <span className="ml-2 text-warning-700 dark:text-warning-400">
+                (Phase 1 supports {supportedKinds.join(', ')})
+              </span>
+            )}
+          </div>
+        </div>
+        <Button onClick={onRun} disabled={running || !isSupported} size="sm">
+          {running ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <Play className="h-4 w-4 mr-1" /> Run
+            </>
+          )}
+        </Button>
+      </div>
+      {error && <Alert type="error" message={error} />}
+      {result && (
+        <div className="text-sm space-y-2">
+          <div>
+            <span className="text-muted-foreground">total over {result.window_minutes}m:</span>{' '}
+            <span className="font-medium">{result.total.toLocaleString()}</span>
+          </div>
+          <div className="space-y-1">
+            {result.series.map((s) => (
+              <div key={s.label} className="flex justify-between text-xs">
+                <code className="text-muted-foreground">{s.label}</code>
+                <span>{s.count.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

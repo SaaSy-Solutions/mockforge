@@ -572,6 +572,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/organizations/{org_id}/observability/traces/query",
             post(handlers::observability::query_traces),
         )
+        // Saved-query execution (#465). Phase 1 supports three `kind`
+        // shapes in the saved query's `filters` payload: `request_count`,
+        // `request_count_by_status`, `incident_count`. Returns a flat
+        // {metric, total, window_minutes, series:[{label,count}]}.
+        .route(
+            "/api/v1/observability/saved-queries/{id}/execute",
+            post(handlers::observability::execute_saved_query),
+        )
         // Chaos campaigns + resilience patterns (cloud-enablement #7 / Phase 1).
         // Run trigger / kill-switch worker / target authorization land
         // in follow-up slices once #4 worker pool is up.
