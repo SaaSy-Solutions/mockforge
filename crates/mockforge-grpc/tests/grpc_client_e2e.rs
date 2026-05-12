@@ -53,6 +53,7 @@ async fn spawn_greeter() -> (String, tokio::task::JoinHandle<()>) {
         excluded_services: vec![],
         http_bridge: None,
         tls: None,
+        overrides: vec![],
     };
     let handle = tokio::spawn(async move {
         mockforge_grpc::start_with_config(port, None, config).await.unwrap();

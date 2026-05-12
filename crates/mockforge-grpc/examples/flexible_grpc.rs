@@ -22,6 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         excluded_services: vec!["grpc.reflection.v1alpha.ServerReflection".to_string()],
         http_bridge: None,
         tls: None,
+        overrides: vec![],
     };
 
     println!("Starting MockForge gRPC server with flexible proto discovery");

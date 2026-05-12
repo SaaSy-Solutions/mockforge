@@ -13,6 +13,7 @@ async fn test_http_bridge_creation() {
         excluded_services: vec![],
         http_bridge: Some(Default::default()),
         tls: None,
+        overrides: vec![],
     };
 
     // Discover services
@@ -29,6 +30,7 @@ async fn test_http_bridge_creation() {
         excluded_services: vec![],
         http_bridge: None, // Disable bridge
         tls: None,
+        overrides: vec![],
     };
 
     // Test that gRPC-only server can be started (but don't actually start it due to port conflicts)

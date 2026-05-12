@@ -84,6 +84,9 @@ pub struct DynamicGrpcConfig {
     pub http_bridge: Option<http_bridge::HttpBridgeConfig>,
     /// TLS configuration (None for plaintext)
     pub tls: Option<GrpcTlsConfig>,
+    /// Per-method response overrides. Populated by callers translating from
+    /// `mockforge_core::config::GrpcConfig`.
+    pub overrides: Vec<mockforge_core::config::GrpcOverride>,
 }
 
 impl Default for DynamicGrpcConfig {
@@ -92,6 +95,7 @@ impl Default for DynamicGrpcConfig {
             proto_dir: "proto".to_string(),
             enable_reflection: false,
             excluded_services: Vec::new(),
+            overrides: Vec::new(),
             http_bridge: Some(http_bridge::HttpBridgeConfig {
                 enabled: true,
                 ..Default::default()
@@ -109,6 +113,9 @@ pub struct ServiceRegistry {
     services: HashMap<String, Arc<DynamicGrpcService>>,
     /// Descriptor pool containing parsed proto definitions
     descriptor_pool: prost_reflect::DescriptorPool,
+    /// Per-method override rules from config; the router checks these before
+    /// falling through to smart-mock generation.
+    overrides: Arc<Vec<mockforge_core::config::GrpcOverride>>,
 }
 
 impl Default for ServiceRegistry {
@@ -128,6 +135,7 @@ impl ServiceRegistry {
         Self {
             services: HashMap::new(),
             descriptor_pool: prost_reflect::DescriptorPool::new(),
+            overrides: Arc::new(Vec::new()),
         }
     }
 
@@ -136,7 +144,19 @@ impl ServiceRegistry {
         Self {
             services: HashMap::new(),
             descriptor_pool,
+            overrides: Arc::new(Vec::new()),
         }
+    }
+
+    /// Replace the override list with `overrides`. Typically called once at
+    /// server start with the rules from `GrpcConfig::overrides`.
+    pub fn set_overrides(&mut self, overrides: Vec<mockforge_core::config::GrpcOverride>) {
+        self.overrides = Arc::new(overrides);
+    }
+
+    /// Get the configured override list.
+    pub fn overrides(&self) -> &[mockforge_core::config::GrpcOverride] {
+        self.overrides.as_ref()
     }
 
     /// Set the descriptor pool (useful when building registry incrementally)
@@ -184,6 +204,10 @@ pub async fn discover_services(
     let descriptor_pool = parser.into_pool();
 
     registry.set_descriptor_pool(descriptor_pool);
+    if !config.overrides.is_empty() {
+        info!("Loaded {} gRPC method override rule(s) from config", config.overrides.len());
+        registry.set_overrides(config.overrides.clone());
+    }
     let registry_duration = registry_start.elapsed();
     debug!("Registry creation completed (took {:?})", registry_duration);
 

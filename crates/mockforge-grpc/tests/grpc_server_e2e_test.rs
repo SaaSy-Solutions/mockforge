@@ -28,6 +28,7 @@ async fn test_grpc_service_discovery_from_proto_files() {
         excluded_services: vec![],
         http_bridge: None,
         tls: None,
+        overrides: vec![],
     };
 
     let registry = discover_services(&config).await.expect("Service discovery should succeed");
@@ -51,6 +52,7 @@ async fn test_grpc_service_discovery_with_exclusion() {
         excluded_services: vec!["mockforge.greeter.Greeter".to_string()],
         http_bridge: None,
         tls: None,
+        overrides: vec![],
     };
 
     let registry = discover_services(&config).await.expect("Service discovery should succeed");
@@ -204,6 +206,7 @@ async fn test_grpc_descriptor_pool_accessible() {
         excluded_services: vec![],
         http_bridge: None,
         tls: None,
+        overrides: vec![],
     };
 
     let registry = discover_services(&config).await.expect("Service discovery should succeed");
