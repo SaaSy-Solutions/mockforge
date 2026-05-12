@@ -10,5 +10,5 @@ path = "src/main.rs"
 
 [dependencies]
 mockforge-core = { path = "../crates/mockforge-core" }
-tokio = "1.50"
+tokio = "1.52"
 serde_json = "1.0"
