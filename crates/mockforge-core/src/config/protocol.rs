@@ -491,6 +491,13 @@ pub struct KafkaConfig {
     /// `advertised_host`. Defaults to `port`. Useful when Fly maps a
     /// different public port (currently we keep them aligned at 9092).
     pub advertised_port: Option<u16>,
+    /// Topic → messages map of records to inject at broker startup, before
+    /// the broker accepts any client connections. A consumer reading from
+    /// the beginning of a seeded topic sees these records at offset 0+.
+    /// Topics referenced here are auto-created using `default_partitions`
+    /// and `default_replication_factor`.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub seed_messages: std::collections::HashMap<String, Vec<KafkaSeedMessage>>,
 }
 
 impl Default for KafkaConfig {
@@ -509,8 +516,27 @@ impl Default for KafkaConfig {
             default_replication_factor: 1,
             advertised_host: None,
             advertised_port: None,
+            seed_messages: std::collections::HashMap::new(),
         }
     }
+}
+
+/// A single message to inject into a topic's log at broker startup. See
+/// `KafkaConfig::seed_messages` for how these get wired in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct KafkaSeedMessage {
+    /// Optional record key. When present, the broker uses Kafka's
+    /// hash-on-key strategy to assign a partition; same key always lands
+    /// on the same partition. When absent, the round-robin counter picks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Record value. Stored verbatim — typically a JSON or text payload,
+    /// but raw UTF-8 strings are fine for tests.
+    pub value: String,
+    /// Optional record headers. Same shape as on-the-wire Kafka headers.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub headers: std::collections::HashMap<String, String>,
 }
 
 /// AMQP server configuration
