@@ -1,0 +1,184 @@
+name: Production Smoke Test
+
+# Runs end-to-end against api.mockforge.dev every 15 minutes. Catches regressions
+# that ship past release.yml's gates and surface only when real customers hit them.
+#
+# Each run exercises: health → register → login → list hosted-mocks → billing/subscription.
+# If any step fails, the workflow opens a GitHub issue (deduped by title) so it
+# pages whoever's watching notifications.
+
+on:
+  schedule:
+    # Every 15 minutes.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+# Only one smoke at a time; if a previous run is still going (rare, but the
+# runner queue can stall), cancel it and start fresh — staleness compounds.
+concurrency:
+  group: production-smoke
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke:
+    name: Smoke api.mockforge.dev
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout (for issue-creation script)
+        uses: actions/checkout@v6
+
+      - name: Run smoke checks
+        id: smoke
+        # Don't fail the job on first error — we want to capture which step
+        # failed for the issue body. The composite step below fails the job
+        # if `failure_step` got written.
+        continue-on-error: true
+        env:
+          BASE_URL: https://api.mockforge.dev
+        run: |
+          set +e
+          fail() {
+            echo "::error::Smoke failed at step: $1"
+            echo "failure_step=$1" >> "$GITHUB_OUTPUT"
+            echo "failure_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$2" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            exit 1
+          }
+
+          # 1) Health endpoint — fastest signal, runs first.
+          HEALTH=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 10 "$BASE_URL/metrics/health" || echo "000")
+          if [ "$HEALTH" != "200" ]; then
+            fail "health" "GET /metrics/health returned $HEALTH; body: $(cat /tmp/health.json 2>/dev/null | head -c 200)"
+          fi
+          echo "OK health -> $HEALTH"
+
+          # 2) Register a throwaway smoke user. Tag with the run id so each
+          # invocation has a unique account that won't collide.
+          TS=$(date +%s)
+          USERNAME="smoke_${TS}_${GITHUB_RUN_ID}"
+          EMAIL="smoke_${TS}_${GITHUB_RUN_ID}@smoke.mockforge.dev"
+          PASSWORD="Smoke-$(openssl rand -hex 8)"
+
+          REG=$(curl -sS -o /tmp/reg.json -w '%{http_code}' --max-time 15 \
+            -X POST "$BASE_URL/api/v1/auth/register" \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$USERNAME\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+            || echo "000")
+          if [ "$REG" != "200" ] && [ "$REG" != "201" ]; then
+            fail "register" "POST /api/v1/auth/register returned $REG; body: $(cat /tmp/reg.json 2>/dev/null | head -c 300)"
+          fi
+          ACCESS_TOKEN=$(jq -r '.access_token // .token // empty' /tmp/reg.json)
+          if [ -z "$ACCESS_TOKEN" ]; then
+            fail "register-token" "Register succeeded but no access_token in response: $(cat /tmp/reg.json | head -c 300)"
+          fi
+          echo "OK register -> $REG"
+
+          # 3) Login with the just-registered user — proves bcrypt verify + JWT issue path.
+          LOGIN=$(curl -sS -o /tmp/login.json -w '%{http_code}' --max-time 15 \
+            -X POST "$BASE_URL/api/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
+            || echo "000")
+          if [ "$LOGIN" != "200" ]; then
+            fail "login" "POST /api/v1/auth/login returned $LOGIN; body: $(cat /tmp/login.json 2>/dev/null | head -c 300)"
+          fi
+          echo "OK login -> $LOGIN"
+
+          # 4) List hosted-mocks — proves auth middleware + a real DB query work.
+          # Empty list (200) is success; we don't actually deploy a mock from
+          # the smoke because that costs Fly compute and leaves dangling state.
+          # If/when there's a cheap deploy+teardown path, fold it in here.
+          LIST=$(curl -sS -o /tmp/list.json -w '%{http_code}' --max-time 15 \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "$BASE_URL/api/v1/hosted-mocks" \
+            || echo "000")
+          if [ "$LIST" != "200" ]; then
+            fail "hosted-mocks-list" "GET /api/v1/hosted-mocks returned $LIST; body: $(cat /tmp/list.json 2>/dev/null | head -c 300)"
+          fi
+          echo "OK hosted-mocks list -> $LIST"
+
+          # 5) Subscription info — touches the billing handler path so a regression
+          # in the Stripe glue surfaces here, not at the first customer signup.
+          SUB=$(curl -sS -o /tmp/sub.json -w '%{http_code}' --max-time 15 \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            "$BASE_URL/api/v1/billing/subscription" \
+            || echo "000")
+          # 404 is acceptable here (no subscription yet for a fresh free user, depending on impl).
+          if [ "$SUB" != "200" ] && [ "$SUB" != "404" ]; then
+            fail "billing-subscription" "GET /api/v1/billing/subscription returned $SUB; body: $(cat /tmp/sub.json 2>/dev/null | head -c 300)"
+          fi
+          echo "OK subscription -> $SUB"
+
+          echo "All smoke checks passed."
+
+      - name: Open GitHub issue on failure
+        # Open an issue when the smoke step set a failure_step. Dedupe by
+        # rotating the title day-by-day so a sustained outage doesn't spam
+        # the tracker, but a return-to-failure after recovery still pages.
+        if: steps.smoke.outputs.failure_step != ''
+        uses: actions/github-script@v9
+        env:
+          STEP: ${{ steps.smoke.outputs.failure_step }}
+          DETAIL: ${{ steps.smoke.outputs.failure_detail }}
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        with:
+          script: |
+            const step = process.env.STEP;
+            const detail = process.env.DETAIL || '(no detail)';
+            const runUrl = process.env.RUN_URL;
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `Production smoke: ${step} failing on api.mockforge.dev (${today})`;
+
+            // Dedupe: search for an open issue with the same title today.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'production-smoke',
+              per_page: 50,
+            });
+            const dup = existing.data.find(i => i.title === title);
+            const body = [
+              `**Production smoke test failed at step: \`${step}\`**`,
+              ``,
+              `Run: ${runUrl}`,
+              ``,
+              `Detail:`,
+              '```',
+              detail.slice(0, 4000),
+              '```',
+              ``,
+              `_This is an automated production-smoke alert. The smoke workflow runs every 15 minutes against \`api.mockforge.dev\`. If this is the first occurrence today, expect the workflow to retry shortly — close this issue when the next run passes._`,
+            ].join('\n');
+
+            if (dup) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: dup.number,
+                body: `Still failing on run ${runUrl}.\n\nDetail:\n\`\`\`\n${detail.slice(0, 4000)}\n\`\`\``,
+              });
+              console.log(`Commented on existing issue #${dup.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['production-smoke', 'bug'],
+              });
+              console.log(`Opened issue #${created.data.number}`);
+            }
+
+      - name: Fail job if smoke detected a problem
+        if: steps.smoke.outputs.failure_step != ''
+        run: |
+          echo "Smoke step '${{ steps.smoke.outputs.failure_step }}' failed — see issue tracker."
+          exit 1
