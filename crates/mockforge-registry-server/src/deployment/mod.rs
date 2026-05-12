@@ -7,4 +7,5 @@ pub mod flyio;
 pub mod health_check;
 pub mod metrics;
 pub mod orchestrator;
+pub mod rate_limit;
 pub mod router;

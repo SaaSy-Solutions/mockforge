@@ -6,14 +6,43 @@
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, Method, StatusCode, Uri},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::any,
     Router,
 };
 use uuid::Uuid;
 
+use crate::deployment::rate_limit;
 use crate::models::HostedMock;
 use crate::AppState;
+
+/// Hard cap on proxied request body size. Customers can't upload more than this
+/// per request — protects MockForge from unbounded memory + bandwidth costs.
+/// Configurable via `MOCKFORGE_HOSTED_MOCK_MAX_BODY_BYTES`; default 10 MiB.
+fn max_body_bytes() -> usize {
+    std::env::var("MOCKFORGE_HOSTED_MOCK_MAX_BODY_BYTES")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(10 * 1024 * 1024)
+}
+
+/// Build a 429 response with a Retry-After header for the wildcard proxy.
+fn rate_limited_response(retry_after_secs: u64) -> Response {
+    let body = format!(
+        "{{\"error\":\"rate_limit_exceeded\",\"message\":\"Per-deployment request rate limit exceeded. Retry in {} second(s).\"}}",
+        retry_after_secs
+    );
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [
+            ("retry-after", retry_after_secs.to_string()),
+            ("content-type", "application/json".to_string()),
+        ],
+        body,
+    )
+        .into_response()
+}
 
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
@@ -54,6 +83,11 @@ impl MultitenantRouter {
         // Check if deployment is active
         if !matches!(deployment.status(), crate::models::DeploymentStatus::Active) {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+
+        // Per-deployment rate limit — protects against runaway customer traffic
+        if let Err(retry_after) = rate_limit::global().check(deployment.id) {
+            return Ok(rate_limited_response(retry_after));
         }
 
         // Get the target base URL (prefer internal_url for Fly.io internal routing)
@@ -116,6 +150,11 @@ pub async fn custom_domain_fallback(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
+    // Per-deployment rate limit — same gate as the /mocks/* path
+    if let Err(retry_after) = rate_limit::global().check(deployment.id) {
+        return Ok(rate_limited_response(retry_after));
+    }
+
     // Get the target base URL (prefer internal_url for Fly.io internal routing)
     let base_url = deployment
         .internal_url
@@ -146,11 +185,15 @@ async fn proxy_request(
 ) -> Result<Response, StatusCode> {
     let client = reqwest::Client::new();
 
-    // Read body if present
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await.map_err(|e| {
-        tracing::warn!("Failed to read request body: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+    // Read body, capped to protect against unbounded uploads. axum returns an
+    // error when the body exceeds the limit; map that to 413 Payload Too Large.
+    let body_bytes = match axum::body::to_bytes(body, max_body_bytes()).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("Failed to read request body (or too large): {}", e);
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+    };
 
     // Build request based on method
     let request_builder = match method.as_str() {
