@@ -11,9 +11,67 @@ use crate::partitions::KafkaMessage;
 use crate::protocol::{KafkaProtocolHandler, KafkaRequest, KafkaRequestType, KafkaResponse};
 use crate::spec_registry::KafkaSpecRegistry;
 use crate::topics::Topic;
-use mockforge_core::config::KafkaConfig;
+use mockforge_core::config::{KafkaConfig, KafkaFault, KafkaFaultKind};
 use mockforge_core::Result;
 use std::sync::OnceLock;
+
+/// Outcome of evaluating a fault rule against a single (topic, partition).
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FaultOutcome {
+    /// No matching fault — let the request proceed normally.
+    None,
+    /// Sleep `ms` before processing the request. Used by `produce_throttle`.
+    Throttle { ms: u64 },
+    /// Replace the response with an error of `code`. Used by
+    /// `produce_not_leader` (6) and `offset_out_of_range` (1).
+    Error { code: i16 },
+}
+
+/// Decide what fault (if any) applies to a (topic, partition, kind) tuple.
+///
+/// Iterates rules in declaration order. The first rule whose topic +
+/// partition + kind all match (and whose probability roll passes) wins.
+/// Rules with no `partition` match every partition of the named topic.
+/// Stochastic firing uses `rand::random::<f64>()` so production traffic
+/// gets non-deterministic faults; tests should set `probability: 1.0` (or
+/// omit it) to fire deterministically.
+pub(crate) fn evaluate_fault(
+    faults: &[KafkaFault],
+    topic: &str,
+    partition: i32,
+    expected_kind: KafkaFaultKind,
+) -> FaultOutcome {
+    for rule in faults {
+        if rule.topic != topic {
+            continue;
+        }
+        if let Some(p) = rule.partition {
+            if p != partition {
+                continue;
+            }
+        }
+        if rule.kind != expected_kind {
+            continue;
+        }
+        let fires = match rule.probability {
+            None => true,
+            Some(p) if p >= 1.0 => true,
+            Some(p) if p <= 0.0 => false,
+            Some(p) => rand::random::<f64>() < p,
+        };
+        if !fires {
+            continue;
+        }
+        return match rule.kind {
+            KafkaFaultKind::ProduceThrottle => FaultOutcome::Throttle {
+                ms: rule.delay_ms.unwrap_or(0),
+            },
+            KafkaFaultKind::ProduceNotLeader => FaultOutcome::Error { code: 6 },
+            KafkaFaultKind::OffsetOutOfRange => FaultOutcome::Error { code: 1 },
+        };
+    }
+    FaultOutcome::None
+}
 
 /// Resolve the (host, port) the broker advertises in its
 /// MetadataResponse. When the orchestrator sets
@@ -571,6 +629,49 @@ impl KafkaMockBroker {
                     continue;
                 }
 
+                // Drop the topics guard before any fault-induced sleep so we
+                // don't block other partitions / requests holding the same
+                // lock. We re-acquire below for the actual produce.
+                drop(topics_guard);
+
+                // produce_not_leader fault — short-circuit with error code 6
+                // before any sleep or write.
+                if let FaultOutcome::Error { code } = evaluate_fault(
+                    &self.config.faults,
+                    &topic_data.name,
+                    part.partition_index,
+                    KafkaFaultKind::ProduceNotLeader,
+                ) {
+                    partition_results.push(PartitionProduceResult {
+                        partition_index: part.partition_index,
+                        error_code: code,
+                        base_offset: -1,
+                        log_append_time_ms: -1,
+                        log_start_offset: 0,
+                    });
+                    continue;
+                }
+
+                // produce_throttle fault — delay before the produce.
+                if let FaultOutcome::Throttle { ms } = evaluate_fault(
+                    &self.config.faults,
+                    &topic_data.name,
+                    part.partition_index,
+                    KafkaFaultKind::ProduceThrottle,
+                ) {
+                    if ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                    }
+                }
+
+                // Re-acquire the lock for the actual produce.
+                let mut topics_guard = self.topics.write().await;
+                let topic_entry = topics_guard.get_mut(&topic_data.name).ok_or_else(|| {
+                    mockforge_core::Error::internal(
+                        "topic disappeared between fault check and produce",
+                    )
+                })?;
+
                 let mut base_offset: i64 = -1;
                 for (i, rec) in part.records.into_iter().enumerate() {
                     let msg = KafkaMessage {
@@ -699,6 +800,25 @@ impl KafkaMockBroker {
                     });
                     continue;
                 };
+
+                // offset_out_of_range fault — synthesize the error before
+                // the real offset check, so a consumer reading from offset 0
+                // can still trip the fault.
+                if let FaultOutcome::Error { code } = evaluate_fault(
+                    &self.config.faults,
+                    &t.topic,
+                    p.partition_index,
+                    KafkaFaultKind::OffsetOutOfRange,
+                ) {
+                    partition_responses.push(FetchPartitionResponse {
+                        partition_index: p.partition_index,
+                        error_code: code,
+                        high_watermark: part.high_watermark,
+                        log_start_offset: part.log_start_offset,
+                        records: Vec::new(),
+                    });
+                    continue;
+                }
 
                 // Validate offset: fetch_offset > high_watermark is
                 // OFFSET_OUT_OF_RANGE; == high_watermark is a valid empty
@@ -1347,6 +1467,131 @@ fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
 mod tests {
     use super::*;
     use mockforge_core::config::KafkaSeedMessage;
+
+    // ==================== Fault Injection Tests ====================
+
+    fn fault(
+        topic: &str,
+        partition: Option<i32>,
+        kind: KafkaFaultKind,
+        delay_ms: Option<u64>,
+    ) -> KafkaFault {
+        KafkaFault {
+            topic: topic.to_string(),
+            partition,
+            kind,
+            delay_ms,
+            probability: None,
+        }
+    }
+
+    #[test]
+    fn evaluate_fault_no_rules_returns_none() {
+        let outcome = evaluate_fault(&[], "orders.created", 0, KafkaFaultKind::ProduceThrottle);
+        assert!(matches!(outcome, FaultOutcome::None));
+    }
+
+    #[test]
+    fn evaluate_fault_matches_topic_and_kind() {
+        let rules = vec![fault(
+            "orders.created",
+            None,
+            KafkaFaultKind::ProduceThrottle,
+            Some(500),
+        )];
+        let outcome = evaluate_fault(&rules, "orders.created", 0, KafkaFaultKind::ProduceThrottle);
+        assert!(matches!(outcome, FaultOutcome::Throttle { ms: 500 }));
+    }
+
+    #[test]
+    fn evaluate_fault_topic_mismatch_skips() {
+        let rules = vec![fault(
+            "orders.created",
+            None,
+            KafkaFaultKind::ProduceThrottle,
+            None,
+        )];
+        let outcome = evaluate_fault(&rules, "orders.shipped", 0, KafkaFaultKind::ProduceThrottle);
+        assert!(matches!(outcome, FaultOutcome::None));
+    }
+
+    #[test]
+    fn evaluate_fault_partition_filter() {
+        let rules = vec![fault(
+            "orders.created",
+            Some(1),
+            KafkaFaultKind::ProduceThrottle,
+            Some(1000),
+        )];
+        // Partition 1 — matches
+        assert!(matches!(
+            evaluate_fault(&rules, "orders.created", 1, KafkaFaultKind::ProduceThrottle),
+            FaultOutcome::Throttle { .. }
+        ));
+        // Partition 0 — doesn't match
+        assert!(matches!(
+            evaluate_fault(&rules, "orders.created", 0, KafkaFaultKind::ProduceThrottle),
+            FaultOutcome::None
+        ));
+    }
+
+    #[test]
+    fn evaluate_fault_kind_mismatch_skips() {
+        let rules = vec![fault(
+            "orders.created",
+            None,
+            KafkaFaultKind::ProduceThrottle,
+            None,
+        )];
+        let outcome = evaluate_fault(&rules, "orders.created", 0, KafkaFaultKind::OffsetOutOfRange);
+        assert!(matches!(outcome, FaultOutcome::None));
+    }
+
+    #[test]
+    fn evaluate_fault_probability_zero_never_fires() {
+        let mut rule = fault("t", None, KafkaFaultKind::OffsetOutOfRange, None);
+        rule.probability = Some(0.0);
+        for _ in 0..20 {
+            assert!(matches!(
+                evaluate_fault(&[rule.clone()], "t", 0, KafkaFaultKind::OffsetOutOfRange),
+                FaultOutcome::None
+            ));
+        }
+    }
+
+    #[test]
+    fn evaluate_fault_probability_one_always_fires() {
+        let mut rule = fault("t", None, KafkaFaultKind::OffsetOutOfRange, None);
+        rule.probability = Some(1.0);
+        for _ in 0..20 {
+            assert!(matches!(
+                evaluate_fault(&[rule.clone()], "t", 0, KafkaFaultKind::OffsetOutOfRange),
+                FaultOutcome::Error { code: 1 }
+            ));
+        }
+    }
+
+    #[test]
+    fn evaluate_fault_first_match_wins() {
+        // Two rules on the same topic+kind. The first one (higher
+        // throttle) should win even though a later catch-all is shorter.
+        let rules = vec![
+            fault("t", Some(0), KafkaFaultKind::ProduceThrottle, Some(2000)),
+            fault("t", None, KafkaFaultKind::ProduceThrottle, Some(100)),
+        ];
+        let outcome = evaluate_fault(&rules, "t", 0, KafkaFaultKind::ProduceThrottle);
+        match outcome {
+            FaultOutcome::Throttle { ms } => assert_eq!(ms, 2000),
+            _ => panic!("expected throttle, got {:?}", outcome),
+        }
+    }
+
+    #[test]
+    fn evaluate_fault_produce_not_leader_returns_code_6() {
+        let rules = vec![fault("t", None, KafkaFaultKind::ProduceNotLeader, None)];
+        let outcome = evaluate_fault(&rules, "t", 0, KafkaFaultKind::ProduceNotLeader);
+        assert!(matches!(outcome, FaultOutcome::Error { code: 6 }));
+    }
 
     // ==================== Seed Message Tests ====================
 
