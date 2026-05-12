@@ -127,6 +127,13 @@ impl KafkaMockBroker {
         let spec_registry = KafkaSpecRegistry::new(config.clone(), Arc::clone(&topics)).await?;
         let metrics = Arc::new(KafkaMetrics::new());
 
+        // Apply seed messages from config BEFORE the broker starts accepting
+        // connections, so any consumer reading from offset 0 sees them as
+        // part of the topic log.
+        if !config.seed_messages.is_empty() {
+            Self::apply_seed_messages(&topics, &config).await?;
+        }
+
         Ok(Self {
             config,
             topics,
@@ -138,6 +145,65 @@ impl KafkaMockBroker {
             fixture_runtime: Arc::new(OnceLock::new()),
             metrics,
         })
+    }
+
+    /// Inject all `config.seed_messages` into their respective topic logs.
+    /// Topics are auto-created as needed using the configured defaults.
+    /// Each message's partition is chosen via the same hash-on-key strategy
+    /// the produce path uses, so seeded keys land on the same partition real
+    /// produced records would.
+    async fn apply_seed_messages(
+        topics: &Arc<RwLock<HashMap<String, Topic>>>,
+        config: &KafkaConfig,
+    ) -> Result<()> {
+        use crate::topics::TopicConfig;
+        let mut guard = topics.write().await;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        let mut total_seeded = 0usize;
+        for (topic_name, messages) in &config.seed_messages {
+            let topic = guard.entry(topic_name.clone()).or_insert_with(|| {
+                Topic::new(
+                    topic_name.clone(),
+                    TopicConfig {
+                        num_partitions: config.default_partitions.max(1),
+                        replication_factor: config.default_replication_factor,
+                        retention_ms: config.log_retention_ms,
+                        max_message_bytes: 1_048_576,
+                    },
+                )
+            });
+
+            for seed in messages {
+                let key_bytes = seed.key.as_ref().map(|k| k.as_bytes().to_vec());
+                let partition = topic.assign_partition(key_bytes.as_deref());
+                let msg = KafkaMessage {
+                    offset: 0, // overwritten by Partition::append
+                    timestamp: now_ms,
+                    key: key_bytes,
+                    value: seed.value.as_bytes().to_vec(),
+                    headers: seed
+                        .headers
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.as_bytes().to_vec()))
+                        .collect(),
+                };
+                topic.produce(partition, msg).await?;
+                total_seeded += 1;
+            }
+        }
+
+        if total_seeded > 0 {
+            tracing::info!(
+                "Seeded {} messages across {} topic(s) at broker startup",
+                total_seeded,
+                config.seed_messages.len()
+            );
+        }
+        Ok(())
     }
 
     /// Start the Kafka broker server
@@ -1280,6 +1346,145 @@ fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockforge_core::config::KafkaSeedMessage;
+
+    // ==================== Seed Message Tests ====================
+
+    #[tokio::test]
+    async fn seed_messages_populate_topic_before_first_consumer() {
+        let mut seed_messages: HashMap<String, Vec<KafkaSeedMessage>> = HashMap::new();
+        seed_messages.insert(
+            "orders.created".to_string(),
+            vec![
+                KafkaSeedMessage {
+                    key: Some("order-001".to_string()),
+                    value: r#"{"order_id":"order-001","total":4299}"#.to_string(),
+                    headers: HashMap::new(),
+                },
+                KafkaSeedMessage {
+                    key: Some("order-002".to_string()),
+                    value: r#"{"order_id":"order-002","total":1599}"#.to_string(),
+                    headers: HashMap::from([("source".to_string(), "seed".to_string())]),
+                },
+            ],
+        );
+
+        let config = KafkaConfig {
+            seed_messages,
+            default_partitions: 3,
+            ..KafkaConfig::default()
+        };
+        let broker = KafkaMockBroker::new(config).await.expect("broker should construct");
+
+        let topics = broker.topics.read().await;
+        let topic = topics.get("orders.created").expect("seeded topic must exist");
+
+        // Both records present somewhere in the topic, regardless of which
+        // partition the hash assigned them to.
+        let mut total = 0;
+        let mut saw_order_001 = false;
+        let mut saw_order_002 = false;
+        let mut saw_source_header = false;
+        for partition in &topic.partitions {
+            for msg in &partition.messages {
+                total += 1;
+                let value = std::str::from_utf8(&msg.value).unwrap_or("");
+                if value.contains("order-001") {
+                    saw_order_001 = true;
+                }
+                if value.contains("order-002") {
+                    saw_order_002 = true;
+                    if msg.headers.iter().any(|(k, v)| k == "source" && v == b"seed") {
+                        saw_source_header = true;
+                    }
+                }
+            }
+        }
+        assert_eq!(total, 2, "two seeded messages should be in the topic");
+        assert!(saw_order_001, "order-001 should be present");
+        assert!(saw_order_002, "order-002 should be present");
+        assert!(saw_source_header, "order-002's source header should be preserved");
+    }
+
+    #[tokio::test]
+    async fn seed_messages_use_default_partitions_when_topic_autocreated() {
+        let mut seed_messages: HashMap<String, Vec<KafkaSeedMessage>> = HashMap::new();
+        seed_messages.insert(
+            "events".to_string(),
+            vec![KafkaSeedMessage {
+                key: Some("k".to_string()),
+                value: "v".to_string(),
+                headers: HashMap::new(),
+            }],
+        );
+
+        let config = KafkaConfig {
+            seed_messages,
+            default_partitions: 5,
+            ..KafkaConfig::default()
+        };
+        let broker = KafkaMockBroker::new(config).await.unwrap();
+        let topics = broker.topics.read().await;
+        assert_eq!(topics.get("events").unwrap().partitions.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn seed_messages_with_same_key_land_on_same_partition() {
+        // Kafka's hash-on-key promise: same key → same partition. The seed
+        // path must honor it so seeded records are consumable by client
+        // code that filters by partition.
+        let mut seed_messages: HashMap<String, Vec<KafkaSeedMessage>> = HashMap::new();
+        seed_messages.insert(
+            "events".to_string(),
+            vec![
+                KafkaSeedMessage {
+                    key: Some("user-42".to_string()),
+                    value: "first".to_string(),
+                    headers: HashMap::new(),
+                },
+                KafkaSeedMessage {
+                    key: Some("user-42".to_string()),
+                    value: "second".to_string(),
+                    headers: HashMap::new(),
+                },
+            ],
+        );
+
+        let config = KafkaConfig {
+            seed_messages,
+            default_partitions: 3,
+            ..KafkaConfig::default()
+        };
+        let broker = KafkaMockBroker::new(config).await.unwrap();
+        let topics = broker.topics.read().await;
+        let topic = topics.get("events").unwrap();
+
+        // Find the partition holding "first" and verify "second" is in the
+        // same one.
+        let mut partition_of_first: Option<i32> = None;
+        let mut partition_of_second: Option<i32> = None;
+        for partition in &topic.partitions {
+            for msg in &partition.messages {
+                let value = std::str::from_utf8(&msg.value).unwrap_or("");
+                if value == "first" {
+                    partition_of_first = Some(partition.id);
+                }
+                if value == "second" {
+                    partition_of_second = Some(partition.id);
+                }
+            }
+        }
+        assert_eq!(
+            partition_of_first, partition_of_second,
+            "same key should land on the same partition"
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_seed_messages_is_a_no_op() {
+        let broker = KafkaMockBroker::new(KafkaConfig::default()).await.unwrap();
+        assert!(broker.topics.read().await.is_empty());
+    }
 
     // ==================== Advertised Endpoint Tests ====================
 
