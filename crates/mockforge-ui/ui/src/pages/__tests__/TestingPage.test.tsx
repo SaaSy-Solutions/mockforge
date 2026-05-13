@@ -5,6 +5,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+// Force local mode. The shared test setup at src/test/setup.ts pins
+// `VITE_API_BASE_URL`, which the legacy detection in `cloudMode.ts`
+// reads as "cloud mode is on" — and `<TestingPage />` then short-circuits
+// to `<CloudSmokeView />` (the deployment picker, not the Smoke / Health
+// Check / Integration tabs these tests assert on). Mirrors the same
+// hoisted mock that the sibling `components/__tests__/testing/Testing.test.tsx`
+// uses. Cloud-branch coverage would belong in a dedicated suite that mocks
+// the deployment list + SSE event panel.
+const cloudModeMock = vi.hoisted(() => ({
+  isCloudMode: vi.fn(() => false),
+  getCloudApiBase: vi.fn(() => ''),
+}));
+vi.mock('../../utils/cloudMode', () => cloudModeMock);
+
 import { TestingPage } from '../TestingPage';
 import { dashboardApi, smokeTestsApi } from '../../services/api';
 import type { SmokeTestResult } from '../../types';
@@ -55,6 +70,9 @@ describe('TestingPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // vi.clearAllMocks resets the .mockReturnValue() set above; re-pin it
+    // so every test starts in local mode.
+    cloudModeMock.isCloudMode.mockReturnValue(false);
   });
 
   it('renders testing page header', () => {
