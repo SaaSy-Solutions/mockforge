@@ -363,6 +363,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "ai_tokens_per_month": 0, // BYOK only
             "hosted_mocks": false,
             "max_hosted_mocks": 0,
+            "mock_request_body_mb": 1, // tight cap even if user is force-upgraded
+            "mock_rps_limit": 10, // 10 RPS — sanity guard if hosted_mocks ever flips on
             "runner_seconds_per_month": 0, // no test execution on Free
             "max_concurrent_runs": 0,
             "max_tunnel_reservations": 1, // 1 ephemeral subdomain
@@ -389,6 +391,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "ai_tokens_per_month": 100000,
             "hosted_mocks": true,
             "max_hosted_mocks": 3,
+            "mock_request_body_mb": 10, // 10 MB request body cap per hosted mock
+            "mock_rps_limit": 100, // 100 RPS per hosted mock
             "runner_seconds_per_month": 30000, // 500 runner-minutes/month
             "max_concurrent_runs": 1,
             "max_tunnel_reservations": 3,
@@ -415,6 +419,8 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "ai_tokens_per_month": 1000000,
             "hosted_mocks": true,
             "max_hosted_mocks": -1, // unlimited
+            "mock_request_body_mb": 50, // 50 MB request body cap per hosted mock
+            "mock_rps_limit": 1000, // 1000 RPS per hosted mock
             "runner_seconds_per_month": 300000, // 5000 runner-minutes/month
             "max_concurrent_runs": 3,
             "max_tunnel_reservations": 10,
@@ -715,6 +721,8 @@ mod tests {
         assert_eq!(limits["ai_tokens_per_month"], 0);
         assert_eq!(limits["hosted_mocks"], false);
         assert_eq!(limits["max_hosted_mocks"], 0);
+        assert_eq!(limits["mock_request_body_mb"], 1);
+        assert_eq!(limits["mock_rps_limit"], 10);
     }
 
     #[test]
@@ -732,6 +740,8 @@ mod tests {
         assert_eq!(limits["ai_tokens_per_month"], 100000);
         assert_eq!(limits["hosted_mocks"], true);
         assert_eq!(limits["max_hosted_mocks"], 3);
+        assert_eq!(limits["mock_request_body_mb"], 10);
+        assert_eq!(limits["mock_rps_limit"], 100);
     }
 
     #[test]
@@ -749,6 +759,8 @@ mod tests {
         assert_eq!(limits["ai_tokens_per_month"], 1000000);
         assert_eq!(limits["hosted_mocks"], true);
         assert_eq!(limits["max_hosted_mocks"], -1); // unlimited
+        assert_eq!(limits["mock_request_body_mb"], 50);
+        assert_eq!(limits["mock_rps_limit"], 1000);
     }
 
     #[test]

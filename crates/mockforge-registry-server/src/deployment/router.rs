@@ -14,12 +14,23 @@ use uuid::Uuid;
 
 use crate::middleware::org_rate_limit::increment_usage;
 use crate::models::{HostedMock, Organization, UsageCounter};
+use crate::redis::RedisPool;
 use crate::AppState;
 
 /// Fallback monthly request limit when an org's `limits_json` has no
 /// `requests_per_30d` entry. Matches the Free plan default — conservative
 /// enough that legacy orgs without the field don't get unbounded traffic.
 const DEFAULT_REQUESTS_PER_30D: i64 = 10_000;
+
+/// Default body cap (10 MB) when an org's `limits_json` has no
+/// `mock_request_body_mb` entry. Conservative fail-safe — only triggers for
+/// orgs created before the limit field existed; the migration intent is for
+/// every org to carry an explicit plan default.
+const DEFAULT_MOCK_REQUEST_BODY_MB: i64 = 10;
+
+/// Default RPS cap when an org's `limits_json` has no `mock_rps_limit` entry.
+/// Same rationale as the body cap default.
+const DEFAULT_MOCK_RPS_LIMIT: i64 = 100;
 
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
@@ -67,6 +78,12 @@ impl MultitenantRouter {
         // its monthly request quota.
         enforce_monthly_quota(&state, deployment.org_id).await?;
 
+        // Resolve plan-derived per-deployment caps (#450) and enforce the RPS
+        // bucket before we touch the body. Body cap is applied inside
+        // `proxy_request`.
+        let limits = resolve_proxy_limits(state.db.pool(), deployment.org_id).await;
+        enforce_rps(state.redis.as_ref(), deployment.id, limits.rps).await?;
+
         // Get the target base URL (prefer internal_url for Fly.io internal routing)
         let base_url = deployment
             .internal_url
@@ -82,7 +99,8 @@ impl MultitenantRouter {
         // Build target URL
         let target_url = build_target_url(base_url, path_after_slug, uri.query());
 
-        let response = proxy_request(method, headers, body, &target_url).await?;
+        let response =
+            proxy_request(method, headers, body, &target_url, limits.max_body_bytes).await?;
         bump_proxy_usage(&state, deployment.org_id, &response);
         Ok(response)
     }
@@ -132,6 +150,11 @@ pub async fn custom_domain_fallback(
     // Enforce the org's monthly `requests_per_30d` plan limit before forwarding.
     enforce_monthly_quota(&state, deployment.org_id).await?;
 
+    // Resolve plan-derived per-deployment caps (#450); body cap is applied
+    // inside `proxy_request`, RPS check fires here.
+    let limits = resolve_proxy_limits(state.db.pool(), deployment.org_id).await;
+    enforce_rps(state.redis.as_ref(), deployment.id, limits.rps).await?;
+
     // Get the target base URL (prefer internal_url for Fly.io internal routing)
     let base_url = deployment
         .internal_url
@@ -141,7 +164,7 @@ pub async fn custom_domain_fallback(
 
     let target_url = build_target_url(base_url, uri.path(), uri.query());
 
-    let response = proxy_request(method, headers, body, &target_url).await?;
+    let response = proxy_request(method, headers, body, &target_url, limits.max_body_bytes).await?;
     bump_proxy_usage(&state, deployment.org_id, &response);
     Ok(response)
 }
@@ -155,20 +178,46 @@ fn build_target_url(base_url: &str, path: &str, query: Option<&str>) -> String {
     url
 }
 
-/// Proxy an HTTP request to a target URL and return the response
+/// Proxy an HTTP request to a target URL and return the response.
+///
+/// `max_body_bytes` caps how much of the inbound body we will read into memory
+/// before proxying. Requests larger than the cap are rejected with 413 — this
+/// prevents a malicious customer from forcing the registry to buffer arbitrary
+/// payloads and from amplifying Fly.io egress (#450).
 async fn proxy_request(
     method: Method,
     headers: HeaderMap,
     body: axum::body::Body,
     target_url: &str,
+    max_body_bytes: usize,
 ) -> Result<Response, StatusCode> {
     let client = reqwest::Client::new();
 
-    // Read body if present
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await.map_err(|e| {
-        tracing::warn!("Failed to read request body: {}", e);
-        StatusCode::BAD_REQUEST
-    })?;
+    // Fast-path: reject obvious oversize bodies before reading them
+    if let Some(declared) = headers
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<usize>().ok())
+    {
+        if declared > max_body_bytes {
+            tracing::warn!(
+                "Rejecting oversized proxy body: declared={} max={}",
+                declared,
+                max_body_bytes
+            );
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+    }
+
+    // Read body with the plan-derived cap. axum's to_bytes returns Err if the
+    // stream exceeds the limit, which we surface as 413.
+    let body_bytes = match axum::body::to_bytes(body, max_body_bytes).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("Proxy body read failed (cap={} bytes): {}", max_body_bytes, e);
+            return Err(StatusCode::PAYLOAD_TOO_LARGE);
+        }
+    };
 
     // Build request based on method
     let request_builder = match method.as_str() {
@@ -331,6 +380,102 @@ fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
     });
 }
 
+/// Resolved per-deployment proxy limits sourced from the owning org's
+/// `limits_json`. See `get_default_limits` in mockforge-registry-core for the
+/// per-plan defaults.
+#[derive(Debug, Clone, Copy)]
+struct ProxyLimits {
+    /// Max inbound request body size in bytes (cap → HTTP 413)
+    max_body_bytes: usize,
+    /// Per-deployment requests-per-second cap (overage → HTTP 429)
+    rps: i64,
+}
+
+/// Derive proxy caps from a raw `limits_json` value. Pure helper — extracted
+/// from `resolve_proxy_limits` so the parsing rules can be unit-tested without
+/// a Postgres fixture.
+///
+/// Missing, non-integer, or non-positive entries fall back to the conservative
+/// `DEFAULT_*` constants above. Non-positive values are treated as "field
+/// absent" rather than "disabled" because a stored `0` (or sentinel `-1` used
+/// elsewhere for "unlimited") would otherwise unlock unbounded bodies/RPS,
+/// defeating the entire point of this limit set.
+fn proxy_limits_from_json(limits_json: &serde_json::Value) -> ProxyLimits {
+    let body_mb = limits_json
+        .get("mock_request_body_mb")
+        .and_then(|v| v.as_i64())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_MOCK_REQUEST_BODY_MB);
+    let rps = limits_json
+        .get("mock_rps_limit")
+        .and_then(|v| v.as_i64())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_MOCK_RPS_LIMIT);
+
+    ProxyLimits {
+        max_body_bytes: (body_mb as usize).saturating_mul(1024 * 1024),
+        rps,
+    }
+}
+
+/// Look up the org's `limits_json` and derive the per-deployment proxy caps.
+///
+/// On any DB error or missing org we return the conservative built-in defaults
+/// rather than failing the request — the caps exist to *prevent* runaway cost,
+/// so an unavailable database shouldn't open the floodgates.
+async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
+    let limits_json = match Organization::find_by_id(pool, org_id).await {
+        Ok(Some(org)) => org.limits_json,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while resolving proxy limits", org_id);
+            serde_json::Value::Null
+        }
+        Err(e) => {
+            tracing::error!("DB error resolving proxy limits for org {}: {}", org_id, e);
+            serde_json::Value::Null
+        }
+    };
+
+    proxy_limits_from_json(&limits_json)
+}
+
+/// Per-deployment RPS check using a fixed 1-second Redis window.
+///
+/// Returns 429 if the deployment has already served `>= rps` requests in the
+/// current epoch second. If Redis is unavailable we log and allow the request —
+/// the body cap remains an absolute safety floor even without Redis.
+async fn enforce_rps(
+    redis: Option<&RedisPool>,
+    deployment_id: Uuid,
+    rps: i64,
+) -> Result<(), StatusCode> {
+    let Some(pool) = redis else {
+        tracing::debug!(
+            "Redis not configured — skipping RPS enforcement for deployment {}",
+            deployment_id
+        );
+        return Ok(());
+    };
+
+    let bucket = chrono::Utc::now().timestamp();
+    let key = format!("mock_rps:{}:{}", deployment_id, bucket);
+
+    // 2s expiry so the key clears itself; current bucket only lives for ~1s
+    // but a 2s TTL covers clock skew on read.
+    match pool.increment_with_expiry(&key, 2).await {
+        Ok(count) if count > rps => {
+            tracing::info!("RPS cap hit for deployment {}: {}/{}", deployment_id, count, rps);
+            Err(StatusCode::TOO_MANY_REQUESTS)
+        }
+        Ok(_) => Ok(()),
+        Err(e) => {
+            tracing::error!("Redis RPS check failed for deployment {}: {}", deployment_id, e);
+            // Fail open: don't take the whole proxy offline if Redis hiccups
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +528,85 @@ mod tests {
             monthly_request_limit(&json!({ "requests_per_30d": "250000" })),
             Some(DEFAULT_REQUESTS_PER_30D)
         );
+    }
+
+    // ───────────────── #450 body cap + RPS ─────────────────
+
+    #[test]
+    fn proxy_limits_pro_plan_defaults() {
+        let limits = proxy_limits_from_json(&json!({
+            "mock_request_body_mb": 10,
+            "mock_rps_limit": 100,
+        }));
+        assert_eq!(limits.max_body_bytes, 10 * 1024 * 1024);
+        assert_eq!(limits.rps, 100);
+    }
+
+    #[test]
+    fn proxy_limits_team_plan_defaults() {
+        let limits = proxy_limits_from_json(&json!({
+            "mock_request_body_mb": 50,
+            "mock_rps_limit": 1000,
+        }));
+        assert_eq!(limits.max_body_bytes, 50 * 1024 * 1024);
+        assert_eq!(limits.rps, 1000);
+    }
+
+    #[test]
+    fn proxy_limits_missing_fields_fall_back_to_built_in_defaults() {
+        // Legacy orgs without these fields must NOT get unbounded proxies.
+        let limits = proxy_limits_from_json(&json!({}));
+        assert_eq!(limits.max_body_bytes, DEFAULT_MOCK_REQUEST_BODY_MB as usize * 1024 * 1024);
+        assert_eq!(limits.rps, DEFAULT_MOCK_RPS_LIMIT);
+    }
+
+    #[test]
+    fn proxy_limits_null_json_falls_back() {
+        // DB error / org-not-found path
+        let limits = proxy_limits_from_json(&serde_json::Value::Null);
+        assert_eq!(limits.max_body_bytes, DEFAULT_MOCK_REQUEST_BODY_MB as usize * 1024 * 1024);
+        assert_eq!(limits.rps, DEFAULT_MOCK_RPS_LIMIT);
+    }
+
+    #[test]
+    fn proxy_limits_non_positive_values_treated_as_missing() {
+        // -1 ("unlimited" sentinel used elsewhere) and 0 ("disabled") would
+        // both bypass the cost ceiling — explicitly reject them.
+        let limits = proxy_limits_from_json(&json!({
+            "mock_request_body_mb": -1,
+            "mock_rps_limit": 0,
+        }));
+        assert_eq!(limits.max_body_bytes, DEFAULT_MOCK_REQUEST_BODY_MB as usize * 1024 * 1024);
+        assert_eq!(limits.rps, DEFAULT_MOCK_RPS_LIMIT);
+    }
+
+    #[test]
+    fn proxy_limits_string_values_treated_as_missing() {
+        // Defensive against `limits_json` corruption — wrong JSON types fall
+        // through to defaults rather than panic.
+        let limits = proxy_limits_from_json(&json!({
+            "mock_request_body_mb": "10",
+            "mock_rps_limit": "100",
+        }));
+        assert_eq!(limits.max_body_bytes, DEFAULT_MOCK_REQUEST_BODY_MB as usize * 1024 * 1024);
+        assert_eq!(limits.rps, DEFAULT_MOCK_RPS_LIMIT);
+    }
+
+    #[test]
+    fn proxy_limits_extreme_body_mb_does_not_overflow() {
+        // saturating_mul guards against a hostile i64 → usize blow-up
+        let limits = proxy_limits_from_json(&json!({
+            "mock_request_body_mb": i64::MAX,
+            "mock_rps_limit": 100,
+        }));
+        assert_eq!(limits.max_body_bytes, usize::MAX);
+    }
+
+    #[tokio::test]
+    async fn enforce_rps_without_redis_is_allow_through() {
+        // The proxy must keep serving when Redis isn't configured. The body
+        // cap remains an absolute safety floor in that scenario.
+        let result = enforce_rps(None, Uuid::new_v4(), 100).await;
+        assert!(result.is_ok());
     }
 }
