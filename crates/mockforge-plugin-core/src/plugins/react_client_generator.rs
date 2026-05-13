@@ -3343,7 +3343,7 @@ mod tests {
                 description: Some("Test API".to_string()),
             },
             servers: None,
-            paths: std::collections::HashMap::new(),
+            paths: HashMap::new(),
             components: None,
         };
 
@@ -3353,7 +3353,7 @@ mod tests {
             include_types: true,
             include_mocks: false,
             template_dir: None,
-            options: std::collections::HashMap::new(),
+            options: HashMap::new(),
         };
 
         let result = generator.generate_client(&spec, &config).await;

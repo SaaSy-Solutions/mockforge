@@ -5207,7 +5207,7 @@ mod tests {
             .rotate_user_public_key(user_id, old.id, "ed25519", &b64(&[0x66u8; 32]), "another")
             .await
             .unwrap_err();
-        assert!(matches!(err, crate::error::StoreError::NotFound));
+        assert!(matches!(err, StoreError::NotFound));
     }
 
     /// End-to-end scenarios CRUD on SQLite. Seeds a user + org, creates

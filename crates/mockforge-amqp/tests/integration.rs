@@ -163,7 +163,7 @@ async fn test_message_properties() {
         content_type: Some("application/json".to_string()),
         content_encoding: Some("utf-8".to_string()),
         headers: [("custom".to_string(), "value".to_string())].into(),
-        delivery_mode: mockforge_amqp::messages::DeliveryMode::Persistent,
+        delivery_mode: DeliveryMode::Persistent,
         priority: 5,
         correlation_id: Some("corr-123".to_string()),
         reply_to: Some("reply-queue".to_string()),

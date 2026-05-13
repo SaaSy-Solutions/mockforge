@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn test_virtual_file_config_to_file_fixture_static() {
         let config = VirtualFileConfig {
-            path: std::path::PathBuf::from("/test.txt"),
+            path: PathBuf::from("/test.txt"),
             content: FileContentConfig::Static {
                 content: "Hello World".to_string(),
             },
@@ -188,14 +188,14 @@ mod tests {
         };
 
         let fixture = config.to_file_fixture();
-        assert_eq!(fixture.path, std::path::PathBuf::from("/test.txt"));
+        assert_eq!(fixture.path, PathBuf::from("/test.txt"));
         assert_eq!(fixture.metadata.permissions, "644");
     }
 
     #[test]
     fn test_virtual_file_config_to_file_fixture_template() {
         let config = VirtualFileConfig {
-            path: std::path::PathBuf::from("/template.txt"),
+            path: PathBuf::from("/template.txt"),
             content: FileContentConfig::Template {
                 template: "Hello {{name}}".to_string(),
             },
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn test_virtual_file_config_to_file_fixture_generated() {
         let config = VirtualFileConfig {
-            path: std::path::PathBuf::from("/generated.bin"),
+            path: PathBuf::from("/generated.bin"),
             content: FileContentConfig::Generated {
                 size: 1024,
                 pattern: GenerationPattern::Random,
@@ -407,7 +407,7 @@ mod tests {
         let discard = UploadStorage::Discard;
         let memory = UploadStorage::Memory;
         let file = UploadStorage::File {
-            path: std::path::PathBuf::from("/tmp/uploads"),
+            path: PathBuf::from("/tmp/uploads"),
         };
 
         let _ = format!("{:?}", discard);

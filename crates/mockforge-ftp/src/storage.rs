@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn test_mockforge_storage_new() {
-        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
+        let vfs = Arc::new(VirtualFileSystem::new(PathBuf::from("/")));
         let spec_registry = Arc::new(FtpSpecRegistry::new());
         let storage = MockForgeStorage::new(vfs.clone(), spec_registry.clone());
 
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_mockforge_storage_clone() {
-        let vfs = Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/")));
+        let vfs = Arc::new(VirtualFileSystem::new(PathBuf::from("/")));
         let spec_registry = Arc::new(FtpSpecRegistry::new());
         let storage = MockForgeStorage::new(vfs.clone(), spec_registry.clone());
 
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn test_mockforge_metadata_len_with_file() {
         let file = VirtualFile::new(
-            std::path::PathBuf::from("/test.txt"),
+            PathBuf::from("/test.txt"),
             FileContent::Static(b"test content".to_vec()),
             FileMetadata {
                 size: 1024,
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_mockforge_metadata_is_file() {
         let file = VirtualFile::new(
-            std::path::PathBuf::from("/test.txt"),
+            PathBuf::from("/test.txt"),
             FileContent::Static(vec![]),
             FileMetadata::default(),
         );
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn test_mockforge_metadata_modified() {
         let file = VirtualFile::new(
-            std::path::PathBuf::from("/test.txt"),
+            PathBuf::from("/test.txt"),
             FileContent::Static(vec![]),
             FileMetadata::default(),
         );
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn test_mockforge_metadata_clone() {
         let file = VirtualFile::new(
-            std::path::PathBuf::from("/test.txt"),
+            PathBuf::from("/test.txt"),
             FileContent::Static(vec![]),
             FileMetadata::default(),
         );

@@ -355,7 +355,7 @@ mod tests {
             let mut exchanges = broker.exchanges.write().await;
             exchanges.declare_exchange(
                 "test-exchange".to_string(),
-                crate::exchanges::ExchangeType::Direct,
+                ExchangeType::Direct,
                 true,
                 false,
             );
@@ -412,18 +412,8 @@ mod tests {
 
         {
             let mut exchanges = broker.exchanges.write().await;
-            exchanges.declare_exchange(
-                "exchange1".to_string(),
-                crate::exchanges::ExchangeType::Direct,
-                true,
-                false,
-            );
-            exchanges.declare_exchange(
-                "exchange2".to_string(),
-                crate::exchanges::ExchangeType::Fanout,
-                false,
-                true,
-            );
+            exchanges.declare_exchange("exchange1".to_string(), ExchangeType::Direct, true, false);
+            exchanges.declare_exchange("exchange2".to_string(), ExchangeType::Fanout, false, true);
         }
 
         let exchanges = broker.exchanges.read().await;
@@ -461,7 +451,7 @@ mod tests {
             let mut exchanges = broker1.exchanges.write().await;
             exchanges.declare_exchange(
                 "exchange-from-task1".to_string(),
-                crate::exchanges::ExchangeType::Direct,
+                ExchangeType::Direct,
                 true,
                 false,
             );

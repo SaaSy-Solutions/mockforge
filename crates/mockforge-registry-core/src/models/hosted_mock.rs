@@ -603,7 +603,7 @@ impl DeploymentMetrics {
         hosted_mock_id: Uuid,
     ) -> sqlx::Result<Self> {
         use chrono::Datelike;
-        let now = chrono::Utc::now().date_naive();
+        let now = Utc::now().date_naive();
         let period_start =
             chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now);
 

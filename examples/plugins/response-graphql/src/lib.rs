@@ -536,7 +536,7 @@ mod tests {
         // Test GraphQL content type
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/graphql"));
-        let request = mockforge_plugin_core::ResponseRequest {
+        let request = ResponseRequest {
             method: Method::POST,
             uri: "/graphql".to_string(),
             path: "/graphql".to_string(),
@@ -555,7 +555,7 @@ mod tests {
         // Test JSON content type
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
-        let request = mockforge_plugin_core::ResponseRequest {
+        let request = ResponseRequest {
             method: Method::POST,
             uri: "/graphql".to_string(),
             path: "/graphql".to_string(),
@@ -588,7 +588,7 @@ mod tests {
         let context =
             PluginContext::new(PluginId::new("graphql-response"), PluginVersion::new(1, 0, 0));
 
-        let request = mockforge_plugin_core::ResponseRequest {
+        let request = ResponseRequest {
             method: Method::POST,
             uri: "/graphql".to_string(),
             path: "/graphql".to_string(),
