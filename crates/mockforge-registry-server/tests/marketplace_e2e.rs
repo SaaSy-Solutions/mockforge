@@ -654,6 +654,6 @@ async fn test_template_star_flow() {
     assert_eq!(got["stats"]["stars"], json!(0), "live stars should be 0");
 
     // Anonymous POST to star endpoint must be rejected.
-    let anon = reqwest::Client::new().post(&star_path).send().await.expect("anonymous request");
+    let anon = Client::new().post(&star_path).send().await.expect("anonymous request");
     assert_eq!(anon.status().as_u16(), 401, "anonymous star should be 401");
 }

@@ -405,7 +405,7 @@ async fn load_authorized_tunnel(
 /// PATCH-semantics double-option deserializer (same pattern as test_suites).
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
-    T: serde::Deserialize<'de>,
+    T: Deserialize<'de>,
     D: serde::Deserializer<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)

@@ -1,7 +1,7 @@
 //! Authentication handlers
 
 use axum::{extract::State, Json};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -490,7 +490,7 @@ pub struct MeResponse {
     pub email_notifications: bool,
     pub security_alerts: bool,
     pub preferences: serde_json::Value,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Get current user info (GET /api/v1/auth/me)

@@ -283,8 +283,8 @@ pub async fn import_to_workspace(
     )?;
 
     // Optionally bucket routes into one folder per HTTP method.
-    let method_folder_cache: std::collections::HashMap<String, Uuid> = if create_folders {
-        let mut cache = std::collections::HashMap::new();
+    let method_folder_cache: HashMap<String, Uuid> = if create_folders {
+        let mut cache = HashMap::new();
         let mut unique_methods: Vec<String> =
             parsed.routes.iter().map(|r| r.method.to_uppercase()).collect();
         unique_methods.sort();
@@ -302,7 +302,7 @@ pub async fn import_to_workspace(
         }
         cache
     } else {
-        std::collections::HashMap::new()
+        HashMap::new()
     };
 
     let mut imported = 0usize;

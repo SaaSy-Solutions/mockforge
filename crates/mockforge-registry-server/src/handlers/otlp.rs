@@ -440,15 +440,7 @@ pub async fn list_traces(
     // an ERROR status. Root-span name is pulled with a correlated
     // subquery — there's exactly one parent_span_id IS NULL span per
     // well-formed trace.
-    type Row = (
-        String,
-        i64,
-        chrono::DateTime<chrono::Utc>,
-        f64,
-        Option<String>,
-        Option<String>,
-        bool,
-    );
+    type Row = (String, i64, DateTime<Utc>, f64, Option<String>, Option<String>, bool);
 
     let rows: Vec<Row> = if let Some(since) = since {
         sqlx::query_as(

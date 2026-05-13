@@ -161,7 +161,7 @@ pub async fn delete_suite(
 /// serde collapses both into `None`.
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
-    T: serde::Deserialize<'de>,
+    T: Deserialize<'de>,
     D: serde::Deserializer<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)

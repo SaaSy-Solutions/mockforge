@@ -771,10 +771,7 @@ async fn handle_subscription_deleted(
 }
 
 /// Handle payment succeeded
-async fn handle_payment_succeeded(
-    pool: &sqlx::PgPool,
-    invoice: &stripe::Invoice,
-) -> Result<(), ApiError> {
+async fn handle_payment_succeeded(pool: &sqlx::PgPool, invoice: &Invoice) -> Result<(), ApiError> {
     let customer_id = match &invoice.customer {
         Some(stripe::Expandable::Id(id)) => id.to_string(),
         Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
@@ -803,10 +800,7 @@ async fn handle_payment_succeeded(
     Ok(())
 }
 
-async fn handle_payment_failed(
-    pool: &sqlx::PgPool,
-    invoice: &stripe::Invoice,
-) -> Result<(), ApiError> {
+async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result<(), ApiError> {
     let customer_id = match &invoice.customer {
         Some(stripe::Expandable::Id(id)) => id.to_string(),
         Some(stripe::Expandable::Object(customer)) => customer.id.to_string(),
