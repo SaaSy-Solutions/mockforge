@@ -3,6 +3,7 @@
 pub mod ab_testing;
 #[cfg(feature = "behavioral-cloning")]
 pub mod behavioral_cloning;
+pub mod conn_diagnostics;
 pub mod deceptive_canary;
 pub mod drift_tracking;
 pub mod keepalive_hint;
@@ -14,6 +15,7 @@ pub mod security;
 pub use ab_testing::ab_testing_middleware;
 #[cfg(feature = "behavioral-cloning")]
 pub use behavioral_cloning::{behavioral_cloning_middleware, BehavioralCloningMiddlewareState};
+pub use conn_diagnostics::{conn_diag_middleware, is_conn_log_enabled};
 pub use deceptive_canary::{deceptive_canary_middleware, DeceptiveCanaryState};
 pub use drift_tracking::drift_tracking_middleware_with_extensions;
 pub use keepalive_hint::{is_keepalive_hint_enabled, keepalive_hint_middleware};

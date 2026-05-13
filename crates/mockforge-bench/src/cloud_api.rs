@@ -815,6 +815,8 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
     let server_latency = &json["metrics"]["mockforge_server_injected_latency_ms"]["values"];
     let server_jitter = &json["metrics"]["mockforge_server_injected_jitter_ms"]["values"];
     let server_fault = &json["metrics"]["mockforge_server_fault_total"]["values"]["count"];
+    let tcp_connecting = &json["metrics"]["http_req_connecting"]["values"];
+    let tls_handshake = &json["metrics"]["http_req_tls_handshaking"]["values"];
     Ok(K6Results {
         total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
         // See `K6Executor::parse_results` for the rationale on why
@@ -837,6 +839,12 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
         server_injected_jitter_samples: server_jitter["count"].as_u64().unwrap_or(0),
         server_injected_jitter_avg_ms: server_jitter["avg"].as_f64().unwrap_or(0.0),
         server_reported_faults: server_fault.as_u64().unwrap_or(0),
+        tcp_connect_samples: tcp_connecting["count"].as_u64().unwrap_or(0),
+        tcp_connect_avg_ms: tcp_connecting["avg"].as_f64().unwrap_or(0.0),
+        tcp_connect_max_ms: tcp_connecting["max"].as_f64().unwrap_or(0.0),
+        tls_handshake_samples: tls_handshake["count"].as_u64().unwrap_or(0),
+        tls_handshake_avg_ms: tls_handshake["avg"].as_f64().unwrap_or(0.0),
+        tls_handshake_max_ms: tls_handshake["max"].as_f64().unwrap_or(0.0),
     })
 }
 
