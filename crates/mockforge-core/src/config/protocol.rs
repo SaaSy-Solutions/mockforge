@@ -245,8 +245,8 @@ pub struct GrpcOverride {
     /// Optional request-field-equality match. Keys are top-level field names of
     /// the request message; values are stringified expected values. When
     /// omitted, the rule matches every call to the named method.
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub r#match: std::collections::HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub r#match: HashMap<String, String>,
     /// Response to return when this rule fires.
     pub response: GrpcOverrideResponse,
 }
@@ -496,8 +496,8 @@ pub struct KafkaConfig {
     /// the beginning of a seeded topic sees these records at offset 0+.
     /// Topics referenced here are auto-created using `default_partitions`
     /// and `default_replication_factor`.
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub seed_messages: std::collections::HashMap<String, Vec<KafkaSeedMessage>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub seed_messages: HashMap<String, Vec<KafkaSeedMessage>>,
     /// Fault-injection rules applied at the protocol-handler boundary.
     /// Each rule fires either deterministically (no `probability`) or
     /// stochastically (`probability: 0.0..=1.0`). Rules with `partition`
@@ -523,7 +523,7 @@ impl Default for KafkaConfig {
             default_replication_factor: 1,
             advertised_host: None,
             advertised_port: None,
-            seed_messages: std::collections::HashMap::new(),
+            seed_messages: HashMap::new(),
             faults: Vec::new(),
         }
     }
@@ -586,8 +586,8 @@ pub struct KafkaSeedMessage {
     /// but raw UTF-8 strings are fine for tests.
     pub value: String,
     /// Optional record headers. Same shape as on-the-wire Kafka headers.
-    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub headers: std::collections::HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub headers: HashMap<String, String>,
 }
 
 /// AMQP server configuration
