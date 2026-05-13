@@ -39,7 +39,7 @@ fn map_row_to_threat_assessment(
     use sqlx::Row;
 
     // Parse basic fields
-    let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id")?;
     let service_id: Option<String> = row.try_get("service_id")?;
     let service_name: Option<String> = row.try_get("service_name")?;
     let endpoint: Option<String> = row.try_get("endpoint")?;
@@ -437,7 +437,7 @@ pub async fn list_findings(
     use sqlx::Row;
     let mut findings = Vec::new();
     for row in rows {
-        let finding_id: uuid::Uuid = row.try_get("id").map_err(|e| {
+        let finding_id: Uuid = row.try_get("id").map_err(|e| {
             tracing::error!("Failed to get finding id from row: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;

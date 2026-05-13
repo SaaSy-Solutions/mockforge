@@ -158,7 +158,7 @@ mod tests {
         let query = "query GetUser($id: ID!) { user(id: $id) { id name email } }";
         let variables = r#"{"id": "123"}"#;
 
-        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
+        let context = RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_graphql_request(
             &recorder,
             "query",
@@ -197,7 +197,7 @@ mod tests {
         let mutation =
             "mutation CreateUser($input: UserInput!) { createUser(input: $input) { id name } }";
 
-        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
+        let context = RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_graphql_request(
             &recorder,
             "mutation",

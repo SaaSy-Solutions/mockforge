@@ -150,8 +150,8 @@ mod tests {
     fn create_test_comparison_result(
         matches: bool,
         differences: Vec<crate::diff::Difference>,
-    ) -> crate::diff::ComparisonResult {
-        crate::diff::ComparisonResult {
+    ) -> ComparisonResult {
+        ComparisonResult {
             matches,
             status_match: matches,
             headers_match: matches,

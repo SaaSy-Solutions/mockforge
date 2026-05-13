@@ -951,7 +951,7 @@ mod tests {
         let router = create_api_router(recorder, None);
 
         // Router should be created successfully
-        assert!(std::mem::size_of_val(&router) > 0);
+        assert!(size_of_val(&router) > 0);
     }
 
     #[tokio::test]

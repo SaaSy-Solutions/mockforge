@@ -100,7 +100,7 @@ mod tests {
         let metadata =
             HashMap::from([("content-type".to_string(), "application/grpc".to_string())]);
 
-        let context = crate::models::RequestContext::new(Some("127.0.0.1"), None, None);
+        let context = RequestContext::new(Some("127.0.0.1"), None, None);
         let request_id = record_grpc_request(
             &recorder,
             "helloworld.Greeter",

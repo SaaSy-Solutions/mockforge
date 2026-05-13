@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn test_bridge_response_serialization() {
-        let response = BridgeResponse::<serde_json::Value> {
+        let response = BridgeResponse::<Value> {
             success: true,
             data: Some(serde_json::json!({"result": "success"})),
             error: None,
@@ -699,8 +699,7 @@ mod tests {
         assert!(json_str.contains("service"));
         assert!(json_str.contains("method"));
 
-        let deserialized: BridgeResponse<serde_json::Value> =
-            serde_json::from_str(&json_str).unwrap();
+        let deserialized: BridgeResponse<Value> = serde_json::from_str(&json_str).unwrap();
         assert_eq!(deserialized.success, response.success);
         assert_eq!(deserialized.data, response.data);
         assert_eq!(deserialized.error, response.error);

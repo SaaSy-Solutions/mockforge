@@ -1165,7 +1165,7 @@ mod tests {
 
     #[test]
     fn test_handler_error_json_error() {
-        let json_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let json_err = serde_json::from_str::<Value>("invalid").unwrap_err();
         let err = HandlerError::JsonError(json_err);
         assert!(err.to_string().contains("JSON"));
     }

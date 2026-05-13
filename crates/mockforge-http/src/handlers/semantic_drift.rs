@@ -47,8 +47,7 @@ fn map_row_to_semantic_incident(
     let after_semantic_state: serde_json::Value =
         row.try_get("after_semantic_state").unwrap_or_default();
     let details_json: serde_json::Value = row.try_get("details").unwrap_or_default();
-    let related_drift_incident_id: Option<uuid::Uuid> =
-        row.try_get("related_drift_incident_id").ok();
+    let related_drift_incident_id: Option<Uuid> = row.try_get("related_drift_incident_id").ok();
     let contract_diff_id: Option<String> = row.try_get("contract_diff_id").ok();
     let external_ticket_id: Option<String> = row.try_get("external_ticket_id").ok();
     let external_ticket_url: Option<String> = row.try_get("external_ticket_url").ok();
