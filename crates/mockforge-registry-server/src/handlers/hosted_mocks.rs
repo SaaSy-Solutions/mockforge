@@ -50,13 +50,37 @@ pub async fn create_deployment(
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
 
-    // Block deployment for past_due subscriptions — customer's last payment failed.
-    // Stripe is retrying; we don't accrue more Fly compute on their behalf during dunning.
+    // Block deployment for past_due subscriptions whose payment has been
+    // outstanding for >24h — per #449 acceptance criterion. The earlier
+    // implementation (PR #479) blocked immediately on the first
+    // `invoice.payment_failed` webhook, which was stricter than the spec
+    // called for and made customers feel cut off the moment Stripe's first
+    // retry failed (often a transient card-network blip). The 24h grace
+    // window matches what most SaaS providers do during Stripe's
+    // smart-retry sequence.
+    //
+    // We use `subscription.updated_at` as a proxy for "when the status
+    // flipped to past_due" because every state-change webhook
+    // (`customer.subscription.updated`, `invoice.payment_failed`,
+    // `invoice.payment_succeeded`) calls `Subscription::upsert_from_stripe`
+    // which touches `updated_at`. There's a small accuracy gap if an
+    // unrelated write happens during the grace window, but for the 24h
+    // threshold it's good enough; a future PR can add an explicit
+    // `past_due_since` column if billing wants finer control.
     if let Some(subscription) = Subscription::find_by_org(pool, org_ctx.org_id).await? {
         if subscription.status() == SubscriptionStatus::PastDue {
-            return Err(ApiError::InvalidRequest(
-                "Subscription is past due. Please update your payment method in the billing portal before deploying new mocks.".to_string(),
-            ));
+            const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
+            let elapsed = (chrono::Utc::now() - subscription.updated_at).num_seconds();
+            if elapsed > PAST_DUE_GRACE_SECONDS {
+                return Err(ApiError::InvalidRequest(
+                    "Subscription has been past due for over 24 hours. Please update your payment method in the billing portal before deploying new mocks.".to_string(),
+                ));
+            }
+            tracing::info!(
+                org_id = %org_ctx.org_id,
+                past_due_seconds = elapsed,
+                "past_due subscription within 24h grace; allowing deploy"
+            );
         }
     }
 
