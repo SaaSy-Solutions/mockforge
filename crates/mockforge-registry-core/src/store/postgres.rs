@@ -1933,10 +1933,10 @@ impl RegistryStore for PgRegistryStore {
         .await?;
         let (inherited_org_id, revoked_at) = match row {
             Some(r) => r,
-            None => return Err(crate::error::StoreError::NotFound),
+            None => return Err(StoreError::NotFound),
         };
         if revoked_at.is_some() {
-            return Err(crate::error::StoreError::NotFound);
+            return Err(StoreError::NotFound);
         }
 
         let new_key: UserPublicKey = sqlx::query_as::<_, UserPublicKey>(

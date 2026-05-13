@@ -240,7 +240,7 @@ pub struct UsageCounter {
 impl UsageCounter {
     /// Get or create usage counter for current month
     pub async fn get_or_create_current(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Self> {
-        let period_start = chrono::Utc::now().date_naive();
+        let period_start = Utc::now().date_naive();
         let period_start = NaiveDate::from_ymd_opt(period_start.year(), period_start.month(), 1)
             .unwrap_or(period_start);
 

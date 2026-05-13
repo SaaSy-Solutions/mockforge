@@ -107,7 +107,7 @@ impl Host {
         loader_config: PluginLoaderConfig,
         verifier: SignatureVerifier,
         blocklist: Blocklist,
-    ) -> (Self, HostActor, std::sync::Arc<mockforge_plugin_loader::InvocationMetricsBus>) {
+    ) -> (Self, HostActor, Arc<mockforge_plugin_loader::InvocationMetricsBus>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let started_at = Arc::new(Instant::now());
 
@@ -635,8 +635,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor, _bus) =
-                Host::new(loader_config(), verifier, crate::blocklist::Blocklist::new());
+            let (host, actor, _bus) = Host::new(loader_config(), verifier, Blocklist::new());
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -742,8 +741,7 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Required,
             );
-            let (host, actor, _bus) =
-                Host::new(loader_config(), verifier, crate::blocklist::Blocklist::new());
+            let (host, actor, _bus) = Host::new(loader_config(), verifier, Blocklist::new());
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -797,10 +795,7 @@ mod tests {
     /// Drive a Host wired to a Blocklist with the test plugin
     /// already revoked. Lets us verify the kill-switch refuses
     /// the load before any other check.
-    fn run_with_blocklist<F, T>(
-        blocklist: crate::blocklist::Blocklist,
-        body: impl FnOnce(Host) -> F,
-    ) -> T
+    fn run_with_blocklist<F, T>(blocklist: Blocklist, body: impl FnOnce(Host) -> F) -> T
     where
         F: std::future::Future<Output = T>,
     {

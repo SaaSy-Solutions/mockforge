@@ -35,7 +35,7 @@ async fn test_graphql_router_creation() {
 
     let router = result.unwrap();
     // Router should be created successfully
-    assert!(std::mem::size_of_val(&router) > 0);
+    assert!(size_of_val(&router) > 0);
 }
 
 #[tokio::test]

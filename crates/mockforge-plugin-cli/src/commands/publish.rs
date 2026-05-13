@@ -605,9 +605,9 @@ mod tests {
         // Two SBOMs with identical semantics but different formatting.
         let a = tmp.path().join("a.json");
         let b = tmp.path().join("b.json");
-        std::fs::write(&a, br#"{"components":[{"name":"foo","version":"1.0"}]}"#).unwrap();
+        fs::write(&a, br#"{"components":[{"name":"foo","version":"1.0"}]}"#).unwrap();
         // Same content, reordered keys, pretty-printed whitespace.
-        std::fs::write(
+        fs::write(
             &b,
             br#"{
     "components": [
@@ -652,7 +652,7 @@ mod tests {
         key::generate_key(&key_path, false).await.unwrap();
 
         let sbom_path = temp_dir.path().join("sbom.json");
-        std::fs::write(&sbom_path, br#"{"components":[]}"#).unwrap();
+        fs::write(&sbom_path, br#"{"components":[]}"#).unwrap();
 
         let att = build_sbom_attestation(
             &pkg,
@@ -669,7 +669,7 @@ mod tests {
         use base64::Engine;
         use sha2::{Digest, Sha256};
         let signing = key::load_signing_key(&key_path).unwrap();
-        let checksum_bytes: [u8; 32] = Sha256::digest(std::fs::read(&pkg).unwrap()).into();
+        let checksum_bytes: [u8; 32] = Sha256::digest(fs::read(&pkg).unwrap()).into();
         let checksum_hex: String = checksum_bytes.iter().map(|b| format!("{:02x}", b)).collect();
         let msg = key::attestation_message(&checksum_hex, &att.sbom_canonical_bytes).unwrap();
         let sig_bytes =

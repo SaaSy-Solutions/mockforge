@@ -464,15 +464,17 @@ async fn forward_request(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    // Convert method
+    // Convert method. axum re-exports `http::Method`; reqwest uses the same
+    // underlying type, so we can construct via the in-scope `Method` without
+    // the redundant `reqwest::` prefix.
     let reqwest_method = match *method {
-        Method::GET => reqwest::Method::GET,
-        Method::POST => reqwest::Method::POST,
-        Method::PUT => reqwest::Method::PUT,
-        Method::DELETE => reqwest::Method::DELETE,
-        Method::PATCH => reqwest::Method::PATCH,
-        Method::HEAD => reqwest::Method::HEAD,
-        Method::OPTIONS => reqwest::Method::OPTIONS,
+        Method::GET => Method::GET,
+        Method::POST => Method::POST,
+        Method::PUT => Method::PUT,
+        Method::DELETE => Method::DELETE,
+        Method::PATCH => Method::PATCH,
+        Method::HEAD => Method::HEAD,
+        Method::OPTIONS => Method::OPTIONS,
         _ => {
             warn!("Unsupported method: {}", method);
             return Err(StatusCode::METHOD_NOT_ALLOWED);
