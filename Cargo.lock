@@ -8797,6 +8797,7 @@ dependencies = [
  "governor 0.6.3",
  "hex",
  "hickory-resolver",
+ "hmac 0.12.1",
  "jsonwebtoken",
  "lettre",
  "mockforge-analytics",

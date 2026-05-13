@@ -57,6 +57,10 @@ jobs:
       # tests that hit `/api/v1/internal/*`. Kept literal so both
       # processes see the same value.
       MOCKFORGE_INTERNAL_API_TOKEN: "e2e-internal-token-do-not-use-in-prod"
+      # paid_flow_e2e signs Stripe webhook events with this secret; the
+      # registry server verifies them with the same value. Must match the
+      # `DEFAULT_WEBHOOK_SECRET` constant in tests/paid_flow_e2e.rs.
+      STRIPE_WEBHOOK_SECRET: "whsec_e2e_test_secret"
 
     steps:
       - name: Checkout
@@ -146,6 +150,7 @@ jobs:
             --test cloud_verification_e2e \
             --test cloud_ai_contract_diff_e2e \
             --test cloud_conformance_e2e \
+            --test paid_flow_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
