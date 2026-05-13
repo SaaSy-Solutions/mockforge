@@ -697,10 +697,7 @@ mod tests {
 
         let response = registry.generate_mock_response(&request).unwrap();
 
-        assert!(matches!(
-            response.status,
-            mockforge_core::protocol_abstraction::ResponseStatus::KafkaStatus(0)
-        ));
+        assert!(matches!(response.status, ResponseStatus::KafkaStatus(0)));
         assert_eq!(response.content_type, "application/json");
         assert!(response.metadata.contains_key("topic"));
         assert!(response.metadata.contains_key("offset"));
@@ -755,10 +752,7 @@ mod tests {
 
         let response = registry.generate_mock_response(&request).unwrap();
 
-        assert!(matches!(
-            response.status,
-            mockforge_core::protocol_abstraction::ResponseStatus::KafkaStatus(0)
-        ));
+        assert!(matches!(response.status, ResponseStatus::KafkaStatus(0)));
         assert_eq!(response.content_type, "application/json");
         assert_eq!(response.metadata.get("topic").unwrap(), "test-topic");
         assert_eq!(response.metadata.get("partition").unwrap(), "0");

@@ -521,37 +521,34 @@ mod tests {
     fn test_error_to_status_code() {
         assert_eq!(
             ErrorHandler::error_to_status_code("service not found"),
-            axum::http::StatusCode::NOT_FOUND
+            http::StatusCode::NOT_FOUND
         );
-        assert_eq!(
-            ErrorHandler::error_to_status_code("unauthorized"),
-            axum::http::StatusCode::FORBIDDEN
-        );
+        assert_eq!(ErrorHandler::error_to_status_code("unauthorized"), http::StatusCode::FORBIDDEN);
         assert_eq!(
             ErrorHandler::error_to_status_code("invalid request"),
-            axum::http::StatusCode::BAD_REQUEST
+            http::StatusCode::BAD_REQUEST
         );
         assert_eq!(
             ErrorHandler::error_to_status_code("internal error"),
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            http::StatusCode::INTERNAL_SERVER_ERROR
         );
 
         // Test additional error cases
         assert_eq!(
             ErrorHandler::error_to_status_code("Unknown service"),
-            axum::http::StatusCode::NOT_FOUND
+            http::StatusCode::NOT_FOUND
         );
         assert_eq!(
             ErrorHandler::error_to_status_code("forbidden access"),
-            axum::http::StatusCode::FORBIDDEN
+            http::StatusCode::FORBIDDEN
         );
         assert_eq!(
             ErrorHandler::error_to_status_code("malformed JSON"),
-            axum::http::StatusCode::BAD_REQUEST
+            http::StatusCode::BAD_REQUEST
         );
         assert_eq!(
             ErrorHandler::error_to_status_code("random error"),
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            http::StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 
@@ -669,7 +666,7 @@ mod tests {
 
         // Verify it's an SSE response
         let sse_response = stream_response.into_response();
-        assert_eq!(sse_response.status(), axum::http::StatusCode::OK);
+        assert_eq!(sse_response.status(), http::StatusCode::OK);
 
         // Check content type
         let content_type = sse_response

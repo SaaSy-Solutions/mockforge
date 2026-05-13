@@ -312,7 +312,7 @@ mod tests {
         ];
 
         // Test excluding all DELETE operations
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
         let result = parser.exclude_operations(operations.clone(), "DELETE").unwrap();
 
@@ -330,7 +330,7 @@ mod tests {
             create_test_operation("delete", "/posts/{id}", Some("deletePost")),
         ];
 
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
 
         // Test excluding specific DELETE operation by path
@@ -352,7 +352,7 @@ mod tests {
             create_test_operation("put", "/users/{id}", Some("updateUser")),
         ];
 
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
 
         // Test excluding DELETE and POST
@@ -370,7 +370,7 @@ mod tests {
             create_test_operation("delete", "/users/{id}", Some("deleteUser")),
         ];
 
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
 
         // Empty string should return all operations
@@ -387,7 +387,7 @@ mod tests {
             create_test_operation("delete", "/posts/{id}", Some("deletePost")),
         ];
 
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
 
         // Test excluding DELETE operations matching /users/*
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_get_base_path_with_full_url() {
-        let mut spec = openapiv3::OpenAPI::default();
+        let mut spec = OpenAPI::default();
         spec.servers.push(openapiv3::Server {
             url: "https://api.example.com/api/v1".to_string(),
             description: None,
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_get_base_path_with_relative_path() {
-        let mut spec = openapiv3::OpenAPI::default();
+        let mut spec = OpenAPI::default();
         spec.servers.push(openapiv3::Server {
             url: "/api/v2".to_string(),
             description: None,
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn test_get_base_path_no_path_in_url() {
-        let mut spec = openapiv3::OpenAPI::default();
+        let mut spec = OpenAPI::default();
         spec.servers.push(openapiv3::Server {
             url: "https://api.example.com".to_string(),
             description: None,
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn test_get_base_path_no_servers() {
-        let spec = openapiv3::OpenAPI::default();
+        let spec = OpenAPI::default();
         let parser = SpecParser { spec };
         let base_path = parser.get_base_path();
 
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn test_get_base_path_trailing_slash_removed() {
-        let mut spec = openapiv3::OpenAPI::default();
+        let mut spec = OpenAPI::default();
         spec.servers.push(openapiv3::Server {
             url: "https://api.example.com/api/v1/".to_string(),
             description: None,

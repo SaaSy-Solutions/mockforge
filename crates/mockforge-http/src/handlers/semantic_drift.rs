@@ -32,8 +32,8 @@ fn map_row_to_semantic_incident(
     use mockforge_foundation::contract_diff_types::SemanticChangeType;
     use sqlx::Row;
 
-    let id: uuid::Uuid = row.try_get("id")?;
-    let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id").ok();
+    let id: Uuid = row.try_get("id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
     let endpoint: String = row.try_get("endpoint")?;
     let method: String = row.try_get("method")?;
     let semantic_change_type_str: String = row.try_get("semantic_change_type")?;
