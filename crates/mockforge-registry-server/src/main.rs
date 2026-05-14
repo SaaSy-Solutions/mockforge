@@ -178,6 +178,7 @@ async fn main() -> Result<()> {
         db.pool().clone(),
     );
     workers::usage_threshold_checker::start_usage_threshold_checker(state.clone());
+    workers::fly_spend_alert::start_fly_spend_alert_worker(state.clone());
     workers::token_rotation_reminders::start_token_rotation_reminders_worker(db.pool().clone());
     workers::test_schedule_runner::start_test_schedule_worker(
         db.pool().clone(),

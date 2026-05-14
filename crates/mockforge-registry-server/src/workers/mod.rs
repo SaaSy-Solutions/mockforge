@@ -1,5 +1,6 @@
 //! Background workers for periodic tasks
 
+pub mod fly_spend_alert;
 pub mod incident_dispatcher;
 pub mod osv_sync;
 pub mod plugin_scanner;
