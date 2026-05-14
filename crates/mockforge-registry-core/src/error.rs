@@ -109,9 +109,28 @@ pub enum ApiError {
     #[error("Rate limit exceeded: {0}")]
     RateLimitExceeded(String),
 
+    /// Plan-quota exhaustion (#449). Distinct from `RateLimitExceeded` (which
+    /// is per-IP/global throttling) and `ResourceLimitExceeded` (which is
+    /// soft caps on entity counts). This carries the structured numbers the
+    /// client needs to render an upsell: which limit, how much used, what's
+    /// the cap, and the rolling window key.
+    #[error("Usage limit exceeded: {limit_type} {current}/{max}")]
+    UsageLimitExceeded {
+        limit_type: String,
+        current: i64,
+        max: i64,
+        period: String,
+    },
+
     // Resource limit errors
     #[error("Resource limit exceeded: {0}")]
     ResourceLimitExceeded(String),
+
+    /// Subscription is past_due (#449 / criterion 8). Maps to 402 so clients
+    /// can distinguish "your card failed, fix billing" from "you don't have
+    /// permission" (403) or "this resource doesn't exist" (404).
+    #[error("Payment required: {0}")]
+    PaymentRequired(String),
 
     // Storage and database errors
     #[error("Database error: {0}")]
@@ -299,6 +318,55 @@ impl IntoResponse for ApiError {
                     json!({
                         "message": msg,
                         "hint": "Upgrade your plan to increase limits"
+                    }),
+                )
+            }
+
+            // Usage-quota exhaustion (#449) — 429 + retry-after, with the
+            // structured numbers the dashboard needs to render an upsell.
+            ApiError::UsageLimitExceeded {
+                limit_type,
+                current,
+                max,
+                period,
+            } => {
+                tracing::warn!(
+                    limit = %limit_type,
+                    current,
+                    max,
+                    period = %period,
+                    "Usage limit exceeded"
+                );
+                let request_id = get_request_id();
+                let body = Json(json!({
+                    "error": "usage_limit_exceeded",
+                    "error_code": "USAGE_LIMIT_EXCEEDED",
+                    "status": 429,
+                    "request_id": request_id,
+                    "limit": limit_type,
+                    "current": current,
+                    "max": max,
+                    "details": {
+                        "period": period,
+                        "hint": "Upgrade your plan or wait for the next billing period",
+                        "upgrade_url": "/billing/upgrade"
+                    }
+                }));
+                return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, "60")], body)
+                    .into_response();
+            }
+
+            // Subscription past_due (#449 criterion 8) — 402 PaymentRequired.
+            ApiError::PaymentRequired(msg) => {
+                tracing::warn!("Payment required: {}", msg);
+                (
+                    StatusCode::PAYMENT_REQUIRED,
+                    "PAYMENT_REQUIRED",
+                    msg.clone(),
+                    json!({
+                        "message": msg,
+                        "hint": "Update your payment method in the billing portal",
+                        "billing_url": "/billing"
                     }),
                 )
             }
@@ -580,6 +648,36 @@ mod tests {
         let error = ApiError::ResourceLimitExceeded("test".to_string());
         let response = error.into_response();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_usage_limit_exceeded() {
+        let error = ApiError::UsageLimitExceeded {
+            limit_type: "requests".to_string(),
+            current: 250_000,
+            max: 250_000,
+            period: "2026-05".to_string(),
+        };
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response.headers().get(header::RETRY_AFTER).map(|v| v.to_str().unwrap()),
+            Some("60")
+        );
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        // Spec from #449 acceptance criterion 1.
+        assert_eq!(body["error"], "usage_limit_exceeded");
+        assert_eq!(body["limit"], "requests");
+        assert_eq!(body["current"], 250_000);
+        assert_eq!(body["max"], 250_000);
+    }
+
+    #[tokio::test]
+    async fn test_into_response_payment_required() {
+        let error = ApiError::PaymentRequired("Subscription past due".to_string());
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::PAYMENT_REQUIRED);
     }
 
     #[tokio::test]

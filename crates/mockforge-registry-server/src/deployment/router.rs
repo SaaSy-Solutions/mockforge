@@ -6,15 +6,16 @@
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, Method, StatusCode, Uri},
-    response::Response,
+    response::{IntoResponse, Response},
     routing::any,
     Router,
 };
 use uuid::Uuid;
 
+use crate::error::ApiError;
 use crate::middleware::org_rate_limit::increment_usage;
 use crate::models::{HostedMock, Organization, UsageCounter};
-use crate::redis::RedisPool;
+use crate::redis::{current_month_period, RedisPool};
 use crate::AppState;
 
 /// Fallback monthly request limit when an org's `limits_json` has no
@@ -74,9 +75,11 @@ impl MultitenantRouter {
         }
 
         // Enforce the org's monthly `requests_per_30d` plan limit (#449).
-        // Returns 429 if the deployment's owning org has already burnt through
-        // its monthly request quota.
-        enforce_monthly_quota(&state, deployment.org_id).await?;
+        // Returns 429 with the spec'd `usage_limit_exceeded` body if the
+        // deployment's owning org has already burnt through its monthly quota.
+        if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
+            return Ok(response);
+        }
 
         // Resolve plan-derived per-deployment caps (#450) and enforce the RPS
         // bucket before we touch the body. Body cap is applied inside
@@ -148,7 +151,9 @@ pub async fn custom_domain_fallback(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // Enforce the org's monthly `requests_per_30d` plan limit before forwarding.
-    enforce_monthly_quota(&state, deployment.org_id).await?;
+    if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
+        return Ok(response);
+    }
 
     // Resolve plan-derived per-deployment caps (#450); body cap is applied
     // inside `proxy_request`, RPS check fires here.
@@ -310,13 +315,14 @@ fn monthly_request_limit(limits_json: &serde_json::Value) -> Option<i64> {
 }
 
 /// Enforce the owning org's `requests_per_30d` plan limit on a hosted-mock
-/// proxy request. Returns 429 if the org has already exhausted its monthly
-/// allotment.
+/// proxy request. Returns a 429 `Response` carrying the spec'd
+/// `usage_limit_exceeded` body (#449 criterion 1) when the org has already
+/// exhausted its monthly allotment.
 ///
 /// Fail-open semantics on DB/Redis hiccups: a transient infra failure must
 /// not take the proxy offline. The body cap and per-second RPS check (added
 /// in #450) remain absolute safety floors regardless.
-async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), StatusCode> {
+async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Response> {
     let org = match Organization::find_by_id(state.db.pool(), org_id).await {
         Ok(Some(org)) => org,
         Ok(None) => {
@@ -343,7 +349,13 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Sta
 
     if used >= limit {
         tracing::info!("Monthly request quota exhausted for org {}: {}/{}", org_id, used, limit);
-        Err(StatusCode::TOO_MANY_REQUESTS)
+        Err(ApiError::UsageLimitExceeded {
+            limit_type: "requests".to_string(),
+            current: used,
+            max: limit,
+            period: current_month_period(),
+        }
+        .into_response())
     } else {
         Ok(())
     }
