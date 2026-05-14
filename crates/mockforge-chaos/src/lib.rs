@@ -208,7 +208,8 @@ pub use resilience::{
     RetryConfig as ResilienceRetryConfig, RetryPolicy,
 };
 pub use resilience_middleware::{
-    default_resilience_state, resilience_middleware, ResilienceMiddlewareState,
+    default_resilience_state, resilience_middleware, resilience_state_from_configs,
+    ResilienceMiddlewareState,
 };
 
 pub use resilience_api::{
