@@ -13,6 +13,7 @@ pub mod cloud_plugin_attachments;
 pub mod cloud_plugins;
 pub mod cloud_services;
 pub mod cloud_workspaces;
+pub mod consistency;
 pub mod contract_verification;
 pub mod faq;
 pub mod federations;
