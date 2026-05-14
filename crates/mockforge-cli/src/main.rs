@@ -3568,6 +3568,7 @@ async fn handle_admin(
         None, // recorder
         None, // federation
         None, // vbr_engine
+        None, // resilience_api_state (#468 — admin-only entry point, no http_app to wire)
     )
     .await?;
 

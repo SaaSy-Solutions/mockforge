@@ -30,6 +30,7 @@ async fn serves_root_and_assets_and_health() {
         None,
         None,
         None,
+        None,
     );
 
     // /
@@ -77,6 +78,7 @@ async fn works_under_mount_prefix() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
         None,
         None,
         None,
@@ -141,6 +143,7 @@ async fn test_api_endpoints() {
         None,
         None,
         None,
+        None,
     );
 
     // Test all the new API endpoints
@@ -176,6 +179,7 @@ async fn test_post_endpoints() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
         None,
         None,
         None,

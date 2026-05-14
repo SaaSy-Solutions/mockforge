@@ -1765,6 +1765,17 @@ pub async fn handle_serve(
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
 
+    // Resilience middleware + dashboard state (#468 Phase 2).
+    //
+    // The `CircuitBreakerConfig` / `BulkheadConfig` defaults both carry
+    // `enabled: false`, so installing the middleware here is essentially
+    // a no-op until someone turns the patterns on (CLI flags exist; full
+    // wiring is the follow-up). The Arcs we hand to the middleware are
+    // the *same* ones we pass to the admin server, so the
+    // `/api/resilience/*` dashboard reflects what this middleware
+    // records once it's active.
+    let (resilience_mw_state, resilience_api_state) = mockforge_chaos::default_resilience_state();
+
     // Merge WebSocket router onto the HTTP app so `/ws` and `/ws/{*path}` are
     // reachable on the same port as HTTP. This is required for hosted mocks,
     // where Fly.io only exposes port 3000. The separate WS listener below
@@ -2018,6 +2029,20 @@ pub async fn handle_serve(
     {
         use axum::middleware::from_fn;
         http_app = http_app.layer(from_fn(mockforge_http::collect_http_metrics));
+    }
+
+    // Layer the resilience middleware (#468 Phase 2). Cheap when the
+    // managers are disabled (the default) — every request shortcuts
+    // through `allow_request` / `try_acquire` without taking either
+    // lock for long. When the operator turns the patterns on (planned
+    // CLI wiring), this layer is where each request's outcome gets
+    // attributed back to the per-endpoint circuit breaker.
+    {
+        use axum::middleware::from_fn_with_state;
+        http_app = http_app.layer(from_fn_with_state(
+            resilience_mw_state.clone(),
+            mockforge_chaos::resilience_middleware,
+        ));
     }
 
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
@@ -2804,6 +2829,7 @@ pub async fn handle_serve(
                     recorder_clone,
                     federation_clone,
                     vbr_engine_clone,
+                    Some(resilience_api_state.clone()),
                     Some(admin_bound_tx),
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))

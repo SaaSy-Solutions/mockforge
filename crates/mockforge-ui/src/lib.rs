@@ -61,6 +61,7 @@ pub async fn start_admin_server(
     recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
+    resilience_api_state: Option<mockforge_chaos::resilience_api::ResilienceApiState>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     start_admin_server_notify(
         addr,
@@ -78,6 +79,7 @@ pub async fn start_admin_server(
         recorder,
         federation,
         vbr_engine,
+        resilience_api_state,
         None,
     )
     .await
@@ -107,6 +109,7 @@ pub async fn start_admin_server_notify(
     recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
+    resilience_api_state: Option<mockforge_chaos::resilience_api::ResilienceApiState>,
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut app = create_admin_router(
@@ -125,6 +128,7 @@ pub async fn start_admin_server_notify(
         recorder,
         federation,
         vbr_engine,
+        resilience_api_state,
     );
 
     // Optionally bring up the registry-admin (SQLite) sub-router if the
