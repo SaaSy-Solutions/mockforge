@@ -2275,7 +2275,7 @@ mod tests {
         assert_eq!(parsed.topics[0].partitions[0].records[0].value, b"hello-produce");
 
         // Now round-trip through the broker.
-        let handler = crate::protocol::KafkaProtocolHandler::new();
+        let handler = KafkaProtocolHandler::new();
         let request = handler.parse_request(&msg).expect("parse header");
         assert_eq!(request.api_key, 0);
         assert_eq!(request.api_version, 9);

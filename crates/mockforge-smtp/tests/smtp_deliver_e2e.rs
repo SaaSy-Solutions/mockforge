@@ -28,7 +28,7 @@ async fn free_port() -> u16 {
 async fn wait_for_port(port: u16, max: Duration) {
     let deadline = tokio::time::Instant::now() + max;
     loop {
-        if tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
+        if TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
             return;
         }
         if tokio::time::Instant::now() >= deadline {

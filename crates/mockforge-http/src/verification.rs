@@ -223,7 +223,7 @@ mod tests {
     async fn test_verification_router_creation() {
         let router = verification_router();
         // Router should be created without panicking
-        assert!(std::mem::size_of_val(&router) > 0);
+        assert!(size_of_val(&router) > 0);
     }
 
     #[tokio::test]
@@ -312,14 +312,14 @@ mod tests {
     fn test_verification_state_new() {
         let state = VerificationState::new();
         // State should be created successfully (size_of_val always >= 0 for usize)
-        let _ = std::mem::size_of_val(&state);
+        let _ = size_of_val(&state);
     }
 
     #[test]
     fn test_verification_state_default() {
         let state = VerificationState;
         // size_of_val always >= 0 for usize
-        let _ = std::mem::size_of_val(&state);
+        let _ = size_of_val(&state);
     }
 
     #[test]

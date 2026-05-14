@@ -1072,7 +1072,7 @@ async fn run_real_bench(
         .unwrap_or_else(|_| reqwest::Client::new());
 
     let target = target_url.to_string();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(duration_secs);
+    let deadline = Instant::now() + std::time::Duration::from_secs(duration_secs);
     let mut handles = Vec::with_capacity(concurrency as usize);
     for _ in 0..concurrency {
         let client = client.clone();
@@ -1081,8 +1081,8 @@ async fn run_real_bench(
             let mut latencies_ns: Vec<u128> = Vec::new();
             let mut ok = 0u64;
             let mut err = 0u64;
-            while std::time::Instant::now() < deadline {
-                let started = std::time::Instant::now();
+            while Instant::now() < deadline {
+                let started = Instant::now();
                 match client.get(&target).send().await {
                     Ok(resp) => {
                         if resp.status().is_success() {

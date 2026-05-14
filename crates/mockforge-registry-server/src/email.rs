@@ -68,7 +68,7 @@ impl EmailService {
     ///
     /// # Errors
     /// Returns an error if the HTTP client cannot be created
-    pub fn new(config: EmailConfig) -> anyhow::Result<Self> {
+    pub fn new(config: EmailConfig) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
@@ -81,7 +81,7 @@ impl EmailService {
     ///
     /// # Errors
     /// Returns an error if the HTTP client cannot be created
-    pub fn from_env() -> anyhow::Result<Self> {
+    pub fn from_env() -> Result<Self> {
         let provider = std::env::var("EMAIL_PROVIDER").unwrap_or_else(|_| "disabled".to_string());
 
         let config = EmailConfig {

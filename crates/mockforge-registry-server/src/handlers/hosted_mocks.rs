@@ -1222,7 +1222,7 @@ fn build_runtime_logs_stream(app_name: String) -> impl Stream<Item = Result<Even
 /// so the wire format is the canonical contract.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RuntimeRequestEvent {
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: DateTime<Utc>,
     pub method: String,
     pub path: String,
     pub status: u16,
@@ -1345,7 +1345,7 @@ pub async fn ingest_runtime_logs(
 pub struct CaptureIngestRequest {
     pub id: String,
     pub protocol: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: DateTime<Utc>,
     pub method: String,
     pub path: String,
     #[serde(default)]
@@ -1376,7 +1376,7 @@ pub struct CaptureIngestResponse {
     pub body: Option<String>,
     pub body_encoding: String,
     pub size_bytes: i64,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub timestamp: DateTime<Utc>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1525,11 +1525,11 @@ pub async fn get_runtime_requests(
     let since = params
         .since
         .as_deref()
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-        .map(|d| d.with_timezone(&chrono::Utc));
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&Utc));
 
     type RuntimeRequestRow = (
-        chrono::DateTime<chrono::Utc>,
+        DateTime<Utc>,
         String,
         String,
         i16,
@@ -1778,8 +1778,8 @@ pub async fn list_recorder_captures(
         let since = params
             .since
             .as_deref()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|d| d.with_timezone(&chrono::Utc));
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|d| d.with_timezone(&Utc));
         let captures = list_cloud_captures(pool, deployment_id, limit, since).await?;
         let body = serde_json::to_vec(&captures).map_err(|e| {
             ApiError::InvalidRequest(format!("Failed to serialize captures: {}", e))
@@ -1813,24 +1813,24 @@ async fn list_cloud_captures(
     pool: &sqlx::PgPool,
     deployment_id: Uuid,
     limit: i64,
-    since: Option<chrono::DateTime<chrono::Utc>>,
+    since: Option<DateTime<Utc>>,
 ) -> ApiResult<Vec<serde_json::Value>> {
     type Row = (
-        String,                        // capture_id
-        String,                        // protocol
-        chrono::DateTime<chrono::Utc>, // occurred_at
-        String,                        // method
-        String,                        // path
-        Option<String>,                // query_params
-        String,                        // request_headers
-        Option<String>,                // request_body
-        String,                        // request_body_encoding
-        Option<String>,                // client_ip
-        Option<String>,                // trace_id
-        Option<String>,                // span_id
-        Option<i64>,                   // duration_ms
-        Option<i32>,                   // status_code
-        Option<String>,                // tags
+        String,         // capture_id
+        String,         // protocol
+        DateTime<Utc>,  // occurred_at
+        String,         // method
+        String,         // path
+        Option<String>, // query_params
+        String,         // request_headers
+        Option<String>, // request_body
+        String,         // request_body_encoding
+        Option<String>, // client_ip
+        Option<String>, // trace_id
+        Option<String>, // span_id
+        Option<i64>,    // duration_ms
+        Option<i32>,    // status_code
+        Option<String>, // tags
     );
 
     let rows: Vec<Row> = if let Some(since) = since {
@@ -1951,7 +1951,7 @@ async fn fetch_cloud_capture(
     type Row = (
         String,
         String,
-        chrono::DateTime<chrono::Utc>,
+        DateTime<Utc>,
         String,
         String,
         Option<String>,
@@ -2320,7 +2320,7 @@ pub async fn get_deployment_metrics(
         match client.snapshot_for_app(&app_name).await {
             Ok(snap) => {
                 use chrono::Datelike;
-                let now = chrono::Utc::now().date_naive();
+                let now = Utc::now().date_naive();
                 let period_start =
                     chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1).unwrap_or(now);
                 return Ok(Json(MetricsResponse {
@@ -2493,8 +2493,8 @@ pub struct DeploymentResponse {
     /// Persisted inside `config_json["upstream_url"]`; surfaced here so the
     /// UI can display and (eventually) edit it without reparsing config_json.
     pub upstream_url: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl From<HostedMock> for DeploymentResponse {
@@ -2531,7 +2531,7 @@ pub struct LogResponse {
     pub level: String,
     pub message: String,
     pub metadata: serde_json::Value,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl From<DeploymentLog> for LogResponse {

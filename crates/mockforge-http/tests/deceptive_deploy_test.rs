@@ -8,7 +8,7 @@
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{HeaderName, HeaderValue, Request, StatusCode},
     response::IntoResponse,
     routing::get,
     Router,
@@ -319,10 +319,9 @@ async fn test_production_headers_no_override() {
     // Handler that sets its own header
     async fn handler_with_header() -> impl IntoResponse {
         let mut response = (StatusCode::OK, "test").into_response();
-        response.headers_mut().insert(
-            axum::http::HeaderName::from_static("x-custom"),
-            axum::http::HeaderValue::from_static("handler-value"),
-        );
+        response
+            .headers_mut()
+            .insert(HeaderName::from_static("x-custom"), HeaderValue::from_static("handler-value"));
         response
     }
 

@@ -264,7 +264,7 @@ async fn replay_one(
         }
     }
 
-    let started = std::time::Instant::now();
+    let started = Instant::now();
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {

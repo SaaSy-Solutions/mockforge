@@ -280,7 +280,7 @@ async fn build_workspace_manifest(
 
     let manifest = serde_json::json!({
         "schema_version": 1,
-        "captured_at": chrono::Utc::now(),
+        "captured_at": Utc::now(),
         "workspace_id": workspace_id,
         "partial": partial,
         "counts": {

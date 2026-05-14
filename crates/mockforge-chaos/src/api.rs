@@ -2270,9 +2270,8 @@ mod tests {
         // coerce to the foundation trait object for storage in chaos.
         #[allow(deprecated)]
         let concrete = mockforge_core::intelligent_behavior::MockAI::new(mockai_config);
-        let mockai: Arc<
-            tokio::sync::RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>,
-        > = Arc::new(tokio::sync::RwLock::new(concrete));
+        let mockai: Arc<RwLock<dyn mockforge_foundation::intelligent_behavior::MockAiBehavior>> =
+            Arc::new(RwLock::new(concrete));
 
         let (_router, _config_arc, _latency_tracker, state) =
             create_chaos_api_router(config, Some(mockai.clone()));

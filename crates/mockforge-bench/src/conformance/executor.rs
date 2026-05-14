@@ -1465,7 +1465,7 @@ custom_checks:
     method: POST
     expected_status: 201
 "#;
-        let parsed: super::CustomConformanceConfig =
+        let parsed: CustomConformanceConfig =
             serde_yaml::from_str(custom_yaml).expect("YAML parses");
         assert_eq!(parsed.custom_checks.len(), 2);
 
@@ -1497,7 +1497,7 @@ custom_checks:
     method: POST
     expected_status: 201
 "#;
-        let parsed: super::CustomConformanceConfig =
+        let parsed: CustomConformanceConfig =
             serde_yaml::from_str(custom_yaml).expect("YAML parses");
 
         let base = ConformanceConfig {
@@ -1520,7 +1520,7 @@ custom_checks:
 
     #[test]
     fn with_custom_checks_from_config_rejects_bad_filter_regex() {
-        let parsed: super::CustomConformanceConfig =
+        let parsed: CustomConformanceConfig =
             serde_yaml::from_str("custom_checks: []").expect("YAML parses");
         let base = ConformanceConfig {
             target_url: "http://localhost:3000".to_string(),
@@ -1760,9 +1760,9 @@ custom_checks:
             method: "GET".to_string(),
             expected_status: 200,
             body: None,
-            expected_headers: std::collections::HashMap::new(),
+            expected_headers: HashMap::new(),
             expected_body_fields: vec![],
-            headers: std::collections::HashMap::new(),
+            headers: HashMap::new(),
         };
 
         executor.add_custom_check(&custom);

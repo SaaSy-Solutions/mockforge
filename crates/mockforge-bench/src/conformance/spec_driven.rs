@@ -1315,7 +1315,7 @@ mod tests {
     #[test]
     fn test_annotate_post_with_json_body() {
         let mut op = Operation::default();
-        let mut body = openapiv3::RequestBody {
+        let mut body = RequestBody {
             required: true,
             ..Default::default()
         };

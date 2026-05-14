@@ -180,7 +180,7 @@ pub async fn create_my_public_key(
     state
         .store
         .record_audit_event(
-            uuid::Uuid::nil(),
+            Uuid::nil(),
             Some(user_id),
             AuditEventType::PublisherKeyCreated,
             format!("Publisher key '{}' created", saved.label),
@@ -242,7 +242,7 @@ pub async fn revoke_my_public_key(
     state
         .store
         .record_audit_event(
-            uuid::Uuid::nil(),
+            Uuid::nil(),
             Some(user_id),
             AuditEventType::PublisherKeyRevoked,
             format!("Publisher key {} revoked", key_id),
@@ -322,7 +322,7 @@ pub async fn rotate_my_public_key(
     state
         .store
         .record_audit_event(
-            uuid::Uuid::nil(),
+            Uuid::nil(),
             Some(user_id),
             AuditEventType::PublisherKeyRotated,
             format!("Publisher key rotated from {} to {}", old_key_id, new_key.id),

@@ -143,10 +143,10 @@ mod tests {
     #[test]
     fn test_all_modules_accessible() {
         // Test that all modules are accessible
-        let _broker_module = broker::MqttConfig::default();
-        let _fixtures_module = fixtures::MqttFixtureRegistry::new();
-        let _spec_module = spec_registry::MqttSpecRegistry::new();
-        let _topics_module = topics::TopicTree::new();
+        let _broker_module = MqttConfig::default();
+        let _fixtures_module = MqttFixtureRegistry::new();
+        let _spec_module = MqttSpecRegistry::new();
+        let _topics_module = TopicTree::new();
         let _qos_module = qos::QoS::AtMostOnce;
     }
 

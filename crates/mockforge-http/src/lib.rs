@@ -2702,10 +2702,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
                             req.extensions_mut().insert(state);
                         }
                         // Call the middleware function
-                        crate::middleware::behavioral_cloning::behavioral_cloning_middleware(
-                            req, next,
-                        )
-                        .await
+                        middleware::behavioral_cloning::behavioral_cloning_middleware(req, next)
+                            .await
                     }
                 },
             ));
@@ -3454,8 +3452,8 @@ fn test_http_server_state_multiple_routes() {
 fn test_http_server_state_with_rate_limiter() {
     use std::sync::Arc;
 
-    let config = crate::middleware::RateLimitConfig::default();
-    let rate_limiter = Arc::new(crate::middleware::GlobalRateLimiter::new(config));
+    let config = middleware::RateLimitConfig::default();
+    let rate_limiter = Arc::new(middleware::GlobalRateLimiter::new(config));
 
     let state = HttpServerState::new().with_rate_limiter(rate_limiter);
 

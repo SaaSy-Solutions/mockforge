@@ -419,7 +419,7 @@ pub async fn delete_sso_config(
 pub async fn get_saml_metadata(
     State(state): State<AppState>,
     Path(org_slug): Path<String>,
-) -> ApiResult<axum::response::Response> {
+) -> ApiResult<Response> {
     // Find organization by slug
     let org = state
         .store
@@ -462,7 +462,7 @@ pub async fn get_saml_metadata(
         slo_url
     );
 
-    axum::response::Response::builder()
+    Response::builder()
         .status(axum::http::StatusCode::OK)
         .header("Content-Type", "application/xml")
         .body(metadata.into())
@@ -614,8 +614,8 @@ pub async fn saml_acs(
     if let Some(assertion_id) = &user_info.assertion_id {
         let expires_at = user_info
             .not_on_or_after
-            .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(1));
-        let issued_at = user_info.issued_at.unwrap_or_else(chrono::Utc::now);
+            .unwrap_or_else(|| Utc::now() + chrono::Duration::hours(1));
+        let issued_at = user_info.issued_at.unwrap_or_else(Utc::now);
 
         state
             .store
@@ -642,7 +642,7 @@ pub async fn saml_acs(
     }
 
     // Create SSO session
-    let session_expires = chrono::Utc::now() + chrono::Duration::hours(8); // 8 hour session
+    let session_expires = Utc::now() + chrono::Duration::hours(8); // 8 hour session
     let _session = SSOSession::create(
         pool,
         org.id,
@@ -759,7 +759,7 @@ struct SAMLUserInfo {
 /// Generate SAML AuthnRequest XML
 fn generate_saml_authn_request(entity_id: &str, acs_url: &str) -> String {
     let request_id = uuid::Uuid::new_v4().to_string();
-    let issue_instant = chrono::Utc::now().to_rfc3339();
+    let issue_instant = Utc::now().to_rfc3339();
 
     format!(
         r#"<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
@@ -833,20 +833,20 @@ async fn parse_saml_response(
     let not_before = extract_xml_value(xml_str, "NotBefore")
         .or_else(|| extract_xml_value(xml_str, "saml:NotBefore"))
         .or_else(|| extract_xml_value(xml_str, "saml2:NotBefore"))
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
 
     let not_on_or_after = extract_xml_value(xml_str, "NotOnOrAfter")
         .or_else(|| extract_xml_value(xml_str, "saml:NotOnOrAfter"))
         .or_else(|| extract_xml_value(xml_str, "saml2:NotOnOrAfter"))
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
 
     let issued_at = extract_xml_value(xml_str, "IssueInstant")
         .or_else(|| extract_xml_value(xml_str, "saml:IssueInstant"))
         .or_else(|| extract_xml_value(xml_str, "saml2:IssueInstant"))
-        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
-        .map(|dt| dt.with_timezone(&chrono::Utc));
+        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
 
     // Extract attributes based on attribute mapping
     let mut attributes = serde_json::json!({});
@@ -1155,7 +1155,7 @@ fn parse_saml_logout_request(request_xml: &[u8]) -> Result<Option<String>, ApiEr
 /// Generate SAML logout response
 fn generate_saml_logout_response(slo_url: &str) -> String {
     let response_id = uuid::Uuid::new_v4().to_string();
-    let issue_instant = chrono::Utc::now().to_rfc3339();
+    let issue_instant = Utc::now().to_rfc3339();
 
     format!(
         r#"<samlp:LogoutResponse xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
@@ -1226,7 +1226,7 @@ async fn find_or_create_user_from_saml(
 /// Validate SAML assertion timestamps (NotBefore/NotOnOrAfter)
 /// Prevents replay attacks by ensuring assertions are within valid time window
 fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
-    let now = chrono::Utc::now();
+    let now = Utc::now();
 
     // Check NotBefore (assertion not valid before this time)
     if let Some(not_before) = user_info.not_before {

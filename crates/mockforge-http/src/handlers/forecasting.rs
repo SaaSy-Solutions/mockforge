@@ -399,11 +399,11 @@ pub async fn refresh_forecasts(
     use sqlx::Row;
     let mut incidents = Vec::new();
     for row in rows {
-        let id: uuid::Uuid = row.try_get("id").map_err(|e| {
+        let id: Uuid = row.try_get("id").map_err(|e| {
             tracing::error!("Failed to get id from row: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
-        let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id").ok();
+        let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
         let endpoint: String = match row.try_get("endpoint") {
             Ok(e) => e,
             Err(_) => continue,

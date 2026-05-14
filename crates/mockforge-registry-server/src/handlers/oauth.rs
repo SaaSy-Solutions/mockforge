@@ -73,7 +73,7 @@ pub async fn oauth_authorize(
     if let Some(redis) = &state.redis {
         // Store state token with provider info and timestamp for verification
         // Format: "provider:timestamp" (e.g., "github:1234567890")
-        let state_value = format!("{}:{}", provider.as_str(), chrono::Utc::now().timestamp());
+        let state_value = format!("{}:{}", provider.as_str(), Utc::now().timestamp());
         redis
             .set_with_expiry(&state_key, &state_value, 900) // 15 minutes expiration
             .await
@@ -212,7 +212,7 @@ pub async fn oauth_callback(
     // Send welcome email for new OAuth users (non-blocking). Gated on the
     // user's `email_notifications` preference — new accounts default to
     // opted-in so a brand-new signup still gets the welcome.
-    let is_new_user = user.created_at > chrono::Utc::now() - chrono::Duration::minutes(1);
+    let is_new_user = user.created_at > Utc::now() - Duration::minutes(1);
     if is_new_user && user.email_notifications {
         if let Ok(email_service) = crate::email::EmailService::from_env() {
             let welcome_email =

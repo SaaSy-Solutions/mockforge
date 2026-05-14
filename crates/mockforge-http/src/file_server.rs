@@ -166,7 +166,7 @@ mod tests {
     fn test_file_serving_router_creation() {
         let router = file_serving_router();
         // Router should be created successfully
-        assert!(std::mem::size_of_val(&router) > 0);
+        assert!(size_of_val(&router) > 0);
     }
 
     #[tokio::test]

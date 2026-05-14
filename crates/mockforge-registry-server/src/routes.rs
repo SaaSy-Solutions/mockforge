@@ -614,7 +614,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/monitored-services/{id}",
-            axum::routing::delete(handlers::contract_verification::delete_monitored_service),
+            delete(handlers::contract_verification::delete_monitored_service),
         )
         .route(
             "/api/v1/monitored-services/{id}/diffs",
@@ -649,7 +649,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/verification-suites/{id}",
-            axum::routing::delete(handlers::contract_verification::delete_verification_suite),
+            delete(handlers::contract_verification::delete_verification_suite),
         )
         // Recorder + Behavioral cloning (cloud-enablement #6 / Phase 1).
         // Training worker / replay endpoint / per-capture cloud-shipping
@@ -665,7 +665,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/capture-sessions/{id}",
-            axum::routing::delete(handlers::captures::delete_session),
+            delete(handlers::captures::delete_session),
         )
         .route(
             "/api/v1/workspaces/{workspace_id}/clone-models",

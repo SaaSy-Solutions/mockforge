@@ -5,7 +5,7 @@
 
 use axum::{
     body::Body,
-    http::{Request, Response, StatusCode},
+    http::{header, HeaderValue, Request, Response, StatusCode},
     middleware::Next,
 };
 use mockforge_intelligence::behavioral_cloning::ProbabilisticModel;
@@ -179,8 +179,8 @@ pub async fn behavioral_cloning_middleware(req: Request<Body>, next: Next) -> Re
 
                         // Set content-type header
                         response.headers_mut().insert(
-                            axum::http::header::CONTENT_TYPE,
-                            axum::http::HeaderValue::from_static("application/json"),
+                            header::CONTENT_TYPE,
+                            HeaderValue::from_static("application/json"),
                         );
 
                         debug!("Applied error pattern body from sample response");

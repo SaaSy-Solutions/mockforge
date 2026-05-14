@@ -413,7 +413,7 @@ mod tests {
         let evaluator = SyncDriftEvaluator::new(drift_engine, incident_manager, database);
 
         // Should create successfully
-        assert!(std::mem::size_of_val(&evaluator) > 0);
+        assert!(size_of_val(&evaluator) > 0);
     }
 
     #[tokio::test]

@@ -323,8 +323,8 @@ impl TestOnlyBrokerExt for KafkaMockBroker {
         }
 
         // Silence unused imports when the trait is not instantiated.
-        let _ = std::mem::size_of::<DecodedRecord>();
-        let _ = std::mem::size_of::<PartitionProduceData>();
-        let _ = std::mem::size_of::<TopicProduceData>();
+        let _ = size_of::<DecodedRecord>();
+        let _ = size_of::<PartitionProduceData>();
+        let _ = size_of::<TopicProduceData>();
     }
 }

@@ -32,8 +32,8 @@ fn map_row_to_semantic_incident(
     use mockforge_foundation::contract_diff_types::SemanticChangeType;
     use sqlx::Row;
 
-    let id: uuid::Uuid = row.try_get("id")?;
-    let workspace_id: Option<uuid::Uuid> = row.try_get("workspace_id").ok();
+    let id: Uuid = row.try_get("id")?;
+    let workspace_id: Option<Uuid> = row.try_get("workspace_id").ok();
     let endpoint: String = row.try_get("endpoint")?;
     let method: String = row.try_get("method")?;
     let semantic_change_type_str: String = row.try_get("semantic_change_type")?;
@@ -47,8 +47,7 @@ fn map_row_to_semantic_incident(
     let after_semantic_state: serde_json::Value =
         row.try_get("after_semantic_state").unwrap_or_default();
     let details_json: serde_json::Value = row.try_get("details").unwrap_or_default();
-    let related_drift_incident_id: Option<uuid::Uuid> =
-        row.try_get("related_drift_incident_id").ok();
+    let related_drift_incident_id: Option<Uuid> = row.try_get("related_drift_incident_id").ok();
     let contract_diff_id: Option<String> = row.try_get("contract_diff_id").ok();
     let external_ticket_id: Option<String> = row.try_get("external_ticket_id").ok();
     let external_ticket_url: Option<String> = row.try_get("external_ticket_url").ok();

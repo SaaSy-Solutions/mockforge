@@ -402,7 +402,7 @@ mod tests {
         let res = Response::builder()
             .status(StatusCode::OK)
             .header("content-type", "application/json")
-            .body(axum::body::Body::empty())
+            .body(Body::empty())
             .unwrap();
 
         let size = calculate_response_size(&res);
@@ -420,7 +420,7 @@ mod tests {
             .header("content-type", "application/json")
             .header("cache-control", "no-cache")
             .header("x-request-id", "123-456-789")
-            .body(axum::body::Body::empty())
+            .body(Body::empty())
             .unwrap();
 
         let size = calculate_response_size(&res);

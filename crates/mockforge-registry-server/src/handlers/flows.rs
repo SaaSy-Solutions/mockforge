@@ -267,12 +267,7 @@ pub async fn trigger_run(
     // run still queues with whatever metadata we have, so the runner
     // can record the failure with context.
     let version_config: Option<serde_json::Value> = match flow.current_version_id {
-        Some(vid) => match mockforge_registry_core::models::flow::FlowVersion::find_by_id(
-            state.db.pool(),
-            vid,
-        )
-        .await
-        {
+        Some(vid) => match FlowVersion::find_by_id(state.db.pool(), vid).await {
             Ok(Some(v)) => Some(v.config),
             Ok(None) => {
                 tracing::warn!(
@@ -390,7 +385,7 @@ async fn load_authorized_flow(
 
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
-    T: serde::Deserialize<'de>,
+    T: Deserialize<'de>,
     D: serde::Deserializer<'de>,
 {
     Option::<T>::deserialize(deserializer).map(Some)

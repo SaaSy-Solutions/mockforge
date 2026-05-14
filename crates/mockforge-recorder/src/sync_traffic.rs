@@ -313,7 +313,7 @@ mod tests {
         let analyzer = TrafficAnalyzer::new(config);
 
         // Should create successfully
-        assert!(std::mem::size_of_val(&analyzer) > 0);
+        assert!(size_of_val(&analyzer) > 0);
     }
 
     #[tokio::test]
@@ -474,14 +474,14 @@ mod tests {
         let analyzer = TrafficAnalyzer::new(config);
 
         let changes = vec![
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-1".to_string(),
                 method: "GET".to_string(),
                 path: "/api/users".to_string(),
                 comparison: create_test_comparison_result(false),
                 updated: false,
             },
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-2".to_string(),
                 method: "POST".to_string(),
                 path: "/api/posts".to_string(),
@@ -503,14 +503,14 @@ mod tests {
         let analyzer = TrafficAnalyzer::new(config);
 
         let changes = vec![
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-1".to_string(),
                 method: "GET".to_string(),
                 path: "/api/users".to_string(),
                 comparison: create_test_comparison_result(false),
                 updated: false,
             },
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-2".to_string(),
                 method: "POST".to_string(),
                 path: "/api/posts".to_string(),
@@ -551,14 +551,14 @@ mod tests {
         let analyzer = TrafficAnalyzer::new(config);
 
         let changes = vec![
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-1".to_string(),
                 method: "GET".to_string(),
                 path: "/api/users".to_string(),
                 comparison: create_test_comparison_result(false),
                 updated: false,
             },
-            crate::sync::DetectedChange {
+            DetectedChange {
                 request_id: "req-2".to_string(),
                 method: "POST".to_string(),
                 path: "/api/posts".to_string(),
@@ -598,7 +598,7 @@ mod tests {
         let config = create_test_traffic_config();
         let analyzer = TrafficAnalyzer::new(config);
 
-        let changes = vec![crate::sync::DetectedChange {
+        let changes = vec![DetectedChange {
             request_id: "req-1".to_string(),
             method: "GET".to_string(),
             path: "/api/users".to_string(),
