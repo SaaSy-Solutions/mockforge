@@ -311,6 +311,13 @@ impl K6Executor {
         let server_jitter = &json["metrics"]["mockforge_server_injected_jitter_ms"]["values"];
         let server_fault = &json["metrics"]["mockforge_server_fault_total"]["values"]["count"];
 
+        // Issue #79 (round 5) — surface TCP connect / TLS handshake stats and
+        // a connection-rate count for `--cps` runs. k6's `http_req_connecting`
+        // is "time spent establishing TCP connection"; with `noConnectionReuse`
+        // it fires per request, so `count` is effectively connections opened.
+        let tcp_connecting = &json["metrics"]["http_req_connecting"]["values"];
+        let tls_handshake = &json["metrics"]["http_req_tls_handshaking"]["values"];
+
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
             // k6 Rate metric: `passes` = count of non-zero values.
@@ -334,6 +341,12 @@ impl K6Executor {
             server_injected_jitter_samples: server_jitter["count"].as_u64().unwrap_or(0),
             server_injected_jitter_avg_ms: server_jitter["avg"].as_f64().unwrap_or(0.0),
             server_reported_faults: server_fault.as_u64().unwrap_or(0),
+            tcp_connect_samples: tcp_connecting["count"].as_u64().unwrap_or(0),
+            tcp_connect_avg_ms: tcp_connecting["avg"].as_f64().unwrap_or(0.0),
+            tcp_connect_max_ms: tcp_connecting["max"].as_f64().unwrap_or(0.0),
+            tls_handshake_samples: tls_handshake["count"].as_u64().unwrap_or(0),
+            tls_handshake_avg_ms: tls_handshake["avg"].as_f64().unwrap_or(0.0),
+            tls_handshake_max_ms: tls_handshake["max"].as_f64().unwrap_or(0.0),
         })
     }
 }
@@ -375,6 +388,25 @@ pub struct K6Results {
     /// Count of responses that carried an `X-Mockforge-Fault` header.
     #[serde(default)]
     pub server_reported_faults: u64,
+    /// Issue #79 (round 5) — TCP connect samples / timing. With `--cps`
+    /// (`noConnectionReuse: true`) k6 records one connect per request, so
+    /// `tcp_connect_samples` equals connections opened. Without `--cps` this
+    /// is typically a small count (k6 reuses pooled connections), so it tells
+    /// you whether reuse was actually happening.
+    #[serde(default)]
+    pub tcp_connect_samples: u64,
+    #[serde(default)]
+    pub tcp_connect_avg_ms: f64,
+    #[serde(default)]
+    pub tcp_connect_max_ms: f64,
+    /// TLS handshake samples / timing — same shape as TCP connect, but only
+    /// non-zero for HTTPS targets.
+    #[serde(default)]
+    pub tls_handshake_samples: u64,
+    #[serde(default)]
+    pub tls_handshake_avg_ms: f64,
+    #[serde(default)]
+    pub tls_handshake_max_ms: f64,
 }
 
 impl K6Results {

@@ -8,8 +8,19 @@ use colored::*;
 pub struct TerminalReporter;
 
 impl TerminalReporter {
-    /// Print a summary of the bench results
+    /// Print a summary of the bench results.
+    ///
+    /// `cps_mode` is `true` when the bench was invoked with `--cps`. In that
+    /// mode each request opens a fresh TCP/TLS connection, so we print an
+    /// explicit "Connection Rate" line alongside RPS — Srikanth's round-5
+    /// reply on Issue #79: "CPS without RPS Command is Working but Client
+    /// dont report CPS Counts".
     pub fn print_summary(results: &K6Results, duration_secs: u64) {
+        Self::print_summary_with_mode(results, duration_secs, false);
+    }
+
+    /// Like [`print_summary`] but lets the caller opt into the `--cps` view.
+    pub fn print_summary_with_mode(results: &K6Results, duration_secs: u64, cps_mode: bool) {
         println!("\n{}", "=".repeat(60).bright_green());
         println!("{}", "Load Test Complete! ✓".bright_green().bold());
         println!("{}\n", "=".repeat(60).bright_green());
@@ -47,6 +58,32 @@ impl TerminalReporter {
         }
         if results.vus_max > 0 {
             println!("  Max VUs:              {}", results.vus_max.to_string().cyan());
+        }
+
+        // Issue #79 (round 5) — Connections-per-second report. When the user
+        // passed `--cps`, k6 ran with `noConnectionReuse: true` so each
+        // request opened a new TCP/TLS connection. CPS therefore equals the
+        // request rate; show it explicitly, plus connect/handshake timing.
+        if cps_mode {
+            let cps = if results.rps > 0.0 {
+                results.rps
+            } else {
+                results.total_requests as f64 / duration_secs.max(1) as f64
+            };
+            println!("  CPS:                  {} conn/s (--cps)", format!("{:.1}", cps).cyan());
+            println!("  Total Connections:    {}", results.total_requests.to_string().cyan());
+            if results.tcp_connect_samples > 0 {
+                println!(
+                    "  TCP connect:          avg {:.2}ms, max {:.2}ms",
+                    results.tcp_connect_avg_ms, results.tcp_connect_max_ms,
+                );
+            }
+            if results.tls_handshake_samples > 0 {
+                println!(
+                    "  TLS handshake:        avg {:.2}ms, max {:.2}ms",
+                    results.tls_handshake_avg_ms, results.tls_handshake_max_ms,
+                );
+            }
         }
 
         // Issue #79 — server-injected chaos signals (latency / jitter / faults)

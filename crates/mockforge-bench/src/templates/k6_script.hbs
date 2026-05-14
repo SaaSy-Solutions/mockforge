@@ -42,12 +42,19 @@ export const options = {
       // --rps was passed: open-model load at a fixed request rate. VUs are
       // pre-allocated up to `--vus`; k6 fires {{target_rps}} requests/sec
       // regardless of how long each one takes.
+      //
+      // Issue #79 (round 5): we deliberately do NOT derive duration / VU
+      // pool from the chosen scenario's last stage here. Under the default
+      // `ramp-up` scenario the last stage is the ramp-DOWN to `target: 0`,
+      // which previously gave `preAllocatedVUs: 0` → k6 ran with no VUs and
+      // produced 0 requests. With `--rps`, the executor is open-model, so
+      // pre-allocate the full `--vus` pool for the full `--duration`.
       executor: 'constant-arrival-rate',
       rate: {{target_rps}},
       timeUnit: '1s',
-      duration: '{{#each stages}}{{#if @last}}{{this.duration}}{{/if}}{{/each}}',
-      preAllocatedVUs: {{#each stages}}{{#if @last}}{{this.target}}{{/if}}{{/each}},
-      maxVUs: {{#each stages}}{{#if @last}}{{this.target}}{{/if}}{{/each}},
+      duration: '{{duration_secs}}s',
+      preAllocatedVUs: {{max_vus}},
+      maxVUs: {{max_vus}},
       {{else}}
       executor: 'ramping-vus',
       startVUs: 0,
@@ -243,7 +250,28 @@ function textSummary(data, options) {
     const count = metrics.http_reqs.values.count || 0;
     const rate = metrics.http_reqs.values.rate;
     output += indent + `Total Requests: ${count}\n`;
-    output += indent + `Request Rate: ${rate != null ? rate.toFixed(2) : '0.00'} req/s\n\n`;
+    output += indent + `Request Rate: ${rate != null ? rate.toFixed(2) : '0.00'} req/s\n`;
+    {{#if no_keep_alive}}
+    // --cps was passed → noConnectionReuse is on, so every request opens a
+    // fresh TCP/TLS connection. Connections-per-second therefore equals the
+    // request rate; emit it explicitly so users running CPS-stress benches
+    // see the connection rate they were targeting. Issue #79 (round 5):
+    // Srikanth reported "CPS without RPS Command is Working but Client dont
+    // report CPS Counts".
+    output += indent + `Total Connections: ${count}\n`;
+    output += indent + `Connection Rate: ${rate != null ? rate.toFixed(2) : '0.00'} conn/s (--cps)\n`;
+    if (metrics.http_req_connecting && metrics.http_req_connecting.values) {
+      const tc = metrics.http_req_connecting.values;
+      output += indent + `  TCP connect avg: ${tc.avg != null ? tc.avg.toFixed(2) : 'N/A'}ms (max ${tc.max != null ? tc.max.toFixed(2) : 'N/A'}ms)\n`;
+    }
+    if (metrics.http_req_tls_handshaking && metrics.http_req_tls_handshaking.values) {
+      const th = metrics.http_req_tls_handshaking.values;
+      if ((th.count || 0) > 0) {
+        output += indent + `  TLS handshake avg: ${th.avg != null ? th.avg.toFixed(2) : 'N/A'}ms (max ${th.max != null ? th.max.toFixed(2) : 'N/A'}ms)\n`;
+      }
+    }
+    {{/if}}
+    output += '\n';
   } else {
     output += indent + 'Total Requests: 0\n';
     output += indent + 'Request Rate: 0.00 req/s\n\n';

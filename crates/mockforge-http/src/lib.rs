@@ -1095,6 +1095,17 @@ pub async fn build_router_with_multi_tenant(
         app = app.layer(axum::middleware::from_fn(middleware::keepalive_hint_middleware));
     }
 
+    // Issue #79 (round 5): per-request log line with HTTP version + Connection
+    // header MockForge actually sees, so users debugging proxy ↔ MockForge
+    // negotiation can confirm whether their proxy is speaking HTTP/1.1 with
+    // keep-alive or HTTP/1.0 (which forces hyper to FIN after each response).
+    if middleware::is_conn_log_enabled() {
+        info!(
+            "MOCKFORGE_HTTP_LOG_CONN enabled — logging HTTP version + Connection headers per request (Issue #79 diagnostic)"
+        );
+        app = app.layer(axum::middleware::from_fn(middleware::conn_diag_middleware));
+    }
+
     // Add authentication middleware if OAuth is configured via deceptive deploy
     if let Some(auth_config) = deceptive_deploy_auth_config {
         use crate::auth::{auth_middleware, create_oauth2_client, AuthState};
@@ -3160,6 +3171,17 @@ pub async fn build_router_with_chains_and_multi_tenant(
             "MOCKFORGE_HTTP_KEEPALIVE_HINT enabled — emitting Connection: keep-alive + Keep-Alive headers on all responses (Issue #79 workaround)"
         );
         app = app.layer(axum::middleware::from_fn(middleware::keepalive_hint_middleware));
+    }
+
+    // Issue #79 (round 5): per-request log line with HTTP version + Connection
+    // header MockForge actually sees, so users debugging proxy ↔ MockForge
+    // negotiation can confirm whether their proxy is speaking HTTP/1.1 with
+    // keep-alive or HTTP/1.0 (which forces hyper to FIN after each response).
+    if middleware::is_conn_log_enabled() {
+        info!(
+            "MOCKFORGE_HTTP_LOG_CONN enabled — logging HTTP version + Connection headers per request (Issue #79 diagnostic)"
+        );
+        app = app.layer(axum::middleware::from_fn(middleware::conn_diag_middleware));
     }
 
     // Add authentication middleware if OAuth is configured via deceptive deploy

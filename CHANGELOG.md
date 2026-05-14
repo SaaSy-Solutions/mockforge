@@ -1,3 +1,21 @@
+## [0.3.133] - 2026-05-13
+
+### Fixed
+
+- **[Reality]** `mockforge bench --rps N` produced 0 requests under the default `ramp-up` scenario (#79 follow-up, Srikanth's 5th-round reply)
+  - Root cause: the k6 script template derived `preAllocatedVUs` / `maxVUs` / `duration` for the `constant-arrival-rate` executor from the *last* stage of the chosen scenario. The default scenario is `ramp-up`, whose last stage is the ramp-DOWN with `target: 0` — so `preAllocatedVUs: 0` and the bench completed with zero requests. Without `--rps`, the bench used `ramping-vus` which honors all stages, so the bug was specific to `--rps`.
+  - Fix: when `target_rps` is set, the script now uses the configured `--vus` directly for `preAllocatedVUs` / `maxVUs` and the full `--duration` for the executor duration, ignoring scenario stages (which don't apply to open-model load anyway).
+  - Regression test added in `mockforge_bench::k6_gen::tests::test_rps_with_ramp_up_uses_full_vu_pool_and_duration` that asserts the generated script contains `preAllocatedVUs: 100` and `duration: '600s'` for a 100-VU / 600s / `--rps 100` invocation with the default ramp-up scenario.
+
+### Added
+
+- **[Reality]** `mockforge bench --cps` now reports connections-per-second in the end-of-run summary (#79 follow-up, Srikanth's 5th-round reply)
+  - With `--cps` (which sets k6's `noConnectionReuse: true`), every request opens a fresh TCP/TLS connection, so connections/sec equals request rate. Previously the summary only printed `RPS:`; users running CPS-stress benches had to read it from k6's raw output.
+  - The terminal summary now prints `CPS:`, `Total Connections:`, and — when k6 has samples — TCP-connect and TLS-handshake `avg/max` timings. `K6Results` exposes `tcp_connect_*` / `tls_handshake_*` fields so SDK consumers can read the same numbers programmatically.
+- **[Reality]** Opt-in `MOCKFORGE_HTTP_LOG_CONN=1` env var emits per-request HTTP-version / Connection-header diagnostic log (#79 follow-up, Srikanth's 5th-round reply)
+  - Srikanth's PCAP showed HTTP/1.1 requests arriving at MockForge with no `Connection` header but MockForge sending FIN after each response. The only way to confirm what MockForge actually sees on the wire is to log the version + headers from hyper's view. New middleware in `mockforge_http::middleware::conn_diagnostics` emits one INFO log line per request with `method`, `path`, `version`, `req_connection`, `req_keep_alive`, `req_host`, `peer`, `resp_status`, `resp_connection`, `resp_keep_alive`, and a `close_decision` field summarizing the keep-alive outcome (e.g. `keep-alive (HTTP/1.1 default — no Connection: close)`).
+  - Disabled by default — the log is too noisy for normal operation. Truthy values: `1`, `true`, `yes`, `on`.
+
 ## [0.3.132] - 2026-05-12
 
 ### Added

@@ -47,6 +47,16 @@ pub struct K6ScriptTemplateData {
     /// request so each one opens a fresh TCP/TLS connection. Used to drive
     /// connections-per-second load. Issue #79.
     pub no_keep_alive: bool,
+    /// Total test duration in seconds. Used by the `constant-arrival-rate`
+    /// executor (when `target_rps` is set) which needs a single duration
+    /// rather than a list of stages. Issue #79 — Srikanth's round-5 reply:
+    /// `--rps` was previously deriving duration from the last stage of the
+    /// chosen scenario; under `ramp-up` (the default) the last stage has
+    /// `target: 0`, which gave `preAllocatedVUs: 0` and 0 requests.
+    pub duration_secs: u64,
+    /// Max VUs to pre-allocate for the `constant-arrival-rate` executor.
+    /// Issue #79 (round 5).
+    pub max_vus: u32,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -354,6 +364,8 @@ impl K6ScriptGenerator {
             chunked_request_bodies: self.config.chunked_request_bodies,
             target_rps: self.config.target_rps,
             no_keep_alive: self.config.no_keep_alive,
+            duration_secs: self.config.duration_secs,
+            max_vus: self.config.max_vus,
         })
     }
 
@@ -775,6 +787,145 @@ mod tests {
         assert!(
             script.contains("billing_subscriptions_v1_errors.add"),
             "Variable usage should use sanitized name"
+        );
+    }
+
+    /// Issue #79 (round 5) regression: `--rps` with the default `ramp-up`
+    /// scenario produced 0 requests because the script took
+    /// `preAllocatedVUs` from the *last* stage's target — and ramp-up's last
+    /// stage is the ramp-DOWN to `target: 0`. The fix is to use the
+    /// configured `max_vus` directly when `target_rps` is set, and the full
+    /// `duration_secs` rather than the last stage's duration.
+    #[test]
+    fn test_rps_with_ramp_up_uses_full_vu_pool_and_duration() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/users".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("listUsers".to_string()),
+        };
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::RampUp,
+            duration_secs: 600,
+            max_vus: 100,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: Some(100),
+            no_keep_alive: false,
+        };
+
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        let script = generator.generate().expect("Should generate script");
+
+        assert!(
+            script.contains("constant-arrival-rate"),
+            "with --rps set, executor must switch to constant-arrival-rate"
+        );
+        assert!(
+            script.contains("rate: 100,"),
+            "constant-arrival-rate must use the configured --rps as `rate`"
+        );
+        assert!(
+            script.contains("duration: '600s'"),
+            "duration must come from --duration, not the ramp-down stage; got:\n{}",
+            script
+        );
+        assert!(
+            script.contains("preAllocatedVUs: 100,"),
+            "preAllocatedVUs must equal --vus, not the last stage's target=0; got:\n{}",
+            script
+        );
+        assert!(
+            script.contains("maxVUs: 100,"),
+            "maxVUs must equal --vus, not the last stage's target=0; got:\n{}",
+            script
+        );
+        // Make sure the regression — `preAllocatedVUs: 0` from the ramp-down —
+        // can never silently come back. Walk the lines so we don't false-
+        // positive on the explanatory comment that lives in the template.
+        for (idx, line) in script.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//") || trimmed.starts_with("/*") {
+                continue;
+            }
+            assert!(
+                !trimmed.starts_with("preAllocatedVUs: 0"),
+                "regression at line {}: preAllocatedVUs is 0 — constant-arrival-rate \
+                 will run no VUs (issue #79 round 5 ramp-up bug). Line: {:?}",
+                idx + 1,
+                line,
+            );
+        }
+    }
+
+    /// Companion to the test above: confirm `--cps` flips `noConnectionReuse`
+    /// on. Issue #79 (round 5).
+    #[test]
+    fn test_cps_sets_no_connection_reuse() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/u".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("u".to_string()),
+        };
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: true,
+        };
+        let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
+        assert!(
+            script.contains("noConnectionReuse: true"),
+            "--cps must set noConnectionReuse: true on the k6 options block"
+        );
+        assert!(
+            script.contains("Total Connections:"),
+            "--cps summary must include connection-rate output (Srikanth's round-5 ask)"
+        );
+        assert!(
+            script.contains("Connection Rate:"),
+            "--cps summary must include 'Connection Rate:' (Srikanth's round-5 ask)"
         );
     }
 

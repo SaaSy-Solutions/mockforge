@@ -514,7 +514,7 @@ impl BenchCommand {
 
         // Print results
         let duration_secs = Self::parse_duration(&self.duration)?;
-        TerminalReporter::print_summary(&results, duration_secs);
+        TerminalReporter::print_summary_with_mode(&results, duration_secs, self.no_keep_alive);
 
         println!("\nResults saved to: {}", self.output.display());
 
@@ -1936,7 +1936,7 @@ impl BenchCommand {
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
         let duration_secs = Self::parse_duration(&self.duration)?;
-        TerminalReporter::print_summary(&results, duration_secs);
+        TerminalReporter::print_summary_with_mode(&results, duration_secs, self.no_keep_alive);
 
         Ok(())
     }
@@ -2742,7 +2742,7 @@ impl BenchCommand {
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
         let duration_secs = Self::parse_duration(&self.duration)?;
-        TerminalReporter::print_summary(&results, duration_secs);
+        TerminalReporter::print_summary_with_mode(&results, duration_secs, self.no_keep_alive);
 
         println!("\nOWASP security test results saved to: {}", self.output.display());
 
