@@ -40,7 +40,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 serde_yaml = "0.9"
 
 # Redis queue (matches the registry-server's choice).
-redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
 
 # Cloud-friendly bench/conformance/OWASP entry points (see
 # mockforge-bench::cloud_api). Adds k6 + handlebars + openapi parser to
