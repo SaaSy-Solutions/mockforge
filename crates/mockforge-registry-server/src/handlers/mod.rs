@@ -38,6 +38,7 @@ pub mod plugins;
 pub mod projects;
 pub mod public_keys;
 pub mod request_verification;
+pub mod resilience;
 pub mod reviews;
 pub mod routing_rules;
 pub mod runtime_logs;

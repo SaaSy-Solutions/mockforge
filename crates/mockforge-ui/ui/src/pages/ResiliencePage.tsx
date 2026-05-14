@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
 
 interface CircuitBreakerState {
   endpoint: string;
@@ -48,9 +51,28 @@ export const ResiliencePage: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [selectedTab, setSelectedTab] = useState<'circuit-breakers' | 'bulkheads'>('circuit-breakers');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  // `runtime_state: 'pending'` from the cloud scaffold (#468) means the
+  // runtime hasn't wired up middleware yet; we want to swap the auto-refresh
+  // banner for an honest "pending" notice rather than showing zeros that
+  // look like live data.
+  const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
+
+  const cloudMode = isCloudMode();
+  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+  const workspaceId = activeWorkspace?.id;
 
   const fetchCircuitBreakers = async () => {
     try {
+      if (cloudMode) {
+        if (!workspaceId) {
+          setCircuitBreakers([]);
+          return;
+        }
+        const env = await cloudResilienceApi.listCircuitBreakers(workspaceId);
+        setCircuitBreakers(env.data);
+        setRuntimeState(env.runtime_state);
+        return;
+      }
       const response = await fetch('/api/resilience/circuit-breakers');
       const data = await response.json();
       setCircuitBreakers(Array.isArray(data) ? data : []);
@@ -61,6 +83,16 @@ export const ResiliencePage: React.FC = () => {
 
   const fetchBulkheads = async () => {
     try {
+      if (cloudMode) {
+        if (!workspaceId) {
+          setBulkheads([]);
+          return;
+        }
+        const env = await cloudResilienceApi.listBulkheads(workspaceId);
+        setBulkheads(env.data);
+        setRuntimeState(env.runtime_state);
+        return;
+      }
       const response = await fetch('/api/resilience/bulkheads');
       const data = await response.json();
       setBulkheads(Array.isArray(data) ? data : []);
@@ -71,6 +103,19 @@ export const ResiliencePage: React.FC = () => {
 
   const fetchSummary = async () => {
     try {
+      if (cloudMode) {
+        if (!workspaceId) {
+          setSummary(null);
+          return;
+        }
+        const s = await cloudResilienceApi.getSummary(workspaceId);
+        setSummary({
+          circuit_breakers: s.circuit_breakers,
+          bulkheads: { ...s.bulkheads },
+        });
+        setRuntimeState(s.runtime_state);
+        return;
+      }
       const response = await fetch('/api/resilience/dashboard/summary');
       const data = await response.json();
       setSummary(data && typeof data === 'object' && !Array.isArray(data) ? data : null);
@@ -81,6 +126,15 @@ export const ResiliencePage: React.FC = () => {
 
   const resetCircuitBreaker = async (endpoint: string) => {
     try {
+      if (cloudMode) {
+        if (!workspaceId) return;
+        const result = await cloudResilienceApi.resetCircuitBreaker(workspaceId, endpoint);
+        if (!result.accepted) {
+          console.info('Circuit breaker reset is a no-op:', result.reason);
+        }
+        fetchCircuitBreakers();
+        return;
+      }
       await fetch(`/api/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`, {
         method: 'POST',
       });
@@ -92,6 +146,15 @@ export const ResiliencePage: React.FC = () => {
 
   const resetBulkhead = async (service: string) => {
     try {
+      if (cloudMode) {
+        if (!workspaceId) return;
+        const result = await cloudResilienceApi.resetBulkhead(workspaceId, service);
+        if (!result.accepted) {
+          console.info('Bulkhead reset is a no-op:', result.reason);
+        }
+        fetchBulkheads();
+        return;
+      }
       await fetch(`/api/resilience/bulkheads/${encodeURIComponent(service)}/reset`, {
         method: 'POST',
       });
@@ -138,6 +201,27 @@ export const ResiliencePage: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Pending-runtime banner (#468 cloud scaffold). Stops users wondering
+          why their counts stay at zero. Hides once the runtime ingest lands
+          and the registry starts returning `runtime_state: 'live'`. */}
+      {cloudMode && runtimeState === 'pending' && (
+        <div className="bg-warning-50 border border-warning-200 dark:bg-warning-900/30 dark:border-warning-800 rounded-lg p-4">
+          <p className="font-medium text-warning-700 dark:text-warning-300">
+            Resilience runtime not yet wired
+          </p>
+          <p className="text-sm text-warning-700/80 dark:text-warning-300/80 mt-1">
+            Cloud-side API is live, but hosted-mock runners don&rsquo;t yet install
+            the circuit-breaker / bulkhead middleware. Counters stay at zero
+            until that follow-up ships; resets are accepted but no-op.
+          </p>
+        </div>
+      )}
+      {cloudMode && !workspaceId && (
+        <div className="bg-card border border-border rounded-lg p-4 text-sm text-muted-foreground">
+          Select a workspace to view resilience state.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-foreground">Resilience Dashboard</h1>

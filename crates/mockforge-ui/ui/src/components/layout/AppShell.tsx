@@ -261,6 +261,13 @@ const cloudNavItemIds = new Set([
   // Cloud snapshots — synchronous capture / diff / restore for the
   // active workspace via cloudSnapshotsApi.
   'cloud-snapshots',
+  // Resilience dashboard (#468 cloud scaffold) — circuit-breaker /
+  // bulkhead state via cloudResilienceApi. Phase 1 returns
+  // `runtime_state: 'pending'` because the hosted-mock runtime hasn't
+  // wired the middleware yet; the page shows an explicit pending
+  // banner so users don't confuse "no breakers configured" with the
+  // empty scaffold response.
+  'resilience',
   // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
   // (different feature from drift IncidentDashboard).
   'cloud-incidents',
