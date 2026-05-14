@@ -1,0 +1,44 @@
+name: 'Install Rust toolchain (no profile pollution)'
+description: >
+  Drop-in wrapper for dtolnay/rust-toolchain that pre-seeds a rustup symlink
+  in $CARGO_HOME/bin before the upstream action runs. Without this, when our
+  workflows set CARGO_HOME=/tmp/cargo-mockforge-<run_id>, dtolnay sees an
+  empty $CARGO_HOME, invokes rustup-init, and rustup-init defaults to
+  appending `. "$CARGO_HOME/env"` to ~/.profile. After the tmp dir is wiped
+  the source line dangles, breaking shells that resolve cargo via .profile.
+  See SaaSy-Solutions/mockforge#510 for the full incident write-up.
+
+inputs:
+  toolchain:
+    description: 'Rust toolchain to install (passed through to dtolnay/rust-toolchain).'
+    required: false
+    default: 'stable'
+  components:
+    description: 'Comma-separated rustup components (clippy, rustfmt, ...). Passed through.'
+    required: false
+    default: ''
+  targets:
+    description: 'Comma-separated target triples to add. Passed through.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Pre-seed rustup symlink in CARGO_HOME/bin (avoid rustup-init .profile write)
+      shell: bash
+      run: |
+        # Only matters on the self-hosted runner where /home/actions/.cargo/bin/rustup
+        # is preinstalled. On hosted runners $CARGO_HOME defaults to ~/.cargo and this
+        # is a no-op.
+        if [ -x /home/actions/.cargo/bin/rustup ] && [ -n "$CARGO_HOME" ] && [ ! -x "$CARGO_HOME/bin/rustup" ]; then
+          mkdir -p "$CARGO_HOME/bin"
+          ln -sf /home/actions/.cargo/bin/rustup "$CARGO_HOME/bin/rustup"
+        fi
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
