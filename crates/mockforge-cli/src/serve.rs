@@ -98,6 +98,17 @@ pub(crate) struct ServeArgs {
     pub(crate) no_config: bool,
     /// Disable the built-in HTTP rate limiter (sets `MOCKFORGE_RATE_LIMIT_ENABLED=false`).
     pub(crate) no_rate_limit: bool,
+    /// Enable the per-endpoint circuit breaker resilience pattern (#468 follow-up).
+    pub(crate) circuit_breaker: bool,
+    pub(crate) circuit_breaker_failure_threshold: u64,
+    pub(crate) circuit_breaker_success_threshold: u64,
+    pub(crate) circuit_breaker_timeout_ms: u64,
+    pub(crate) circuit_breaker_failure_rate: f64,
+    /// Enable the global bulkhead resilience pattern (#468 follow-up).
+    pub(crate) bulkhead: bool,
+    pub(crate) bulkhead_max_concurrent: u32,
+    pub(crate) bulkhead_max_queue: u32,
+    pub(crate) bulkhead_queue_timeout_ms: u64,
 }
 
 impl Default for ServeArgs {
@@ -169,6 +180,15 @@ impl Default for ServeArgs {
             verbose: false,
             no_config: false,
             no_rate_limit: false,
+            circuit_breaker: false,
+            circuit_breaker_failure_threshold: 5,
+            circuit_breaker_success_threshold: 2,
+            circuit_breaker_timeout_ms: 60_000,
+            circuit_breaker_failure_rate: 50.0,
+            bulkhead: false,
+            bulkhead_max_concurrent: 100,
+            bulkhead_max_queue: 10,
+            bulkhead_queue_timeout_ms: 5000,
         }
     }
 }
@@ -1709,6 +1729,31 @@ pub async fn handle_serve(
     )
     .await;
 
+    // CLI-flag overrides for the #468 resilience patterns. The YAML
+    // `ChaosEngConfig` doesn't carry `circuit_breaker` / `bulkhead` fields
+    // today, so CLI is the only way to turn these on. `None` falls back to
+    // the chaos crate's defaults (which keep `enabled: false`), so the
+    // middleware stays a no-op until the operator opts in.
+    let cli_circuit_breaker =
+        serve_args
+            .circuit_breaker
+            .then_some(mockforge_chaos::config::CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: serve_args.circuit_breaker_failure_threshold,
+                success_threshold: serve_args.circuit_breaker_success_threshold,
+                timeout_ms: serve_args.circuit_breaker_timeout_ms,
+                failure_rate_threshold: serve_args.circuit_breaker_failure_rate,
+                half_open_max_requests: 3,
+                min_requests_for_rate: 10,
+                rolling_window_ms: 10_000,
+            });
+    let cli_bulkhead = serve_args.bulkhead.then_some(mockforge_chaos::config::BulkheadConfig {
+        enabled: true,
+        max_concurrent_requests: serve_args.bulkhead_max_concurrent,
+        max_queue_size: serve_args.bulkhead_max_queue,
+        queue_timeout_ms: serve_args.bulkhead_queue_timeout_ms,
+    });
+
     // Integrate chaos engineering API router
     // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
     let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
@@ -1743,13 +1788,19 @@ pub async fn handle_serve(
                     connection_timeout_ms: 30000,
                 }
             }),
-            circuit_breaker: None,
-            bulkhead: None,
+            circuit_breaker: cli_circuit_breaker.clone(),
+            bulkhead: cli_bulkhead.clone(),
         };
         chaos_cfg
     } else {
-        // Default chaos config if not configured
-        ChaosConfig::default()
+        // Default chaos config if not configured — still honour CLI flags
+        // for the resilience patterns so `--circuit-breaker` works without
+        // a chaos YAML.
+        ChaosConfig {
+            circuit_breaker: cli_circuit_breaker.clone(),
+            bulkhead: cli_bulkhead.clone(),
+            ..ChaosConfig::default()
+        }
     };
 
     // Create and merge chaos API router
@@ -1765,16 +1816,18 @@ pub async fn handle_serve(
     http_app = http_app.merge(chaos_router);
     println!("✅ Chaos Engineering API available at /api/chaos/*");
 
-    // Resilience middleware + dashboard state (#468 Phase 2).
+    // Resilience middleware + dashboard state (#468 Phase 2 + CLI follow-up).
     //
-    // The `CircuitBreakerConfig` / `BulkheadConfig` defaults both carry
-    // `enabled: false`, so installing the middleware here is essentially
-    // a no-op until someone turns the patterns on (CLI flags exist; full
-    // wiring is the follow-up). The Arcs we hand to the middleware are
-    // the *same* ones we pass to the admin server, so the
-    // `/api/resilience/*` dashboard reflects what this middleware
-    // records once it's active.
-    let (resilience_mw_state, resilience_api_state) = mockforge_chaos::default_resilience_state();
+    // We hand the same `Option<...Config>` values to both the chaos config
+    // (above) and the resilience state builder so `/api/chaos/*` and
+    // `/api/resilience/*` report identical settings. When both CLI flags
+    // are unset, the builder falls back to the disabled defaults and the
+    // middleware short-circuits per-request — effectively free.
+    let (resilience_mw_state, resilience_api_state) =
+        mockforge_chaos::resilience_state_from_configs(
+            cli_circuit_breaker.clone(),
+            cli_bulkhead.clone(),
+        );
 
     // Merge WebSocket router onto the HTTP app so `/ws` and `/ws/{*path}` are
     // reachable on the same port as HTTP. This is required for hosted mocks,

@@ -64,29 +64,38 @@ impl ResilienceMiddlewareState {
     }
 }
 
-/// Build the middleware state + matching dashboard state with default
-/// (disabled) configs and a fresh Prometheus registry. Both states share
-/// the same `Arc<...Manager>` instances, so `/api/resilience/*` reflects
-/// what the middleware records.
+/// Build the middleware state + matching dashboard state from explicit
+/// `CircuitBreakerConfig` / `BulkheadConfig` values. Both states share the
+/// same `Arc<...Manager>` instances backed by a fresh Prometheus registry,
+/// so `/api/resilience/*` reflects what the middleware records.
 ///
-/// Useful from binaries that don't want to depend on `prometheus` or
-/// `mockforge-chaos::config` directly — the `mockforge-cli` `serve`
-/// command uses this to wire #468 Phase 2 with one call.
-pub fn default_resilience_state(
+/// `None` for either config falls back to that type's `Default` (which has
+/// `enabled: false`), preserving the same behaviour `default_resilience_state`
+/// shipped with in #468 Phase 2.
+pub fn resilience_state_from_configs(
+    circuit_config: Option<crate::config::CircuitBreakerConfig>,
+    bulkhead_config: Option<crate::config::BulkheadConfig>,
 ) -> (ResilienceMiddlewareState, crate::resilience_api::ResilienceApiState) {
-    use crate::config::{BulkheadConfig, CircuitBreakerConfig};
     use prometheus::Registry;
 
     let registry = Arc::new(Registry::new());
     let circuit =
-        Arc::new(CircuitBreakerManager::new(CircuitBreakerConfig::default(), registry.clone()));
-    let bulkhead = Arc::new(BulkheadManager::new(BulkheadConfig::default(), registry));
+        Arc::new(CircuitBreakerManager::new(circuit_config.unwrap_or_default(), registry.clone()));
+    let bulkhead = Arc::new(BulkheadManager::new(bulkhead_config.unwrap_or_default(), registry));
     let mw_state = ResilienceMiddlewareState::new(circuit.clone(), bulkhead.clone());
     let api_state = crate::resilience_api::ResilienceApiState {
         circuit_breaker_manager: circuit,
         bulkhead_manager: bulkhead,
     };
     (mw_state, api_state)
+}
+
+/// Build the middleware state + matching dashboard state with default
+/// (disabled) configs. Thin wrapper around [`resilience_state_from_configs`]
+/// for callers that don't have CLI/YAML overrides to plumb through.
+pub fn default_resilience_state(
+) -> (ResilienceMiddlewareState, crate::resilience_api::ResilienceApiState) {
+    resilience_state_from_configs(None, None)
 }
 
 /// Axum middleware: gate request through circuit breaker + bulkhead.
@@ -286,6 +295,56 @@ mod tests {
         let s = ResilienceMiddlewareState::new(circuit, bulkhead);
         let app = app(s).await;
         assert_eq!(call(&app, "/ok").await, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn from_configs_threshold_drives_breaker_trip() {
+        // Hand the builder a 1-failure-threshold breaker and confirm it
+        // actually trips after one 5xx — proves the config passed through
+        // rather than being ignored / replaced with defaults.
+        let cb = CircuitBreakerConfig {
+            enabled: true,
+            failure_threshold: 1,
+            success_threshold: 1,
+            timeout_ms: 60_000,
+            half_open_max_requests: 1,
+            failure_rate_threshold: 100.0,
+            min_requests_for_rate: 100,
+            rolling_window_ms: 10_000,
+        };
+        let (mw, _api) = resilience_state_from_configs(Some(cb), None);
+        let app = app(mw).await;
+        assert_eq!(call(&app, "/boom").await, StatusCode::INTERNAL_SERVER_ERROR);
+        // Threshold=1 means the next request hits an open breaker.
+        assert_eq!(call(&app, "/boom").await, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn from_configs_bulkhead_capacity_rejects() {
+        // 0-slot bulkhead via the new builder rejects unconditionally —
+        // proves the BulkheadConfig also threads through correctly.
+        let bh = BulkheadConfig {
+            enabled: true,
+            max_concurrent_requests: 0,
+            max_queue_size: 0,
+            queue_timeout_ms: 100,
+        };
+        let (mw, _api) = resilience_state_from_configs(None, Some(bh));
+        let app = app(mw).await;
+        assert_eq!(call(&app, "/ok").await, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn from_configs_with_none_matches_default_state() {
+        // Both None should be equivalent to `default_resilience_state` —
+        // no surprises in the boundary case.
+        let (mw, _api) = resilience_state_from_configs(None, None);
+        let app = app(mw).await;
+        // Disabled managers must let everything through unchanged.
+        assert_eq!(call(&app, "/ok").await, StatusCode::OK);
+        for _ in 0..5 {
+            assert_eq!(call(&app, "/boom").await, StatusCode::INTERNAL_SERVER_ERROR);
+        }
     }
 
     #[tokio::test]

@@ -2471,6 +2471,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 verbose: args.verbose,
                 no_config: args.no_config,
                 no_rate_limit: args.no_rate_limit,
+                circuit_breaker: args.chaos_opts.circuit_breaker,
+                circuit_breaker_failure_threshold: args
+                    .chaos_opts
+                    .circuit_breaker_failure_threshold,
+                circuit_breaker_success_threshold: args
+                    .chaos_opts
+                    .circuit_breaker_success_threshold,
+                circuit_breaker_timeout_ms: args.chaos_opts.circuit_breaker_timeout_ms,
+                circuit_breaker_failure_rate: args.chaos_opts.circuit_breaker_failure_rate,
+                bulkhead: args.chaos_opts.bulkhead,
+                bulkhead_max_concurrent: args.chaos_opts.bulkhead_max_concurrent,
+                bulkhead_max_queue: args.chaos_opts.bulkhead_max_queue,
+                bulkhead_queue_timeout_ms: args.chaos_opts.bulkhead_queue_timeout_ms,
             })
             .await?;
         }
