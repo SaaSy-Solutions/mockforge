@@ -1,3 +1,21 @@
+## [0.3.135] - 2026-05-15
+
+### Added
+
+- **[Cloud][Reality]** Cloud-mode Resilience dashboard — end-to-end live state from hosted-mock deployments (#468)
+  - **Phase 1 (#517) — cloud scaffold:** registry exposes `/api/v1/hosted-mocks/{deployment_id}/resilience/{circuit-breakers, bulkheads, summary}` and POST reset endpoints. UI's `ResiliencePage` branches on `isCloudMode()` and calls the registry instead of the never-mounted local `/api/resilience/*` routes. Originally workspace-scoped; #522 corrected the scope (see below) — circuit-breaker / bulkhead state lives in a specific mockforge process so it must be deployment-scoped.
+  - **Phase 2 (#518) — middleware in the runtime:** new `mockforge_chaos::resilience_middleware` axum layer wires every HTTP request through the existing `CircuitBreakerManager` + `BulkheadManager`. Per-endpoint circuit breaker keyed by `"{METHOD} {path}"`; bulkhead keyed on a configurable service string (defaults to `"http"`); only 5xx counts as a breaker failure (4xx stays out of the per-endpoint failure budget). Bulkhead saturation returns 503 + `Retry-After: 1` without recording on the breaker. `mockforge serve` now layers the middleware on the HTTP app and mounts `mockforge_chaos::create_resilience_router` on the admin port; `default_resilience_state()` returns a `(MiddlewareState, ResilienceApiState)` pair backed by the same `Arc<...Manager>` instances so the dashboard reflects what the middleware records.
+  - **CLI flags wired (#519):** existing `--circuit-breaker` / `--bulkhead` flags (and the nine threshold/limit knobs that come with them) actually turn the middleware on. New `resilience_state_from_configs(circuit, bulkhead)` builder takes `Option<CircuitBreakerConfig>` / `Option<BulkheadConfig>` overrides; `serve.rs` threads the CLI values into both `ChaosConfig` (so `/api/chaos/*` reports identical settings) and the resilience state. When both flags are unset, behaviour is identical to before — middleware short-circuits per-request, effectively free.
+  - **Phase 3 (#522) — runtime proxy + admin enable:** registry now `reqwest`-proxies `/api/v1/hosted-mocks/{deployment_id}/resilience/*` over Fly 6PN to `http://{HostedMock::fly_app_name}.internal:9080/api/resilience/*` (3-second timeout, fail-fast). `runtime_state` is now `"live" | "unreachable"` — dropped `"pending"` because every non-live state is some form of unreachable with a real proxy in place. **The orchestrator now injects `MOCKFORGE_ADMIN_ENABLED=true` on every Fly deploy** (both `deploy_to_flyio` and `redeploy_to_flyio`); without that, the admin server wouldn't start in cloud and the proxy would have returned `unreachable` for every deployment that ever existed. UI gains a deployment selector: auto-selects the first active deployment in the org, shows a `<select>` only when >1 exists, renders a helpful empty state when none.
+- **[Cloud]** Cloud-mode Virtual Backends — consistency lifecycle presets (#516, #461)
+  - Registry endpoints for managing virtual-backend lifecycle (provisioning, eventual consistency, primary/secondary fan-out) with cloud-side persistence and audit. UI lifecycle picker now drives cloud-mode workspaces without falling back to the local-only surface.
+
+### Fixed
+
+- **[Security]** `lettre` 0.11.21 → 0.11.22 to clear RUSTSEC-2026-0141 (critical, published 2026-05-14) (#521)
+  - Patch-level bump in Cargo.lock; no API surface change.
+  - Drive-by clippy cleanup in `mockforge-registry` to unblock the warning ratchet on the lettre commit.
+
 ## [0.3.134] - 2026-05-14
 
 ### Added
