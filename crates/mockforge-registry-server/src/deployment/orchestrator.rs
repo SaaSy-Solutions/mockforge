@@ -254,6 +254,12 @@ impl DeploymentOrchestrator {
         env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
         env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
         env.insert("PORT".to_string(), "3000".to_string());
+        // Admin server hosts `/api/resilience/*` (#468 Phase 2) and other
+        // internal endpoints the registry proxies over Fly 6PN. It binds on
+        // 0.0.0.0:9080 inside the container (Docker default for AdminConfig)
+        // and isn't published as a public Fly service, so it's reachable
+        // only on `{app}.internal:9080` from sibling apps in the same org.
+        env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
 
         if let Some(ref spec_url) = deployment.openapi_spec_url {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
@@ -602,6 +608,9 @@ impl DeploymentOrchestrator {
         env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
         env.insert("MOCKFORGE_CONFIG".to_string(), serde_json::to_string(&deployment.config_json)?);
         env.insert("PORT".to_string(), "3000".to_string());
+        // Same admin-server enable rationale as `deploy_to_flyio` above —
+        // gives the resilience proxy something to reach over 6PN.
+        env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
 
         if let Some(ref spec_url) = deployment.openapi_spec_url {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
