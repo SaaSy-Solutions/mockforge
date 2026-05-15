@@ -527,6 +527,32 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/workspaces/{workspace_id}/resilience/bulkheads/{service}/reset",
             post(handlers::resilience::reset_bulkhead),
         )
+        // Consistency / Virtual Backends routes (#461 / part of #459).
+        // Lifecycle preset library is static (matches mockforge-data); the
+        // workspace-scoped apply + entity-list endpoints back the cloud
+        // VirtualBackendsPage. Time-driven state transitions are not modeled
+        // here — that's a future driver decision; cloud users see the
+        // applied initial state until they reapply.
+        .route(
+            "/api/v1/consistency/lifecycle-presets",
+            get(handlers::consistency::list_lifecycle_presets),
+        )
+        .route(
+            "/api/v1/consistency/lifecycle-presets/{preset_id}",
+            get(handlers::consistency::get_lifecycle_preset),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/consistency/lifecycle-presets/apply",
+            post(handlers::consistency::apply_lifecycle_preset),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/consistency/entities",
+            get(handlers::consistency::list_workspace_entities),
+        )
+        .route(
+            "/api/v1/consistency/entities/{id}",
+            get(handlers::consistency::get_entity),
+        )
         // Flow routes (cloud-enablement task #9 / Phase 1).
         // Unified resource for scenario/orchestration/state_machine/chain
         // editor surfaces. Run trigger reuses #4 test_runs (kind=...).

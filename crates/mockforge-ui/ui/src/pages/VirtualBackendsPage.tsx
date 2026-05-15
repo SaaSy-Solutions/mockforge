@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { consistencyApi, snapshotsApi } from '../services/api';
+import { cloudConsistencyApi } from '../services/api/cloudConsistency';
+import { isCloudMode } from '../utils/cloudMode';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 
 type Tab = 'entities' | 'data' | 'snapshots' | 'settings';
 
@@ -34,14 +37,29 @@ export const VirtualBackendsPage: React.FC = () => {
     const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
     const queryClient = useQueryClient();
 
+    // Cloud-mode branching (#461). The entities tab swaps over to the
+    // registry's per-workspace consistency endpoints; the snapshots tab
+    // points at the dedicated `cloud-snapshots` page since cloud snapshots
+    // identify by UUID rather than name and warrant their own UI.
+    const cloudMode = isCloudMode();
+    const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
+    const workspaceId = activeWorkspace?.id;
+
     // Fetch entities from consistency API
     const {
         data: entitiesData,
         isLoading: entitiesLoading,
         error: entitiesError,
     } = useQuery({
-        queryKey: ['virtual-backend', 'entities'],
-        queryFn: () => consistencyApi.listEntities(),
+        queryKey: ['virtual-backend', 'entities', cloudMode ? workspaceId ?? null : 'local'],
+        // In cloud mode we need an active workspace before we can hit the
+        // per-workspace endpoint; the `enabled` flag below short-circuits
+        // the query until one is selected.
+        queryFn: () =>
+            cloudMode
+                ? cloudConsistencyApi.listEntities(workspaceId!)
+                : consistencyApi.listEntities(),
+        enabled: !cloudMode || !!workspaceId,
     });
 
     // Fetch snapshots
@@ -214,7 +232,14 @@ export const VirtualBackendsPage: React.FC = () => {
 
             {/* Content */}
             <div className="flex-1 bg-card rounded-xl shadow-sm border border-border overflow-hidden">
-                {activeTab === 'entities' && (
+                {activeTab === 'entities' && cloudMode && !workspaceId ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                        <Database className="w-12 h-12 mb-3 opacity-20" />
+                        <p>Select a workspace to view virtual entities.</p>
+                    </div>
+                ) : null}
+
+                {activeTab === 'entities' && (!cloudMode || !!workspaceId) && (
                     <div className="p-0">
                         {entitiesLoading ? (
                             <div className="flex items-center justify-center py-16">
@@ -366,7 +391,25 @@ export const VirtualBackendsPage: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'snapshots' && (
+                {activeTab === 'snapshots' && cloudMode && (
+                    // Cloud snapshots identify by UUID (not name) and are
+                    // surfaced on the dedicated Cloud Snapshots page (#10).
+                    // Pointing both UIs at the same data would just duplicate
+                    // the controls — link out instead of half-wiring it here.
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                        <History className="w-12 h-12 mb-3 opacity-30" />
+                        <p>Snapshots in cloud mode live on the dedicated page.</p>
+                        <a
+                            href="/cloud-snapshots"
+                            className="mt-3 inline-flex items-center px-3 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            <History className="w-4 h-4 mr-2" />
+                            Open Cloud Snapshots
+                        </a>
+                    </div>
+                )}
+
+                {activeTab === 'snapshots' && !cloudMode && (
                     <div className="p-6">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-medium text-foreground">Database Snapshots</h3>

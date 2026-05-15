@@ -268,6 +268,12 @@ const cloudNavItemIds = new Set([
   // banner so users don't confuse "no breakers configured" with the
   // empty scaffold response.
   'resilience',
+  // Virtual Backends (#461) — entities tab dispatches to
+  // cloudConsistencyApi against /api/v1/workspaces/{id}/consistency/*.
+  // Lifecycle preset library is shared with local mode (static array
+  // server-side); cloud-mode snapshots tab links to the cloud-snapshots
+  // page instead of trying to host two snapshot UIs.
+  'virtual-backends',
   // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
   // (different feature from drift IncidentDashboard).
   'cloud-incidents',
