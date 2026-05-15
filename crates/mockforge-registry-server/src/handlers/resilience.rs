@@ -1,59 +1,81 @@
-//! Cloud resilience handlers (#468) — Phase 1 (cloud scaffold).
+//! Cloud resilience handlers (#468) — Phase 2 (runtime proxy).
 //!
-//! The local `ResiliencePage` reads circuit-breaker + bulkhead state from
-//! `/api/resilience/*`. The state managers
-//! (`mockforge_chaos::resilience::CircuitBreakerManager` / `BulkheadManager`)
-//! exist, but no part of `mockforge-cli serve`, the admin-UI binary, or the
-//! hosted-mock runtime daemon currently installs them as middleware in the
-//! request path. That gap is the actual #468 work; the runtime wire-up is
-//! tracked separately in the #468 description after the scope correction.
+//! Live circuit-breaker + bulkhead state from a hosted mock. The deployment
+//! itself runs `mockforge serve` with the resilience middleware installed
+//! (#518) and exposes `/api/resilience/*` on its admin port. We reach it
+//! over Fly.io's private network (`{fly-app}.internal:9080`).
 //!
-//! This Phase 1 ships the *cloud-side API surface* so:
-//!   - The UI can branch on `isCloudMode()` and call the registry instead
-//!     of the never-mounted local routes.
-//!   - The future runtime PR has a stable contract to wire its state into.
-//!   - The `resilience` nav item is unblocked from `cloudHiddenNavItemIds`.
+//! Phase 1 of #468 (PR #517) shipped a workspace-scoped envelope that
+//! always returned `runtime_state: "pending"`. Phase 2 (this PR) corrects
+//! the scope — resilience state is per-deployment, not per-workspace —
+//! and replaces the placeholder with a real reqwest-driven proxy.
 //!
-//! Endpoints return empty payloads with a top-level `runtime_state` field
-//! carrying `"pending"` so the UI can render an honest empty state instead
-//! of a generic spinner. Once the runtime ingest channel lands, this module
-//! reads from a `runtime_resilience_state` table (or equivalent) and
-//! flips `runtime_state` to `"live"`.
+//! ## Wire format
 //!
-//! Routes:
-//!   GET  /api/v1/workspaces/{workspace_id}/resilience/circuit-breakers
-//!   GET  /api/v1/workspaces/{workspace_id}/resilience/bulkheads
-//!   GET  /api/v1/workspaces/{workspace_id}/resilience/summary
-//!   POST /api/v1/workspaces/{workspace_id}/resilience/circuit-breakers/{endpoint}/reset
-//!   POST /api/v1/workspaces/{workspace_id}/resilience/bulkheads/{service}/reset
+//! Every GET returns `{ runtime_state, data }`. `runtime_state` is one of:
+//! * `"live"` — proxy succeeded; `data` is whatever the deployment reported.
+//! * `"unreachable"` — proxy failed (connection refused, timeout, non-2xx
+//!   upstream, etc.); `data` is empty. The UI shows a "deployment not
+//!   reachable" banner. Picked over `"pending"` because it covers every
+//!   non-live state with one label and is honest about *why* the page is
+//!   empty: the registry tried and the deployment did not answer.
+//!
+//! POST resets return `{ accepted, runtime_state, reason }`. `accepted=true`
+//! is only set on a 2xx from the upstream reset endpoint.
+//!
+//! ## Routes
+//!
+//! * `GET  /api/v1/hosted-mocks/{deployment_id}/resilience/circuit-breakers`
+//! * `GET  /api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads`
+//! * `GET  /api/v1/hosted-mocks/{deployment_id}/resilience/summary`
+//! * `POST /api/v1/hosted-mocks/{deployment_id}/resilience/circuit-breakers/{endpoint}/reset`
+//! * `POST /api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads/{service}/reset`
+
+use std::time::Duration;
 
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
     Json,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::CloudWorkspace,
+    models::HostedMock,
     AppState,
 };
 
-/// Cloud circuit-breaker state. Mirrors
-/// `mockforge_chaos::resilience_api::CircuitBreakerStateResponse` so the UI
-/// can swap services without changing its types.
-#[derive(Debug, Clone, Serialize)]
+/// Admin port the hosted mock exposes `/api/resilience/*` on. Matches the
+/// default in `mockforge-core::config::protocol::AdminConfig`. Fly machines
+/// expose ports bound to `0.0.0.0` on the private 6PN network, so the
+/// admin server is reachable from the registry pod even though no
+/// `[[services]]` entry publishes it.
+const ADMIN_PORT: u16 = 9080;
+
+/// Reqwest timeout for one proxy call. The dashboard polls every few
+/// seconds, so a slow call shouldn't block UX — fail fast and let the
+/// next poll retry.
+const PROXY_TIMEOUT: Duration = Duration::from_secs(3);
+
+// --- Wire types -----------------------------------------------------------
+//
+// These mirror `mockforge_chaos::resilience_api::*Response`. Duplicated here
+// (rather than `pub use`d) so the registry doesn't pull in the whole chaos
+// crate; the upstream shape changes rarely and Deserialize keeps us
+// resilient to additive fields.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerStateResponse {
     pub endpoint: String,
     pub state: String,
     pub stats: CircuitStatsResponse,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitStatsResponse {
     pub total_requests: u64,
     pub successful_requests: u64,
@@ -65,13 +87,13 @@ pub struct CircuitStatsResponse {
     pub failure_rate: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkheadStateResponse {
     pub service: String,
     pub stats: BulkheadStatsResponse,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkheadStatsResponse {
     pub active_requests: u32,
     pub queued_requests: u32,
@@ -82,11 +104,6 @@ pub struct BulkheadStatsResponse {
 }
 
 /// Envelope wrapping each GET response with a `runtime_state` discriminator.
-///
-/// The UI checks this field to decide between "no breakers configured yet"
-/// (empty + state=`live`) and "runtime instrumentation not yet wired"
-/// (empty + state=`pending`). Once runtime ingest lands, the inner `data`
-/// list populates and `runtime_state` stays `live`.
 #[derive(Debug, Serialize)]
 pub struct ResilienceEnvelope<T: Serialize> {
     pub runtime_state: &'static str,
@@ -94,9 +111,16 @@ pub struct ResilienceEnvelope<T: Serialize> {
 }
 
 impl<T: Serialize> ResilienceEnvelope<T> {
-    fn pending() -> Self {
+    fn live(data: Vec<T>) -> Self {
         Self {
-            runtime_state: "pending",
+            runtime_state: "live",
+            data,
+        }
+    }
+
+    fn unreachable() -> Self {
+        Self {
+            runtime_state: "unreachable",
             data: Vec::new(),
         }
     }
@@ -107,112 +131,189 @@ impl<T: Serialize> ResilienceEnvelope<T> {
 pub async fn list_circuit_breakers(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Path(workspace_id): Path<Uuid>,
+    Path(deployment_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<ResilienceEnvelope<CircuitBreakerStateResponse>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    // Runtime wire-up is pending; return empty + pending discriminator.
-    Ok(Json(ResilienceEnvelope::pending()))
+    let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let base_url = admin_base_url(&deployment);
+    let url = format!("{base_url}/api/resilience/circuit-breakers");
+    Ok(Json(match proxy_get_vec::<CircuitBreakerStateResponse>(&url).await {
+        Ok(data) => ResilienceEnvelope::live(data),
+        Err(err) => {
+            tracing::warn!(%deployment_id, error = %err, "resilience proxy GET failed");
+            ResilienceEnvelope::unreachable()
+        }
+    }))
 }
 
 pub async fn list_bulkheads(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Path(workspace_id): Path<Uuid>,
+    Path(deployment_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<ResilienceEnvelope<BulkheadStateResponse>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    Ok(Json(ResilienceEnvelope::pending()))
+    let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let base_url = admin_base_url(&deployment);
+    let url = format!("{base_url}/api/resilience/bulkheads");
+    Ok(Json(match proxy_get_vec::<BulkheadStateResponse>(&url).await {
+        Ok(data) => ResilienceEnvelope::live(data),
+        Err(err) => {
+            tracing::warn!(%deployment_id, error = %err, "resilience proxy GET failed");
+            ResilienceEnvelope::unreachable()
+        }
+    }))
 }
 
 pub async fn get_summary(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Path(workspace_id): Path<Uuid>,
+    Path(deployment_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Value>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    // Same shape as `mockforge_chaos::resilience_api::get_dashboard_summary`
-    // so the UI's summary cards render identically; `runtime_state` flags
-    // the data as scaffold rather than live.
-    Ok(Json(json!({
-        "runtime_state": "pending",
-        "circuit_breakers": {
-            "total": 0,
-            "open": 0,
-            "half_open": 0,
-            "closed": 0,
-        },
-        "bulkheads": {
-            "total": 0,
-            "active_requests": 0,
-            "queued_requests": 0,
-        },
-    })))
+    let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let base_url = admin_base_url(&deployment);
+    let url = format!("{base_url}/api/resilience/dashboard/summary");
+    Ok(Json(match proxy_get_value(&url).await {
+        Ok(mut body) => {
+            // The hosted mock's summary endpoint returns the raw stats
+            // object without a runtime_state tag; tag it here so the UI's
+            // single discriminator path keeps working.
+            if let Value::Object(ref mut map) = body {
+                map.insert("runtime_state".into(), Value::String("live".into()));
+            }
+            body
+        }
+        Err(err) => {
+            tracing::warn!(%deployment_id, error = %err, "resilience proxy GET summary failed");
+            json!({
+                "runtime_state": "unreachable",
+                "circuit_breakers": { "total": 0, "open": 0, "half_open": 0, "closed": 0 },
+                "bulkheads": { "total": 0, "active_requests": 0, "queued_requests": 0 },
+            })
+        }
+    }))
 }
 
 // --- POST handlers --------------------------------------------------------
 
-/// Reset a circuit breaker. No-ops while the runtime ingest channel is
-/// pending; returns the same JSON envelope shape `{accepted, runtime_state,
-/// reason}` for both states so the UI doesn't need conditional parsing once
-/// the live runtime lands.
 pub async fn reset_circuit_breaker(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Path((workspace_id, endpoint)): Path<(Uuid, String)>,
+    Path((deployment_id, endpoint)): Path<(Uuid, String)>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Value>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    tracing::info!(
-        %workspace_id,
-        endpoint = %endpoint,
-        "circuit-breaker reset requested while runtime wire-up is pending",
+    let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let base_url = admin_base_url(&deployment);
+    // The hosted mock's endpoint segment is itself a path component that
+    // may contain `/`, so urlencode it.
+    let url = format!(
+        "{base_url}/api/resilience/circuit-breakers/{}/reset",
+        urlencoding::encode(&endpoint),
     );
-    Ok(Json(json!({
-        "accepted": false,
-        "runtime_state": "pending",
-        "reason": "Resilience runtime wire-up is pending; this reset is a no-op until it lands.",
-    })))
+    Ok(Json(match proxy_post_empty(&url).await {
+        Ok(()) => json!({ "accepted": true, "runtime_state": "live" }),
+        Err(err) => {
+            tracing::warn!(%deployment_id, %endpoint, error = %err, "resilience proxy POST reset failed");
+            json!({
+                "accepted": false,
+                "runtime_state": "unreachable",
+                "reason": err.to_string(),
+            })
+        }
+    }))
 }
 
 pub async fn reset_bulkhead(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
-    Path((workspace_id, service)): Path<(Uuid, String)>,
+    Path((deployment_id, service)): Path<(Uuid, String)>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Value>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    tracing::info!(
-        %workspace_id,
-        service = %service,
-        "bulkhead reset requested while runtime wire-up is pending",
-    );
-    Ok(Json(json!({
-        "accepted": false,
-        "runtime_state": "pending",
-        "reason": "Resilience runtime wire-up is pending; this reset is a no-op until it lands.",
-    })))
+    let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
+    let base_url = admin_base_url(&deployment);
+    let url =
+        format!("{base_url}/api/resilience/bulkheads/{}/reset", urlencoding::encode(&service),);
+    Ok(Json(match proxy_post_empty(&url).await {
+        Ok(()) => json!({ "accepted": true, "runtime_state": "live" }),
+        Err(err) => {
+            tracing::warn!(%deployment_id, %service, error = %err, "resilience proxy POST reset failed");
+            json!({
+                "accepted": false,
+                "runtime_state": "unreachable",
+                "reason": err.to_string(),
+            })
+        }
+    }))
 }
 
 // --- helpers --------------------------------------------------------------
 
-async fn authorize_workspace(
+/// Build the 6PN admin URL for a hosted mock. The deployment is a Fly app
+/// named via [`HostedMock::fly_app_name`]; Fly resolves `{name}.internal`
+/// to a private IPv6 reachable from the registry pod.
+fn admin_base_url(deployment: &HostedMock) -> String {
+    format!("http://{}.internal:{ADMIN_PORT}", deployment.fly_app_name())
+}
+
+/// GET a JSON list. 2xx + valid JSON → Ok; anything else → Err.
+async fn proxy_get_vec<T: for<'de> serde::Deserialize<'de>>(url: &str) -> reqwest::Result<Vec<T>> {
+    reqwest::Client::builder()
+        .timeout(PROXY_TIMEOUT)
+        .build()?
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Vec<T>>()
+        .await
+}
+
+/// GET an arbitrary JSON object (used for the summary endpoint, which has
+/// a fixed shape but the registry doesn't model it strongly).
+async fn proxy_get_value(url: &str) -> reqwest::Result<Value> {
+    reqwest::Client::builder()
+        .timeout(PROXY_TIMEOUT)
+        .build()?
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Value>()
+        .await
+}
+
+/// POST with no body, discard response. Used for reset endpoints; 2xx is
+/// the only signal we care about.
+async fn proxy_post_empty(url: &str) -> reqwest::Result<()> {
+    reqwest::Client::builder()
+        .timeout(PROXY_TIMEOUT)
+        .build()?
+        .post(url)
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
+/// Resolve `deployment_id` to a `HostedMock`, after confirming the caller's
+/// org matches. Returns the deployment so callers can build the admin URL
+/// without a second DB hit.
+async fn authorize_deployment(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
-    workspace_id: Uuid,
-) -> ApiResult<()> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
+    deployment_id: Uuid,
+) -> ApiResult<HostedMock> {
+    let deployment = HostedMock::find_by_id(state.db.pool(), deployment_id)
         .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
-    if ctx.org_id != workspace.org_id {
-        return Err(ApiError::InvalidRequest("Workspace not found".into()));
+    if ctx.org_id != deployment.org_id {
+        return Err(ApiError::InvalidRequest("Deployment not found".into()));
     }
-    Ok(())
+    Ok(deployment)
 }
 
 #[cfg(test)]
@@ -220,20 +321,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn envelope_pending_is_empty() {
-        let env: ResilienceEnvelope<CircuitBreakerStateResponse> = ResilienceEnvelope::pending();
-        assert_eq!(env.runtime_state, "pending");
-        assert!(env.data.is_empty());
+    fn envelope_live_round_trips_data() {
+        let env = ResilienceEnvelope::live(vec![BulkheadStateResponse {
+            service: "http".into(),
+            stats: BulkheadStatsResponse {
+                active_requests: 3,
+                queued_requests: 0,
+                total_requests: 17,
+                rejected_requests: 0,
+                timeout_requests: 0,
+                utilization_percent: 3.0,
+            },
+        }]);
+        let body = serde_json::to_value(&env).unwrap();
+        assert_eq!(body["runtime_state"], "live");
+        assert_eq!(body["data"].as_array().unwrap().len(), 1);
+        assert_eq!(body["data"][0]["service"], "http");
+        assert_eq!(body["data"][0]["stats"]["active_requests"], 3);
     }
 
     #[test]
-    fn envelope_serialization_matches_contract() {
-        // The UI keys off `runtime_state` and `data`. Lock the JSON shape
-        // so a refactor doesn't silently break the client.
-        let env: ResilienceEnvelope<CircuitBreakerStateResponse> = ResilienceEnvelope::pending();
+    fn envelope_unreachable_is_empty() {
+        let env: ResilienceEnvelope<CircuitBreakerStateResponse> =
+            ResilienceEnvelope::unreachable();
         let body = serde_json::to_value(&env).unwrap();
-        assert_eq!(body["runtime_state"], "pending");
-        assert!(body["data"].is_array());
+        assert_eq!(body["runtime_state"], "unreachable");
         assert_eq!(body["data"].as_array().unwrap().len(), 0);
     }
 }

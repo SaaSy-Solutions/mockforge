@@ -28,6 +28,7 @@ abd = "abd"  # Part of git commit hashes (e.g., abd3306)
 existant = "existant"  # CSS variable name (--sidebar-non-existant) - consistently used in book CSS
 Configuracion = "Configuracion"  # Spanish translation for "Configuration" in i18n
 Requiere = "Requiere"  # Spanish translation for "Requires" in i18n
+PN = "PN"  # Part of "6PN" — Fly.io's IPv6 private network branding
 
 [files]
 extend-exclude = [

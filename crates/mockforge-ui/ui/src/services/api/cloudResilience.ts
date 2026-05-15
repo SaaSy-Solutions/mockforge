@@ -1,23 +1,21 @@
 /**
- * Cloud resilience API client (#468 Phase 1 — cloud scaffold).
+ * Cloud resilience API client (#468).
  *
- * Backs the registry's `/api/v1/workspaces/{id}/resilience/*` routes.
+ * Backs the registry's `/api/v1/hosted-mocks/{deployment_id}/resilience/*`
+ * routes. The registry proxies over Fly 6PN to the running mockforge
+ * instance's admin port (`{fly-app}.internal:9080`) and tags the response
+ * with `runtime_state`.
  *
- * Phase 1 always returns `runtime_state: 'pending'` with empty lists because
- * the hosted-mock runtime doesn't yet install the circuit-breaker / bulkhead
- * middleware. The wire-up is the bulk of #468 and lives in a follow-up;
- * shipping the API surface now means `ResiliencePage` can stop calling the
- * never-mounted `/api/resilience/*` routes and instead render an honest
- * empty state.
- *
- * Reset endpoints return `{ accepted: false, runtime_state: 'pending',
- * reason }` so the page can surface a "no-op while pending" toast instead
- * of treating the reset as failed.
+ * `runtime_state` values:
+ * * `'live'` — proxy succeeded; `data` is the deployment's current state.
+ * * `'unreachable'` — registry could not reach the deployment (not yet
+ *   deployed, connection refused, timeout, etc.); `data` is empty. Show
+ *   an empty state with a "deployment not reachable" hint.
  */
 import { fetchJsonWithErrorBody } from './client';
 import { isCloudMode } from '../../utils/cloudMode';
 
-export type RuntimeState = 'pending' | 'live';
+export type RuntimeState = 'live' | 'unreachable';
 
 export interface ResilienceEnvelope<T> {
   runtime_state: RuntimeState;
@@ -71,46 +69,46 @@ class CloudResilienceApi {
   }
 
   async listCircuitBreakers(
-    workspaceId: string,
+    deploymentId: string,
   ): Promise<ResilienceEnvelope<CloudCircuitBreakerState>> {
     this.guard('listCircuitBreakers');
     return fetchJsonWithErrorBody(
-      `/api/v1/workspaces/${workspaceId}/resilience/circuit-breakers`,
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/circuit-breakers`,
     ) as Promise<ResilienceEnvelope<CloudCircuitBreakerState>>;
   }
 
-  async listBulkheads(workspaceId: string): Promise<ResilienceEnvelope<CloudBulkheadState>> {
+  async listBulkheads(deploymentId: string): Promise<ResilienceEnvelope<CloudBulkheadState>> {
     this.guard('listBulkheads');
     return fetchJsonWithErrorBody(
-      `/api/v1/workspaces/${workspaceId}/resilience/bulkheads`,
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/bulkheads`,
     ) as Promise<ResilienceEnvelope<CloudBulkheadState>>;
   }
 
-  async getSummary(workspaceId: string): Promise<CloudResilienceSummary> {
+  async getSummary(deploymentId: string): Promise<CloudResilienceSummary> {
     this.guard('getSummary');
     return fetchJsonWithErrorBody(
-      `/api/v1/workspaces/${workspaceId}/resilience/summary`,
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/summary`,
     ) as Promise<CloudResilienceSummary>;
   }
 
   async resetCircuitBreaker(
-    workspaceId: string,
+    deploymentId: string,
     endpoint: string,
   ): Promise<CloudResilienceResetResult> {
     this.guard('resetCircuitBreaker');
     return fetchJsonWithErrorBody(
-      `/api/v1/workspaces/${workspaceId}/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`,
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`,
       { method: 'POST' },
     ) as Promise<CloudResilienceResetResult>;
   }
 
   async resetBulkhead(
-    workspaceId: string,
+    deploymentId: string,
     service: string,
   ): Promise<CloudResilienceResetResult> {
     this.guard('resetBulkhead');
     return fetchJsonWithErrorBody(
-      `/api/v1/workspaces/${workspaceId}/resilience/bulkheads/${encodeURIComponent(service)}/reset`,
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/bulkheads/${encodeURIComponent(service)}/reset`,
       { method: 'POST' },
     ) as Promise<CloudResilienceResetResult>;
   }

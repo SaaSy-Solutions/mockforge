@@ -503,28 +503,30 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/snapshots/{id}/restore",
             post(handlers::snapshots::restore_snapshot),
         )
-        // Resilience scaffold routes (#468 / part of #459) — see
-        // handlers::resilience for the runtime-wire-up gap. Endpoints
-        // return empty payloads tagged `runtime_state: "pending"`; the
-        // UI renders that as an honest empty-state instead of a spinner.
+        // Resilience runtime proxy (#468 Phase 2 follow-up). Scoped to a
+        // hosted-mock deployment because circuit-breaker / bulkhead state
+        // lives in the running `mockforge serve` process. Handlers proxy
+        // over Fly 6PN to `{fly-app}.internal:9080/api/resilience/*` and
+        // return `runtime_state: "live"` or `"unreachable"`. Phase 1's
+        // workspace-scoped routes were the wrong scope; corrected here.
         .route(
-            "/api/v1/workspaces/{workspace_id}/resilience/circuit-breakers",
+            "/api/v1/hosted-mocks/{deployment_id}/resilience/circuit-breakers",
             get(handlers::resilience::list_circuit_breakers),
         )
         .route(
-            "/api/v1/workspaces/{workspace_id}/resilience/bulkheads",
+            "/api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads",
             get(handlers::resilience::list_bulkheads),
         )
         .route(
-            "/api/v1/workspaces/{workspace_id}/resilience/summary",
+            "/api/v1/hosted-mocks/{deployment_id}/resilience/summary",
             get(handlers::resilience::get_summary),
         )
         .route(
-            "/api/v1/workspaces/{workspace_id}/resilience/circuit-breakers/{endpoint}/reset",
+            "/api/v1/hosted-mocks/{deployment_id}/resilience/circuit-breakers/{endpoint}/reset",
             post(handlers::resilience::reset_circuit_breaker),
         )
         .route(
-            "/api/v1/workspaces/{workspace_id}/resilience/bulkheads/{service}/reset",
+            "/api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads/{service}/reset",
             post(handlers::resilience::reset_bulkhead),
         )
         // Flow routes (cloud-enablement task #9 / Phase 1).
