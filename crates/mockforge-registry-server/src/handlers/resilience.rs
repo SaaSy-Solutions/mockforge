@@ -256,7 +256,7 @@ fn admin_base_url(deployment: &HostedMock) -> String {
 }
 
 /// GET a JSON list. 2xx + valid JSON → Ok; anything else → Err.
-async fn proxy_get_vec<T: for<'de> serde::Deserialize<'de>>(url: &str) -> reqwest::Result<Vec<T>> {
+async fn proxy_get_vec<T: for<'de> Deserialize<'de>>(url: &str) -> reqwest::Result<Vec<T>> {
     reqwest::Client::builder()
         .timeout(PROXY_TIMEOUT)
         .build()?
