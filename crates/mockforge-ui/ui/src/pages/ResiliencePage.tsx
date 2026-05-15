@@ -1,8 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { isCloudMode } from '../utils/cloudMode';
-import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
+
+interface DeploymentSummary {
+  id: string;
+  name: string;
+  status: string;
+}
 
 interface CircuitBreakerState {
   endpoint: string;
@@ -58,17 +63,52 @@ export const ResiliencePage: React.FC = () => {
   const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
 
   const cloudMode = isCloudMode();
-  const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
-  const workspaceId = activeWorkspace?.id;
+  // In cloud mode the page scopes to a single hosted-mock deployment because
+  // resilience state lives in that deployment's running mockforge process.
+  // We pick the first active deployment by default; if the org has more
+  // than one, the dropdown lets the user switch.
+  const [deployments, setDeployments] = useState<DeploymentSummary[]>([]);
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cloudMode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/v1/hosted-mocks', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) return;
+        const list = (await response.json()) as DeploymentSummary[];
+        if (cancelled) return;
+        const items = Array.isArray(list) ? list : [];
+        setDeployments(items);
+        // Auto-select the first active deployment so the page works without
+        // an extra click in the common one-deployment-per-org case.
+        if (!selectedDeploymentId) {
+          const active = items.find((d) => d.status === 'active') ?? items[0] ?? null;
+          if (active) setSelectedDeploymentId(active.id);
+        }
+      } catch (err) {
+        console.error('Failed to load deployments:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // selectedDeploymentId intentionally omitted: only run on mode change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudMode]);
 
   const fetchCircuitBreakers = async () => {
     try {
       if (cloudMode) {
-        if (!workspaceId) {
+        if (!selectedDeploymentId) {
           setCircuitBreakers([]);
           return;
         }
-        const env = await cloudResilienceApi.listCircuitBreakers(workspaceId);
+        const env = await cloudResilienceApi.listCircuitBreakers(selectedDeploymentId);
         setCircuitBreakers(env.data);
         setRuntimeState(env.runtime_state);
         return;
@@ -84,11 +124,11 @@ export const ResiliencePage: React.FC = () => {
   const fetchBulkheads = async () => {
     try {
       if (cloudMode) {
-        if (!workspaceId) {
+        if (!selectedDeploymentId) {
           setBulkheads([]);
           return;
         }
-        const env = await cloudResilienceApi.listBulkheads(workspaceId);
+        const env = await cloudResilienceApi.listBulkheads(selectedDeploymentId);
         setBulkheads(env.data);
         setRuntimeState(env.runtime_state);
         return;
@@ -104,11 +144,11 @@ export const ResiliencePage: React.FC = () => {
   const fetchSummary = async () => {
     try {
       if (cloudMode) {
-        if (!workspaceId) {
+        if (!selectedDeploymentId) {
           setSummary(null);
           return;
         }
-        const s = await cloudResilienceApi.getSummary(workspaceId);
+        const s = await cloudResilienceApi.getSummary(selectedDeploymentId);
         setSummary({
           circuit_breakers: s.circuit_breakers,
           bulkheads: { ...s.bulkheads },
@@ -127,8 +167,11 @@ export const ResiliencePage: React.FC = () => {
   const resetCircuitBreaker = async (endpoint: string) => {
     try {
       if (cloudMode) {
-        if (!workspaceId) return;
-        const result = await cloudResilienceApi.resetCircuitBreaker(workspaceId, endpoint);
+        if (!selectedDeploymentId) return;
+        const result = await cloudResilienceApi.resetCircuitBreaker(
+          selectedDeploymentId,
+          endpoint,
+        );
         if (!result.accepted) {
           console.info('Circuit breaker reset is a no-op:', result.reason);
         }
@@ -147,8 +190,8 @@ export const ResiliencePage: React.FC = () => {
   const resetBulkhead = async (service: string) => {
     try {
       if (cloudMode) {
-        if (!workspaceId) return;
-        const result = await cloudResilienceApi.resetBulkhead(workspaceId, service);
+        if (!selectedDeploymentId) return;
+        const result = await cloudResilienceApi.resetBulkhead(selectedDeploymentId, service);
         if (!result.accepted) {
           console.info('Bulkhead reset is a no-op:', result.reason);
         }
@@ -178,7 +221,8 @@ export const ResiliencePage: React.FC = () => {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh, selectedDeploymentId]);
 
   const getStateColor = (state: string): string => {
     switch (state) {
@@ -201,24 +245,47 @@ export const ResiliencePage: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Pending-runtime banner (#468 cloud scaffold). Stops users wondering
-          why their counts stay at zero. Hides once the runtime ingest lands
-          and the registry starts returning `runtime_state: 'live'`. */}
-      {cloudMode && runtimeState === 'pending' && (
+      {/* Deployment unreachable banner. The registry proxies live state from
+          the hosted-mock's admin port; when that proxy fails (deployment
+          stopped, not yet started, transient network), the page renders zeros
+          and we want to surface why instead of letting them look like real
+          live data. */}
+      {cloudMode && runtimeState === 'unreachable' && selectedDeploymentId && (
         <div className="bg-warning-50 border border-warning-200 dark:bg-warning-900/30 dark:border-warning-800 rounded-lg p-4">
           <p className="font-medium text-warning-700 dark:text-warning-300">
-            Resilience runtime not yet wired
+            Deployment not reachable
           </p>
           <p className="text-sm text-warning-700/80 dark:text-warning-300/80 mt-1">
-            Cloud-side API is live, but hosted-mock runners don&rsquo;t yet install
-            the circuit-breaker / bulkhead middleware. Counters stay at zero
-            until that follow-up ships; resets are accepted but no-op.
+            The registry could not reach this deployment&rsquo;s admin endpoint.
+            Resilience counters will populate once the deployment is running
+            and reachable on the private network.
           </p>
         </div>
       )}
-      {cloudMode && !workspaceId && (
+      {cloudMode && !selectedDeploymentId && (
         <div className="bg-card border border-border rounded-lg p-4 text-sm text-muted-foreground">
-          Select a workspace to view resilience state.
+          {deployments.length === 0
+            ? 'No hosted-mock deployments yet. Create one from the Hosted Mocks page to see resilience state here.'
+            : 'Select a deployment to view resilience state.'}
+        </div>
+      )}
+      {cloudMode && deployments.length > 1 && (
+        <div className="flex items-center space-x-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="resilience-deployment">
+            Deployment:
+          </label>
+          <select
+            id="resilience-deployment"
+            value={selectedDeploymentId ?? ''}
+            onChange={(e) => setSelectedDeploymentId(e.target.value || null)}
+            className="rounded border border-border bg-card text-foreground text-sm px-2 py-1"
+          >
+            {deployments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} ({d.status})
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
