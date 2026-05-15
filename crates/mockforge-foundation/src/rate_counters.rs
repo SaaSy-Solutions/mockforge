@@ -17,6 +17,16 @@
 //! The "successful API transaction" definition for TPS is `200..=399`,
 //! matching how load-testing tools (k6, JMeter, etc.) classify a successful
 //! request — anything that wasn't a 4xx/5xx error.
+//!
+//! Connection-lifecycle counters (added in 0.3.134 / issue #79 round 6 —
+//! Srikanth's "how many open at any time" ask):
+//!
+//! * `HTTP_CONNECTIONS_OPEN` — currently open (incremented on accept,
+//!   decremented on connection drop). The dashboard sampler reads this
+//!   for the live "Active Connections" gauge in the TUI / admin UI.
+//! * `HTTP_CONNECTIONS_CLOSED_TOTAL` — lifetime closed. `accepts - closed`
+//!   equals open at any sampling instant; we keep both so a single load
+//!   can read either without doing subtraction.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -29,6 +39,13 @@ pub static OK_RESPONSES_TOTAL: AtomicU64 = AtomicU64::new(0);
 /// Total accepted TCP connections (plain HTTP path only — see module docs).
 pub static HTTP_ACCEPTS_TOTAL: AtomicU64 = AtomicU64::new(0);
 
+/// Currently-open HTTP connections (incremented on accept, decremented on
+/// connection drop). Issue #79 round 6.
+pub static HTTP_CONNECTIONS_OPEN: AtomicU64 = AtomicU64::new(0);
+
+/// Lifetime closed HTTP connections. Issue #79 round 6.
+pub static HTTP_CONNECTIONS_CLOSED_TOTAL: AtomicU64 = AtomicU64::new(0);
+
 /// Bump the response counters according to the response's status code.
 #[inline]
 pub fn record_response(status_code: u16) {
@@ -40,10 +57,26 @@ pub fn record_response(status_code: u16) {
     }
 }
 
-/// Bump the TCP-accept counter. Call once per accepted connection.
+/// Bump the TCP-accept counter AND the currently-open gauge. Call once per
+/// accepted connection — paired with [`record_close`] when the connection
+/// terminates.
 #[inline]
 pub fn record_accept() {
     HTTP_ACCEPTS_TOTAL.fetch_add(1, Ordering::Relaxed);
+    HTTP_CONNECTIONS_OPEN.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Decrement the currently-open gauge and bump the lifetime-closed counter.
+/// Call once when a previously-accepted connection terminates.
+#[inline]
+pub fn record_close() {
+    // Saturating decrement — a stray `record_close` without a matching
+    // `record_accept` should not wrap around to `u64::MAX`.
+    let prev = HTTP_CONNECTIONS_OPEN.load(Ordering::Relaxed);
+    if prev > 0 {
+        HTTP_CONNECTIONS_OPEN.fetch_sub(1, Ordering::Relaxed);
+    }
+    HTTP_CONNECTIONS_CLOSED_TOTAL.fetch_add(1, Ordering::Relaxed);
 }
 
 /// Point-in-time snapshot of the rate counters.
@@ -52,6 +85,10 @@ pub struct CounterSnapshot {
     pub successful: u64,
     pub ok: u64,
     pub accepts: u64,
+    /// Currently-open HTTP connections.
+    pub connections_open: u64,
+    /// Lifetime closed HTTP connections.
+    pub connections_closed: u64,
 }
 
 /// Read all counters atomically (each load is independent — a snapshot
@@ -61,6 +98,8 @@ pub fn snapshot() -> CounterSnapshot {
         successful: SUCCESSFUL_RESPONSES_TOTAL.load(Ordering::Relaxed),
         ok: OK_RESPONSES_TOTAL.load(Ordering::Relaxed),
         accepts: HTTP_ACCEPTS_TOTAL.load(Ordering::Relaxed),
+        connections_open: HTTP_CONNECTIONS_OPEN.load(Ordering::Relaxed),
+        connections_closed: HTTP_CONNECTIONS_CLOSED_TOTAL.load(Ordering::Relaxed),
     }
 }
 
@@ -76,6 +115,8 @@ mod tests {
         SUCCESSFUL_RESPONSES_TOTAL.store(0, Ordering::Relaxed);
         OK_RESPONSES_TOTAL.store(0, Ordering::Relaxed);
         HTTP_ACCEPTS_TOTAL.store(0, Ordering::Relaxed);
+        HTTP_CONNECTIONS_OPEN.store(0, Ordering::Relaxed);
+        HTTP_CONNECTIONS_CLOSED_TOTAL.store(0, Ordering::Relaxed);
     }
 
     #[test]
@@ -125,6 +166,44 @@ mod tests {
         assert_eq!(s.successful, 2);
         assert_eq!(s.ok, 2);
         assert_eq!(s.accepts, 1);
+    }
+
+    #[test]
+    fn record_accept_bumps_open_gauge() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset_counters();
+        record_accept();
+        record_accept();
+        let s = snapshot();
+        assert_eq!(s.accepts, 2, "lifetime accepts");
+        assert_eq!(s.connections_open, 2, "currently open");
+        assert_eq!(s.connections_closed, 0);
+    }
+
+    #[test]
+    fn record_close_decrements_open_and_bumps_closed() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset_counters();
+        record_accept();
+        record_accept();
+        record_close();
+        let s = snapshot();
+        assert_eq!(s.accepts, 2);
+        assert_eq!(s.connections_open, 1, "one still open");
+        assert_eq!(s.connections_closed, 1);
+    }
+
+    #[test]
+    fn record_close_without_matching_accept_does_not_underflow() {
+        let _g = TEST_LOCK.lock().unwrap();
+        reset_counters();
+        // Defensive: a stray close (e.g. across reset boundaries during shutdown)
+        // must not underflow to u64::MAX.
+        record_close();
+        record_close();
+        let s = snapshot();
+        assert_eq!(s.connections_open, 0, "saturating decrement");
+        assert_eq!(s.connections_closed, 2, "closed still tallied");
     }
 
     #[test]

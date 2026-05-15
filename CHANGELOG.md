@@ -1,3 +1,16 @@
+## [0.3.134] - 2026-05-14
+
+### Added
+
+- **[Reality]** Server-side HTTP connection lifecycle gauges (#79 round 6, Srikanth's "how many connections are opened at a time")
+  - `CountingMakeService` (in `mockforge-http`) now wraps each per-connection service in a `TrackedService` whose `Drop` impl records the close. The pair of `record_accept` / `record_close` increments give an exact live `connections_open` gauge plus cumulative `connections_total_opened` / `connections_total_closed` counters in `mockforge_foundation::rate_counters`.
+  - Works for both plain HTTP (`axum::serve`) and HTTPS (`axum_server::bind_rustls`) paths — only successfully accepted connections (post-TLS-handshake for HTTPS) are counted. A `record_close` always fires per `record_accept`, even for make-service errors, so the gauge stays balanced.
+  - When `MOCKFORGE_HTTP_LOG_CONN=1` is set, each connection close emits an INFO log line under target `mockforge_http::conn_diag` with `duration_ms` and `requests` (number served before close). Combined with the existing per-request `http_conn_diag` line, this tells you with certainty whether MockForge closed the socket after 1 request (versus the peer closing) — the exact missing piece for diagnosing Srikanth's FIN-from-server PCAP.
+  - Exposed in the admin/UI `SystemInfo` response: `connections_open`, `connections_total_opened`, `connections_total_closed`, `peak_connections_open`. Surfaced in the TUI dashboard's stats panel as `Conns Open: N (peak M)  Opened: X  Closed: Y` — a live multiplexing / churn indicator.
+- **[Reality]** Bench client summary always shows connection-open counts when k6 made TCP sockets (#79 round 6, Srikanth's "open connection on the client")
+  - Previously the `Connections opened`, `TCP connect avg/max`, and `TLS handshake avg/max` lines only printed in `--cps` mode. Now they print whenever `http_req_connecting.count > 0`, so non-`--cps` runs can also see distinct connections opened vs request count — i.e. whether the client actually pooled connections.
+  - New `Peak concurrent VUs` line surfaces `vus_max` as the upper bound on simultaneously-open client connections, paired with the server-side `Conns Open` gauge for cross-checking.
+
 ## [0.3.133] - 2026-05-13
 
 ### Fixed

@@ -150,6 +150,19 @@ pub struct SystemInfo {
     pub cps: f64,
     #[serde(default)]
     pub peak_cps: f64,
+    /// Currently-open HTTP connections (live gauge). Issue #79 round 6 —
+    /// Srikanth's "how many open at a time" ask.
+    #[serde(default)]
+    pub connections_open: u64,
+    /// Lifetime accepted HTTP connections (cumulative).
+    #[serde(default)]
+    pub connections_total_opened: u64,
+    /// Lifetime closed HTTP connections (cumulative).
+    #[serde(default)]
+    pub connections_total_closed: u64,
+    /// Peak `connections_open` observed since `peaks_since`.
+    #[serde(default)]
+    pub peak_connections_open: u64,
 }
 
 // ── Request logs ─────────────────────────────────────────────────────
