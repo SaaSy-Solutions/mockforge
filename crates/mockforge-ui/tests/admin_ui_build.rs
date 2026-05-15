@@ -120,6 +120,7 @@ async fn test_admin_ui_serves_built_assets() {
         None,
         None,
         None,
+        None,
     );
 
     // Test that main HTML page serves
@@ -173,6 +174,7 @@ async fn test_admin_ui_serves_built_assets() {
         None,
         None,
         None,
+        None,
     );
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
@@ -202,6 +204,7 @@ async fn test_admin_ui_serves_built_assets() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
         None,
         None,
         None,
@@ -307,6 +310,7 @@ async fn test_ui_handles_missing_assets() {
         None,
         None,
         None,
+        None,
     );
 
     // Test main page
@@ -344,6 +348,7 @@ async fn test_ui_handles_missing_assets() {
         None,
         None,
         None,
+        None,
     );
     let css_response = app2
         .oneshot(Request::builder().uri("/assets/index.css").body(Body::empty()).unwrap())
@@ -366,6 +371,7 @@ async fn test_ui_handles_missing_assets() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
         None,
         None,
         None,
@@ -441,6 +447,7 @@ async fn test_ui_security_headers() {
         true,
         9080,
         "http://localhost:9090".to_string(),
+        None,
         None,
         None,
         None,

@@ -96,3 +96,6 @@ distributed = ["redis"]
 [dev-dependencies]
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = "3.27"
+# Used by `resilience_middleware` tests to drive the layered axum router
+# via `ServiceExt::oneshot` without spinning up a real listener.
+tower = { version = "0.5", features = ["util"] }

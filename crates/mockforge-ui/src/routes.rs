@@ -58,6 +58,12 @@ pub fn create_admin_router(
     recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
+    // Resilience API state — when `Some`, mounts the `/api/resilience/*`
+    // dashboard endpoints (#468 Phase 2). Caller is expected to pass the
+    // same `Arc<...Manager>` instances it installed on `http_app` via
+    // `mockforge_chaos::resilience_middleware`, so the dashboard reads
+    // the state the middleware writes.
+    resilience_api_state: Option<mockforge_chaos::resilience_api::ResilienceApiState>,
 ) -> Router {
     // Initialize global logger if not already initialized
     let _logger = get_global_logger().unwrap_or_else(|| init_global_logger(1000));
@@ -682,6 +688,16 @@ pub fn create_admin_router(
         tracing::info!("Conformance testing API routes mounted at /api/conformance");
     }
 
+    // Resilience dashboard routes (#468 Phase 2). Mounted when the caller
+    // passed the same `ResilienceApiState` it constructed for the
+    // `resilience_middleware` layered onto `http_app`, so this dashboard
+    // reads what that middleware writes.
+    if let Some(state) = resilience_api_state {
+        let resilience_router = mockforge_chaos::create_resilience_router(state);
+        router = router.nest_service("/api/resilience", resilience_router);
+        tracing::info!("Resilience dashboard API mounted at /api/resilience");
+    }
+
     // SPA fallback: serve index.html for any unmatched routes to support client-side routing
     // IMPORTANT: This must be AFTER all API routes
     router = router.route("/{*path}", get(serve_admin_html));
@@ -717,6 +733,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         // Router should be created successfully
@@ -741,6 +758,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         // Router should still work without server addresses
@@ -756,6 +774,7 @@ mod tests {
             true,
             8080,
             "http://localhost:9090".to_string(),
+            None,
             None,
             None,
             None,

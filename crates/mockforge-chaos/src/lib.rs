@@ -58,6 +58,7 @@ pub mod reinforcement_learning;
 pub mod request_matcher;
 pub mod resilience;
 pub mod resilience_api;
+pub mod resilience_middleware;
 pub mod scenario_orchestrator;
 pub mod scenario_recorder;
 pub mod scenario_replay;
@@ -206,6 +207,10 @@ pub use resilience::{
     DynamicThresholdAdjuster, FallbackHandler, HealthCheckIntegration, JsonFallbackHandler,
     RetryConfig as ResilienceRetryConfig, RetryPolicy,
 };
+pub use resilience_middleware::{
+    default_resilience_state, resilience_middleware, ResilienceMiddlewareState,
+};
+
 pub use resilience_api::{
     create_resilience_router, BulkheadStateResponse, CircuitBreakerStateResponse,
     ResilienceApiState,
