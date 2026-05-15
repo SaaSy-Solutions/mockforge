@@ -273,17 +273,13 @@ mod tests {
         // Wrap a Cloneable inner service so TrackedService can be cloned.
         #[derive(Clone)]
         struct EchoSvc;
-        impl tower::Service<u32> for EchoSvc {
+        impl Service<u32> for EchoSvc {
             type Response = u32;
             type Error = Infallible;
-            type Future = std::pin::Pin<
-                Box<dyn std::future::Future<Output = Result<u32, Infallible>> + Send>,
-            >;
-            fn poll_ready(
-                &mut self,
-                _cx: &mut std::task::Context<'_>,
-            ) -> std::task::Poll<Result<(), Infallible>> {
-                std::task::Poll::Ready(Ok(()))
+            type Future =
+                Pin<Box<dyn std::future::Future<Output = Result<u32, Infallible>> + Send>>;
+            fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+                Poll::Ready(Ok(()))
             }
             fn call(&mut self, req: u32) -> Self::Future {
                 Box::pin(async move { Ok(req) })
@@ -323,15 +319,12 @@ mod tests {
         // returns Err first.
         #[derive(Clone)]
         struct NeverSvc;
-        impl tower::Service<()> for NeverSvc {
+        impl Service<()> for NeverSvc {
             type Response = ();
             type Error = Infallible;
             type Future = std::future::Ready<Result<(), Infallible>>;
-            fn poll_ready(
-                &mut self,
-                _cx: &mut std::task::Context<'_>,
-            ) -> std::task::Poll<Result<(), Infallible>> {
-                std::task::Poll::Ready(Ok(()))
+            fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
+                Poll::Ready(Ok(()))
             }
             fn call(&mut self, _req: ()) -> Self::Future {
                 std::future::ready(Ok(()))

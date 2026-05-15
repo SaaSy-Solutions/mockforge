@@ -7,6 +7,7 @@ use axum::{
 };
 
 use crate::handlers;
+use crate::middleware::past_due_writes::past_due_writes_blocked_middleware;
 use crate::middleware::{auth_middleware, rate_limit_middleware};
 use crate::AppState;
 
@@ -976,6 +977,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/workspaces/{workspace_id}/promotions", get(handlers::scenario_promotions::list_promotions))
         .route("/api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/approve", post(handlers::scenario_promotions::approve_promotion))
         .route("/api/v1/workspaces/{workspace_id}/promotions/{promotion_id}/reject", post(handlers::scenario_promotions::reject_promotion))
+        // past_due read-only enforcement (#449 criterion 6b). After the 24h
+        // grace window, write methods outside the billing/auth allowlist
+        // return 402. Mounted before auth_middleware below so route_layer's
+        // outer-to-inner application puts it strictly inside auth — auth
+        // populates the user_id this gate reads.
+        .route_layer(middleware::from_fn_with_state(state.clone(), past_due_writes_blocked_middleware))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

@@ -72,7 +72,9 @@ pub async fn create_deployment(
             const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
             let elapsed = (Utc::now() - subscription.updated_at).num_seconds();
             if elapsed > PAST_DUE_GRACE_SECONDS {
-                return Err(ApiError::InvalidRequest(
+                // 402 (not 400) — billing-state failure is distinct from a
+                // malformed request. Matches #449 acceptance criterion 8.
+                return Err(ApiError::PaymentRequired(
                     "Subscription has been past due for over 24 hours. Please update your payment method in the billing portal before deploying new mocks.".to_string(),
                 ));
             }

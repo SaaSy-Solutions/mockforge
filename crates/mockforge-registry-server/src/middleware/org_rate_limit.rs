@@ -5,16 +5,15 @@
 
 use axum::{
     extract::{Request, State},
-    http::{HeaderMap, StatusCode},
+    http::HeaderMap,
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use chrono::Datelike;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
+    error::ApiError,
     middleware::resolve_org_context,
     models::{Organization, UsageCounter},
     redis::{current_month_period, RedisPool},
@@ -27,44 +26,57 @@ use crate::{
 /// the auth-route middleware can pass them in; current implementation reads
 /// the authoritative counter from Postgres, but a Redis fast-path is intended
 /// for a follow-up.
+///
+/// Returns `Ok(())` when the org is under both the `requests_per_30d` and
+/// `storage_gb` plan limits, and an `ApiError::UsageLimitExceeded` carrying
+/// the structured limit/current/max numbers (#449 criterion 1) otherwise.
 pub async fn check_org_limits(
     pool: &sqlx::PgPool,
     _redis: Option<&RedisPool>,
     org: &Organization,
     _user_id: Uuid,
-) -> Result<(), RateLimitError> {
+) -> Result<(), ApiError> {
     let limits = &org.limits_json;
 
     // Get current month period
     let period = current_month_period();
 
     // Get or create usage counter
-    let usage = UsageCounter::get_or_create_current(pool, org.id)
-        .await
-        .map_err(|_| RateLimitError::Database)?;
+    let usage = UsageCounter::get_or_create_current(pool, org.id).await.map_err(|e| {
+        tracing::error!(org_id = %org.id, "rate limit check: failed to load usage counter: {}", e);
+        ApiError::Storage("usage counter lookup failed".to_string())
+    })?;
 
-    // Check request limit
-    let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);
+    // Check request limit. -1 sentinel = unlimited (Team plan).
+    let requests_limit = match limits.get("requests_per_30d").and_then(|v| v.as_i64()) {
+        Some(-1) => i64::MAX,
+        Some(n) if n > 0 => n,
+        _ => 10_000, // conservative free-tier default for legacy orgs missing the field
+    };
 
-    if usage.requests >= requests_limit {
-        return Err(RateLimitError::LimitExceeded {
+    if requests_limit != i64::MAX && usage.requests >= requests_limit {
+        return Err(ApiError::UsageLimitExceeded {
             limit_type: "requests".to_string(),
-            limit: requests_limit,
-            used: usage.requests,
-            reset_period: period.clone(),
+            current: usage.requests,
+            max: requests_limit,
+            period: period.clone(),
         });
     }
 
-    // Check storage limit
-    let storage_limit_gb = limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1);
-    let storage_limit_bytes = storage_limit_gb * 1_000_000_000;
+    // Check storage limit. -1 sentinel = unlimited.
+    let storage_limit_gb = match limits.get("storage_gb").and_then(|v| v.as_i64()) {
+        Some(-1) => i64::MAX,
+        Some(n) if n > 0 => n,
+        _ => 1,
+    };
+    let storage_limit_bytes = storage_limit_gb.saturating_mul(1_000_000_000);
 
-    if usage.storage_bytes >= storage_limit_bytes {
-        return Err(RateLimitError::LimitExceeded {
+    if storage_limit_bytes != i64::MAX && usage.storage_bytes >= storage_limit_bytes {
+        return Err(ApiError::UsageLimitExceeded {
             limit_type: "storage".to_string(),
-            limit: storage_limit_bytes,
-            used: usage.storage_bytes,
-            reset_period: period.clone(),
+            current: usage.storage_bytes,
+            max: storage_limit_bytes,
+            period,
         });
     }
 
@@ -77,7 +89,7 @@ pub async fn increment_usage(
     redis: Option<&RedisPool>,
     org_id: Uuid,
     request_size_bytes: i64,
-) -> Result<(), RateLimitError> {
+) -> Result<(), ApiError> {
     // Increment in Redis first (fast path)
     if let Some(redis_pool) = redis {
         let period = current_month_period();
@@ -90,14 +102,18 @@ pub async fn increment_usage(
     }
 
     // Increment in database (slower, but persistent)
-    UsageCounter::increment_requests(pool, org_id, 1)
-        .await
-        .map_err(|_| RateLimitError::Database)?;
+    UsageCounter::increment_requests(pool, org_id, 1).await.map_err(|e| {
+        tracing::error!(org_id = %org_id, "increment_usage: requests bump failed: {}", e);
+        ApiError::Storage("usage counter increment failed".to_string())
+    })?;
 
     if request_size_bytes > 0 {
         UsageCounter::increment_egress(pool, org_id, request_size_bytes)
             .await
-            .map_err(|_| RateLimitError::Database)?;
+            .map_err(|e| {
+                tracing::error!(org_id = %org_id, "increment_usage: egress bump failed: {}", e);
+                ApiError::Storage("usage counter increment failed".to_string())
+            })?;
     }
 
     Ok(())
@@ -147,9 +163,10 @@ pub async fn org_rate_limit_middleware(
 
     let pool = state.db.pool();
 
-    // Check org limits
+    // Check org limits — propagates ApiError::UsageLimitExceeded as the
+    // spec'd 429 response (#449 criterion 1).
     if let Err(e) = check_org_limits(pool, state.redis.as_ref(), &org_ctx.org, user_id).await {
-        return Err(rate_limit_error_response(e));
+        return Err(e.into_response());
     }
 
     // Get usage info for rate limit headers
@@ -235,54 +252,4 @@ fn estimate_response_size(response: &Response) -> i64 {
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(256)
-}
-
-/// Rate limit error
-#[derive(Debug)]
-pub enum RateLimitError {
-    Database,
-    LimitExceeded {
-        limit_type: String,
-        limit: i64,
-        used: i64,
-        reset_period: String,
-    },
-}
-
-/// Convert rate limit error to HTTP response
-fn rate_limit_error_response(error: RateLimitError) -> impl IntoResponse {
-    match error {
-        RateLimitError::Database => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "error": "Internal server error",
-                "message": "Failed to check rate limits"
-            })),
-        ),
-        RateLimitError::LimitExceeded {
-            limit_type,
-            limit,
-            used,
-            reset_period,
-        } => {
-            let limit_type_display = match limit_type.as_str() {
-                "requests" => "Monthly request limit",
-                "storage" => "Storage limit",
-                _ => "Usage limit",
-            };
-
-            (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(json!({
-                    "error": "Rate limit exceeded",
-                    "message": format!("{} exceeded. Used {}/{}", limit_type_display, used, limit),
-                    "limit_type": limit_type,
-                    "limit": limit,
-                    "used": used,
-                    "reset_period": reset_period,
-                    "upgrade_url": "/billing/upgrade"
-                })),
-            )
-        }
-    }
 }
