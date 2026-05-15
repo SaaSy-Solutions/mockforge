@@ -70,7 +70,7 @@ pub async fn create_deployment(
     if let Some(subscription) = Subscription::find_by_org(pool, org_ctx.org_id).await? {
         if subscription.status() == SubscriptionStatus::PastDue {
             const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
-            let elapsed = (chrono::Utc::now() - subscription.updated_at).num_seconds();
+            let elapsed = (Utc::now() - subscription.updated_at).num_seconds();
             if elapsed > PAST_DUE_GRACE_SECONDS {
                 return Err(ApiError::InvalidRequest(
                     "Subscription has been past due for over 24 hours. Please update your payment method in the billing portal before deploying new mocks.".to_string(),
