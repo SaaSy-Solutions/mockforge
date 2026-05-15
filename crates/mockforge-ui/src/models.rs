@@ -121,6 +121,22 @@ pub struct SystemInfo {
     /// Peak `cps` observed since `peaks_since`.
     #[serde(default)]
     pub peak_cps: f64,
+    /// Currently-open HTTP connections (live gauge). Issue #79 round 6 —
+    /// Srikanth's "how many open at a time" ask. Tracked by the
+    /// `CountingMakeService` wrapper in `mockforge-http`; reflects
+    /// connections that completed accept (and, for HTTPS, the TLS
+    /// handshake) and that hyper still owns.
+    #[serde(default)]
+    pub connections_open: u64,
+    /// Lifetime accepted HTTP connections (cumulative).
+    #[serde(default)]
+    pub connections_total_opened: u64,
+    /// Lifetime closed HTTP connections (cumulative).
+    #[serde(default)]
+    pub connections_total_closed: u64,
+    /// Peak `connections_open` observed since `peaks_since`.
+    #[serde(default)]
+    pub peak_connections_open: u64,
 }
 
 /// Latency profile configuration
@@ -1254,6 +1270,10 @@ mod tests {
             peak_rps_200: 0.0,
             cps: 0.0,
             peak_cps: 0.0,
+            connections_open: 0,
+            connections_total_opened: 0,
+            connections_total_closed: 0,
+            peak_connections_open: 0,
         };
 
         assert_eq!(info.version, "0.3.8");

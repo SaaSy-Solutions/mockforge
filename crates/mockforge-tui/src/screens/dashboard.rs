@@ -256,9 +256,9 @@ impl DashboardScreen {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        // Reserve 4 lines for the text stats (Total/ErrRate, Avg RT, TPS/RPS,
-        // CPS); rest goes to the sparkline.
-        let chunks = Layout::vertical([Constraint::Length(4), Constraint::Min(2)]).split(inner);
+        // Reserve 5 lines for the text stats (Total/ErrRate, Avg RT, TPS/RPS,
+        // CPS, Connections); rest goes to the sparkline.
+        let chunks = Layout::vertical([Constraint::Length(5), Constraint::Min(2)]).split(inner);
 
         // Stats summary
         let total = data.metrics.total_requests;
@@ -271,6 +271,12 @@ impl DashboardScreen {
         let peak_rps_200 = data.system.peak_rps_200.max(rps_200);
         let cps = data.system.cps;
         let peak_cps = data.system.peak_cps.max(cps);
+        // Issue #79 round 6 — connection lifecycle gauges. `open` is live;
+        // `opened` / `closed` are cumulative since process start.
+        let conn_open = data.system.connections_open;
+        let peak_conn_open = data.system.peak_connections_open.max(conn_open);
+        let conn_opened = data.system.connections_total_opened;
+        let conn_closed = data.system.connections_total_closed;
 
         let stats = vec![
             Line::from(vec![
@@ -306,6 +312,20 @@ impl DashboardScreen {
                 Span::styled(" CPS: ", Theme::dim()),
                 Span::styled(format!("{cps:.1}"), Style::default().fg(Theme::FG)),
                 Span::styled(format!(" (peak {peak_cps:.1})"), Theme::dim()),
+            ]),
+            // Connection lifecycle line — answers Srikanth's "how many
+            // connections are opened at a time" ask. Open is the live
+            // gauge; Opened/Closed are the cumulative tallies that the
+            // bench client's "Connections opened" line should match for
+            // a well-behaved test.
+            Line::from(vec![
+                Span::styled(" Conns Open: ", Theme::dim()),
+                Span::styled(format!("{conn_open}"), Style::default().fg(Theme::FG)),
+                Span::styled(format!(" (peak {peak_conn_open})"), Theme::dim()),
+                Span::styled("  Opened: ", Theme::dim()),
+                Span::styled(format_number(conn_opened), Style::default().fg(Theme::FG)),
+                Span::styled("  Closed: ", Theme::dim()),
+                Span::styled(format_number(conn_closed), Style::default().fg(Theme::FG)),
             ]),
         ];
         frame.render_widget(Paragraph::new(stats), chunks[0]);

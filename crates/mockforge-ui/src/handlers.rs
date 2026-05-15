@@ -144,6 +144,20 @@ pub struct SystemMetrics {
     pub cps: f64,
     /// Peak `cps` observed since `peaks_since`.
     pub peak_cps: f64,
+    /// Currently-open HTTP connections (live gauge, sampled once per tick).
+    /// Issue #79 round 6 — Srikanth's "how many connections are opened at
+    /// a time" ask. Tracked via [`mockforge_foundation::rate_counters::
+    /// HTTP_CONNECTIONS_OPEN`].
+    pub connections_open: u64,
+    /// Lifetime accepted HTTP connections (cumulative, not a rate).
+    pub connections_total_opened: u64,
+    /// Lifetime closed HTTP connections (cumulative).
+    pub connections_total_closed: u64,
+    /// Peak `connections_open` observed since `peaks_since` — useful for
+    /// confirming whether the server actually held many connections open
+    /// concurrently (multiplexing) or churned through one-shots (a sign
+    /// the proxy isn't keeping the upstream pool warm).
+    pub peak_connections_open: u64,
 }
 
 /// Time series data point
@@ -433,6 +447,13 @@ impl AdminState {
                 let rps_200 = cur_snapshot.ok.saturating_sub(prev_snapshot.ok) as f64 / dt_secs;
                 let cps =
                     cur_snapshot.accepts.saturating_sub(prev_snapshot.accepts) as f64 / dt_secs;
+                // Connection lifecycle gauges (#79 round 6). `connections_open`
+                // is a live gauge — read straight from the counter snapshot
+                // rather than a delta — and `total_opened` / `total_closed`
+                // are cumulative.
+                let conn_open = cur_snapshot.connections_open;
+                let conn_opened = cur_snapshot.accepts;
+                let conn_closed = cur_snapshot.connections_closed;
                 prev_snapshot = cur_snapshot;
                 prev_sample_at = now;
 
@@ -453,6 +474,7 @@ impl AdminState {
                     .update_system_metrics(memory_mb_u64, cpu_usage as f64, active_threads)
                     .await;
                 state_clone.update_rate_metrics(tps, rps_200, cps).await;
+                state_clone.update_connection_metrics(conn_open, conn_opened, conn_closed).await;
 
                 if let Some(file) = metrics_log.as_mut() {
                     let m = state_clone.metrics.read().await;
@@ -546,6 +568,10 @@ impl AdminState {
                 peak_rps_200: 0.0,
                 cps: 0.0,
                 peak_cps: 0.0,
+                connections_open: 0,
+                connections_total_opened: 0,
+                connections_total_closed: 0,
+                peak_connections_open: 0,
             })),
             config: Arc::new(RwLock::new(ConfigurationState {
                 latency_profile: LatencyProfile {
@@ -754,6 +780,7 @@ impl AdminState {
         sm.peak_tps = sm.tps;
         sm.peak_rps_200 = sm.rps_200;
         sm.peak_cps = sm.cps;
+        sm.peak_connections_open = sm.connections_open;
         sm.peaks_since = Utc::now();
     }
 
@@ -772,6 +799,19 @@ impl AdminState {
         }
         if cps > sm.peak_cps {
             sm.peak_cps = cps;
+        }
+    }
+
+    /// Update connection-lifecycle metrics. `open` is the live gauge,
+    /// `total_opened` and `total_closed` are cumulative counters.
+    /// Issue #79 round 6 — Srikanth's "show open/closed/total" ask.
+    pub async fn update_connection_metrics(&self, open: u64, total_opened: u64, total_closed: u64) {
+        let mut sm = self.system_metrics.write().await;
+        sm.connections_open = open;
+        sm.connections_total_opened = total_opened;
+        sm.connections_total_closed = total_closed;
+        if open > sm.peak_connections_open {
+            sm.peak_connections_open = open;
         }
     }
 
@@ -1155,6 +1195,10 @@ pub async fn get_dashboard(State(state): State<AdminState>) -> Json<ApiResponse<
         peak_rps_200: system_metrics.peak_rps_200,
         cps: system_metrics.cps,
         peak_cps: system_metrics.peak_cps,
+        connections_open: system_metrics.connections_open,
+        connections_total_opened: system_metrics.connections_total_opened,
+        connections_total_closed: system_metrics.connections_total_closed,
+        peak_connections_open: system_metrics.peak_connections_open,
     };
 
     let servers = vec![
@@ -5020,6 +5064,10 @@ mod tests {
             peak_rps_200: 0.0,
             cps: 0.0,
             peak_cps: 0.0,
+            connections_open: 0,
+            connections_total_opened: 0,
+            connections_total_closed: 0,
+            peak_connections_open: 0,
         };
 
         assert_eq!(metrics.active_threads, 10);

@@ -20,6 +20,13 @@ impl TerminalReporter {
     }
 
     /// Like [`print_summary`] but lets the caller opt into the `--cps` view.
+    ///
+    /// Issue #79 round 6 — the connection-count lines now render unconditionally
+    /// whenever k6 reported `http_req_connecting` samples (i.e. it actually
+    /// opened TCP sockets), so non-`--cps` runs also surface client-side
+    /// connection counts. Without `--cps` k6 reuses sockets, so the count
+    /// equals "distinct connections opened", which is what Srikanth wanted
+    /// alongside RPS.
     pub fn print_summary_with_mode(results: &K6Results, duration_secs: u64, cps_mode: bool) {
         println!("\n{}", "=".repeat(60).bright_green());
         println!("{}", "Load Test Complete! ✓".bright_green().bold());
@@ -72,18 +79,52 @@ impl TerminalReporter {
             };
             println!("  CPS:                  {} conn/s (--cps)", format!("{:.1}", cps).cyan());
             println!("  Total Connections:    {}", results.total_requests.to_string().cyan());
-            if results.tcp_connect_samples > 0 {
+        }
+
+        // Issue #79 round 6 — Always surface client-side connection counts
+        // when k6 actually opened sockets. Helpful even without `--cps`
+        // because it lets you compare "k6 opened N connections" against
+        // the server's `connections_total_opened` and detect whether
+        // your proxy is keeping the upstream pool warm. `tcp_connect_samples`
+        // is k6's `http_req_connecting.count`, which is the number of
+        // request iterations that had to wait for a new TCP socket — i.e.
+        // a fresh connection.
+        if results.tcp_connect_samples > 0 {
+            if !cps_mode {
+                // Surface the count in non-CPS mode too — Srikanth's "open
+                // connection on the client" ask.
                 println!(
-                    "  TCP connect:          avg {:.2}ms, max {:.2}ms",
-                    results.tcp_connect_avg_ms, results.tcp_connect_max_ms,
+                    "  Connections opened:   {} ({} conn/s avg)",
+                    results.tcp_connect_samples.to_string().cyan(),
+                    format!(
+                        "{:.1}",
+                        results.tcp_connect_samples as f64 / duration_secs.max(1) as f64
+                    )
+                    .cyan(),
                 );
             }
-            if results.tls_handshake_samples > 0 {
-                println!(
-                    "  TLS handshake:        avg {:.2}ms, max {:.2}ms",
-                    results.tls_handshake_avg_ms, results.tls_handshake_max_ms,
-                );
-            }
+            println!(
+                "  TCP connect:          avg {:.2}ms, max {:.2}ms",
+                results.tcp_connect_avg_ms, results.tcp_connect_max_ms,
+            );
+        }
+        if results.tls_handshake_samples > 0 {
+            println!(
+                "  TLS handshake:        avg {:.2}ms, max {:.2}ms",
+                results.tls_handshake_avg_ms, results.tls_handshake_max_ms,
+            );
+        }
+        // Peak concurrent VUs — the upper bound on simultaneously-open
+        // connections from the client. For HTTP/1.1 each VU holds at
+        // most one socket; for HTTP/2 with multiplexing this is the
+        // bound on streams, not sockets. Surface it as an open-connection
+        // ceiling so users can sanity-check against the server's
+        // `connections_open` gauge.
+        if results.vus_max > 0 && (cps_mode || results.tcp_connect_samples > 0) {
+            println!(
+                "  Peak concurrent VUs:  {} (max open conns from client side)",
+                results.vus_max.to_string().cyan(),
+            );
         }
 
         // Issue #79 — server-injected chaos signals (latency / jitter / faults)
