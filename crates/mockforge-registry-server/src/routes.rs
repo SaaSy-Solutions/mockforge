@@ -503,6 +503,30 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/snapshots/{id}/restore",
             post(handlers::snapshots::restore_snapshot),
         )
+        // Resilience scaffold routes (#468 / part of #459) — see
+        // handlers::resilience for the runtime-wire-up gap. Endpoints
+        // return empty payloads tagged `runtime_state: "pending"`; the
+        // UI renders that as an honest empty-state instead of a spinner.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience/circuit-breakers",
+            get(handlers::resilience::list_circuit_breakers),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience/bulkheads",
+            get(handlers::resilience::list_bulkheads),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience/summary",
+            get(handlers::resilience::get_summary),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience/circuit-breakers/{endpoint}/reset",
+            post(handlers::resilience::reset_circuit_breaker),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/resilience/bulkheads/{service}/reset",
+            post(handlers::resilience::reset_bulkhead),
+        )
         // Flow routes (cloud-enablement task #9 / Phase 1).
         // Unified resource for scenario/orchestration/state_machine/chain
         // editor surfaces. Run trigger reuses #4 test_runs (kind=...).
