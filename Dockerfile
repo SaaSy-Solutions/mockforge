@@ -10,7 +10,7 @@ RUN corepack enable
 # Install deps first for layer caching. Skip the Playwright browser download —
 # the image only needs Vite/TS build tooling, not the e2e runner.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-COPY crates/mockforge-ui/ui/package.json crates/mockforge-ui/ui/pnpm-lock.yaml ./
+COPY crates/mockforge-ui/ui/package.json crates/mockforge-ui/ui/pnpm-lock.yaml crates/mockforge-ui/ui/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # Copy UI source and build the production bundle (outputs to /ui/dist)
