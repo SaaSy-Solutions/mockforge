@@ -1,3 +1,19 @@
+## [0.3.136] - 2026-05-15
+
+### Added
+
+- **[Registry][Security]** Usage-limit enforcement + `past_due` read-only mode — closes launch blocker #449 (#515)
+  - **429 spec body for quota exhaustion:** new `ApiError::UsageLimitExceeded { limit_type, current, max, period }` returns the `{"error":"usage_limit_exceeded","limit":"…","current":N,"max":M}` shape from the issue. Wired into both the hosted-mock proxy's inline `enforce_monthly_quota` and the previously-dead `org_rate_limit_middleware`, so the same response shape comes out of every path that ever has to reject for quota. Free-tier orgs no longer have an unbounded request budget; Pro/Team orgs trip 429 at their plan ceiling instead of silently consuming Team-tier volume on a Pro plan.
+  - **`past_due` read-only mode after 24h grace:** new `past_due_writes_blocked` middleware on the authenticated route stack. Once an org is in `past_due` past the 24h grace window (introduced in #507), write methods outside an explicit billing/auth/support/legal allowlist return 402 PaymentRequired. Reads + recovery paths (billing portal, support, legal) stay fully reachable so the customer can self-serve out of dunning. Closes the "customer keeps consuming compute through the 7–10 day Stripe retry window" leak.
+  - **402 on past_due deploys (criterion 8):** the deploy-time past_due gate now returns 402 PaymentRequired via a new `ApiError::PaymentRequired` variant, distinct from the old 400 InvalidRequest — billing-state failure is a distinct response class from a malformed request.
+  - **Integration coverage:** new `crates/mockforge-registry-server/tests/usage_limits_e2e.rs` exercises the free→429-with-spec-body path, past_due→402 on the deploy handler, past_due→402 on `POST /api/v1/workspaces` (proves the route-wide middleware works, not just the inline check), and confirms reads + billing endpoints stay reachable. Gated `#[ignore]` for DATABASE_URL availability; run via the registry's E2E job.
+  - This closes the last 3 of #449's 8 acceptance criteria; the deploy/workspace/member gates (#479), `requests_per_30d` hosted-mock proxy enforcement (#494), and 24h past_due grace window (#507) had already shipped in earlier patches.
+
+### Fixed
+
+- **[Reality]** Drained workspace-wide `unused_qualifications` regressions in `mockforge-http::counting_listener` (9 sites, from #520) and `mockforge-registry-server::handlers::resilience` (1 site, from #522) (#515, second commit)
+  - Both PRs ran the warning gate's scoped check (`mockforge-cli` + `mockforge-ui`) only, so the workspace-wide `unused_qualifications` ratchet (graduated workspace-wide in #500-#511) caught these on rebase rather than at merge time. Trivial removals of redundant `tower::`, `std::pin::`, `std::task::`, and `serde::` prefixes where the inner item is already in scope.
+
 ## [0.3.135] - 2026-05-15
 
 ### Added
