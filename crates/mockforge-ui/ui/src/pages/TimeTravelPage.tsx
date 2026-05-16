@@ -28,9 +28,20 @@ import {
   useCronJobs,
   useMutationRules,
 } from '../hooks/useApi';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudTimeTravelView } from './CloudTimeTravelView';
 import { cn } from '../utils/cn';
 
 export function TimeTravelPage() {
+  // #466 Phase 2: in cloud mode, dispatch to the per-deployment cloud view
+  // (cloudTimeTravelApi against /api/v1/hosted-mocks/{id}/time-travel/*).
+  // Local mode keeps the singleton-runtime hooks below unchanged — they
+  // hit /__mockforge/time-travel/* on whatever mockforge process the
+  // browser is talking to directly.
+  if (isCloudMode()) {
+    return <CloudTimeTravelView />;
+  }
+
   const { data: status, isLoading: statusLoading } = useTimeTravelStatus();
   const { data: cronData, isLoading: cronLoading } = useCronJobs();
   const { data: mutationData, isLoading: mutationLoading } = useMutationRules();

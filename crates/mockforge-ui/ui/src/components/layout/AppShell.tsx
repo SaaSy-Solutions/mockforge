@@ -364,6 +364,14 @@ const cloudNavItemIds = new Set([
   // without workspace_id are invisible until the shipper backfill lands;
   // cloud-shipped captures (--cloud-ship) work today.
   'logs',
+  // Time Travel (#466 Phase 2) — per-deployment virtual-clock control via
+  // cloudTimeTravelApi against /api/v1/hosted-mocks/{deployment_id}
+  // /time-travel/* (registry proxies over Fly 6PN to port 3000). Only
+  // the 7 clock-control endpoints are wired in cloud mode (status /
+  // enable / disable / advance / set / scale / reset); cron jobs and
+  // mutation rules stay local-only because they manage scenario state,
+  // not a hosted mock's single-process clock.
+  'time-travel',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
