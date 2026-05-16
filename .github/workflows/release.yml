@@ -117,6 +117,9 @@ jobs:
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest
+    # Same gating rationale as deploy-registry: publishing to crates.io
+    # with broken tests yanks our reputation, not just our deploy.
+    needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
     steps:
     - name: Checkout repository
@@ -154,6 +157,12 @@ jobs:
   deploy-registry:
     name: Deploy Registry Server to Fly.io
     runs-on: ubuntu-latest
+    # Block Fly auto-deploy on the `release` job (which runs `cargo test
+    # --workspace --release` + builds the binary). Without this, a tag push
+    # would deploy whatever the build pipeline produced even if tests had
+    # failed — exactly the scenario #447 calls out. If you want to ship a
+    # deploy without tests, re-trigger this job manually after the test fix.
+    needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
     steps:
     - name: Checkout repository
@@ -170,6 +179,8 @@ jobs:
   helm:
     name: Package and Publish Helm Chart
     runs-on: ubuntu-latest
+    # Same gating rationale as deploy-registry + publish.
+    needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
     permissions:
       contents: write
