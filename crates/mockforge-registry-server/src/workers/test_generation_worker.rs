@@ -42,7 +42,8 @@ use uuid::Uuid;
 use crate::{
     ai::{
         client::{call_llm, LlmCall, LlmResult},
-        provider::{pick_provider, Provider},
+        provider::{pick_provider, Provider, ProviderSelection},
+        quota::{check_ai_quota, record_ai_usage},
     },
     handlers::settings::decrypt_api_key,
     AppState,
@@ -66,6 +67,12 @@ const MAX_CAPTURES: i64 = 25;
 /// org quota in one call.
 const LLM_MAX_COMPLETION_TOKENS: u32 = 2_000;
 
+/// Default per-tick concurrency cap. Higher → faster queue drain when a
+/// burst lands, but multiplies the worker's pressure on the LLM
+/// provider's rate limit and on the DB pool. Override via
+/// `TEST_GENERATION_WORKER_CONCURRENCY` (clamped to ≥1).
+const DEFAULT_CONCURRENCY: usize = 4;
+
 /// Start the test-generation worker. No-op when
 /// `TEST_GENERATION_WORKER_DISABLED=1`.
 pub fn start_test_generation_worker(state: AppState) {
@@ -80,6 +87,12 @@ pub fn start_test_generation_worker(state: AppState) {
         .filter(|n| *n >= 1)
         .unwrap_or(DEFAULT_INTERVAL_SECS);
 
+    let concurrency = std::env::var("TEST_GENERATION_WORKER_CONCURRENCY")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n >= 1)
+        .unwrap_or(DEFAULT_CONCURRENCY);
+
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(interval_secs));
         // Skip the immediate first tick — give the server a moment to
@@ -87,45 +100,77 @@ pub fn start_test_generation_worker(state: AppState) {
         tick.tick().await;
         loop {
             tick.tick().await;
-            if let Err(e) = drain_queue(&state).await {
+            if let Err(e) = drain_queue(&state, concurrency).await {
                 error!("test_generation_worker: drain failed: {e:?}");
             }
         }
     });
 
-    info!("Test generation worker started (every {interval_secs}s)");
+    info!("Test generation worker started (every {interval_secs}s, concurrency={concurrency})");
 }
 
-/// Drain the queue until we either run out of work or a single job
-/// fails to claim. We process jobs serially per tick — concurrency is a
-/// future optimisation if the queue ever sustains a backlog.
-async fn drain_queue(state: &AppState) -> Result<(), sqlx::Error> {
+/// Drain the queue, processing up to `concurrency` jobs in parallel.
+///
+/// Per tick we claim-and-spawn until either the queue is empty or we hit
+/// the concurrency cap; then we await all in-flight jobs before returning.
+/// `claim_next_queued` uses `FOR UPDATE SKIP LOCKED`, so two spawned tasks
+/// can't race for the same row — each `tokio::spawn` independently claims
+/// the next queued row before doing any LLM work.
+async fn drain_queue(state: &AppState, concurrency: usize) -> Result<(), sqlx::Error> {
+    let mut join_set: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+    let pool = state.db.pool().clone();
+
+    // Track whether we hit "nothing to claim" — when every spawned task
+    // returns and we still claim nothing on the next iteration, we exit.
     loop {
-        let claimed = TestGenerationJob::claim_next_queued(state.db.pool()).await?;
-        let Some(job) = claimed else {
+        // Fan out up to `concurrency` claims.
+        while join_set.len() < concurrency {
+            let claimed = match TestGenerationJob::claim_next_queued(&pool).await? {
+                Some(job) => job,
+                None => break,
+            };
+            let state = state.clone();
+            join_set.spawn(async move { process_one(&state, claimed).await });
+        }
+        if join_set.is_empty() {
+            // Nothing was queued; drain is done.
             return Ok(());
-        };
-        let job_id = job.id;
-        debug!(%job_id, "test_generation_worker: claimed job");
-        match process_job(state, job).await {
-            Ok(result) => {
-                let changed =
-                    TestGenerationJob::complete_success(state.db.pool(), job_id, &result).await?;
-                if !changed {
-                    // Almost certainly a cancellation race — log and move on.
+        }
+        // Wait for at least one in-flight task to finish before claiming
+        // more — keeps us from pegging the LLM provider rate-limit when
+        // the queue is large.
+        if join_set.join_next().await.is_none() {
+            return Ok(());
+        }
+    }
+}
+
+/// Per-job lifecycle wrapper: handles the success/failure-write +
+/// cancellation-race no-op so the caller (drain_queue) doesn't have to.
+async fn process_one(state: &AppState, job: TestGenerationJob) {
+    let job_id = job.id;
+    debug!(%job_id, "test_generation_worker: claimed job");
+    match process_job(state, job).await {
+        Ok(result) => {
+            match TestGenerationJob::complete_success(state.db.pool(), job_id, &result).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    // Cancellation race — user flipped to 'cancelled' while
+                    // we were mid-flight; the gate `WHERE status='running'`
+                    // prevents the success write. Log and move on.
                     debug!(%job_id, "test_generation_worker: success write was no-op (likely cancelled)");
                 }
+                Err(e) => {
+                    error!(%job_id, error = ?e, "test_generation_worker: success write failed");
+                }
             }
-            Err(reason) => {
-                let reason_str = reason.to_string();
-                warn!(%job_id, error = %reason_str, "test_generation_worker: job failed");
-                let _ = TestGenerationJob::complete_failure(
-                    state.db.pool(),
-                    job_id,
-                    reason_str.as_str(),
-                )
-                .await;
-            }
+        }
+        Err(reason) => {
+            let reason_str = reason.to_string();
+            warn!(%job_id, error = %reason_str, "test_generation_worker: job failed");
+            let _ =
+                TestGenerationJob::complete_failure(state.db.pool(), job_id, reason_str.as_str())
+                    .await;
         }
     }
 }
@@ -133,62 +178,138 @@ async fn drain_queue(state: &AppState) -> Result<(), sqlx::Error> {
 /// Run one job end-to-end. Returns the `result` JSON value to persist
 /// on success, or an error whose `to_string()` lands in the `error`
 /// column on failure.
+///
+/// Mirrors `ai_studio::run_completion_for_org`'s pipeline (BYOK lookup →
+/// pick_provider → quota check → LlmCall → record_ai_usage) so quota +
+/// billing semantics stay identical between user-driven AI requests and
+/// worker-driven test generation.
 async fn process_job(state: &AppState, job: TestGenerationJob) -> Result<Value, WorkerError> {
     // 1. Org context for plan + BYOK decision.
     let org = Organization::find_by_id(state.db.pool(), job.org_id)
         .await
         .map_err(|e| WorkerError::Internal(format!("org lookup failed: {e}")))?
         .ok_or_else(|| WorkerError::Internal("Organization missing for job".into()))?;
-    let plan = org.plan();
-    let is_paid_plan = matches!(plan, Plan::Pro | Plan::Team);
+    let is_paid_plan = matches!(org.plan(), Plan::Pro | Plan::Team);
 
-    // 2. BYOK config (the worker can't fall back to platform credits
-    // without rate-limit accounting plumbing — Phase 4 if/when we need
-    // platform-credit generations).
+    // 2. BYOK + provider routing — same dispatch ai_studio uses.
     let byok = load_byok_config(state, job.org_id).await?;
     let provider = pick_provider(is_paid_plan, byok);
+    let selection = provider.selection();
 
-    let Provider::Byok(byok_cfg) = provider else {
-        return Err(WorkerError::ProviderUnavailable(match plan {
-            Plan::Free => "Test generation requires a BYOK provider key on the Free plan. Add a key in Settings → BYOK.".into(),
-            _ => "Test generation requires a BYOK provider key. Platform-credit generations are not yet supported — add a BYOK key in Settings → BYOK.".into(),
-        }));
-    };
+    // 3. Pre-call quota check — gates Disabled and quota-exhausted Platform.
+    //    BYOK skips the token quota (the user pays their own provider bill);
+    //    rate caps are enforced separately upstream.
+    let quota = check_ai_quota(state, &org, selection)
+        .await
+        .map_err(|e| WorkerError::Internal(format!("quota check failed: {e:?}")))?;
+    if !quota.allowed {
+        return Err(WorkerError::ProviderUnavailable(
+            quota.deny_reason.unwrap_or_else(|| "AI quota exceeded".into()),
+        ));
+    }
 
-    let api_key = decrypt_api_key(&byok_cfg.api_key)
-        .map_err(|e| WorkerError::Internal(format!("BYOK key decrypt failed: {e:?}")))?;
-
-    // 3. Sample captures.
+    // 4. Sample captures.
     let filter = parse_filter(&job.captures_filter);
     let captures = fetch_captures(state.db.pool(), job.workspace_id, &filter)
         .await
         .map_err(|e| WorkerError::Internal(format!("capture sampling failed: {e}")))?;
-
     if captures.is_empty() {
         return Err(WorkerError::EmptyCorpus(
             "No matching captures found in this workspace. Record some traffic first or relax the filter.".into(),
         ));
     }
 
-    // 4. Build the prompt.
-    let (system, user) = build_prompt(&job.prompt, &captures);
+    // 5. Build LLM call — provider-dependent (BYOK decrypts the stored
+    //    key; Platform reads from env). Centralised here so the byok/
+    //    platform branches share the rest of the pipeline.
+    let (call, provider_label) = build_call_for_provider(&provider, &job.prompt, &captures)?;
 
-    // 5. Call the LLM via the existing dispatch.
-    let call = LlmCall {
-        provider: byok_cfg.provider.clone(),
-        model: byok_cfg.model.clone().unwrap_or_else(|| "gpt-4o-mini".into()),
-        api_key,
-        base_url: byok_cfg.base_url.clone(),
-        system,
-        user,
-        temperature: 0.2,
-        max_tokens: LLM_MAX_COMPLETION_TOKENS,
-    };
+    // 6. Invoke.
     let llm_result = call_llm(call).await.map_err(|e| WorkerError::LlmCall(format!("{e:?}")))?;
 
-    // 6. Parse + assemble the persisted result.
+    // 7. Meter usage — `record_ai_usage` is a no-op for BYOK, so we can
+    //    call it unconditionally and stay in line with ai_studio's
+    //    accounting semantics.
+    let total_tokens = llm_result.total_tokens() as i64;
+    if let Err(e) = record_ai_usage(state, org.id, selection, total_tokens).await {
+        // Surface as warn — we already have the LLM output, just couldn't
+        // bill it. Returning success would leak credit; failing the job
+        // after a real LLM call would also be bad UX. Tradeoff: log loudly
+        // so SREs notice, and bias toward the user's success path.
+        warn!(
+            job_id = %job.id,
+            org_id = %org.id,
+            tokens = total_tokens,
+            error = ?e,
+            "test_generation_worker: usage metering failed",
+        );
+    }
+
+    // 8. Parse + assemble the persisted result.
     let scenarios = parse_scenarios(&llm_result.content);
-    Ok(build_result_value(&llm_result, &byok_cfg.provider, scenarios, captures.len()))
+    Ok(build_result_value(
+        &llm_result,
+        &provider_label,
+        selection,
+        scenarios,
+        captures.len(),
+    ))
+}
+
+/// Build the LLM call inputs for the resolved provider. Returns
+/// `(call, provider_label)`. Splitting this out keeps process_job's
+/// 8-step skeleton readable.
+fn build_call_for_provider(
+    provider: &Provider,
+    user_prompt: &str,
+    captures: &[CaptureSample],
+) -> Result<(LlmCall, String), WorkerError> {
+    let (system, user) = build_prompt(user_prompt, captures);
+    match provider {
+        Provider::Disabled => Err(WorkerError::ProviderUnavailable(
+            "AI is not available — add a BYOK key or upgrade your plan".into(),
+        )),
+        Provider::Byok(cfg) => {
+            let api_key = decrypt_api_key(&cfg.api_key)
+                .map_err(|e| WorkerError::Internal(format!("BYOK key decrypt failed: {e:?}")))?;
+            let provider_label = cfg.provider.clone();
+            let call = LlmCall {
+                provider: cfg.provider.clone(),
+                model: cfg.model.clone().unwrap_or_else(|| "gpt-4o-mini".into()),
+                api_key,
+                base_url: cfg.base_url.clone(),
+                system,
+                user,
+                temperature: 0.2,
+                max_tokens: LLM_MAX_COMPLETION_TOKENS,
+            };
+            Ok((call, provider_label))
+        }
+        Provider::Platform => {
+            // Same env-var contract as ai_studio::build_llm_call.
+            let api_key = std::env::var("MOCKFORGE_PLATFORM_LLM_API_KEY")
+                .map_err(|_| WorkerError::ProviderUnavailable(
+                    "Platform LLM not configured — set MOCKFORGE_PLATFORM_LLM_API_KEY on the registry or add a BYOK key.".into(),
+                ))?;
+            let provider_name = std::env::var("MOCKFORGE_PLATFORM_LLM_PROVIDER")
+                .unwrap_or_else(|_| "openai".into());
+            let model = std::env::var("MOCKFORGE_PLATFORM_LLM_MODEL")
+                .unwrap_or_else(|_| "gpt-4o-mini".into());
+            let base_url = std::env::var("MOCKFORGE_PLATFORM_LLM_ENDPOINT").ok();
+            let provider_label = provider_name.clone();
+            let call = LlmCall {
+                provider: provider_name,
+                model,
+                api_key,
+                base_url,
+                system,
+                user,
+                temperature: 0.2,
+                max_tokens: LLM_MAX_COMPLETION_TOKENS,
+            };
+            Ok((call, provider_label))
+        }
+    }
 }
 
 // --- filter handling ------------------------------------------------------
@@ -329,19 +450,31 @@ fn parse_scenarios(content: &str) -> Option<Value> {
 
 /// Wrap the LLM output for persistence. We always include the raw
 /// content so the UI can show what the provider said even when JSON
-/// parse fails.
+/// parse fails. `selection` records whether the org's BYOK key or
+/// platform credits paid for the call — the UI surfaces this so
+/// customers can confirm where their tokens went.
 fn build_result_value(
     llm: &LlmResult,
-    provider: &str,
+    provider_label: &str,
+    selection: ProviderSelection,
     parsed: Option<Value>,
     captures_sampled: usize,
 ) -> Value {
+    let billing = match selection {
+        ProviderSelection::Byok => "byok",
+        ProviderSelection::Platform => "platform",
+        // Unreachable in practice — process_job bails before calling the
+        // LLM when selection is Disabled. Include the case for total
+        // coverage of the enum so future-Self can't forget it.
+        ProviderSelection::Disabled => "disabled",
+    };
     json!({
         "scenarios": parsed.as_ref().and_then(|v| v.get("scenarios").cloned()),
         "raw_parsed": parsed,
         "raw_content": llm.content,
         "model_meta": {
-            "provider": provider,
+            "provider": provider_label,
+            "billing": billing,
             "prompt_tokens": llm.prompt_tokens,
             "completion_tokens": llm.completion_tokens,
         },
@@ -535,25 +668,71 @@ mod tests {
             prompt_tokens: 100,
             completion_tokens: 50,
         };
-        let v = build_result_value(&llm, "openai", None, 5);
+        let v = build_result_value(&llm, "openai", ProviderSelection::Byok, None, 5);
         assert_eq!(v["raw_content"], "garbage");
         assert!(v["scenarios"].is_null());
         assert!(v["raw_parsed"].is_null());
         assert_eq!(v["model_meta"]["prompt_tokens"], 100);
+        assert_eq!(v["model_meta"]["billing"], "byok");
         assert_eq!(v["captures_sampled"], 5);
     }
 
     #[test]
-    fn build_result_value_hoists_scenarios_field() {
+    fn build_result_value_hoists_scenarios_field_and_tags_platform_billing() {
         let llm = LlmResult {
             content: r#"{"scenarios": [{"name": "happy"}]}"#.into(),
             prompt_tokens: 0,
             completion_tokens: 0,
         };
         let parsed = parse_scenarios(&llm.content);
-        let v = build_result_value(&llm, "openai", parsed, 3);
+        let v = build_result_value(&llm, "openai", ProviderSelection::Platform, parsed, 3);
         assert_eq!(v["scenarios"][0]["name"], "happy");
+        assert_eq!(v["model_meta"]["billing"], "platform");
         assert_eq!(v["captures_sampled"], 3);
+    }
+
+    #[test]
+    fn build_call_for_provider_disabled_returns_clear_error() {
+        let captures = vec![CaptureSample {
+            method: "GET".into(),
+            path: "/".into(),
+            status: 200,
+            duration_ms: 1,
+        }];
+        let err = build_call_for_provider(&Provider::Disabled, "", &captures).unwrap_err();
+        match err {
+            WorkerError::ProviderUnavailable(msg) => {
+                assert!(msg.contains("BYOK") || msg.contains("upgrade"));
+            }
+            other => panic!("expected ProviderUnavailable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_call_for_provider_platform_requires_env() {
+        // Belt-and-suspenders: clear platform env vars, confirm we get
+        // a clear error pointing operators at the right setting.
+        let prev = std::env::var("MOCKFORGE_PLATFORM_LLM_API_KEY").ok();
+        std::env::remove_var("MOCKFORGE_PLATFORM_LLM_API_KEY");
+        let captures = vec![CaptureSample {
+            method: "GET".into(),
+            path: "/".into(),
+            status: 200,
+            duration_ms: 1,
+        }];
+        let err = build_call_for_provider(&Provider::Platform, "", &captures).unwrap_err();
+        match err {
+            WorkerError::ProviderUnavailable(msg) => {
+                assert!(
+                    msg.contains("MOCKFORGE_PLATFORM_LLM_API_KEY"),
+                    "expected env-var hint in message: {msg}"
+                );
+            }
+            other => panic!("expected ProviderUnavailable, got {other:?}"),
+        }
+        if let Some(v) = prev {
+            std::env::set_var("MOCKFORGE_PLATFORM_LLM_API_KEY", v);
+        }
     }
 
     #[test]
