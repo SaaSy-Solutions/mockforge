@@ -530,6 +530,24 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads/{service}/reset",
             post(handlers::resilience::reset_bulkhead),
         )
+        // Test Generator routes (#469 / part of #459) — Phase 1 data plane.
+        // Async LLM jobs that read the workspace's runtime_captures corpus
+        // and emit generated test scenarios. Rows land in 'queued' state;
+        // the Phase 2 worker (separate PR) transitions them through
+        // 'running' → terminal and writes the result blob.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs",
+            post(handlers::test_generation::create_job)
+                .get(handlers::test_generation::list_jobs),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}",
+            get(handlers::test_generation::get_job),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/cancel",
+            post(handlers::test_generation::cancel_job),
+        )
         // Consistency / Virtual Backends routes (#461 / part of #459).
         // Lifecycle preset library is static (matches mockforge-data); the
         // workspace-scoped apply + entity-list endpoints back the cloud

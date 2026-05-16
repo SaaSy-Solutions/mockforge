@@ -46,6 +46,7 @@ pub mod template;
 pub mod template_review;
 pub mod template_star;
 pub mod test_execution;
+pub mod test_generation_job;
 pub mod test_run;
 pub mod tunnel;
 pub mod user;
