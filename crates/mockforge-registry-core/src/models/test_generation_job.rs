@@ -141,6 +141,79 @@ impl TestGenerationJob {
         .await
     }
 
+    /// Atomically claim the oldest queued job, flipping it to 'running'.
+    /// Returns the claimed row, or `None` if no job is queued.
+    ///
+    /// Uses `FOR UPDATE SKIP LOCKED` so concurrent workers (a future
+    /// scale-out won't claim the same row) skip rather than block on a
+    /// locked candidate. Phase 3 only runs a single worker process per
+    /// registry pod, but the locking pattern future-proofs us.
+    pub async fn claim_next_queued(pool: &PgPool) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            UPDATE cloud_test_generation_jobs
+            SET status = 'running', started_at = NOW()
+            WHERE id = (
+                SELECT id FROM cloud_test_generation_jobs
+                WHERE status = 'queued'
+                ORDER BY queued_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING id, workspace_id, org_id, status, prompt, captures_filter,
+                      result, error, queued_at, started_at, finished_at, created_by
+            "#,
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Persist a successful generation result and flip status to
+    /// 'succeeded'. No-op if the job is no longer in 'running' state
+    /// (e.g., the user cancelled while the worker was mid-flight) — the
+    /// rows_affected check makes this safe under that race.
+    pub async fn complete_success(
+        pool: &PgPool,
+        job_id: Uuid,
+        result: &serde_json::Value,
+    ) -> sqlx::Result<bool> {
+        let rows = sqlx::query(
+            r#"
+            UPDATE cloud_test_generation_jobs
+            SET status = 'succeeded',
+                result = $2,
+                finished_at = NOW()
+            WHERE id = $1 AND status = 'running'
+            "#,
+        )
+        .bind(job_id)
+        .bind(result)
+        .execute(pool)
+        .await?
+        .rows_affected();
+        Ok(rows > 0)
+    }
+
+    /// Persist a failure reason and flip status to 'failed'. Same
+    /// no-op-on-race semantics as `complete_success`.
+    pub async fn complete_failure(pool: &PgPool, job_id: Uuid, error: &str) -> sqlx::Result<bool> {
+        let rows = sqlx::query(
+            r#"
+            UPDATE cloud_test_generation_jobs
+            SET status = 'failed',
+                error = $2,
+                finished_at = NOW()
+            WHERE id = $1 AND status = 'running'
+            "#,
+        )
+        .bind(job_id)
+        .bind(error)
+        .execute(pool)
+        .await?
+        .rows_affected();
+        Ok(rows > 0)
+    }
+
     /// Cancel a queued/running job. No-op if the job is already terminal.
     /// Returns Ok(true) on a state change, Ok(false) if the job was
     /// already terminal or not found.

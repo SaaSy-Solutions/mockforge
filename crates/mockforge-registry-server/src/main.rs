@@ -184,6 +184,9 @@ async fn main() -> Result<()> {
         db.pool().clone(),
         state.redis.clone(),
     );
+    // Cloud Test Generator (#469 Phase 3) — drains queued LLM jobs against
+    // the org's BYOK provider. Disabled via TEST_GENERATION_WORKER_DISABLED=1.
+    workers::test_generation_worker::start_test_generation_worker(state.clone());
     workers::incident_dispatcher::start_incident_dispatcher_worker(db.pool().clone());
     workers::snapshot_retention::start_snapshot_retention_worker(
         db.pool().clone(),
