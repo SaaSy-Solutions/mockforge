@@ -200,11 +200,33 @@ jobs:
       # `cargo install` rebuilds these from source on every run (~5 min total),
       # which dominated Security Audit wall-clock. Both tools change rarely;
       # we preinstall them on the runner and verify here with the same
-      # pattern used for protoc above. To upgrade: SSH the runner and run
-      # `sudo -u actions cargo install <tool> --locked --force`.
+      # pattern used for protoc above.
+      #
+      # IMPORTANT (#539): the durable install location is `/usr/local/bin/`,
+      # NOT `~/.cargo/bin/`. The `actions/rust-toolchain` setup re-runs
+      # `rustup-init` on each workflow, which wipes `/home/actions/.cargo/bin/`
+      # — so anything installed there with `cargo install` survives only until
+      # the next toolchain bump. `/usr/local/bin/` is root-owned, comes earlier
+      # in $PATH for the runner user, and is untouched by rustup-init.
+      #
+      # To repair a missing tool, SSH the runner and copy the binary into the
+      # durable location (binaries are statically linked, no rebuild needed):
+      #   ssh root@<runner-ip>
+      #   cp /home/actions/.cargo/bin/cargo-audit /usr/local/bin/
+      #   cp /home/actions/.cargo/bin/cargo-deny  /usr/local/bin/
+      # If `~/.cargo/bin/` is empty too, first build the tool once with
+      # `sudo -u actions cargo install <tool> --locked --force`, then copy.
+      # Long-term: runner provisioning in the saas-platform repo
+      # (`infrastructure/github-runners/`) should populate /usr/local/bin/
+      # directly.
       run: |
-        command -v cargo-audit > /dev/null || { echo "::error::cargo-audit missing on self-hosted runner. Run on the runner host: sudo -u actions cargo install cargo-audit --locked"; exit 1; }
-        command -v cargo-deny > /dev/null || { echo "::error::cargo-deny missing on self-hosted runner. Run on the runner host: sudo -u actions cargo install cargo-deny --locked"; exit 1; }
+        durable_repair_msg='Repair: ssh the runner and run `cp /home/actions/.cargo/bin/<tool> /usr/local/bin/` (cargo install into ~/.cargo/bin/ alone will be wiped by the next rustup-init run — see ci.yml comment).'
+        command -v cargo-audit > /dev/null || { echo "::error::cargo-audit missing on self-hosted runner. $durable_repair_msg"; exit 1; }
+        command -v cargo-deny  > /dev/null || { echo "::error::cargo-deny missing on self-hosted runner. $durable_repair_msg"; exit 1; }
+        # Surface which copy is on PATH so a future failure makes the
+        # ~/.cargo/bin vs /usr/local/bin distinction obvious in logs.
+        echo "cargo-audit: $(command -v cargo-audit)"
+        echo "cargo-deny:  $(command -v cargo-deny)"
         cargo-audit --version
         cargo-deny --version
 
