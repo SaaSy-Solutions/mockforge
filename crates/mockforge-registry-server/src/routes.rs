@@ -530,6 +530,41 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads/{service}/reset",
             post(handlers::resilience::reset_bulkhead),
         )
+        // Time-travel routes (#466 / part of #459). Proxy the runtime's
+        // /__mockforge/time-travel/* endpoints over Fly 6PN to
+        // `{fly-app}.internal:3000/__mockforge/time-travel/*`. Only the 7
+        // clock-control endpoints are exposed in cloud — cron jobs and
+        // mutation rules stay local-only (they don't belong to a hosted
+        // mock's single-process clock). Same `runtime_state: "live" |
+        // "unreachable"` envelope as resilience.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/status",
+            get(handlers::time_travel::get_status),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/enable",
+            post(handlers::time_travel::enable),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/disable",
+            post(handlers::time_travel::disable),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/advance",
+            post(handlers::time_travel::advance),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/set",
+            post(handlers::time_travel::set_time),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/scale",
+            post(handlers::time_travel::set_scale),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/time-travel/reset",
+            post(handlers::time_travel::reset),
+        )
         // Consistency / Virtual Backends routes (#461 / part of #459).
         // Lifecycle preset library is static (matches mockforge-data); the
         // workspace-scoped apply + entity-list endpoints back the cloud
