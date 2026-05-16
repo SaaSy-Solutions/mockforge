@@ -25,6 +25,7 @@ import { RefreshCw, Play, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useWorkspaceStore } from '../store/workspaceStore';
 import {
   cloudTestGeneratorApi,
+  subscribeToJobStream,
   type CloudTestGenerationJob,
   type TestGenerationJobStatus,
 } from '../services/api/cloudTestGenerator';
@@ -112,6 +113,30 @@ export const CloudTestGeneratorView: React.FC = () => {
     return () => clearInterval(t);
   }, [workspaceId, fetchJobs, hasPendingJob]);
 
+  // Phase 4: when a non-terminal job is expanded, open an SSE stream
+  // for sub-second updates. The 5s list-polling still runs in parallel;
+  // the SSE just makes the expanded card feel live. Closing the row or
+  // unmounting tears down the EventSource.
+  useEffect(() => {
+    if (!workspaceId || !expandedJobId) return;
+    const expandedJob = jobs.find((j) => j.id === expandedJobId);
+    if (!expandedJob || TERMINAL_STATUSES.includes(expandedJob.status)) return;
+
+    const close = subscribeToJobStream(workspaceId, expandedJobId, {
+      onUpdate: (updated) => {
+        setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+      },
+      // Don't surface stream errors as page-level errors — the SSE is
+      // a "best-effort live update" channel and the list-polling
+      // fallback covers correctness. Silently let the browser retry.
+      onError: () => {},
+    });
+    return close;
+    // `jobs` intentionally not in the dep array — we only want to re-
+    // subscribe when the expanded job changes, not on every poll tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, expandedJobId]);
+
   const handleCreate = async () => {
     if (!workspaceId) return;
     let parsedFilter: Record<string, unknown> | undefined;
@@ -180,11 +205,10 @@ export const CloudTestGeneratorView: React.FC = () => {
         className="space-section"
       />
 
-      {/* Worker-not-yet-implemented banner — be honest about Phase 2 status. */}
       <Alert
         variant="info"
-        title="Worker rollout in progress"
-        description="Jobs created here are persisted and will be processed once the BYOK LLM worker ships in the follow-up PR. Until then, jobs stay in 'queued' state. Cancellation, listing, and status polling all work today."
+        title="How this works"
+        description="Jobs run against your org's BYOK provider (Settings → BYOK) — or platform credits on paid plans if no BYOK key is configured. Expanded rows live-stream via SSE; the rest of the list polls every 5 seconds."
       />
 
       {error && <Alert variant="error" title="Error" description={error} />}

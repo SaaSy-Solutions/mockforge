@@ -548,6 +548,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/cancel",
             post(handlers::test_generation::cancel_job),
         )
+        // SSE stream for live job-status updates (#469 Phase 4). Poll
+        // endpoints above remain authoritative; this is the low-latency
+        // option for clients that want sub-second updates.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/stream",
+            get(handlers::test_generation::stream_job),
+        )
         // Consistency / Virtual Backends routes (#461 / part of #459).
         // Lifecycle preset library is static (matches mockforge-data); the
         // workspace-scoped apply + entity-list endpoints back the cloud

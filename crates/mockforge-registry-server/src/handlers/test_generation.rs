@@ -16,13 +16,19 @@
 //! first so the UI client (Phase 1) and the worker (Phase 2) can land
 //! independently against a stable contract.
 
+use std::convert::Infallible;
+use std::time::Duration;
+
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
+    response::sse::{Event, KeepAlive, Sse},
     Json,
 };
+use futures_util::stream::{self, Stream};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
@@ -164,6 +170,155 @@ pub async fn cancel_job(
     Ok(Json(json!({
         "cancelled": changed,
     })))
+}
+
+// --- helpers --------------------------------------------------------------
+
+// --- SSE: GET /jobs/{job_id}/stream --------------------------------------
+
+/// `GET /api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/stream`
+///
+/// Server-Sent Events stream of the job's lifecycle. The UI's polling
+/// path (every 5s) works fine; this endpoint exists for clients that
+/// want sub-second update latency without burning the UI render path
+/// on a tight `setInterval`.
+///
+/// Pattern mirrors `handlers::test_runs::stream_run_events`: poll the
+/// underlying row every 1s, emit a `status_update` event whenever the
+/// shape changes (status / started_at / finished_at / has-result /
+/// has-error), terminate after one final event once status reaches a
+/// terminal value.
+///
+/// Polling Postgres (vs LISTEN/NOTIFY) is the right tradeoff today:
+/// per-org job rate is bounded (interactive UI feature, not a firehose)
+/// and the 1s cadence is invisible to the user. A pub/sub upgrade can
+/// land later if usage demands it.
+pub async fn stream_job(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path((workspace_id, job_id)): Path<(Uuid, Uuid)>,
+    headers: HeaderMap,
+) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    // Authorize once up front so we don't leak existence to non-members.
+    let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+
+    let cursor = JobStreamCursor {
+        pool: state.db.pool().clone(),
+        workspace_id: workspace.id,
+        job_id,
+        last_snapshot: None,
+        terminal_emitted: false,
+    };
+
+    let stream = stream::unfold(cursor, advance_job_stream);
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+/// Snapshot of the fields we care about for change-detection. Two
+/// snapshots compare equal iff a client wouldn't see a difference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct JobSnapshot {
+    status: String,
+    started_at_set: bool,
+    finished_at_set: bool,
+    has_result: bool,
+    has_error: bool,
+}
+
+impl JobSnapshot {
+    fn from_job(j: &TestGenerationJob) -> Self {
+        Self {
+            status: j.status.clone(),
+            started_at_set: j.started_at.is_some(),
+            finished_at_set: j.finished_at.is_some(),
+            has_result: j.result.is_some(),
+            has_error: j.error.is_some(),
+        }
+    }
+
+    fn is_terminal(&self) -> bool {
+        matches!(self.status.as_str(), "succeeded" | "failed" | "cancelled")
+    }
+}
+
+struct JobStreamCursor {
+    pool: PgPool,
+    workspace_id: Uuid,
+    job_id: Uuid,
+    last_snapshot: Option<JobSnapshot>,
+    terminal_emitted: bool,
+}
+
+/// One step of the SSE stream:
+///   - Poll the job row.
+///   - If the row is gone, emit `not_found` and terminate.
+///   - If the snapshot is unchanged, sleep and re-poll on the next
+///     iteration (no event emitted; SSE keep-alive comments cover idle
+///     connections).
+///   - If the snapshot changed, emit a `status_update` event with the
+///     full row payload.
+///   - If the new snapshot is terminal, mark the cursor so the next
+///     iteration returns None.
+async fn advance_job_stream(
+    mut cursor: JobStreamCursor,
+) -> Option<(Result<Event, Infallible>, JobStreamCursor)> {
+    if cursor.terminal_emitted {
+        return None;
+    }
+
+    // 1s cadence; matches the test_runs SSE handler. Skip the sleep on
+    // the very first poll so the initial snapshot lands immediately.
+    if cursor.last_snapshot.is_some() {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    let job = match TestGenerationJob::find_in_workspace(
+        &cursor.pool,
+        cursor.workspace_id,
+        cursor.job_id,
+    )
+    .await
+    {
+        Ok(Some(j)) => j,
+        Ok(None) => {
+            let evt = Event::default()
+                .event("not_found")
+                .data(json!({ "job_id": cursor.job_id }).to_string());
+            cursor.terminal_emitted = true;
+            return Some((Ok(evt), cursor));
+        }
+        Err(e) => {
+            let evt = Event::default()
+                .event("stream_error")
+                .data(json!({ "error": e.to_string() }).to_string());
+            cursor.terminal_emitted = true;
+            return Some((Ok(evt), cursor));
+        }
+    };
+
+    let snapshot = JobSnapshot::from_job(&job);
+    let unchanged = cursor.last_snapshot.as_ref().is_some_and(|s| s == &snapshot);
+
+    if unchanged {
+        // No new data — emit a heartbeat keep-alive comment by yielding
+        // a `ping` event so the client knows the connection's still live
+        // without burning bytes on a full payload. The browser's
+        // EventSource ignores unknown event types unless explicitly
+        // listened to, which is what we want.
+        let evt = Event::default().event("ping").data("{}");
+        return Some((Ok(evt), cursor));
+    }
+
+    let terminal = snapshot.is_terminal();
+    cursor.last_snapshot = Some(snapshot);
+    if terminal {
+        cursor.terminal_emitted = true;
+    }
+
+    let payload =
+        serde_json::to_value(&job).unwrap_or_else(|_| json!({ "error": "serialization failed" }));
+    let evt = Event::default().event("status_update").data(payload.to_string());
+    Some((Ok(evt), cursor))
 }
 
 // --- helpers --------------------------------------------------------------
