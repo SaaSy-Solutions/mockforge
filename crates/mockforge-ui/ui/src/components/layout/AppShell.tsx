@@ -364,6 +364,12 @@ const cloudNavItemIds = new Set([
   // without workspace_id are invisible until the shipper backfill lands;
   // cloud-shipped captures (--cloud-ship) work today.
   'logs',
+  // World State (#464 Phase 2) — per-deployment graph + snapshot + layers
+  // + slice query via cloudWorldStateApi against /api/v1/hosted-mocks/
+  // {deployment_id}/world-state/*. The local `/stream` WebSocket isn't
+  // proxied yet (Phase 2 follow-up); cloud mode polls every 5s, which
+  // matches the local TanStack Query refetchInterval.
+  'world-state',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
