@@ -2818,20 +2818,25 @@ pub async fn handle_serve(
             }
         });
         Some(tokio::spawn(async move {
-            // Parse addresses with proper error handling
-            use crate::progress::parse_address;
-            let addr = match parse_address(&format!("{}:{}", admin_host, admin_port), "admin UI") {
-                Ok(addr) => addr,
-                Err(e) => {
-                    return Err(format!(
-                        "Failed to bind Admin UI to {}:{}: {}",
-                        admin_host, admin_port, e.message
-                    ))
-                }
-            };
+            // Parse addresses with proper error handling. `format_bind_address`
+            // wraps bare IPv6 literals (e.g. `::`) in brackets so SocketAddr
+            // parses cleanly — without it, `format!("{host}:{port}")` with
+            // host=`::` produces the ambiguous `":::9080"` and fails (this is
+            // what blocked Fly 6PN reachability for #468 Phase 3).
+            use crate::progress::{format_bind_address, parse_address};
+            let addr =
+                match parse_address(&format_bind_address(&admin_host, admin_port), "admin UI") {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to bind Admin UI to {}:{}: {}",
+                            admin_host, admin_port, e.message
+                        ))
+                    }
+                };
 
             let http_addr =
-                match parse_address(&format!("{}:{}", http_host, http_port), "HTTP server") {
+                match parse_address(&format_bind_address(&http_host, http_port), "HTTP server") {
                     Ok(addr) => Some(addr),
                     Err(e) => {
                         return Err(format!(
@@ -2841,7 +2846,7 @@ pub async fn handle_serve(
                     }
                 };
             let ws_addr =
-                match parse_address(&format!("{}:{}", ws_host, ws_port), "WebSocket server") {
+                match parse_address(&format_bind_address(&ws_host, ws_port), "WebSocket server") {
                     Ok(addr) => Some(addr),
                     Err(e) => {
                         return Err(format!(
@@ -2851,7 +2856,7 @@ pub async fn handle_serve(
                     }
                 };
             let grpc_addr =
-                match parse_address(&format!("{}:{}", grpc_host, grpc_port), "gRPC server") {
+                match parse_address(&format_bind_address(&grpc_host, grpc_port), "gRPC server") {
                     Ok(addr) => Some(addr),
                     Err(e) => {
                         return Err(format!(

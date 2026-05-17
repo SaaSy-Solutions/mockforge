@@ -118,8 +118,10 @@ ENV MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 ENV MOCKFORGE_RESPONSE_VALIDATION=1
 # Mark that we're running in Docker (for Admin UI host detection)
 ENV DOCKER_CONTAINER=true
-# Default Admin UI to be accessible from outside container
-ENV MOCKFORGE_ADMIN_HOST=0.0.0.0
+# Dual-stack admin bind (IPv4 + IPv6). On Linux with bindv6only=0 (default), a
+# `::` listener accepts both IPv4-mapped and native IPv6 — making the admin
+# port reachable on Fly 6PN where private traffic is IPv6-only (#468).
+ENV MOCKFORGE_ADMIN_HOST=::
 
 # Default command
 # Use full path to ensure binary is found regardless of PATH
