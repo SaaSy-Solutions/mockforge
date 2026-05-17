@@ -402,6 +402,12 @@ const cloudHiddenNavItemIds = new Set([
   // cloud-enabled — keeping both visible just adds sidebar noise.
   'metrics',                // → pillar-analytics (request rate / latency / errors live there)
   'performance',            // → cloud-test-runs (k6 / load runs already covered)
+  // ApiExplorerPage is already cloud-aware (takes a `deployment` prop and
+  // fetches the OpenAPI spec from the runtime). It is reached by clicking
+  // "Open" on a deployment in HostedMocksPage, not standalone from the
+  // sidebar — keeping it visible suggested a global explorer that does not
+  // exist in cloud mode.
+  'api-explorer',           // → reached via HostedMocksPage "Open" action
 ]);
 
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"
