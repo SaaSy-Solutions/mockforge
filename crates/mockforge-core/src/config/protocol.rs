@@ -720,13 +720,21 @@ pub struct AdminConfig {
 
 impl Default for AdminConfig {
     fn default() -> Self {
-        // Default to 0.0.0.0 if running in Docker (detected via common Docker env vars)
-        // This makes Admin UI accessible from outside the container by default
+        // Bind dual-stack (`::`) when we detect we're in a container so the
+        // admin port is reachable on both IPv4 and IPv6. The IPv6 side is what
+        // Fly.io 6PN uses (`fdaa::/16` private network) to reach the admin
+        // endpoint from sibling apps — bare `0.0.0.0` is IPv4-only on Linux
+        // and breaks the cloud Resilience proxy (#468).
+        //
+        // On Linux the kernel's default `net.ipv6.bindv6only=0` means a `::`
+        // listener also accepts IPv4 connections via IPv4-mapped IPv6
+        // addresses (`::ffff:x.y.z.w`), so this single bind covers both.
+        // Outside the container the default stays loopback for safety.
         let default_host = if std::env::var("DOCKER_CONTAINER").is_ok()
             || std::env::var("container").is_ok()
             || Path::new("/.dockerenv").exists()
         {
-            "0.0.0.0".to_string()
+            "::".to_string()
         } else {
             "127.0.0.1".to_string()
         };
